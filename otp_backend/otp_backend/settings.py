@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'accounts',
     'api',
     'twofa',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [

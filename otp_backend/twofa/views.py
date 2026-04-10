@@ -1,8 +1,11 @@
+# twofa/views.py - Views for handling 2FA code generation and verification
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.core.mail import send_mail
 from django.conf import settings
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from .models import EmailVerification
 import logging
@@ -13,16 +16,21 @@ logger = logging.getLogger(__name__)
 @permission_classes([AllowAny])
 def send_2fa_code(request):
     username = request.data.get('username')
+    password = request.data.get('password')  # ADD THIS
     
-    if not username:
-        return Response({'success': False, 'error': 'Username required'}, status=400)
+    if not username or not password:
+        return Response({'success': False, 'error': 'Username and password required'}, status=400)
+    
+    # FIRST VERIFY PASSWORD
+    user = authenticate(username=username, password=password)
+    
+    if not user:
+        return Response({'success': False, 'error': 'Invalid username or password'}, status=401)
+    
+    if not user.email:
+        return Response({'success': False, 'error': 'No email associated with account'}, status=400)
     
     try:
-        user = User.objects.get(username=username)
-        
-        if not user.email:
-            return Response({'success': False, 'error': 'No email associated with account'}, status=400)
-        
         # Create verification code
         verification = EmailVerification.objects.create(user=user)
         
@@ -52,7 +60,6 @@ OTP Authenticator
             return Response({
                 'success': True, 
                 'message': f'Code sent to {user.email}',
-                'email': user.email  # For debugging - remove in production
             })
             
         except Exception as email_error:
@@ -62,8 +69,6 @@ OTP Authenticator
                 'error': f'Failed to send email: {str(email_error)}'
             }, status=500)
             
-    except User.DoesNotExist:
-        return Response({'success': False, 'error': 'User not found'}, status=400)
     except Exception as e:
         logger.error(f'2FA error: {e}')
         return Response({'success': False, 'error': str(e)}, status=500)

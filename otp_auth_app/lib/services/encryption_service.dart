@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 class EncryptionService {
@@ -9,7 +9,7 @@ class EncryptionService {
   }
   
   static String simpleEncrypt(String text, String key) {
-    // Simple XOR encryption for demo (use proper AES in production)
+    // Simple XOR encryption
     List<int> textBytes = utf8.encode(text);
     List<int> keyBytes = utf8.encode(key);
     List<int> encrypted = [];
@@ -31,5 +31,14 @@ class EncryptionService {
     }
     
     return utf8.decode(decrypted);
+  }
+  
+  // Alias methods to match what sync_service expects
+  static String encrypt(String text, String key) {
+    return simpleEncrypt(text, key);
+  }
+  
+  static String decrypt(String encryptedBase64, String key) {
+    return simpleDecrypt(encryptedBase64, key);
   }
 }

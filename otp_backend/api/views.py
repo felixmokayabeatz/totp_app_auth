@@ -1,8 +1,11 @@
+# api/views.py - Views for authentication and data synchronization
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from .models import EncryptedData
 from .serializers import UserSerializer, EncryptedDataSerializer, RegisterSerializer
@@ -26,9 +29,10 @@ class AuthViewSet(viewsets.GenericViewSet):
     
     @action(detail=False, methods=['post'])
     def login(self, request):
-        from django.contrib.auth import authenticate
-        user = authenticate(username=request.data['username'], 
-                           password=request.data['password'])
+        user = authenticate(
+            username=request.data.get('username'), 
+            password=request.data.get('password')
+        )
         if user:
             refresh = RefreshToken.for_user(user)
             return Response({
@@ -58,8 +62,8 @@ class SyncViewSet(viewsets.GenericViewSet):
         )
         return Response({'status': 'synced', 'version': obj.version})
     
-    @action(detail=False, methods=['get'])
-    def get_data(self, request):  # Changed from 'get_data' to match URL
+    @action(detail=False, methods=['get'], url_path='get-data')
+    def get_data(self, request):
         data_type = request.query_params.get('data_type')
         try:
             data = EncryptedData.objects.get(user=request.user, data_type=data_type)

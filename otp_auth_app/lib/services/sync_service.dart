@@ -58,9 +58,13 @@ class SyncService {
       
       if (response.statusCode == 200) {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', response.data['access']);
+        final accessToken = response.data['access'];
+        await prefs.setString('access_token', accessToken);
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
+        
+        // Set token for future requests
+        _dio.options.headers['Authorization'] = 'Bearer $accessToken';
         
         await _initEncryption();
         await _clearLocalAccounts();
@@ -82,27 +86,41 @@ class SyncService {
   Future<void> downloadAccounts() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
-    if (token == null) return;
+    if (token == null) {
+      print('No access token found');
+      return;
+    }
     
-    await _initEncryption();
+    // Make sure token is set
     _dio.options.headers['Authorization'] = 'Bearer $token';
     
     try {
-      final response = await _dio.get('sync/get_data/', queryParameters: {
-        'data_type': 'otp_accounts',
-      });
+      print('Downloading accounts with token: ${token.substring(0, 20)}...');
+      
+      final response = await _dio.get(
+        'sync/get-data/',  // Note: hyphen, not underscore
+        queryParameters: {'data_type': 'otp_accounts'},
+      );
+      
+      print('Download response status: ${response.statusCode}');
       
       if (response.statusCode == 200 && response.data['encrypted_content'] != null) {
         final encryptedContent = response.data['encrypted_content'];
+        await _initEncryption();
         final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
+        print('Downloaded and decrypted accounts');
         
-        // Parse and load accounts
-        final List<dynamic> accountsList = [];
-        // Parse decrypted content and add to Hive
-        print('Downloaded and decrypted ${accountsList.length} accounts');
+        // TODO: Parse and load accounts into Hive
+      } else if (response.statusCode == 404) {
+        print('No accounts found on server');
       }
     } catch (e) {
       print('Download error: $e');
+      if (e is DioError) {
+        print('Response data: ${e.response?.data}');
+        print('Response status: ${e.response?.statusCode}');
+        print('Response headers: ${e.response?.headers}');
+      }
     }
   }
   
@@ -111,7 +129,6 @@ class SyncService {
     final token = prefs.getString('access_token');
     if (token == null) return;
     
-    await _initEncryption();
     _dio.options.headers['Authorization'] = 'Bearer $token';
     
     final otpBox = Hive.box<OTPAccount>('otp_accounts');
@@ -123,47 +140,29 @@ class SyncService {
       'createdAt': a.createdAt.toIso8601String(),
     })).toList();
     
-    // Encrypt before sending
+    await _initEncryption();
     final jsonString = accountsData.toString();
     final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
     
     try {
-      await _dio.post('sync/sync/', data: {
+      final response = await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
         'encrypted_content': encryptedContent,
         'version': accountsData.length,
       });
-      print('Sync successful - ${accountsData.length} accounts synced (encrypted)');
+      print('Sync successful - ${accountsData.length} accounts synced');
     } catch (e) {
       print('Sync error: $e');
     }
   }
   
-  Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('access_token');
-    await prefs.remove('refresh_token');
-    await prefs.remove('current_user');
-    await _clearLocalAccounts();
-    _encryptionKey = null;
-  }
-  
-  Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = await prefs.getString('access_token');
-    return token != null;
-  }
-  
-  Future<String?> getCurrentUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('current_user');
-  }
-  
-  Future<bool> send2FACode(String username) async {
+  Future<bool> send2FACode(String username, String password) async {
     try {
       final response = await _dio.post('send-2fa/', data: {
         'username': username,
+        'password': password,  // ADD PASSWORD
       });
+      print('Send 2FA response: ${response.data}');
       return response.data['success'] == true;
     } catch (e) {
       print('Send 2FA error: $e');
@@ -177,10 +176,32 @@ class SyncService {
         'username': username,
         'code': code,
       });
+      print('Verify 2FA response: ${response.data}');
       return response.data['success'] == true;
     } catch (e) {
       print('Verify 2FA error: $e');
       return false;
     }
+  }
+  
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('access_token');
+    await prefs.remove('refresh_token');
+    await prefs.remove('current_user');
+    await _clearLocalAccounts();
+    _encryptionKey = null;
+    _dio.options.headers.remove('Authorization');
+  }
+  
+  Future<bool> isLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = await prefs.getString('access_token');
+    return token != null;
+  }
+  
+  Future<String?> getCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('current_user');
   }
 }

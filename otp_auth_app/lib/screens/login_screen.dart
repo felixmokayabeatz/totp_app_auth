@@ -214,100 +214,57 @@ class _LoginScreenState extends State<LoginScreen> {
   }
   
   void _submitLogin() async {
-    if (_usernameController.text.isEmpty) {
-      _showError('Please enter username');
+  if (_usernameController.text.isEmpty) {
+    _showError('Please enter username');
+    return;
+  }
+  
+  if (_passwordController.text.isEmpty) {
+    _showError('Please enter password');
+    return;
+  }
+  
+  if (!_isLogin) {
+    if (_emailController.text.isEmpty) {
+      _showError('Please enter email');
       return;
     }
     
-    if (_passwordController.text.isEmpty) {
-      _showError('Please enter password');
+    if (_passwordController.text != _confirmPasswordController.text) {
+      _showError('Passwords do not match');
       return;
-    }
-    
-    if (!_isLogin) {
-      if (_emailController.text.isEmpty) {
-        _showError('Please enter email');
-        return;
-      }
-      
-      if (_passwordController.text != _confirmPasswordController.text) {
-        _showError('Passwords do not match');
-        return;
-      }
-    }
-    
-    setState(() {
-      _isLoading = true;
-    });
-    
-    if (_isLogin) {
-      // Send 2FA code to email
-      final sent = await _syncService.send2FACode(_usernameController.text);
-      
-      setState(() {
-        _isLoading = false;
-      });
-      
-      if (sent) {
-        _tempUsername = _usernameController.text;
-        setState(() {
-          _show2FA = true;
-        });
-        _showSuccess('2FA code sent to your email!');
-      } else {
-        _showError('Failed to send 2FA code. User may not exist.');
-      }
-    } else {
-      // Register directly
-      bool success = await _syncService.register(
-        _usernameController.text.trim(),
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
-      
-      setState(() {
-        _isLoading = false;
-      });
-      
-      if (success) {
-        _showSuccess('Registration successful! Please login.');
-        setState(() {
-          _isLogin = true;
-          _passwordController.clear();
-        });
-      } else {
-        _showError('Registration failed - Username may already exist');
-      }
     }
   }
   
-  void _verify2FA() async {
-    if (_otpCodeController.text.isEmpty) {
-      _showError('Please enter verification code');
-      return;
-    }
-    
-    setState(() {
-      _isLoading = true;
-    });
-    
-    // Verify the 2FA code
-    final isValid = await _syncService.verify2FACode(
-      _tempUsername ?? _usernameController.text,
-      _otpCodeController.text,
+  setState(() {
+    _isLoading = true;
+  });
+  
+  if (_isLogin) {
+    // Send 2FA code with password verification
+    final sent = await _syncService.send2FACode(
+      _usernameController.text,
+      _passwordController.text,  // PASS THE PASSWORD!
     );
     
-    if (!isValid) {
-      setState(() {
-        _isLoading = false;
-      });
-      _showError('Invalid verification code');
-      return;
-    }
+    setState(() {
+      _isLoading = false;
+    });
     
-    // Login after 2FA verification
-    bool success = await _syncService.login(
-      _tempUsername ?? _usernameController.text,
+    if (sent) {
+      _tempUsername = _usernameController.text;
+      setState(() {
+        _show2FA = true;
+      });
+      _showSuccess('2FA code sent to your email!');
+    } else {
+      _showError('Invalid username or password');
+    }
+  } else {
+    // Register directly
+    bool success = await _syncService.register(
+      _usernameController.text.trim(),
+      _emailController.text.trim(),
       _passwordController.text,
     );
     
@@ -316,14 +273,61 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     
     if (success) {
-      Navigator.pushReplacement(
-        context, 
-        MaterialPageRoute(builder: (_) => HomeScreen()),
-      );
+      _showSuccess('Registration successful! Please login.');
+      setState(() {
+        _isLogin = true;
+        _passwordController.clear();
+      });
     } else {
-      _showError('Login failed');
+      _showError('Registration failed - Username may already exist');
     }
   }
+}
+  
+  void _verify2FA() async {
+  if (_otpCodeController.text.isEmpty) {
+    _showError('Please enter verification code');
+    return;
+  }
+  
+  setState(() {
+    _isLoading = true;
+  });
+  
+  // Verify the 2FA code
+  final isValid = await _syncService.verify2FACode(
+    _tempUsername ?? _usernameController.text,
+    _otpCodeController.text,
+  );
+  
+  if (!isValid) {
+    setState(() {
+      _isLoading = false;
+    });
+    _showError('Invalid verification code');
+    return;
+  }
+  
+  // Login after 2FA verification - this saves the token
+  bool success = await _syncService.login(
+    _tempUsername ?? _usernameController.text,
+    _passwordController.text,
+  );
+  
+  setState(() {
+    _isLoading = false;
+  });
+  
+  if (success) {
+    // Token is now saved and will be used for sync
+    Navigator.pushReplacement(
+      context, 
+      MaterialPageRoute(builder: (_) => HomeScreen()),
+    );
+  } else {
+    _showError('Login failed');
+  }
+}
   
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(

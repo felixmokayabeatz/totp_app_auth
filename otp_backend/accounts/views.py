@@ -1,3 +1,6 @@
+# accounts/views.py - Views for user profile management and updates
+
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
