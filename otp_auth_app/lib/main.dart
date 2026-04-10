@@ -11,9 +11,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   
-  // Register adapters BEFORE opening boxes
-  Hive.registerAdapter(OTPAccountAdapter());
-  Hive.registerAdapter(PasswordEntryAdapter());
+  // Register adapters
+  if (!Hive.isAdapterRegistered(0)) {
+    Hive.registerAdapter(OTPAccountAdapter());
+  }
+  if (!Hive.isAdapterRegistered(1)) {
+    Hive.registerAdapter(PasswordEntryAdapter());
+  }
   
   await Hive.openBox<OTPAccount>('otp_accounts');
   await Hive.openBox<PasswordEntry>('passwords');
@@ -37,7 +41,7 @@ class MyApp extends StatelessWidget {
             theme: themeProvider.lightTheme,
             darkTheme: themeProvider.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: SplashScreen(),
+            home: SplashScreen(), // Changed to SplashScreen
             debugShowCheckedModeBanner: false,
           );
         },

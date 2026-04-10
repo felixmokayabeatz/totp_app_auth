@@ -85,20 +85,19 @@ class SyncService {
   
   Future<void> downloadAccounts() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    String? token = prefs.getString('access_token');
     if (token == null) {
       print('No access token found');
       return;
     }
     
-    // Make sure token is set
     _dio.options.headers['Authorization'] = 'Bearer $token';
     
     try {
       print('Downloading accounts with token: ${token.substring(0, 20)}...');
       
       final response = await _dio.get(
-        'sync/get-data/',  // Note: hyphen, not underscore
+        'sync/get-data/',
         queryParameters: {'data_type': 'otp_accounts'},
       );
       
@@ -109,18 +108,18 @@ class SyncService {
         await _initEncryption();
         final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
         print('Downloaded and decrypted accounts');
-        
-        // TODO: Parse and load accounts into Hive
       } else if (response.statusCode == 404) {
         print('No accounts found on server');
       }
+    } on DioError catch (e) {
+      if (e.response?.statusCode == 401) {
+        print('Token expired, please login again');
+        // Optionally: Refresh token or logout
+      } else {
+        print('Download error: $e');
+      }
     } catch (e) {
       print('Download error: $e');
-      if (e is DioError) {
-        print('Response data: ${e.response?.data}');
-        print('Response status: ${e.response?.statusCode}');
-        print('Response headers: ${e.response?.headers}');
-      }
     }
   }
   

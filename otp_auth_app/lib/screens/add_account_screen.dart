@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/otp_account.dart';
+import '../services/sync_service.dart';
 
 class AddAccountScreen extends StatefulWidget {
   @override
@@ -14,6 +16,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _secretController = TextEditingController();
   final _issuerController = TextEditingController();
   bool _isScanning = false;
+  
+  bool get _isMobile => Platform.isAndroid || Platform.isIOS;
   
   @override
   Widget build(BuildContext context) {
@@ -30,8 +34,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _isScanning ? _buildScanner() : _buildForm(),
-      floatingActionButton: FloatingActionButton(
+      body: _isScanning && _isMobile ? _buildScanner() : _buildForm(),
+      floatingActionButton: _isMobile ? FloatingActionButton(
         onPressed: () {
           setState(() {
             _isScanning = !_isScanning;
@@ -40,7 +44,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         child: Icon(_isScanning ? Icons.edit : Icons.qr_code_scanner),
         backgroundColor: Colors.white,
         foregroundColor: Color(0xFF667eea),
-      ),
+      ) : null,
     );
   }
   
@@ -119,6 +123,29 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         key: _formKey,
         child: Column(
           children: [
+            if (!_isMobile)
+              Container(
+                margin: EdgeInsets.only(bottom: 20),
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.white.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.white, size: 24),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'On desktop, please enter the secret key manually. QR scanning is available on mobile devices.',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            
             Container(
               padding: EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -179,6 +206,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide(color: Colors.white24),
                       ),
+                      suffixIcon: _isMobile ? IconButton(
+                        icon: Icon(Icons.qr_code_scanner, color: Colors.white70),
+                        onPressed: () {
+                          setState(() {
+                            _isScanning = true;
+                          });
+                        },
+                        tooltip: 'Scan QR Code',
+                      ) : null,
                     ),
                     validator: (value) => value!.isEmpty ? 'Required' : null,
                   ),
@@ -198,6 +234,16 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 ),
               ),
             ),
+            
+            if (!_isMobile)
+              Padding(
+                padding: EdgeInsets.only(top: 20),
+                child: Text(
+                  '💡 Tip: You can find the secret key when setting up 2FA on websites.\nLook for a code like: JBSWY3DPEHPK3PXP',
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                  textAlign: TextAlign.center,
+                ),
+              ),
           ],
         ),
       ),
@@ -216,7 +262,24 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       );
       
       await otpBox.put(newAccount.id, newAccount);
+      
+      // Try to sync
+      try {
+        final syncService = SyncService();
+        await syncService.syncAccounts();
+      } catch (e) {
+        print('Sync error: $e');
+      }
+      
       Navigator.pop(context, true);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ Account added!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
   

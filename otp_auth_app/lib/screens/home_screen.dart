@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';  // ADD THIS IMPORT
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import '../models/otp_account.dart';
@@ -8,6 +9,7 @@ import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
+import 'show_qr_screen.dart';  // ADD THIS IMPORT
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -155,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   tp.toggleTheme();
                 },
               ),
-              // LOGOUT BUTTON ADDED HERE
               IconButton(
                 icon: Icon(Icons.logout, color: Colors.white),
                 onPressed: () => _logout(),
@@ -362,13 +363,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ),
                             ),
                             SizedBox(width: 8),
+                            // COPY BUTTON - FIXED
                             IconButton(
                               icon: Icon(Icons.copy, color: Colors.white70, size: 20),
                               onPressed: () => _copyToClipboard(otp),
+                              tooltip: 'Copy OTP',
                             ),
+                            // QR CODE BUTTON - ADDED
+                            IconButton(
+                              icon: Icon(Icons.qr_code, color: Colors.white70, size: 20),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => ShowQRScreen(
+                                    secret: account.secret,
+                                    service: account.service,
+                                    issuer: account.issuer,
+                                  )),
+                                );
+                              },
+                              tooltip: 'Show QR Code',
+                            ),
+                            // DELETE BUTTON
                             IconButton(
                               icon: Icon(Icons.delete_outline, color: Colors.white70, size: 20),
                               onPressed: () => _deleteAccount(account.id),
+                              tooltip: 'Delete',
                             ),
                           ],
                         ),
@@ -416,12 +436,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Icons.security;
   }
   
-  void _copyToClipboard(String otp) {
+  // FIXED COPY TO CLIPBOARD
+  void _copyToClipboard(String otp) async {
+    await Clipboard.setData(ClipboardData(text: otp));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('OTP $otp copied!'),
+        content: Text('✓ OTP $otp copied to clipboard!'),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 1),
+        duration: Duration(seconds: 2),
       ),
     );
   }
