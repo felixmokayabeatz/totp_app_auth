@@ -1,0 +1,36 @@
+name: otp_auth_app
+description: TOTP Authenticator with Cloud Sync
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI & State Management
+  provider: ^6.1.1
+  
+  # OTP & Security  
+  crypto: ^3.0.3
+  
+  # QR & Camera
+  mobile_scanner: ^5.0.0
+  
+  # Storage & Sync
+  hive_flutter: ^1.1.0
+  dio: ^5.4.0
+  shared_preferences: ^2.2.2
+  
+  # Utilities
+  intl: ^0.19.0
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: ^2.4.8
+  hive_generator: ^2.0.1
+
+flutter:
+  uses-material-design: true
