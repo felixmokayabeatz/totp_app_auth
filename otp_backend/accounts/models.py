@@ -1,4 +1,4 @@
-# 
+# accounts/models.py
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -8,7 +8,7 @@ class UserProfile(models.Model):
     profile_photo = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
     bio = models.TextField(blank=True, max_length=500)
     encryption_public_key = models.TextField(blank=True, null=True)
-    encryption_private_key = models.TextField(blank=True, null=True)  # Store encrypted
+    encryption_private_key = models.TextField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):

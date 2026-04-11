@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/sync_service.dart';
+import '../providers/auth_provider.dart';
 import 'home_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -595,6 +600,18 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     
     if (success) {
+      // Get user data from sync service
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString('user_email') ?? '';
+      final username = prefs.getString('current_user') ?? '';
+      final userId = prefs.getString('user_id') ?? '';
+      
+      await Provider.of<AuthProvider>(context, listen: false).setUserData(
+        username, 
+        email, 
+        userId
+      );
+      
       Navigator.pushReplacement(
         context, 
         MaterialPageRoute(builder: (_) => HomeScreen()),

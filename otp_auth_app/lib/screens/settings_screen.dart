@@ -4,6 +4,9 @@ import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/sync_service.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import '../models/otp_account.dart';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -37,6 +40,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: _isDark ? Color(0xFF1A1A2E) : _accent,
         foregroundColor: Colors.white,
         elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: ListView(
         padding: EdgeInsets.all(16),
@@ -102,7 +109,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.person_outline_rounded,
               label: 'Profile',
               sub: 'Edit profile information',
-              onTap: () => _soon('Profile'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ProfileScreen()),
+                );
+              },
             ),
             _dividerLine(),
             _tappableTile(
@@ -585,6 +597,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirmed == true) {
+      // Clear all Hive data
+      final otpBox = Hive.box<OTPAccount>('otp_accounts');
+      await otpBox.clear();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('All data cleared'),
         backgroundColor: Colors.red,

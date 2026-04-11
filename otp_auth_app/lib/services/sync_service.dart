@@ -6,6 +6,7 @@ import 'encryption_service.dart';
 
 class SyncService {
   late Dio _dio;
+  bool _isRefreshing = false;
   
   SyncService() {
     _dio = Dio(BaseOptions(
@@ -28,6 +29,57 @@ class SyncService {
       print('Auth header set with token: ${token.substring(0, 20)}...');
     } else {
       print('No token found');
+    }
+  }
+  
+  Future<bool> _refreshToken() async {
+    if (_isRefreshing) return false;
+    
+    _isRefreshing = true;
+    final prefs = await SharedPreferences.getInstance();
+    final refreshToken = prefs.getString('refresh_token');
+    
+    if (refreshToken == null) {
+      _isRefreshing = false;
+      return false;
+    }
+    
+    try {
+      print('Refreshing token...');
+      final response = await _dio.post('auth/refresh/', data: {
+        'refresh': refreshToken,
+      });
+      
+      if (response.statusCode == 200) {
+        final newAccessToken = response.data['access'];
+        await prefs.setString('access_token', newAccessToken);
+        await _updateAuthHeader();
+        print('Token refreshed successfully');
+        _isRefreshing = false;
+        return true;
+      }
+      _isRefreshing = false;
+      return false;
+    } catch (e) {
+      print('Token refresh failed: $e');
+      _isRefreshing = false;
+      return false;
+    }
+  }
+  
+  Future<Response> _requestWithRetry(Future<Response> Function() request) async {
+    try {
+      return await request();
+    } on DioError catch (e) {
+      if (e.response?.statusCode == 401) {
+        print('Token expired, attempting refresh...');
+        final refreshed = await _refreshToken();
+        if (refreshed) {
+          print('Retrying request with new token...');
+          return await request();
+        }
+      }
+      rethrow;
     }
   }
   
@@ -56,6 +108,8 @@ class SyncService {
         await prefs.setString('access_token', accessToken);
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
+        await prefs.setString('user_email', email);
+        await prefs.setString('user_id', response.data['user']['id'].toString());
         
         await _updateAuthHeader();
         await _initEncryption();
@@ -82,9 +136,14 @@ class SyncService {
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
         
+        final userEmail = response.data['user']['email'] ?? '';
+        await prefs.setString('user_email', userEmail);
+        await prefs.setString('user_id', response.data['user']['id'].toString());
+        
+        print('Saved user data - Username: $username, Email: $userEmail');
+        
         await _updateAuthHeader();
         await _initEncryption();
-        
         await downloadAndMergeAccounts();
         return true;
       }
@@ -100,10 +159,10 @@ class SyncService {
     
     try {
       print('Downloading accounts from cloud...');
-      final response = await _dio.get(
+      final response = await _requestWithRetry(() => _dio.get(
         'sync/get-data/',
         queryParameters: {'data_type': 'otp_accounts'},
-      );
+      ));
       
       print('Download response status: ${response.statusCode}');
       
@@ -154,11 +213,11 @@ class SyncService {
     
     try {
       print('Syncing ${accountsData.length} accounts...');
-      final response = await _dio.post('sync/sync/', data: {
+      final response = await _requestWithRetry(() => _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
         'encrypted_content': encryptedContent,
         'version': accountsData.length,
-      });
+      }));
       
       if (response.statusCode == 200) {
         print('Sync successful - ${accountsData.length} accounts synced');
@@ -169,14 +228,6 @@ class SyncService {
       }
     } on DioError catch (e) {
       print('Sync error: ${e.message}');
-      if (e.response?.statusCode == 401) {
-        print('Token expired - please login again');
-        await prefs.remove('access_token');
-      } else if (e.type == DioErrorType.connectionTimeout) {
-        print('Connection timeout - no internet');
-      } else if (e.type == DioErrorType.connectionError) {
-        print('Connection error - server unreachable');
-      }
       return false;
     } catch (e) {
       print('Sync error: $e');
@@ -217,6 +268,8 @@ class SyncService {
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
     await prefs.remove('current_user');
+    await prefs.remove('user_email');
+    await prefs.remove('user_id');
     _encryptionKey = null;
     _dio.options.headers.remove('Authorization');
   }

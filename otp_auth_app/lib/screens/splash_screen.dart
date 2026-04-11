@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
+import '../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
@@ -41,13 +43,24 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       
       if (mounted) {
         if (token != null && token.isNotEmpty) {
-          // User is logged in - go to Home
+          // User is logged in - load user data and go to Home
+          final email = prefs.getString('user_email') ?? '';
+          final username = prefs.getString('current_user') ?? '';
+          final userId = prefs.getString('user_id') ?? '';
+          
+          // Update AuthProvider with user data
+          await Provider.of<AuthProvider>(context, listen: false).setUserData(
+            username, 
+            email, 
+            userId
+          );
+          
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => HomeScreen()),
           );
         } else {
-          // User is NOT logged in - go to Onboarding (with different content)
+          // User is NOT logged in - go to Onboarding
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => OnboardingScreen(isFirstLaunch: isFirstLaunch)),
@@ -77,7 +90,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         ),
         child: Stack(
           children: [
-            // Animated background circles
             ..._buildBackgroundCircles(),
             
             Center(
