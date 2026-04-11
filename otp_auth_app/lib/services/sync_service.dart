@@ -85,7 +85,6 @@ class SyncService {
         await _updateAuthHeader();
         await _initEncryption();
         
-        // Download and merge accounts
         await downloadAndMergeAccounts();
         return true;
       }
@@ -114,7 +113,6 @@ class SyncService {
         final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
         print('Cloud accounts downloaded and decrypted');
         
-        // Parse and merge accounts
         final localBox = Hive.box<OTPAccount>('otp_accounts');
         print('Local accounts before merge: ${localBox.length}');
       } else if (response.statusCode == 404) {
@@ -130,7 +128,7 @@ class SyncService {
     }
   }
   
-  Future<void> syncAccounts() async {
+  Future<bool> syncAccounts() async {
     await _updateAuthHeader();
     
     final prefs = await SharedPreferences.getInstance();
@@ -138,7 +136,7 @@ class SyncService {
     
     if (token == null || token.isEmpty) {
       print('No access token found - cannot sync');
-      return;
+      return false;
     }
     
     final otpBox = Hive.box<OTPAccount>('otp_accounts');
@@ -164,18 +162,25 @@ class SyncService {
       
       if (response.statusCode == 200) {
         print('Sync successful - ${accountsData.length} accounts synced');
+        return true;
       } else {
         print('Sync failed with status: ${response.statusCode}');
+        return false;
       }
     } on DioError catch (e) {
       print('Sync error: ${e.message}');
       if (e.response?.statusCode == 401) {
         print('Token expired - please login again');
-        // Clear invalid token
         await prefs.remove('access_token');
+      } else if (e.type == DioErrorType.connectionTimeout) {
+        print('Connection timeout - no internet');
+      } else if (e.type == DioErrorType.connectionError) {
+        print('Connection error - server unreachable');
       }
+      return false;
     } catch (e) {
       print('Sync error: $e');
+      return false;
     }
   }
   

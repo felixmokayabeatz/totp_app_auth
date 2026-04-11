@@ -12,6 +12,7 @@ import 'login_screen.dart';
 import 'show_qr_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -27,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String _searchQuery = '';
   bool _isSyncing = false;
   bool _allBlurred = false;
+  bool _hasInternetError = false;
 
   @override
   void initState() {
@@ -120,7 +122,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           padding: EdgeInsets.fromLTRB(20, 16, 12, 16),
           child: Row(
             children: [
-              // Logo + title
               Container(
                 width: 40,
                 height: 40,
@@ -150,7 +151,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ],
               ),
               Spacer(),
-              // Actions
               _headerAction(
                 _allBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded,
                 _toggleBlurAll,
@@ -241,7 +241,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-          // Add button inline with search — no more FAB overlap
           GestureDetector(
             onTap: () async {
               final result = await Navigator.push(
@@ -363,7 +362,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               children: [
                 Row(
                   children: [
-                    // Icon
                     Container(
                       width: 44,
                       height: 44,
@@ -378,7 +376,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                     ),
                     SizedBox(width: 12),
-                    // Name
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,7 +404,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                     ),
                     SizedBox(width: 8),
-                    // OTP + timer badge
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -446,7 +442,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ],
                 ),
                 SizedBox(height: 12),
-                // Progress bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
@@ -459,7 +454,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 ),
                 SizedBox(height: 12),
-                // Actions row
                 Row(
                   children: [
                     _accountAction(
@@ -509,7 +503,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // Format OTP as "123 456" for readability
   String _formatOtp(String otp) {
     if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
     return otp;
@@ -616,11 +609,41 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _syncData() async {
     setState(() => _isSyncing = true);
-    await _syncService.syncAccounts();
-    setState(() => _isSyncing = false);
+    
+    try {
+      final success = await _syncService.syncAccounts();
+      
+      setState(() => _isSyncing = false);
+      
+      if (success) {
+        _showSnackBar('Sync completed!', Colors.green);
+        setState(() => _hasInternetError = false);
+      } else {
+        _showSnackBar('No internet connection or server unavailable', Colors.orange);
+        setState(() => _hasInternetError = true);
+      }
+    } catch (e) {
+      setState(() => _isSyncing = false);
+      _showSnackBar('Sync failed: ${e.toString().substring(0, 50)}...', Colors.red);
+      setState(() => _hasInternetError = true);
+    }
+  }
+  
+  void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Sync complete'),
-      backgroundColor: Color(0xFF10B981),
+      content: Row(
+        children: [
+          Icon(
+            color == Colors.green ? Icons.check_circle_rounded : Icons.error_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
+          SizedBox(width: 10),
+          Expanded(child: Text(message)),
+        ],
+      ),
+      backgroundColor: color,
+      duration: Duration(seconds: 3),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
