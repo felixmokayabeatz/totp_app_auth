@@ -320,4 +320,32 @@ class SyncService {
       return false;
     }
   }
+
+  Future<bool> sendPasswordResetCode(String email) async {
+  try {
+    final response = await _dio.post('send-reset-code/', data: {
+      'email': email,
+    });
+    print('Send reset code response: ${response.data}');
+    return response.data['success'] == true;
+  } catch (e) {
+    print('Send reset code error: $e');
+    return false;
+  }
+}
+
+Future<bool> resetPassword(String email, String code, String newPassword) async {
+  try {
+    final response = await _dio.post('reset-password/', data: {
+      'email': email,
+      'code': code,
+      'new_password': newPassword,
+    });
+    print('Reset password response: ${response.data}');
+    return response.statusCode == 200;
+  } catch (e) {
+    print('Reset password error: $e');
+    return false;
+  }
+}
 }

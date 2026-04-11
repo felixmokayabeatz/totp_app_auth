@@ -19,7 +19,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   // Full onboarding for first-time users
   final List<OnboardingData> _fullPages = [
     OnboardingData(
-      title: 'Secure 2FA Codes',
+      title: 'BeatzLock Authenticator',
+      subtitle: 'Secure 2FA Codes',
       description: 'Store and manage your two-factor authentication codes securely with military-grade encryption',
       icon: Icons.security,
       gradientColors: [Color(0xFF667eea), Color(0xFF764ba2)],
@@ -27,6 +28,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     ),
     OnboardingData(
       title: 'Cloud Sync',
+      subtitle: 'Never Lose Access',
       description: 'Sync your codes across all your devices with end-to-end encryption. Never lose access again.',
       icon: Icons.cloud_sync,
       gradientColors: [Color(0xFF00b4db), Color(0xFF0083b0)],
@@ -34,6 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     ),
     OnboardingData(
       title: 'QR Scanner',
+      subtitle: 'Quick Setup',
       description: 'Quickly add new accounts by scanning QR codes. Fast, secure, and hassle-free setup.',
       icon: Icons.qr_code_scanner,
       gradientColors: [Color(0xFF11998e), Color(0xFF38ef7d)],
@@ -41,6 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     ),
     OnboardingData(
       title: 'Get Started',
+      subtitle: 'Join BeatzLock',
       description: 'Create an account or login to start securing your 2FA codes',
       icon: Icons.rocket_launch,
       gradientColors: [Color(0xFFf12711), Color(0xFFf5af19)],
@@ -51,7 +55,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
   // Simplified onboarding for returning/logged out users
   final List<OnboardingData> _returningPages = [
     OnboardingData(
-      title: 'Welcome Back!',
+      title: 'Welcome Back to',
+      subtitle: 'BeatzLock Authenticator',
       description: 'Login to access your secure 2FA codes and continue protecting your accounts',
       icon: Icons.fingerprint,
       gradientColors: [Color(0xFF667eea), Color(0xFF764ba2)],
@@ -203,24 +208,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
             ),
           ),
           
-          // Login link for returning users
+          SizedBox(height: 16),
+          
+          // Register link for returning users (instead of "Already have an account? Login")
           if (!widget.isFirstLaunch)
-            SizedBox(height: 16),
-          if (!widget.isFirstLaunch)
-            TextButton(
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => LoginScreen()),
-                );
-              },
-              child: Text(
-                'Already have an account? Login',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "Don't have an account? ",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
+                TextButton(
+                  onPressed: () {
+                    // Navigate to register (which is login screen with isLogin = false)
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => LoginScreen()),
+                    );
+                  },
+                  child: Text(
+                    'Register',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -230,6 +249,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
 
 class OnboardingData {
   final String title;
+  final String subtitle;
   final String description;
   final IconData icon;
   final List<Color> gradientColors;
@@ -237,6 +257,7 @@ class OnboardingData {
   
   OnboardingData({
     required this.title,
+    required this.subtitle,
     required this.description,
     required this.icon,
     required this.gradientColors,
@@ -292,12 +313,13 @@ class OnboardingPage extends StatelessWidget {
             },
           ),
           
-          SizedBox(height: 50),
+          SizedBox(height: 40),
           
+          // Title with BeatzLock branding
           Text(
             data.title,
             style: TextStyle(
-              fontSize: data.isNewUser ? 32 : 36,
+              fontSize: data.isNewUser ? 32 : 28,
               fontWeight: FontWeight.bold,
               color: Colors.white,
               letterSpacing: 1,
@@ -305,12 +327,27 @@ class OnboardingPage extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           
+          SizedBox(height: 8),
+          
+          // Subtitle
+          Text(
+            data.subtitle,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: Colors.white70,
+              letterSpacing: 0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          
           SizedBox(height: 20),
           
+          // Description
           Text(
             data.description,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 15,
               color: Colors.white70,
               height: 1.5,
             ),

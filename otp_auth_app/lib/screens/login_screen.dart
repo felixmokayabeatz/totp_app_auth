@@ -5,8 +5,6 @@ import 'home_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-
-
 class LoginScreen extends StatefulWidget {
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -18,16 +16,26 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _otpCodeController = TextEditingController();
+  final _resetEmailController = TextEditingController();
+  final _resetNewPasswordController = TextEditingController();
+  final _resetConfirmPasswordController = TextEditingController();
+  final _resetOtpCodeController = TextEditingController();
   
   final SyncService _syncService = SyncService();
   
   bool _isLogin = true;
   bool _isLoading = false;
   bool _show2FA = false;
+  bool _showForgotPassword = false;
+  bool _showResetPassword = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _obscureResetPassword = true;
+  bool _obscureResetConfirmPassword = true;
   String? _tempUsername;
+  String? _resetEmail;
   double _passwordLength = 16;
+  double _resetPasswordLength = 16;
   
   // Password strength variables
   double _passwordStrength = 0.0;
@@ -35,10 +43,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Color _passwordStrengthColor = Colors.grey;
   List<String> _passwordSuggestions = [];
   
+  // Reset password strength
+  double _resetPasswordStrength = 0.0;
+  String _resetPasswordStrengthText = '';
+  Color _resetPasswordStrengthColor = Colors.grey;
+  List<String> _resetPasswordSuggestions = [];
+  
   @override
   void initState() {
     super.initState();
     _passwordController.addListener(_checkPasswordStrength);
+    _resetNewPasswordController.addListener(_checkResetPasswordStrength);
   }
   
   void _checkPasswordStrength() {
@@ -56,7 +71,6 @@ class _LoginScreenState extends State<LoginScreen> {
     int score = 0;
     List<String> suggestions = [];
     
-    // Length check
     if (password.length >= 12) {
       score += 25;
     } else if (password.length >= 8) {
@@ -65,21 +79,18 @@ class _LoginScreenState extends State<LoginScreen> {
       suggestions.add('Use at least 8 characters (12+ recommended)');
     }
     
-    // Contains number
     if (password.contains(RegExp(r'[0-9]'))) {
       score += 25;
     } else {
       suggestions.add('Add a number');
     }
     
-    // Contains uppercase
     if (password.contains(RegExp(r'[A-Z]'))) {
       score += 25;
     } else {
       suggestions.add('Add an uppercase letter');
     }
     
-    // Contains special character
     if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) {
       score += 25;
     } else {
@@ -102,6 +113,63 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
   
+  void _checkResetPasswordStrength() {
+    final password = _resetNewPasswordController.text;
+    if (password.isEmpty) {
+      setState(() {
+        _resetPasswordStrength = 0.0;
+        _resetPasswordStrengthText = '';
+        _resetPasswordStrengthColor = Colors.grey;
+        _resetPasswordSuggestions = [];
+      });
+      return;
+    }
+    
+    int score = 0;
+    List<String> suggestions = [];
+    
+    if (password.length >= 12) {
+      score += 25;
+    } else if (password.length >= 8) {
+      score += 15;
+    } else {
+      suggestions.add('Use at least 8 characters (12+ recommended)');
+    }
+    
+    if (password.contains(RegExp(r'[0-9]'))) {
+      score += 25;
+    } else {
+      suggestions.add('Add a number');
+    }
+    
+    if (password.contains(RegExp(r'[A-Z]'))) {
+      score += 25;
+    } else {
+      suggestions.add('Add an uppercase letter');
+    }
+    
+    if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) {
+      score += 25;
+    } else {
+      suggestions.add('Add a special character (!@#\$%^&*)');
+    }
+    
+    setState(() {
+      _resetPasswordStrength = score / 100;
+      if (score < 50) {
+        _resetPasswordStrengthText = 'Weak';
+        _resetPasswordStrengthColor = Colors.red;
+      } else if (score < 75) {
+        _resetPasswordStrengthText = 'Medium';
+        _resetPasswordStrengthColor = Colors.orange;
+      } else {
+        _resetPasswordStrengthText = 'Strong';
+        _resetPasswordStrengthColor = Colors.green;
+      }
+      _resetPasswordSuggestions = suggestions;
+    });
+  }
+  
   String _generateStrongPassword(int length) {
     const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const lowercase = 'abcdefghijkmnopqrstuvwxyz';
@@ -111,7 +179,6 @@ class _LoginScreenState extends State<LoginScreen> {
     String password = '';
     final random = DateTime.now().millisecondsSinceEpoch;
     
-    // Ensure at least one of each type
     password += uppercase[random % uppercase.length];
     password += lowercase[(random + 1) % lowercase.length];
     password += numbers[(random + 2) % numbers.length];
@@ -119,13 +186,11 @@ class _LoginScreenState extends State<LoginScreen> {
     
     final allChars = uppercase + lowercase + numbers + symbols;
     
-    // Fill the rest randomly
     for (int i = password.length; i < length; i++) {
       final randomIndex = (random + i) % allChars.length;
       password += allChars[randomIndex];
     }
     
-    // Shuffle the password for better randomness
     List<String> chars = password.split('');
     for (int i = chars.length - 1; i > 0; i--) {
       final j = (random + i) % (i + 1);
@@ -143,6 +208,17 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _passwordController.text = strongPassword;
       _checkPasswordStrength();
+    });
+    _showSuccess('Strong password generated! (${length} characters)');
+  }
+  
+  void _suggestResetStrongPassword() {
+    final length = _resetPasswordLength.toInt();
+    final strongPassword = _generateStrongPassword(length);
+    setState(() {
+      _resetNewPasswordController.text = strongPassword;
+      _resetConfirmPasswordController.text = strongPassword;
+      _checkResetPasswordStrength();
     });
     _showSuccess('Strong password generated! (${length} characters)');
   }
@@ -174,7 +250,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     Icon(Icons.security, size: 80, color: Color(0xFF667eea)),
                     SizedBox(height: 20),
                     Text(
-                      _show2FA ? 'Enter 2FA Code' : (_isLogin ? 'Welcome Back' : 'Create Account'),
+                      _show2FA ? 'Enter 2FA Code' : 
+                      (_showResetPassword ? 'Reset Password' :
+                      (_showForgotPassword ? 'Forgot Password' :
+                      (_isLogin ? 'Welcome to BeatzLock' : 'Create BeatzLock Account'))),
                       style: TextStyle(
                         fontSize: 28, 
                         fontWeight: FontWeight.bold,
@@ -182,7 +261,204 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     SizedBox(height: 30),
                     
-                    if (!_show2FA) ...[
+                    if (_showForgotPassword && !_showResetPassword) ...[
+                      Text(
+                        'Enter your email address to reset your password',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                      SizedBox(height: 20),
+                      TextFormField(
+                        controller: _resetEmailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: InputDecoration(
+                          labelText: 'Email Address',
+                          prefixIcon: Icon(Icons.email),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _sendResetCode,
+                        child: _isLoading
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text('Send Reset Code', style: TextStyle(fontSize: 18)),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _showForgotPassword = false;
+                            _resetEmailController.clear();
+                          });
+                        },
+                        child: Text('Back to Login'),
+                      ),
+                    ] else if (_showResetPassword) ...[
+                      Text(
+                        'A verification code has been sent to your email',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                      SizedBox(height: 20),
+                      TextFormField(
+                        controller: _resetOtpCodeController,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 24, letterSpacing: 4),
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Enter 6-digit code',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          counterText: '',
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Color(0xFF667eea).withOpacity(0.3)),
+                        ),
+                        child: TextField(
+                          controller: _resetNewPasswordController,
+                          obscureText: _obscureResetPassword,
+                          onChanged: (_) => _checkResetPasswordStrength(),
+                          decoration: InputDecoration(
+                            labelText: 'New Password',
+                            labelStyle: TextStyle(color: Colors.grey.shade700),
+                            prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF667eea)),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscureResetPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                              onPressed: () => setState(() => _obscureResetPassword = !_obscureResetPassword),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          ),
+                        ),
+                      ),
+                      if (_resetNewPasswordController.text.isNotEmpty) ...[
+                        SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: LinearProgressIndicator(
+                                value: _resetPasswordStrength,
+                                backgroundColor: Colors.grey.shade300,
+                                valueColor: AlwaysStoppedAnimation<Color>(_resetPasswordStrengthColor),
+                                minHeight: 4,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              _resetPasswordStrengthText,
+                              style: TextStyle(
+                                color: _resetPasswordStrengthColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.format_size, size: 18, color: Color(0xFF667eea)),
+                          SizedBox(width: 8),
+                          Text(
+                            'Length: ${_resetPasswordLength.toInt()}',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF667eea)),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: _resetPasswordLength,
+                              min: 8,
+                              max: 20,
+                              divisions: 12,
+                              activeColor: Color(0xFF667eea),
+                              inactiveColor: Colors.grey.shade300,
+                              onChanged: (value) {
+                                setState(() {
+                                  _resetPasswordLength = value;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _suggestResetStrongPassword,
+                          icon: Icon(Icons.auto_awesome, size: 16, color: Color(0xFF667eea)),
+                          label: Text(
+                            'Suggest strong password',
+                            style: TextStyle(fontSize: 12, color: Color(0xFF667eea)),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Color(0xFF667eea).withOpacity(0.3)),
+                        ),
+                        child: TextField(
+                          controller: _resetConfirmPasswordController,
+                          obscureText: _obscureResetConfirmPassword,
+                          decoration: InputDecoration(
+                            labelText: 'Confirm New Password',
+                            labelStyle: TextStyle(color: Colors.grey.shade700),
+                            prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF667eea)),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscureResetConfirmPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                              onPressed: () => setState(() => _obscureResetConfirmPassword = !_obscureResetConfirmPassword),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _resetPassword,
+                        child: _isLoading
+                            ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            : Text('Reset Password', style: TextStyle(fontSize: 18)),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _showResetPassword = false;
+                            _showForgotPassword = false;
+                            _resetOtpCodeController.clear();
+                            _resetNewPasswordController.clear();
+                            _resetConfirmPasswordController.clear();
+                          });
+                        },
+                        child: Text('Back to Login'),
+                      ),
+                    ] else if (!_show2FA) ...[
                       // Username field
                       TextFormField(
                         controller: _usernameController,
@@ -308,7 +584,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Password suggestion and length controls (only for registration)
                       if (!_isLogin) ...[
                         SizedBox(height: 8),
-                        // Password length slider
                         Row(
                           children: [
                             Icon(Icons.format_size, size: 18, color: Color(0xFF667eea)),
@@ -338,7 +613,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-                        // Suggest password button
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton.icon(
@@ -381,7 +655,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       
                       SizedBox(height: 24),
                       
-                      // Submit button
                       ElevatedButton(
                         onPressed: _isLoading ? null : _submitLogin,
                         child: _isLoading
@@ -407,6 +680,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       
                       SizedBox(height: 16),
                       
+                      // Forgot Password link
+                      if (_isLogin)
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _showForgotPassword = true;
+                              _showResetPassword = false;
+                            });
+                          },
+                          child: Text(
+                            'Forgot Password?',
+                            style: TextStyle(color: Color(0xFF667eea)),
+                          ),
+                        ),
+                      
                       // Toggle login/register
                       TextButton(
                         onPressed: () {
@@ -421,8 +709,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                         child: Text(
                           _isLogin 
-                            ? 'Create new account' 
-                            : 'Already have an account? Login',
+                            ? 'No account? Register' 
+                            : 'Back to Login',
                         ),
                       ),
                     ] else ...[
@@ -562,6 +850,92 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
   
+  void _sendResetCode() async {
+    if (_resetEmailController.text.isEmpty) {
+      _showError('Please enter your email address');
+      return;
+    }
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    final sent = await _syncService.sendPasswordResetCode(_resetEmailController.text);
+    
+    setState(() {
+      _isLoading = false;
+    });
+    
+    if (sent) {
+      _resetEmail = _resetEmailController.text;
+      setState(() {
+        _showResetPassword = true;
+      });
+      _showSuccess('Reset code sent to your email!');
+    } else {
+      _showError('No account found with this email address');
+    }
+  }
+  
+  void _resetPassword() async {
+    if (_resetOtpCodeController.text.isEmpty) {
+      _showError('Please enter verification code');
+      return;
+    }
+    
+    if (_resetOtpCodeController.text.length != 6) {
+      _showError('Please enter a valid 6-digit code');
+      return;
+    }
+    
+    if (_resetNewPasswordController.text.isEmpty) {
+      _showError('Please enter new password');
+      return;
+    }
+    
+    if (_resetNewPasswordController.text.length < 8) {
+      _showError('Password must be at least 8 characters');
+      return;
+    }
+    
+    if (_resetNewPasswordController.text != _resetConfirmPasswordController.text) {
+      _showError('Passwords do not match');
+      return;
+    }
+    
+    if (_resetPasswordStrength < 0.5) {
+      _showError('Please use a stronger password');
+      return;
+    }
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    final success = await _syncService.resetPassword(
+      _resetEmail!,
+      _resetOtpCodeController.text,
+      _resetNewPasswordController.text,
+    );
+    
+    setState(() {
+      _isLoading = false;
+    });
+    
+    if (success) {
+      _showSuccess('Password reset successfully! Please login with your new password.');
+      setState(() {
+        _showResetPassword = false;
+        _showForgotPassword = false;
+        _resetOtpCodeController.clear();
+        _resetNewPasswordController.clear();
+        _resetConfirmPasswordController.clear();
+      });
+    } else {
+      _showError('Invalid verification code');
+    }
+  }
+  
   void _verify2FA() async {
     if (_otpCodeController.text.isEmpty) {
       _showError('Please enter verification code');
@@ -600,7 +974,6 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     
     if (success) {
-      // Get user data from sync service
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString('user_email') ?? '';
       final username = prefs.getString('current_user') ?? '';
@@ -650,7 +1023,12 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _otpCodeController.dispose();
+    _resetEmailController.dispose();
+    _resetNewPasswordController.dispose();
+    _resetConfirmPasswordController.dispose();
+    _resetOtpCodeController.dispose();
     _passwordController.removeListener(_checkPasswordStrength);
+    _resetNewPasswordController.removeListener(_checkResetPasswordStrength);
     super.dispose();
   }
 }
