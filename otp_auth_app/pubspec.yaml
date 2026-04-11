@@ -1,5 +1,5 @@
-name: otp_auth_app
-description: TOTP Authenticator with Cloud Sync
+name: beatzlock_auth
+description: BeatzLock Authenticator - Secure Two-Factor Authentication
 version: 1.0.0+1
 
 environment:
