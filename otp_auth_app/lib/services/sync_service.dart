@@ -111,7 +111,7 @@ class SyncService {
       } else if (response.statusCode == 404) {
         print('No accounts found on server');
       }
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         print('Token expired, please login again');
         // Optionally: Refresh token or logout

@@ -14,15 +14,25 @@ class ShowQRScreen extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final otpUrl = 'otpauth://totp/${issuer != null ? "$issuer:" : ""}$service?secret=$secret&issuer=${issuer ?? service}';
     
     return Scaffold(
       appBar: AppBar(
-        title: Text('QR Code'),
+        title: Text(
+          'QR Code',
+          style: TextStyle(
+            color: isDark ? Colors.white : Color(0xFF667eea),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(
+            Icons.arrow_back,
+            color: isDark ? Colors.white : Color(0xFF667eea),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -31,7 +41,9 @@ class ShowQRScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            colors: isDark
+                ? [Color(0xFF1a1a2e), Color(0xFF16213e)]
+                : [Color(0xFF667eea), Color(0xFF764ba2)],
           ),
         ),
         child: Center(
@@ -44,6 +56,7 @@ class ShowQRScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
+                  color: Colors.white,
                   child: Padding(
                     padding: EdgeInsets.all(24),
                     child: Column(
@@ -73,7 +86,7 @@ class ShowQRScreen extends StatelessWidget {
                         SizedBox(height: 10),
                         Text(
                           'with your authenticator app',
-                          style: TextStyle(color: Colors.grey),
+                          style: TextStyle(color: Colors.grey[600]),
                         ),
                       ],
                     ),
@@ -84,28 +97,48 @@ class ShowQRScreen extends StatelessWidget {
                   margin: EdgeInsets.symmetric(horizontal: 20),
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
                   ),
                   child: Column(
                     children: [
                       Text(
                         'Or enter manually:',
-                        style: TextStyle(color: Colors.white70),
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       SizedBox(height: 10),
-                      SelectableText(
-                        secret,
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: SelectableText(
+                          secret,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Keep this secret safe!',
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontFamily: 'monospace',
+                          color: Colors.white54,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(height: 20),
+                SizedBox(height: 30),
               ],
             ),
           ),

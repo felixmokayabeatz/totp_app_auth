@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';  // ADD THIS IMPORT
+import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import '../models/otp_account.dart';
@@ -9,7 +9,7 @@ import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
-import 'show_qr_screen.dart';  // ADD THIS IMPORT
+import 'show_qr_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -65,50 +65,57 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDark = themeProvider.isDarkMode;
     
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [Color(0xFF1a1a2e), Color(0xFF16213e)]
-                : [Color(0xFF667eea), Color(0xFF764ba2)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(isDark),
-              _buildSearchBar(isDark),
-              Expanded(
-                child: _buildAccountsList(),
-              ),
-            ],
-          ),
-        ),
+    // ENFORCE MINIMUM WINDOW SIZE
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: 900,
+        minHeight: 700,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => AddAccountScreen()),
-          );
-          if (result == true) {
-            _updateAllOTPs();
-          }
-        },
-        icon: Icon(Icons.add, color: Colors.white),
-        label: Text('Add Account', style: TextStyle(color: Colors.white)),
-        backgroundColor: Colors.white.withOpacity(0.2),
-        elevation: 0,
+      child: Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [Color(0xFF1a1a2e), Color(0xFF16213e)]
+                  : [Color(0xFF667eea), Color(0xFF764ba2)],
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(isDark),
+                _buildSearchBar(),
+                Expanded(
+                  child: _buildAccountsList(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => AddAccountScreen()),
+            );
+            if (result == true) {
+              _updateAllOTPs();
+            }
+          },
+          icon: Icon(Icons.add, color: Colors.white),
+          label: Text('Add Account', style: TextStyle(color: Colors.white)),
+          backgroundColor: Colors.white.withOpacity(0.2),
+          elevation: 0,
+        ),
       ),
     );
   }
   
   Widget _buildHeader(bool isDark) {
-    return Container(
-      padding: EdgeInsets.all(24),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -118,17 +125,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Text(
                 'Authenticator',
                 style: TextStyle(
-                  fontSize: 32,
+                  fontSize: 28,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
-                  letterSpacing: 1,
                 ),
               ),
-              SizedBox(height: 4),
               Text(
                 'Secure 2FA Codes',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   color: Colors.white70,
                 ),
               ),
@@ -136,32 +141,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           Row(
             children: [
-              IconButton(
-                icon: Icon(Icons.sync, color: Colors.white),
-                onPressed: () => _syncData(),
+              _buildIconButton(Icons.sync, () => _syncData()),
+              _buildIconButton(Icons.settings, () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => SettingsScreen()),
+              )),
+              _buildIconButton(
+                isDark ? Icons.light_mode : Icons.dark_mode,
+                () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
               ),
-              IconButton(
-                icon: Icon(Icons.settings, color: Colors.white),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => SettingsScreen()),
-                ),
-              ),
-              IconButton(
-                icon: Icon(
-                  isDark ? Icons.light_mode : Icons.dark_mode,
-                  color: Colors.white,
-                ),
-                onPressed: () {
-                  final tp = Provider.of<ThemeProvider>(context, listen: false);
-                  tp.toggleTheme();
-                },
-              ),
-              IconButton(
-                icon: Icon(Icons.logout, color: Colors.white),
-                onPressed: () => _logout(),
-                tooltip: 'Logout',
-              ),
+              _buildIconButton(Icons.logout, () => _logout()),
             ],
           ),
         ],
@@ -169,15 +158,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
   
-  Widget _buildSearchBar(bool isDark) {
+  Widget _buildIconButton(IconData icon, VoidCallback onPressed) {
+    return IconButton(
+      icon: Icon(icon, color: Colors.white, size: 22),
+      onPressed: onPressed,
+      padding: EdgeInsets.all(8),
+      constraints: BoxConstraints(),
+    );
+  }
+  
+  Widget _buildSearchBar() {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(30),
       ),
       child: TextField(
-        style: TextStyle(color: Colors.white),
+        style: TextStyle(color: Colors.white, fontSize: 14),
         onChanged: (value) {
           setState(() {
             _searchQuery = value.toLowerCase();
@@ -185,10 +183,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         },
         decoration: InputDecoration(
           hintText: 'Search accounts...',
-          hintStyle: TextStyle(color: Colors.white70),
-          prefixIcon: Icon(Icons.search, color: Colors.white70),
+          hintStyle: TextStyle(color: Colors.white60, fontSize: 14),
+          prefixIcon: Icon(Icons.search, color: Colors.white70, size: 20),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 15),
+          contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         ),
       ),
     );
@@ -210,24 +208,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.qr_code_2, size: 100, color: Colors.white.withOpacity(0.5)),
-            SizedBox(height: 20),
-            Text(
-              'No accounts yet',
-              style: TextStyle(fontSize: 20, color: Colors.white70),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Tap + to add your first account',
-              style: TextStyle(color: Colors.white54),
-            ),
+            Icon(Icons.qr_code_2, size: 80, color: Colors.white.withOpacity(0.5)),
+            SizedBox(height: 16),
+            Text('No accounts yet', style: TextStyle(fontSize: 18, color: Colors.white70)),
+            SizedBox(height: 8),
+            Text('Tap + to add your first account', style: TextStyle(color: Colors.white54, fontSize: 12)),
           ],
         ),
       );
     }
     
     return ListView.builder(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.all(12),
       itemCount: accounts.length,
       itemBuilder: (context, index) {
         final account = accounts[index];
@@ -235,191 +227,89 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final timer = timers[account.id] ?? 30;
         final progress = timer / 30;
         
-        return FadeTransition(
-          opacity: _animationController,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: Offset(0.5, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: _animationController,
-              curve: Interval(index * 0.05, 1.0, curve: Curves.easeOut),
-            )),
-            child: Container(
-              margin: EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Icon(
-                                          _getServiceIcon(account.service),
-                                          color: Colors.white,
-                                          size: 24,
-                                        ),
-                                      ),
-                                      SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              account.service,
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            if (account.issuer != null)
-                                              Text(
-                                                account.issuer!,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.white70,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withOpacity(0.2),
-                                    Colors.white.withOpacity(0.1),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(15),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.3),
-                                ),
-                              ),
-                              child: Text(
-                                otp,
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  letterSpacing: 4,
-                                  fontFamily: 'monospace',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: LinearProgressIndicator(
-                                  value: progress,
-                                  backgroundColor: Colors.white.withOpacity(0.2),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    timer < 5 ? Colors.red : Colors.green,
-                                  ),
-                                  minHeight: 6,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              '${timer}s',
-                              style: TextStyle(
-                                color: timer < 5 ? Colors.red : Colors.white70,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            // COPY BUTTON - FIXED
-                            IconButton(
-                              icon: Icon(Icons.copy, color: Colors.white70, size: 20),
-                              onPressed: () => _copyToClipboard(otp),
-                              tooltip: 'Copy OTP',
-                            ),
-                            // QR CODE BUTTON - ADDED
-                            IconButton(
-                              icon: Icon(Icons.qr_code, color: Colors.white70, size: 20),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => ShowQRScreen(
-                                    secret: account.secret,
-                                    service: account.service,
-                                    issuer: account.issuer,
-                                  )),
-                                );
-                              },
-                              tooltip: 'Show QR Code',
-                            ),
-                            // DELETE BUTTON
-                            IconButton(
-                              icon: Icon(Icons.delete_outline, color: Colors.white70, size: 20),
-                              onPressed: () => _deleteAccount(account.id),
-                              tooltip: 'Delete',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    right: 20,
-                    top: 20,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        return Container(
+          margin: EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.2)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Icon(_getServiceIcon(account.service), color: Colors.white, size: 24),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.fiber_manual_record, color: Colors.green, size: 8),
-                          SizedBox(width: 4),
-                          Text('Active', style: TextStyle(color: Colors.green, fontSize: 10)),
+                          Text(account.service, 
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          if (account.issuer != null)
+                            Text(account.issuer!, 
+                                style: TextStyle(fontSize: 11, color: Colors.white70),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [Colors.white.withOpacity(0.2), Colors.white.withOpacity(0.1)]),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(otp,
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 2)),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: Colors.white.withOpacity(0.2),
+                          valueColor: AlwaysStoppedAnimation<Color>(timer < 5 ? Colors.red : Color(0xFF4CAF50)),
+                          minHeight: 4,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    SizedBox(width: 35, child: Text('${timer}s', style: TextStyle(color: timer < 5 ? Colors.red : Colors.white70, fontSize: 12))),
+                    _buildActionButton(Icons.copy, () => _copyToClipboard(otp)),
+                    _buildActionButton(Icons.qr_code, () => Navigator.push(context, MaterialPageRoute(builder: (_) => ShowQRScreen(secret: account.secret, service: account.service, issuer: account.issuer)))),
+                    _buildActionButton(Icons.delete_outline, () => _deleteAccount(account.id)),
+                  ],
+                ),
+              ],
             ),
           ),
         );
       },
+    );
+  }
+  
+  Widget _buildActionButton(IconData icon, VoidCallback onPressed) {
+    return IconButton(
+      icon: Icon(icon, color: Colors.white70, size: 18),
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints(),
     );
   }
   
@@ -429,92 +319,43 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (lower.contains('github')) return Icons.code;
     if (lower.contains('facebook')) return Icons.facebook;
     if (lower.contains('twitter')) return Icons.chat;
-    if (lower.contains('microsoft') || lower.contains('outlook')) return Icons.window;
+    if (lower.contains('microsoft')) return Icons.window;
     if (lower.contains('amazon')) return Icons.shopping_cart;
-    if (lower.contains('discord')) return Icons.gamepad;
-    if (lower.contains('slack')) return Icons.message;
     return Icons.security;
   }
   
-  // FIXED COPY TO CLIPBOARD
   void _copyToClipboard(String otp) async {
     await Clipboard.setData(ClipboardData(text: otp));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✓ OTP $otp copied to clipboard!'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✓ Copied!'), backgroundColor: Colors.green, duration: Duration(seconds: 1), behavior: SnackBarBehavior.floating, width: 100));
   }
   
   void _deleteAccount(String id) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete Account'),
-        content: Text('Are you sure you want to delete this account?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: Text('Delete Account'),
+      content: Text('Are you sure you want to delete this account?'),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, true), child: Text('Delete', style: TextStyle(color: Colors.red)))],
+    ));
     if (confirmed == true) {
-      final otpBox = Hive.box<OTPAccount>('otp_accounts');
-      await otpBox.delete(id);
-      setState(() {
-        currentOTPs.remove(id);
-        timers.remove(id);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Account deleted!'), backgroundColor: Colors.red),
-      );
+      await Hive.box<OTPAccount>('otp_accounts').delete(id);
+      setState(() { currentOTPs.remove(id); timers.remove(id); });
     }
   }
   
   void _syncData() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Syncing...'), duration: Duration(seconds: 1)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Syncing...'), duration: Duration(seconds: 1)));
     await _syncService.syncAccounts();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Sync completed!'), backgroundColor: Colors.green, duration: Duration(seconds: 1)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync completed!'), backgroundColor: Colors.green));
   }
   
   void _logout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Logout'),
-        content: Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Logout', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: Text('Logout'),
+      content: Text('Are you sure you want to logout?'),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')), TextButton(onPressed: () => Navigator.pop(context, true), child: Text('Logout', style: TextStyle(color: Colors.red)))],
+    ));
     if (confirmed == true) {
       await _syncService.logout();
-      Navigator.pushReplacement(
-        context, 
-        MaterialPageRoute(builder: (_) => LoginScreen()),
-      );
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginScreen()));
     }
   }
   

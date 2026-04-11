@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'models/otp_account.dart';
 import 'models/password_entry.dart';
 import 'providers/auth_provider.dart';
@@ -9,9 +10,14 @@ import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Set minimum window size
+  appWindow.minSize = Size(900, 700);
+  appWindow.size = Size(900, 700);
+  appWindow.alignment = Alignment.center;
+  
   await Hive.initFlutter();
   
-  // Register adapters
   if (!Hive.isAdapterRegistered(0)) {
     Hive.registerAdapter(OTPAccountAdapter());
   }
@@ -24,6 +30,7 @@ void main() async {
   await Hive.openBox('settings');
   
   runApp(MyApp());
+  appWindow.show();
 }
 
 class MyApp extends StatelessWidget {
@@ -41,7 +48,7 @@ class MyApp extends StatelessWidget {
             theme: themeProvider.lightTheme,
             darkTheme: themeProvider.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: SplashScreen(), // Changed to SplashScreen
+            home: SplashScreen(),
             debugShowCheckedModeBanner: false,
           );
         },

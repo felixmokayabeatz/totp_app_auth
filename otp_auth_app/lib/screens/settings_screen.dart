@@ -41,12 +41,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
       appBar: AppBar(
         title: Text(
           'Settings',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: isDark ? Colors.white : Color(0xFF667eea), fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : Color(0xFF667eea)),
           onPressed: () => Navigator.pop(context),
         ),
       ),
