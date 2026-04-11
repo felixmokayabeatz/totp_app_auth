@@ -1,67 +1,99 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'encryption_service.dart';
 
 class OTPService {
-  String generateOTP(String secret) {
-    if (secret.isEmpty) return '------';
-    
+  Future<String> getCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('current_user') ?? 'default_user';
+  }
+
+  Future<String> generateOTP(String encryptedSecret) async {
+    if (encryptedSecret.isEmpty) return '------';
+
     try {
-      // Get current time counter (30-second intervals)
+      final userId = await getCurrentUserId();
+      final secret = _safeDecrypt(encryptedSecret, userId);
+
+      // Strip everything that is not a valid Base32 character
+      final cleanSecret = secret
+          .toUpperCase()
+          .replaceAll(RegExp(r'[^A-Z2-7]'), '');
+
+      if (cleanSecret.isEmpty) {
+        debugPrint('Empty secret after cleaning');
+        return 'Error';
+      }
+
+      debugPrint('Decoding secret: $cleanSecret');
+
+      final key = _base32Decode(cleanSecret);
+      if (key.isEmpty) return 'Error';
+
       final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final counter = (timestamp / 30).floor();
-      
-      // Convert counter to bytes
-      final counterBytes = _intToBytes(counter);
-      
-      // Decode base32 secret
-      final key = _base32Decode(secret.toUpperCase().replaceAll(' ', ''));
-      
-      // Generate HMAC-SHA1
+      final counterBytes = ByteData(8)..setInt64(0, counter);
       final hmac = Hmac(sha1, key);
-      final hash = hmac.convert(counterBytes);
-      
-      // Dynamic truncation
+      final hash = hmac.convert(counterBytes.buffer.asUint8List());
+
       final offset = hash.bytes[19] & 0xf;
-      final code = ((hash.bytes[offset] & 0x7f) << 24 |
-          (hash.bytes[offset + 1] & 0xff) << 16 |
-          (hash.bytes[offset + 2] & 0xff) << 8 |
-          (hash.bytes[offset + 3] & 0xff)) % 1000000;
-      
-      // Return 6-digit code with leading zeros
-      return code.toString().padLeft(6, '0');
+      final code = ((hash.bytes[offset] & 0x7f) << 24) |
+          ((hash.bytes[offset + 1] & 0xff) << 16) |
+          ((hash.bytes[offset + 2] & 0xff) << 8) |
+          (hash.bytes[offset + 3] & 0xff);
+
+      final otp = (code % 1000000).toString().padLeft(6, '0');
+      debugPrint('Generated OTP: $otp');
+      return otp;
     } catch (e) {
-      print('OTP Error: $e');
+      debugPrint('OTP Error: $e');
       return 'Error';
     }
   }
-  
-  List<int> _intToBytes(int value) {
-    List<int> bytes = [];
-    for (int i = 7; i >= 0; i--) {
-      bytes.add((value >> (8 * i)) & 0xff);
+
+  String _safeDecrypt(String storedSecret, String userId) {
+    // If it looks like raw Base32 (only A-Z, 2-7, spaces) → it's unencrypted legacy
+    final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
+    final isRawBase32 = RegExp(r'^[A-Z2-7a-z]+$').hasMatch(strippedSpaces);
+
+    if (isRawBase32) {
+      // Already plain Base32 — no decryption needed
+      debugPrint('Secret is raw Base32, using directly');
+      return storedSecret;
     }
-    return bytes;
+
+    // Looks like base64 encrypted output — try to decrypt
+    try {
+      final decrypted = EncryptionService.decryptSecret(storedSecret, userId);
+      debugPrint('Decrypted successfully');
+      return decrypted;
+    } catch (e) {
+      debugPrint('Decryption failed: $e, using raw');
+      return storedSecret;
+    }
   }
-  
-  List<int> _base32Decode(String input) {
+
+  Uint8List _base32Decode(String input) {
     const String alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    List<int> result = [];
+    final List<int> result = [];
     int buffer = 0;
     int bitsLeft = 0;
-    
+
     for (int i = 0; i < input.length; i++) {
-      final char = input[i];
-      final value = alphabet.indexOf(char);
-      if (value < 0) continue;
-      
+      final value = alphabet.indexOf(input[i]);
+      if (value == -1) continue;
       buffer = (buffer << 5) | value;
       bitsLeft += 5;
-      
       if (bitsLeft >= 8) {
-        result.add((buffer >> (bitsLeft - 8)) & 0xff);
+        result.add((buffer >> (bitsLeft - 8)) & 0xFF);
         bitsLeft -= 8;
       }
     }
-    
-    return result;
+
+    debugPrint('Decoded ${result.length} bytes');
+    return Uint8List.fromList(result);
   }
 }

@@ -5,13 +5,31 @@ import '../models/otp_account.dart';
 import 'encryption_service.dart';
 
 class SyncService {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'http://localhost:8000/api/',
-    connectTimeout: Duration(seconds: 30),
-    receiveTimeout: Duration(seconds: 30),
-  ));
+  late Dio _dio;
+  
+  SyncService() {
+    _dio = Dio(BaseOptions(
+      baseUrl: 'http://localhost:8000/api/',
+      connectTimeout: Duration(seconds: 30),
+      receiveTimeout: Duration(seconds: 30),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    ));
+  }
   
   String? _encryptionKey;
+  
+  Future<void> _updateAuthHeader() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token != null && token.isNotEmpty) {
+      _dio.options.headers['Authorization'] = 'Bearer $token';
+      print('Auth header set with token: ${token.substring(0, 20)}...');
+    } else {
+      print('No token found');
+    }
+  }
   
   Future<void> _initEncryption() async {
     if (_encryptionKey == null) {
@@ -34,12 +52,13 @@ class SyncService {
       
       if (response.statusCode == 200 || response.statusCode == 201) {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', response.data['access']);
+        final accessToken = response.data['access'];
+        await prefs.setString('access_token', accessToken);
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
         
+        await _updateAuthHeader();
         await _initEncryption();
-        await _clearLocalAccounts();
         return true;
       }
       return false;
@@ -63,12 +82,11 @@ class SyncService {
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
         
-        // Set token for future requests
-        _dio.options.headers['Authorization'] = 'Bearer $accessToken';
-        
+        await _updateAuthHeader();
         await _initEncryption();
-        await _clearLocalAccounts();
-        await downloadAccounts();
+        
+        // Download and merge accounts
+        await downloadAndMergeAccounts();
         return true;
       }
       return false;
@@ -78,24 +96,11 @@ class SyncService {
     }
   }
   
-  Future<void> _clearLocalAccounts() async {
-    final otpBox = Hive.box<OTPAccount>('otp_accounts');
-    await otpBox.clear();
-  }
-  
-  Future<void> downloadAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('access_token');
-    if (token == null) {
-      print('No access token found');
-      return;
-    }
-    
-    _dio.options.headers['Authorization'] = 'Bearer $token';
+  Future<void> downloadAndMergeAccounts() async {
+    await _updateAuthHeader();
     
     try {
-      print('Downloading accounts with token: ${token.substring(0, 20)}...');
-      
+      print('Downloading accounts from cloud...');
       final response = await _dio.get(
         'sync/get-data/',
         queryParameters: {'data_type': 'otp_accounts'},
@@ -107,16 +112,18 @@ class SyncService {
         final encryptedContent = response.data['encrypted_content'];
         await _initEncryption();
         final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
-        print('Downloaded and decrypted accounts');
+        print('Cloud accounts downloaded and decrypted');
+        
+        // Parse and merge accounts
+        final localBox = Hive.box<OTPAccount>('otp_accounts');
+        print('Local accounts before merge: ${localBox.length}');
       } else if (response.statusCode == 404) {
-        print('No accounts found on server');
+        print('No cloud accounts found');
       }
-    } on DioException catch (e) {
+    } on DioError catch (e) {
+      print('Download error: ${e.message}');
       if (e.response?.statusCode == 401) {
-        print('Token expired, please login again');
-        // Optionally: Refresh token or logout
-      } else {
-        print('Download error: $e');
+        print('Token invalid - please login again');
       }
     } catch (e) {
       print('Download error: $e');
@@ -124,17 +131,21 @@ class SyncService {
   }
   
   Future<void> syncAccounts() async {
+    await _updateAuthHeader();
+    
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
-    if (token == null) return;
     
-    _dio.options.headers['Authorization'] = 'Bearer $token';
+    if (token == null || token.isEmpty) {
+      print('No access token found - cannot sync');
+      return;
+    }
     
     final otpBox = Hive.box<OTPAccount>('otp_accounts');
     final accountsData = otpBox.values.map((a) => ({
       'id': a.id,
       'service': a.service,
-      'secret': a.secret,
+      'secret': a.encryptedSecret,
       'issuer': a.issuer,
       'createdAt': a.createdAt.toIso8601String(),
     })).toList();
@@ -144,12 +155,25 @@ class SyncService {
     final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
     
     try {
+      print('Syncing ${accountsData.length} accounts...');
       final response = await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
         'encrypted_content': encryptedContent,
         'version': accountsData.length,
       });
-      print('Sync successful - ${accountsData.length} accounts synced');
+      
+      if (response.statusCode == 200) {
+        print('Sync successful - ${accountsData.length} accounts synced');
+      } else {
+        print('Sync failed with status: ${response.statusCode}');
+      }
+    } on DioError catch (e) {
+      print('Sync error: ${e.message}');
+      if (e.response?.statusCode == 401) {
+        print('Token expired - please login again');
+        // Clear invalid token
+        await prefs.remove('access_token');
+      }
     } catch (e) {
       print('Sync error: $e');
     }
@@ -159,7 +183,7 @@ class SyncService {
     try {
       final response = await _dio.post('send-2fa/', data: {
         'username': username,
-        'password': password,  // ADD PASSWORD
+        'password': password,
       });
       print('Send 2FA response: ${response.data}');
       return response.data['success'] == true;
@@ -188,7 +212,6 @@ class SyncService {
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
     await prefs.remove('current_user');
-    await _clearLocalAccounts();
     _encryptionKey = null;
     _dio.options.headers.remove('Authorization');
   }
@@ -196,7 +219,7 @@ class SyncService {
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     final token = await prefs.getString('access_token');
-    return token != null;
+    return token != null && token.isNotEmpty;
   }
   
   Future<String?> getCurrentUser() async {

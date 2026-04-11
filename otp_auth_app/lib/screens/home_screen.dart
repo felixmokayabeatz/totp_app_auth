@@ -10,6 +10,7 @@ import 'add_account_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'show_qr_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -25,7 +26,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late AnimationController _animationController;
   String _searchQuery = '';
   bool _isSyncing = false;
-  
+  bool _allBlurred = false;
+
   @override
   void initState() {
     super.initState();
@@ -36,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _animationController.forward();
     _startTimer();
   }
-  
+
   void _startTimer() {
     Future.delayed(Duration(seconds: 1), () {
       if (mounted) {
@@ -45,644 +47,609 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
     });
   }
-  
-  void _updateAllOTPs() {
+
+  void _updateAllOTPs() async {
     final otpBox = Hive.box<OTPAccount>('otp_accounts');
     final newOTPs = <String, String>{};
     final newTimers = <String, int>{};
-    
+    final userId = await _getUserId();
+
     for (var account in otpBox.values) {
-      newOTPs[account.id] = _otpService.generateOTP(account.secret);
+      final secret = account.getSecret(userId);
+      newOTPs[account.id] = await _otpService.generateOTP(secret);
       newTimers[account.id] = 30 - (DateTime.now().second % 30);
       if (!blurredCodes.containsKey(account.id)) {
         blurredCodes[account.id] = false;
       }
     }
-    
-    setState(() {
-      currentOTPs = newOTPs;
-      timers = newTimers;
-    });
+
+    if (mounted) {
+      setState(() {
+        currentOTPs = newOTPs;
+        timers = newTimers;
+      });
+    }
   }
-  
+
+  Future<String> _getUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('current_user') ?? 'default_user';
+  }
+
   void _toggleBlurAll() {
-    final allBlurred = blurredCodes.isNotEmpty && blurredCodes.values.every((blurred) => blurred == true);
     setState(() {
+      _allBlurred = !_allBlurred;
       for (var key in blurredCodes.keys) {
-        blurredCodes[key] = !allBlurred;
+        blurredCodes[key] = _allBlurred;
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(allBlurred ? '🔓 Codes visible' : '🔒 Codes hidden'),
-        duration: Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDark = themeProvider.isDarkMode;
-    
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        minWidth: 900,
-        minHeight: 700,
+
+    return Scaffold(
+      backgroundColor: isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF),
+      body: Column(
+        children: [
+          _buildHeader(isDark),
+          _buildSearchBar(isDark),
+          Expanded(child: _buildAccountsList(isDark)),
+        ],
       ),
-      child: Scaffold(
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: isDark
-                  ? [Color(0xFF1a1a2e), Color(0xFF16213e)]
-                  : [Color(0xFF667eea), Color(0xFF764ba2)],
-            ),
+    );
+  }
+
+  Widget _buildHeader(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Color(0xFF1A1A2E) : Color(0xFF4F46E5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
+            offset: Offset(0, 4),
           ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(isDark),
-                _buildSearchBar(),
-                Expanded(
-                  child: _buildAccountsList(),
+        ],
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(20, 16, 12, 16),
+          child: Row(
+            children: [
+              // Logo + title
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
+                child: Icon(Icons.shield_rounded, color: Colors.white, size: 24),
+              ),
+              SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Authenticator',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  Text(
+                    'Two-Factor Security',
+                    style: TextStyle(fontSize: 11, color: Colors.white60),
+                  ),
+                ],
+              ),
+              Spacer(),
+              // Actions
+              _headerAction(
+                _allBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                _toggleBlurAll,
+                tooltip: _allBlurred ? 'Show codes' : 'Hide codes',
+              ),
+              _headerAction(
+                Icons.sync_rounded,
+                _syncData,
+                tooltip: 'Sync',
+                loading: _isSyncing,
+              ),
+              _headerAction(
+                Icons.settings_rounded,
+                () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen())),
+                tooltip: 'Settings',
+              ),
+              _headerAction(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+                tooltip: 'Toggle theme',
+              ),
+              _headerAction(
+                Icons.logout_rounded,
+                _logout,
+                tooltip: 'Logout',
+              ),
+            ],
           ),
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () async {
-            final result = await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => AddAccountScreen()),
-            );
-            if (result == true) {
-              _updateAllOTPs();
-            }
-          },
-          icon: Icon(Icons.add, color: Colors.white, size: 28),
-          label: Text('Add Account', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-          backgroundColor: Colors.white.withOpacity(0.2),
-          elevation: 0,
         ),
       ),
     );
   }
-  
-  Widget _buildHeader(bool isDark) {
-    final allBlurred = blurredCodes.isNotEmpty && blurredCodes.values.every((blurred) => blurred == true);
-    
-    return Padding(
-      padding: EdgeInsets.fromLTRB(24, 20, 24, 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Authenticator',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 1,
-                ),
-              ),
-              Text(
-                'Secure 2FA Codes',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.white70,
-                ),
-              ),
-            ],
+
+  Widget _headerAction(IconData icon, VoidCallback onTap, {String? tooltip, bool loading = false}) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 40,
+          height: 40,
+          margin: EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(10),
           ),
-          Row(
-            children: [
-              _buildIconButton(
-                allBlurred ? Icons.visibility : Icons.visibility_off,
-                () => _toggleBlurAll(),
-                allBlurred ? "Show Codes" : "Hide Codes",
+          child: loading
+              ? Padding(
+                  padding: EdgeInsets.all(10),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : Icon(icon, color: Colors.white, size: 20),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(bool isDark) {
+    return Container(
+      margin: EdgeInsets.fromLTRB(16, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: isDark ? Color(0xFF1E1E32) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              style: TextStyle(
+                color: isDark ? Colors.white : Color(0xFF1A1A2E),
+                fontSize: 14,
               ),
-              _buildIconButton(Icons.sync, () => _syncData(), "Sync", isSyncing: _isSyncing),
-              _buildIconButton(Icons.settings, () => Navigator.push(
+              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+              decoration: InputDecoration(
+                hintText: 'Search accounts…',
+                hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400], fontSize: 14),
+                prefixIcon: Icon(Icons.search_rounded, color: isDark ? Colors.white38 : Colors.grey[400], size: 20),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          // Add button inline with search — no more FAB overlap
+          GestureDetector(
+            onTap: () async {
+              final result = await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => SettingsScreen()),
-              ), "Settings"),
-              _buildIconButton(
-                isDark ? Icons.light_mode : Icons.dark_mode,
-                () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-                "Theme",
+                MaterialPageRoute(builder: (_) => AddAccountScreen()),
+              );
+              if (result == true) _updateAllOTPs();
+            },
+            child: Container(
+              margin: EdgeInsets.only(right: 8),
+              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Color(0xFF4F46E5),
+                borderRadius: BorderRadius.circular(10),
               ),
-              _buildIconButton(Icons.logout, () => _logout(), "Logout"),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_rounded, color: Colors.white, size: 18),
+                  SizedBox(width: 4),
+                  Text(
+                    'Add',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-  
-  Widget _buildIconButton(IconData icon, VoidCallback onPressed, String tooltip, {bool isSyncing = false}) {
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        margin: EdgeInsets.only(left: 4),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: IconButton(
-          icon: isSyncing 
-              ? SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Icon(icon, color: Colors.white, size: 24),
-          onPressed: onPressed,
-          padding: EdgeInsets.all(10),
-          constraints: BoxConstraints(),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildSearchBar() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: TextField(
-        style: TextStyle(color: Colors.white, fontSize: 15),
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value.toLowerCase();
-          });
-        },
-        decoration: InputDecoration(
-          hintText: 'Search accounts...',
-          hintStyle: TextStyle(color: Colors.white60, fontSize: 15),
-          prefixIcon: Icon(Icons.search, color: Colors.white70, size: 22),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildAccountsList() {
+
+  Widget _buildAccountsList(bool isDark) {
     final otpBox = Hive.box<OTPAccount>('otp_accounts');
     var accounts = otpBox.values.toList();
-    
+
     if (_searchQuery.isNotEmpty) {
-      accounts = accounts.where((account) =>
-        account.service.toLowerCase().contains(_searchQuery) ||
-        (account.issuer?.toLowerCase().contains(_searchQuery) ?? false)
-      ).toList();
+      accounts = accounts
+          .where((a) =>
+              a.service.toLowerCase().contains(_searchQuery) ||
+              (a.issuer?.toLowerCase().contains(_searchQuery) ?? false))
+          .toList();
     }
-    
+
     if (accounts.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.qr_code_2, size: 100, color: Colors.white.withOpacity(0.5)),
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: isDark ? Color(0xFF1E1E32) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20),
+                ],
+              ),
+              child: Icon(Icons.security_rounded, size: 40, color: Color(0xFF4F46E5)),
+            ),
             SizedBox(height: 20),
-            Text('No accounts yet', style: TextStyle(fontSize: 20, color: Colors.white70, fontWeight: FontWeight.w500)),
-            SizedBox(height: 10),
-            Text('Tap + to add your first account', style: TextStyle(color: Colors.white54, fontSize: 14)),
+            Text(
+              'No accounts yet',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : Color(0xFF1A1A2E),
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Tap Add to get started',
+              style: TextStyle(color: isDark ? Colors.white38 : Colors.grey[500], fontSize: 13),
+            ),
           ],
         ),
       );
     }
-    
+
     return ListView.builder(
-      padding: EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
       itemCount: accounts.length,
       itemBuilder: (context, index) {
         final account = accounts[index];
         final otp = currentOTPs[account.id] ?? '------';
         final timer = timers[account.id] ?? 30;
-        final progress = timer / 30;
         final isBlurred = blurredCodes[account.id] ?? false;
-        
-        return TweenAnimationBuilder(
-          tween: Tween<double>(begin: 0, end: 1),
-          duration: Duration(milliseconds: 300 + (index * 50)),
-          builder: (context, value, child) {
-            return Transform.translate(
-              offset: Offset(0, 20 * (1 - value)),
-              child: Opacity(
-                opacity: value,
-                child: Container(
-                  margin: EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
+        final isExpiring = timer <= 5;
+
+        return AnimatedContainer(
+          duration: Duration(milliseconds: 300),
+          margin: EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: isDark ? Color(0xFF1E1E32) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isExpiring
+                  ? Colors.red.withOpacity(0.4)
+                  : (isDark ? Colors.white.withOpacity(0.06) : Colors.transparent),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+                blurRadius: 12,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    // Icon
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Color(0xFF4F46E5).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        _getServiceIcon(account.service),
+                        color: Color(0xFF4F46E5),
+                        size: 22,
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    // Name
+                    Expanded(
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              // Service Icon
-                              Container(
-                                width: 56,
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.white.withOpacity(0.3),
-                                      Colors.white.withOpacity(0.1),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Icon(_getServiceIcon(account.service), color: Colors.white, size: 32),
-                              ),
-                              SizedBox(width: 16),
-                              
-                              // Service Name
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      account.service, 
-                                      style: TextStyle(
-                                        fontSize: 18, 
-                                        fontWeight: FontWeight.bold, 
-                                        color: Colors.white
-                                      ),
-                                      maxLines: 1, 
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (account.issuer != null)
-                                      Text(
-                                        account.issuer!, 
-                                        style: TextStyle(
-                                          fontSize: 13, 
-                                          color: Colors.white70
-                                        ),
-                                        maxLines: 1, 
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              
-                              // OTP Code with Live Badge
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  // Live Badge
-                                  Container(
-                                    margin: EdgeInsets.only(bottom: 6),
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: timer < 5 ? Colors.red : Color(0xFF4CAF50),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'LIVE',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 8,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // OTP Code with Wiggle Animation
-                                  _buildOtpWithWiggle(otp, isBlurred, timer),
-                                ],
-                              ),
-                            ],
+                          Text(
+                            account.service,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Color(0xFF1A1A2E),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          
-                          SizedBox(height: 16),
-                          
-                          // Progress Bar
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: LinearProgressIndicator(
-                                    value: progress,
-                                    backgroundColor: Colors.white.withOpacity(0.2),
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      timer < 5 ? Colors.red : Color(0xFF4CAF50),
-                                    ),
-                                    minHeight: 8,
-                                  ),
-                                ),
+                          if (account.issuer != null)
+                            Text(
+                              account.issuer!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.white38 : Colors.grey[500],
                               ),
-                              SizedBox(width: 12),
-                              Container(
-                                width: 45,
-                                child: Text(
-                                  '${timer}s',
-                                  style: TextStyle(
-                                    color: timer < 5 ? Colors.red : Colors.white70,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ],
-                          ),
-                          
-                          SizedBox(height: 12),
-                          
-                          // Action Buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              _buildActionButton(Icons.copy, 'Copy OTP', () => _copyToClipboard(otp)),
-                              SizedBox(width: 8),
-                              _buildActionButton(Icons.qr_code, 'Show QR', () => Navigator.push(
-                                context, 
-                                MaterialPageRoute(builder: (_) => ShowQRScreen(
-                                  secret: account.secret, 
-                                  service: account.service, 
-                                  issuer: account.issuer
-                                ))
-                              )),
-                              SizedBox(width: 8),
-                              _buildActionButton(Icons.delete_outline, 'Delete', () => _deleteAccount(account.id), isDestructive: true),
-                            ],
-                          ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                         ],
                       ),
                     ),
+                    SizedBox(width: 8),
+                    // OTP + timer badge
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isExpiring
+                                ? Colors.red.withOpacity(0.1)
+                                : Color(0xFF4F46E5).withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            isBlurred ? '●●● ●●●' : _formatOtp(otp),
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: isExpiring
+                                  ? Colors.red
+                                  : (isDark ? Colors.white : Color(0xFF1A1A2E)),
+                              letterSpacing: 3,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          '${timer}s',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isExpiring ? Colors.red : (isDark ? Colors.white38 : Colors.grey[500]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                // Progress bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: timer / 30,
+                    backgroundColor: isDark ? Colors.white10 : Colors.grey[100],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isExpiring ? Colors.red : Color(0xFF4F46E5),
+                    ),
+                    minHeight: 4,
                   ),
                 ),
-              ),
-            );
-          },
+                SizedBox(height: 12),
+                // Actions row
+                Row(
+                  children: [
+                    _accountAction(
+                      Icons.copy_rounded,
+                      'Copy',
+                      () => _copyToClipboard(otp),
+                      isDark,
+                    ),
+                    SizedBox(width: 8),
+                    _accountAction(
+                      isBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                      isBlurred ? 'Show' : 'Hide',
+                      () => setState(() => blurredCodes[account.id] = !isBlurred),
+                      isDark,
+                    ),
+                    SizedBox(width: 8),
+                    _accountAction(
+                      Icons.qr_code_rounded,
+                      'QR',
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ShowQRScreen(
+                            secret: account.secret,
+                            service: account.service,
+                            issuer: account.issuer,
+                          ),
+                        ),
+                      ),
+                      isDark,
+                    ),
+                    Spacer(),
+                    _accountAction(
+                      Icons.delete_outline_rounded,
+                      'Delete',
+                      () => _deleteAccount(account.id),
+                      isDark,
+                      destructive: true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
-  
-  Widget _buildOtpWithWiggle(String otp, bool isBlurred, int timer) {
-    if (timer < 5) {
-      return TweenAnimationBuilder(
-        tween: Tween<double>(begin: -0.02, end: 0.02),
-        duration: Duration(milliseconds: 100),
-        builder: (context, value, child) {
-          return Transform.rotate(
-            angle: value,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.red.withOpacity(0.3),
-                    Colors.red.withOpacity(0.1),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.red.withOpacity(0.5)),
-              ),
-              child: Text(
-                isBlurred ? '●●●●●●' : otp,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 3,
-                  fontFamily: 'monospace',
-                ),
+
+  // Format OTP as "123 456" for readability
+  String _formatOtp(String otp) {
+    if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
+    return otp;
+  }
+
+  Widget _accountAction(IconData icon, String label, VoidCallback onTap, bool isDark, {bool destructive = false}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: destructive
+              ? Colors.red.withOpacity(0.08)
+              : (isDark ? Colors.white.withOpacity(0.06) : Colors.grey[50]),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: destructive
+                ? Colors.red.withOpacity(0.2)
+                : (isDark ? Colors.white12 : Colors.grey[200]!),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: destructive ? Colors.red : (isDark ? Colors.white60 : Colors.grey[600]),
+            ),
+            SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: destructive ? Colors.red : (isDark ? Colors.white60 : Colors.grey[600]),
               ),
             ),
-          );
-        },
-      );
-    }
-    
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.white.withOpacity(0.2),
-            Colors.white.withOpacity(0.1),
           ],
         ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
-      ),
-      child: Text(
-        isBlurred ? '●●●●●●' : otp,
-        style: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-          letterSpacing: 3,
-          fontFamily: 'monospace',
-        ),
       ),
     );
   }
-  
-  Widget _buildActionButton(IconData icon, String label, VoidCallback onPressed, {bool isDestructive = false}) {
-    return Tooltip(
-      message: label,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDestructive 
-              ? Colors.red.withOpacity(0.2)
-              : Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: IconButton(
-          icon: Icon(icon, color: isDestructive ? Colors.red : Colors.white70, size: 22),
-          onPressed: onPressed,
-          padding: EdgeInsets.all(10),
-          constraints: BoxConstraints(minWidth: 40, minHeight: 40),
-        ),
-      ),
-    );
-  }
-  
+
   IconData _getServiceIcon(String service) {
     final lower = service.toLowerCase();
-    if (lower.contains('google')) return Icons.g_mobiledata;
-    if (lower.contains('github')) return Icons.code;
-    if (lower.contains('facebook')) return Icons.facebook;
-    if (lower.contains('twitter')) return Icons.chat;
-    if (lower.contains('microsoft')) return Icons.window;
-    if (lower.contains('amazon')) return Icons.shopping_cart;
-    if (lower.contains('apple')) return Icons.apple;
-    if (lower.contains('discord')) return Icons.gamepad;
-    if (lower.contains('slack')) return Icons.message;
-    return Icons.security;
+    if (lower.contains('google')) return Icons.g_mobiledata_rounded;
+    if (lower.contains('github')) return Icons.code_rounded;
+    if (lower.contains('facebook')) return Icons.facebook_rounded;
+    if (lower.contains('twitter') || lower.contains('x.com')) return Icons.alternate_email_rounded;
+    if (lower.contains('microsoft')) return Icons.window_rounded;
+    if (lower.contains('amazon') || lower.contains('aws')) return Icons.cloud_rounded;
+    if (lower.contains('apple')) return Icons.apple_rounded;
+    if (lower.contains('discord')) return Icons.headset_rounded;
+    if (lower.contains('slack')) return Icons.message_rounded;
+    if (lower.contains('dropbox')) return Icons.folder_rounded;
+    if (lower.contains('instagram')) return Icons.camera_alt_rounded;
+    return Icons.lock_rounded;
   }
-  
+
   void _copyToClipboard(String otp) async {
-    await Clipboard.setData(ClipboardData(text: otp));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text('OTP copied to clipboard!'),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    await Clipboard.setData(ClipboardData(text: otp.replaceAll(' ', '')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+        SizedBox(width: 8),
+        Text('Copied to clipboard'),
+      ]),
+      backgroundColor: Color(0xFF10B981),
+      duration: Duration(seconds: 2),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
   }
-  
+
   void _deleteAccount(String id) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
-            SizedBox(width: 12),
-            Text('Delete Account'),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to delete this account?\n\nThis action cannot be undone and the OTP codes will be lost.',
-          style: TextStyle(fontSize: 14),
-        ),
+        title: Text('Delete Account'),
+        content: Text('This action cannot be undone.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(fontSize: 16)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Delete', style: TextStyle(fontSize: 16)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: Text('Delete'),
           ),
         ],
       ),
     );
-    
+
     if (confirmed == true) {
       await Hive.box<OTPAccount>('otp_accounts').delete(id);
-      setState(() { 
-        currentOTPs.remove(id); 
+      setState(() {
+        currentOTPs.remove(id);
         timers.remove(id);
         blurredCodes.remove(id);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Account deleted successfully'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
     }
   }
-  
+
   void _syncData() async {
-    setState(() {
-      _isSyncing = true;
-    });
-    
+    setState(() => _isSyncing = true);
     await _syncService.syncAccounts();
-    
-    setState(() {
-      _isSyncing = false;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text('Sync completed!'),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    setState(() => _isSyncing = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Sync complete'),
+      backgroundColor: Color(0xFF10B981),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
   }
-  
+
   void _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.logout, color: Color(0xFF667eea), size: 28),
-            SizedBox(width: 12),
-            Text('Logout'),
-          ],
-        ),
-        content: Text('Are you sure you want to logout?\n\nYour OTP codes will remain saved on this device.'),
+        title: Text('Logout'),
+        content: Text('Your codes will remain saved on this device.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(fontSize: 16)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF667eea),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text('Logout', style: TextStyle(fontSize: 16)),
+            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF4F46E5), foregroundColor: Colors.white),
+            child: Text('Logout'),
           ),
         ],
       ),
     );
-    
+
     if (confirmed == true) {
       await _syncService.logout();
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginScreen()));
     }
   }
-  
+
   @override
   void dispose() {
     _animationController.dispose();

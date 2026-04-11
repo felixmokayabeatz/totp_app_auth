@@ -1,44 +1,41 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:crypto/crypto.dart';
 
 class EncryptionService {
   static String generateKey(String password, String salt) {
-    var key = sha256.convert(utf8.encode(password + salt)).toString();
+    final key = sha256.convert(utf8.encode(password + salt)).toString();
     return key.substring(0, 32);
   }
-  
-  static String simpleEncrypt(String text, String key) {
-    // Simple XOR encryption
-    List<int> textBytes = utf8.encode(text);
-    List<int> keyBytes = utf8.encode(key);
-    List<int> encrypted = [];
-    
-    for (int i = 0; i < textBytes.length; i++) {
-      encrypted.add(textBytes[i] ^ keyBytes[i % keyBytes.length]);
+
+  static String simpleEncrypt(String plainText, String key) {
+    if (plainText.isEmpty) return '';
+    final plainBytes = utf8.encode(plainText);
+    final keyBytes = utf8.encode(key);
+    final encrypted = <int>[];
+    for (int i = 0; i < plainBytes.length; i++) {
+      encrypted.add(plainBytes[i] ^ keyBytes[i % keyBytes.length]);
     }
-    
     return base64.encode(encrypted);
   }
-  
-  static String simpleDecrypt(String encryptedBase64, String key) {
-    List<int> encrypted = base64.decode(encryptedBase64);
-    List<int> keyBytes = utf8.encode(key);
-    List<int> decrypted = [];
-    
+
+  static String simpleDecrypt(String cipherText, String key) {
+    if (cipherText.isEmpty) return '';
+    final encrypted = base64.decode(cipherText);
+    final keyBytes = utf8.encode(key);
+    final decrypted = <int>[];
     for (int i = 0; i < encrypted.length; i++) {
       decrypted.add(encrypted[i] ^ keyBytes[i % keyBytes.length]);
     }
-    
     return utf8.decode(decrypted);
   }
-  
-  // Alias methods to match what sync_service expects
-  static String encrypt(String text, String key) {
-    return simpleEncrypt(text, key);
+
+  static String encryptSecret(String secret, String userId) {
+    final key = generateKey(userId, 'otp_local_encryption_salt');
+    return simpleEncrypt(secret, key);
   }
-  
-  static String decrypt(String encryptedBase64, String key) {
-    return simpleDecrypt(encryptedBase64, key);
+
+  static String decryptSecret(String encryptedSecret, String userId) {
+    final key = generateKey(userId, 'otp_local_encryption_salt');
+    return simpleDecrypt(encryptedSecret, key);
   }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
@@ -11,658 +10,617 @@ class SettingsScreen extends StatefulWidget {
   _SettingsScreenState createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
+class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
   bool _isSyncing = false;
-  
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 500),
-    );
-    _animationController.forward();
-  }
-  
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-  
+
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _accent => Color(0xFF4F46E5);
+  Color get _bgColor => _isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF);
+  Color get _cardColor => _isDark ? Color(0xFF1E1E32) : Colors.white;
+  Color get _textPrimary => _isDark ? Colors.white : Color(0xFF1A1A2E);
+  Color get _textSecondary => _isDark ? Colors.white38 : Colors.grey.shade500;
+  Color get _dividerColor => _isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100;
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDark = themeProvider.isDarkMode;
     final authProvider = Provider.of<AuthProvider>(context);
-    
+
     return Scaffold(
-      backgroundColor: isDark ? Color(0xFF1a1a2e) : Color(0xFF667eea),
+      backgroundColor: _bgColor,
       appBar: AppBar(
         title: Text(
           'Settings',
-          style: TextStyle(color: isDark ? Colors.white : Color(0xFF667eea), fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Colors.white),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: _isDark ? Color(0xFF1A1A2E) : _accent,
+        foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : Color(0xFF667eea)),
-          onPressed: () => Navigator.pop(context),
-        ),
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [Color(0xFF1a1a2e), Color(0xFF16213e)]
-                : [Color(0xFF667eea), Color(0xFF764ba2)],
+      body: ListView(
+        padding: EdgeInsets.all(16),
+        children: [
+          _profileCard(authProvider),
+          SizedBox(height: 24),
+
+          _sectionLabel('Appearance'),
+          _settingsCard([
+            _switchTile(
+              icon: Icons.dark_mode_rounded,
+              label: 'Dark Mode',
+              sub: 'Switch between light and dark',
+              value: themeProvider.isDarkMode,
+              onChanged: (_) => themeProvider.toggleTheme(),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.palette_rounded,
+              label: 'Accent Color',
+              sub: 'Customise theme colour',
+              trailing: _colorDot(themeProvider.accentColor),
+              onTap: () => _showColorPicker(themeProvider),
+            ),
+          ]),
+          SizedBox(height: 20),
+
+          _sectionLabel('Security & Backup'),
+          _settingsCard([
+            _tappableTile(
+              icon: Icons.upload_rounded,
+              label: 'Export Accounts',
+              sub: 'Back up your 2FA codes',
+              onTap: () => _soon('Export'),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.download_rounded,
+              label: 'Import Accounts',
+              sub: 'Restore from backup',
+              onTap: () => _soon('Import'),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.sync_rounded,
+              label: 'Sync Now',
+              sub: 'Manually sync with cloud',
+              trailing: _isSyncing
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+                    )
+                  : null,
+              onTap: _syncNow,
+            ),
+          ]),
+          SizedBox(height: 20),
+
+          _sectionLabel('Account'),
+          _settingsCard([
+            _tappableTile(
+              icon: Icons.person_outline_rounded,
+              label: 'Profile',
+              sub: 'Edit profile information',
+              onTap: () => _soon('Profile'),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.lock_outline_rounded,
+              label: 'Change Password',
+              sub: 'Update your password',
+              onTap: () => _soon('Change Password'),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.notifications_none_rounded,
+              label: 'Notifications',
+              sub: 'Manage notification preferences',
+              onTap: () => _soon('Notifications'),
+            ),
+          ]),
+          SizedBox(height: 20),
+
+          _sectionLabel('About'),
+          _settingsCard([
+            _tappableTile(
+              icon: Icons.info_outline_rounded,
+              label: 'Version',
+              sub: 'Current app version',
+              trailing: _versionBadge('1.0.0'),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.privacy_tip_outlined,
+              label: 'Privacy Policy',
+              sub: 'Read our privacy policy',
+              onTap: () => _soon('Privacy Policy'),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.description_outlined,
+              label: 'Terms of Service',
+              sub: 'Terms and conditions',
+              onTap: () => _soon('Terms of Service'),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.star_outline_rounded,
+              label: 'Rate the App',
+              sub: 'Love it? Leave a review',
+              trailing: Icon(Icons.star_rounded, color: Colors.amber, size: 20),
+              onTap: () => _soon('Rate Us'),
+            ),
+          ]),
+          SizedBox(height: 20),
+
+          _sectionLabel('Danger Zone'),
+          _settingsCard([
+            _tappableTile(
+              icon: Icons.delete_forever_rounded,
+              label: 'Clear All Data',
+              sub: 'Permanently delete all accounts',
+              destructive: true,
+              onTap: _clearAllData,
+            ),
+          ]),
+          SizedBox(height: 20),
+
+          SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: _logout,
+              icon: Icon(Icons.logout_rounded),
+              label: Text('Logout', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade600,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+            ),
           ),
-        ),
-        child: FadeTransition(
-          opacity: _animationController,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: Offset(0.2, 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: _animationController,
-              curve: Curves.easeOut,
-            )),
+          SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileCard(AuthProvider authProvider) {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(_isDark ? 0.2 : 0.06),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: _accent.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(Icons.person_rounded, color: _accent, size: 28),
+          ),
+          SizedBox(width: 14),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Section
-                Container(
-                  margin: EdgeInsets.all(20),
-                  padding: EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
-                    ),
+                Text(
+                  authProvider.userEmail ?? 'User',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: _textPrimary,
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                          ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 10,
-                              offset: Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.person,
-                          color: Colors.white,
-                          size: 30,
-                        ),
-                      ),
-                      SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              authProvider.userEmail ?? 'User',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Premium Account',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.green),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color.fromARGB(255, 0, 255, 8),
-                              ),
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Active',
-                              style: TextStyle(color: const Color.fromARGB(255, 0, 255, 8), fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                
-                Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    children: [
-                      // Appearance Section
-                      _buildSectionHeader(Icons.palette, 'Appearance'),
-                      _buildModernCard([
-                        _buildSettingTile(
-                          icon: Icons.dark_mode,
-                          title: 'Dark Mode',
-                          subtitle: 'Switch between light and dark theme',
-                          trailing: Switch(
-                            value: themeProvider.isDarkMode,
-                            onChanged: (_) => themeProvider.toggleTheme(),
-                            activeColor: Colors.white,
-                            activeTrackColor: Color(0xFF667eea),
-                          ),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.color_lens,
-                          title: 'Accent Color',
-                          subtitle: 'Customize theme color',
-                          trailing: Container(
-                            width: 40,
-                            height: 40,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Container(
-                                  width: 30,
-                                  height: 30,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: themeProvider.accentColor,
-                                    border: Border.all(color: Colors.white, width: 2),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
-                                        blurRadius: 4,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(Icons.edit, color: Colors.white, size: 14),
-                              ],
-                            ),
-                          ),
-                          onTap: () => _showColorPicker(context, themeProvider),
-                        ),
-                      ]),
-                      
-                      SizedBox(height: 20),
-                      
-                      // Security Section
-                      _buildSectionHeader(Icons.security, 'Security'),
-                      _buildModernCard([
-                        _buildSettingTile(
-                          icon: Icons.qr_code,
-                          title: 'Export Accounts',
-                          subtitle: 'Backup your 2FA codes to a file',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _exportAccounts(context),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.qr_code_scanner,
-                          title: 'Import Accounts',
-                          subtitle: 'Restore from backup file',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _importAccounts(context),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.sync,
-                          title: 'Sync Now',
-                          subtitle: 'Manually sync with cloud',
-                          trailing: _isSyncing
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _syncNow(context),
-                        ),
-                      ]),
-                      
-                      SizedBox(height: 20),
-                      
-                      // Account Section
-                      _buildSectionHeader(Icons.account_circle, 'Account'),
-                      _buildModernCard([
-                        _buildSettingTile(
-                          icon: Icons.person_outline,
-                          title: 'Profile',
-                          subtitle: 'Edit profile information',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _showComingSoon(context, 'Profile'),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.lock_outline,
-                          title: 'Change Password',
-                          subtitle: 'Update your password',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _showComingSoon(context, 'Change Password'),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.email_outlined,
-                          title: 'Email Settings',
-                          subtitle: 'Manage notification preferences',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _showComingSoon(context, 'Email Settings'),
-                        ),
-                      ]),
-                      
-                      SizedBox(height: 20),
-                      
-                      // About Section
-                      _buildSectionHeader(Icons.info, 'About'),
-                      _buildModernCard([
-                        _buildSettingTile(
-                          icon: Icons.info_outline,
-                          title: 'Version',
-                          subtitle: 'Current app version',
-                          trailing: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color.fromARGB(255, 0, 255, 8).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color.fromARGB(255, 1, 255, 10).withOpacity(0.5)),
-                            ),
-                            child: Text(
-                              '1.0.0',
-                              style: TextStyle(color: const Color.fromARGB(255, 0, 255, 9), fontSize: 12, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.privacy_tip,
-                          title: 'Privacy Policy',
-                          subtitle: 'Read our privacy policy',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _showComingSoon(context, 'Privacy Policy'),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.description,
-                          title: 'Terms of Service',
-                          subtitle: 'Terms and conditions',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                          onTap: () => _showComingSoon(context, 'Terms of Service'),
-                        ),
-                        _buildSettingTile(
-                          icon: Icons.favorite,
-                          title: 'Rate Us',
-                          subtitle: 'Love this app? Rate it!',
-                          trailing: Icon(Icons.star, color: Colors.amber, size: 20),
-                          onTap: () => _showComingSoon(context, 'Rate Us'),
-                        ),
-                      ]),
-                      
-                      SizedBox(height: 20),
-                      
-                      // Danger Zone Section
-                      _buildSectionHeader(Icons.warning_amber, 'Danger Zone'),
-                      _buildModernCard([
-                        _buildSettingTile(
-                          icon: Icons.delete_forever,
-                          title: 'Clear All Data',
-                          subtitle: 'Permanently delete all accounts',
-                          trailing: Icon(Icons.arrow_forward_ios, color: Colors.red, size: 16),
-                          onTap: () => _clearAllData(context),
-                          isDestructive: true,
-                        ),
-                      ]),
-                      
-                      SizedBox(height: 20),
-                      
-                      // Logout Button
-                      Container(
-                        margin: EdgeInsets.only(bottom: 30),
-                        child: ElevatedButton.icon(
-                          onPressed: () => _logout(context),
-                          icon: Icon(Icons.logout, color: Colors.white, size: 20),
-                          label: Text(
-                            'Logout',
-                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: Size(double.infinity, 50),
-                            backgroundColor: Colors.red.withOpacity(0.8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            elevation: 0,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                SizedBox(height: 2),
+                Text(
+                  'Premium Account',
+                  style: TextStyle(fontSize: 12, color: _textSecondary),
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildSectionHeader(IconData icon, String title) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white70, size: 20),
-          SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1,
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Color(0xFF10B981).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Color(0xFF10B981).withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+                SizedBox(width: 5),
+                Text(
+                  'Active',
+                  style: TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
-  
-  Widget _buildModernCard(List<Widget> children) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+
+  Widget _sectionLabel(String text) {
+    return Padding(
+      padding: EdgeInsets.only(left: 4, bottom: 10),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: _textSecondary,
+          letterSpacing: 1.0,
         ),
-      ),
-      child: Column(
-        children: children,
       ),
     );
   }
-  
-  Widget _buildSettingTile({
+
+  Widget _settingsCard(List<Widget> children) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(_isDark ? 0.2 : 0.05),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _dividerLine() {
+    return Divider(height: 1, indent: 68, endIndent: 16, color: _dividerColor);
+  }
+
+  Widget _switchTile({
     required IconData icon,
-    required String title,
-    String? subtitle,
-    Widget? trailing,
-    VoidCallback? onTap,
-    bool isDestructive = false,
+    required String label,
+    required String sub,
+    required bool value,
+    required ValueChanged<bool> onChanged,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.white.withOpacity(0.1),
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          _iconBox(icon),
+          SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: _textPrimary,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(sub, style: TextStyle(fontSize: 12, color: _textSecondary)),
+              ],
             ),
           ),
-        ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.white,
+            activeTrackColor: _accent,
+            inactiveThumbColor: Colors.grey.shade400,
+            inactiveTrackColor: _isDark ? Colors.white12 : Colors.grey.shade200,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tappableTile({
+    required IconData icon,
+    required String label,
+    required String sub,
+    Widget? trailing,
+    VoidCallback? onTap,
+    bool destructive = false,
+  }) {
+    final color = destructive ? Colors.red : _textPrimary;
+    final subColor = destructive ? Colors.red.shade300 : _textSecondary;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: isDestructive 
-                    ? Colors.red.withOpacity(0.2)
-                    : Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: isDestructive ? Colors.red : Colors.white70, size: 22),
-            ),
-            SizedBox(width: 16),
+            _iconBox(icon, destructive: destructive),
+            SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    label,
                     style: TextStyle(
-                      color: isDestructive ? Colors.red : Colors.white,
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
+                      color: color,
                     ),
                   ),
-                  if (subtitle != null)
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: isDestructive ? Colors.red.shade200 : Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
+                  SizedBox(height: 2),
+                  Text(sub, style: TextStyle(fontSize: 12, color: subColor)),
                 ],
               ),
             ),
-            if (trailing != null) trailing,
+            trailing ??
+                (onTap != null
+                    ? Icon(
+                        Icons.chevron_right_rounded,
+                        color: _isDark ? Colors.white24 : Colors.grey.shade300,
+                        size: 20,
+                      )
+                    : SizedBox.shrink()),
           ],
         ),
       ),
     );
   }
-  
-  void _showColorPicker(BuildContext context, ThemeProvider themeProvider) {
+
+  Widget _iconBox(IconData icon, {bool destructive = false}) {
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: destructive
+            ? Colors.red.withOpacity(0.08)
+            : _accent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        icon,
+        size: 18,
+        color: destructive ? Colors.red : _accent,
+      ),
+    );
+  }
+
+  Widget _colorDot(Color color) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: _isDark ? Colors.white24 : Colors.grey.shade200,
+          width: 2,
+        ),
+      ),
+    );
+  }
+
+  Widget _versionBadge(String version) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Color(0xFF10B981).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Color(0xFF10B981).withOpacity(0.3)),
+      ),
+      child: Text(
+        version,
+        style: TextStyle(
+          color: Color(0xFF10B981),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  void _showColorPicker(ThemeProvider themeProvider) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
+      builder: (_) => Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark ? Color(0xFF1a1a2e) : Colors.white,
+          color: _cardColor,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(24, 12, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Choose Accent Color',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: _isDark ? Colors.white24 : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             SizedBox(height: 20),
+            Text(
+              'Accent Color',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
+            ),
+            SizedBox(height: 16),
             Wrap(
-              spacing: 16,
-              runSpacing: 16,
+              spacing: 14,
+              runSpacing: 14,
               children: themeProvider.accentColors.asMap().entries.map((entry) {
+                final selected = themeProvider.accentColorIndex == entry.key;
                 return GestureDetector(
                   onTap: () {
                     themeProvider.setAccentColor(entry.key);
                     Navigator.pop(context);
-                    _showSuccess(context, 'Accent color changed');
                   },
-                  child: Container(
-                    width: 50,
-                    height: 50,
+                  child: AnimatedContainer(
+                    duration: Duration(milliseconds: 200),
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
                       color: entry.value,
                       shape: BoxShape.circle,
-                      border: themeProvider.accentColorIndex == entry.key
-                          ? Border.all(color: Colors.white, width: 3)
+                      border: selected
+                          ? Border.all(color: _textPrimary, width: 3)
                           : null,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: entry.value.withOpacity(0.4),
                           blurRadius: 8,
-                          offset: Offset(0, 2),
+                          offset: Offset(0, 3),
                         ),
                       ],
                     ),
+                    child: selected
+                        ? Icon(Icons.check_rounded, color: Colors.white, size: 20)
+                        : null,
                   ),
                 );
               }).toList(),
             ),
-            SizedBox(height: 20),
+            SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
-  
-  void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✨ $feature coming soon!'),
-        backgroundColor: Color(0xFF667eea),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+
+  void _soon(String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('$feature coming soon'),
+      backgroundColor: _accent,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      duration: Duration(seconds: 2),
+    ));
   }
-  
-  void _showSuccess(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text(message),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-  
-  void _exportAccounts(BuildContext context) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('📦 Export feature coming soon...'), duration: Duration(seconds: 2)),
-    );
-  }
-  
-  void _importAccounts(BuildContext context) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('📥 Import feature coming soon...'), duration: Duration(seconds: 2)),
-    );
-  }
-  
-  void _syncNow(BuildContext context) async {
-    setState(() {
-      _isSyncing = true;
-    });
-    
+
+  void _syncNow() async {
+    setState(() => _isSyncing = true);
     await _syncService.syncAccounts();
-    
-    setState(() {
-      _isSyncing = false;
-    });
-    
-    _showSuccess(context, 'Sync completed!');
+    setState(() => _isSyncing = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+        SizedBox(width: 8),
+        Text('Sync complete'),
+      ]),
+      backgroundColor: Color(0xFF10B981),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
   }
-  
-  void _clearAllData(BuildContext context) async {
+
+  void _clearAllData() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
-            SizedBox(width: 12),
-            Text('Clear All Data'),
-          ],
-        ),
+        backgroundColor: _cardColor,
+        title: Row(children: [
+          Icon(Icons.warning_rounded, color: Colors.red, size: 24),
+          SizedBox(width: 10),
+          Text('Clear All Data', style: TextStyle(color: _textPrimary, fontSize: 17)),
+        ]),
         content: Text(
-          '⚠️ WARNING: This will permanently delete ALL your OTP accounts.\n\nThis action cannot be undone!',
-          style: TextStyle(fontSize: 14),
+          'This will permanently delete ALL your OTP accounts. This cannot be undone.',
+          style: TextStyle(color: _textSecondary, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(fontSize: 16)),
+            child: Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: Text('Clear All', style: TextStyle(fontSize: 16)),
+            child: Text('Delete All'),
           ),
         ],
       ),
     );
-    
     if (confirmed == true) {
-      // Clear all data logic here
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('All data cleared'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('All data cleared'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
     }
   }
-  
-  void _logout(BuildContext context) async {
+
+  void _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.logout, color: Color(0xFF667eea), size: 28),
-            SizedBox(width: 12),
-            Text('Logout'),
-          ],
+        backgroundColor: _cardColor,
+        title: Text('Logout', style: TextStyle(color: _textPrimary)),
+        content: Text(
+          'Your codes will remain saved on this device.',
+          style: TextStyle(color: _textSecondary, fontSize: 13),
         ),
-        content: Text('Are you sure you want to logout?\n\nYour OTP codes will remain saved on this device.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel', style: TextStyle(fontSize: 16)),
+            child: Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF667eea),
+              backgroundColor: Color(0xFF4F46E5),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: Text('Logout', style: TextStyle(fontSize: 16)),
+            child: Text('Logout'),
           ),
         ],
       ),
     );
-    
     if (confirmed == true) {
       await Provider.of<AuthProvider>(context, listen: false).logout();
       await _syncService.logout();

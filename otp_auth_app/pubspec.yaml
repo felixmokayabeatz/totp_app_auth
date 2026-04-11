@@ -28,7 +28,8 @@ dependencies:
   
   qr_flutter: ^4.1.0
   bitsdojo_window: ^0.1.6
-  # window_manager: ^0.5.1
+  totp: ^0.1.0
+  otp: ^3.2.0
   
 
 dev_dependencies:
