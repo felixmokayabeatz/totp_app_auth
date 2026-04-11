@@ -1,5 +1,3 @@
-# api/views.py - Views for authentication and data synchronization
-
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -41,6 +39,26 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'refresh': str(refresh),
             })
         return Response({'error': 'Invalid credentials'}, status=401)
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def change_password(self, request):
+        user = request.user
+        current_password = request.data.get('current_password')
+        new_password = request.data.get('new_password')
+        
+        if not current_password or not new_password:
+            return Response({'error': 'Current password and new password are required'}, status=400)
+        
+        if not user.check_password(current_password):
+            return Response({'error': 'Current password is incorrect'}, status=400)
+        
+        if len(new_password) < 8:
+            return Response({'error': 'Password must be at least 8 characters'}, status=400)
+        
+        user.set_password(new_password)
+        user.save()
+        
+        return Response({'success': 'Password changed successfully'})
 
 class SyncViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]

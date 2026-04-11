@@ -284,4 +284,40 @@ class SyncService {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('current_user');
   }
+
+  Future<bool> changePassword(String currentPassword, String newPassword) async {
+    await _updateAuthHeader();
+    
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    
+    if (token == null) {
+      print('No token available');
+      return false;
+    }
+    
+    try {
+      final response = await _dio.post(
+        'auth/change_password/',  // Note: underscore, not hyphen
+        data: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+      
+      if (response.statusCode == 200) {
+        print('Password changed successfully');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Change password error: $e');
+      return false;
+    }
+  }
 }

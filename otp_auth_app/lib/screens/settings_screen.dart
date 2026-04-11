@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/sync_service.dart';
@@ -121,7 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.lock_outline_rounded,
               label: 'Change Password',
               sub: 'Update your password',
-              onTap: () => _soon('Change Password'),
+              onTap: () => _showChangePasswordDialog(),
             ),
             _dividerLine(),
             _tappableTile(
@@ -194,6 +195,396 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool _obscureCurrent = true;
+    bool _obscureNew = true;
+    bool _obscureConfirm = true;
+    bool _show2FA = false;
+    String _otpCode = '';
+    double _passwordStrength = 0.0;
+    String _passwordStrengthText = '';
+    Color _passwordStrengthColor = Colors.grey;
+    double _passwordLength = 16;
+
+    void _checkPasswordStrength() {
+      final password = newPasswordController.text;
+      if (password.isEmpty) {
+        setState(() {
+          _passwordStrength = 0.0;
+          _passwordStrengthText = '';
+          _passwordStrengthColor = Colors.grey;
+        });
+        return;
+      }
+      
+      int score = 0;
+      if (password.length >= 12) score += 25;
+      else if (password.length >= 8) score += 15;
+      if (password.contains(RegExp(r'[0-9]'))) score += 25;
+      if (password.contains(RegExp(r'[A-Z]'))) score += 25;
+      if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) score += 25;
+      
+      setState(() {
+        _passwordStrength = score / 100;
+        if (score < 50) {
+          _passwordStrengthText = 'Weak';
+          _passwordStrengthColor = Colors.red;
+        } else if (score < 75) {
+          _passwordStrengthText = 'Medium';
+          _passwordStrengthColor = Colors.orange;
+        } else {
+          _passwordStrengthText = 'Strong';
+          _passwordStrengthColor = Colors.green;
+        }
+      });
+    }
+
+    String _generateStrongPassword(int length) {
+      const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      const lowercase = 'abcdefghijkmnopqrstuvwxyz';
+      const numbers = '23456789';
+      const symbols = r'!@#$%^&*()_+-=[]{}|;:,.<>?';
+      
+      String password = '';
+      final random = DateTime.now().millisecondsSinceEpoch;
+      
+      password += uppercase[random % uppercase.length];
+      password += lowercase[(random + 1) % lowercase.length];
+      password += numbers[(random + 2) % numbers.length];
+      password += symbols[(random + 3) % symbols.length];
+      
+      final allChars = uppercase + lowercase + numbers + symbols;
+      for (int i = password.length; i < length; i++) {
+        final randomIndex = (random + i) % allChars.length;
+        password += allChars[randomIndex];
+      }
+      
+      List<String> chars = password.split('');
+      for (int i = chars.length - 1; i > 0; i--) {
+        final j = (random + i) % (i + 1);
+        final temp = chars[i];
+        chars[i] = chars[j];
+        chars[j] = temp;
+      }
+      
+      return chars.join();
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text(_show2FA ? 'Verify 2FA Code' : 'Change Password'),
+            content: Container(
+              width: 350,
+              child: _show2FA
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.email_outlined, size: 50, color: _accent),
+                        SizedBox(height: 16),
+                        Text(
+                          'A verification code has been sent to your email',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, color: _textSecondary),
+                        ),
+                        SizedBox(height: 20),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _accent.withOpacity(0.3)),
+                          ),
+                          child: TextField(
+                            onChanged: (value) => _otpCode = value,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
+                            keyboardType: TextInputType.number,
+                            maxLength: 6,
+                            decoration: InputDecoration(
+                              hintText: '000000',
+                              hintStyle: TextStyle(fontSize: 24, letterSpacing: 4),
+                              border: InputBorder.none,
+                              counterText: '',
+                              contentPadding: EdgeInsets.symmetric(vertical: 16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Current Password
+                        Container(
+                          decoration: BoxDecoration(
+                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _accent.withOpacity(0.3)),
+                          ),
+                          child: TextField(
+                            controller: currentPasswordController,
+                            obscureText: _obscureCurrent,
+                            decoration: InputDecoration(
+                              labelText: 'Current Password',
+                              labelStyle: TextStyle(color: _textSecondary),
+                              prefixIcon: Icon(Icons.lock_outline, color: _accent),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
+                                onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                        
+                        // New Password
+                        Container(
+                          decoration: BoxDecoration(
+                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _accent.withOpacity(0.3)),
+                          ),
+                          child: TextField(
+                            controller: newPasswordController,
+                            obscureText: _obscureNew,
+                            onChanged: (_) => _checkPasswordStrength(),
+                            decoration: InputDecoration(
+                              labelText: 'New Password',
+                              labelStyle: TextStyle(color: _textSecondary),
+                              prefixIcon: Icon(Icons.lock_outline, color: _accent),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
+                                onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                          ),
+                        ),
+                        
+                        // Password Strength
+                        if (newPasswordController.text.isNotEmpty) ...[
+                          SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: LinearProgressIndicator(
+                                  value: _passwordStrength,
+                                  backgroundColor: Colors.grey.shade300,
+                                  valueColor: AlwaysStoppedAnimation<Color>(_passwordStrengthColor),
+                                  minHeight: 4,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                _passwordStrengthText,
+                                style: TextStyle(
+                                  color: _passwordStrengthColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        
+                        // Password Length Slider
+                        SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.format_size, size: 18, color: _accent),
+                            SizedBox(width: 8),
+                            Text(
+                              'Length: ${_passwordLength.toInt()}',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: _accent),
+                            ),
+                            Expanded(
+                              child: Slider(
+                                value: _passwordLength,
+                                min: 8,
+                                max: 20,
+                                divisions: 12,
+                                activeColor: _accent,
+                                inactiveColor: Colors.grey.shade300,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _passwordLength = value;
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        // Suggest Password Button
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              final strongPassword = _generateStrongPassword(_passwordLength.toInt());
+                              setState(() {
+                                newPasswordController.text = strongPassword;
+                                _checkPasswordStrength();
+                              });
+                            },
+                            icon: Icon(Icons.auto_awesome, size: 16, color: _accent),
+                            label: Text(
+                              'Suggest strong password',
+                              style: TextStyle(fontSize: 12, color: _accent),
+                            ),
+                          ),
+                        ),
+                        
+                        SizedBox(height: 8),
+                        
+                        // Confirm Password
+                        Container(
+                          decoration: BoxDecoration(
+                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _accent.withOpacity(0.3)),
+                          ),
+                          child: TextField(
+                            controller: confirmPasswordController,
+                            obscureText: _obscureConfirm,
+                            decoration: InputDecoration(
+                              labelText: 'Confirm New Password',
+                              labelStyle: TextStyle(color: _textSecondary),
+                              prefixIcon: Icon(Icons.lock_outline, color: _accent),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
+                                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: _show2FA
+                    ? () async {
+                        if (_otpCode.length != 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Please enter 6-digit code'), backgroundColor: Colors.red),
+                          );
+                          return;
+                        }
+                        
+                        final prefs = await SharedPreferences.getInstance();
+                        final username = prefs.getString('current_user') ?? '';
+                        
+                        final isValid = await _syncService.verify2FACode(username, _otpCode);
+                        
+                        if (isValid) {
+                          final changed = await _syncService.changePassword(
+                            currentPasswordController.text,
+                            newPasswordController.text,
+                          );
+                          
+                          if (changed) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Password changed successfully! Please login again.'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            Future.delayed(Duration(seconds: 2), () {
+                              _logout();
+                            });
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to change password'), backgroundColor: Colors.red),
+                            );
+                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Invalid verification code'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    : () async {
+                        if (currentPasswordController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Please enter current password'), backgroundColor: Colors.red),
+                          );
+                          return;
+                        }
+                        if (newPasswordController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Please enter new password'), backgroundColor: Colors.red),
+                          );
+                          return;
+                        }
+                        if (newPasswordController.text.length < 8) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Password must be at least 8 characters'), backgroundColor: Colors.red),
+                          );
+                          return;
+                        }
+                        if (newPasswordController.text != confirmPasswordController.text) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('New passwords do not match'), backgroundColor: Colors.red),
+                          );
+                          return;
+                        }
+                        if (_passwordStrength < 0.5) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Please use a stronger password'), backgroundColor: Colors.red),
+                          );
+                          return;
+                        }
+                        
+                        final prefs = await SharedPreferences.getInstance();
+                        final username = prefs.getString('current_user') ?? '';
+                        
+                        final sent = await _syncService.send2FACode(username, currentPasswordController.text);
+                        
+                        if (sent) {
+                          setState(() {
+                            _show2FA = true;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('2FA code sent to your email!'), backgroundColor: Colors.green),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Invalid current password'), backgroundColor: Colors.red),
+                          );
+                        }
+                      },
+                child: Text(_show2FA ? 'Verify & Change' : 'Send Code'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -597,7 +988,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirmed == true) {
-      // Clear all Hive data
       final otpBox = Hive.box<OTPAccount>('otp_accounts');
       await otpBox.clear();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

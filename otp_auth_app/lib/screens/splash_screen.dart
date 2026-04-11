@@ -128,7 +128,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     ),
                     SizedBox(height: 40),
                     Text(
-                      'OTP Authenticator',
+                      'BeatzLock Authenticator',
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,

@@ -5,11 +5,14 @@ import 'package:provider/provider.dart';
 import '../models/otp_account.dart';
 import '../services/otp_service.dart';
 import '../services/sync_service.dart';
+import '../services/profile_service.dart';
 import '../providers/theme_provider.dart';
+import '../providers/auth_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'show_qr_screen.dart';
+import 'profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 
@@ -21,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   final OTPService _otpService = OTPService();
   final SyncService _syncService = SyncService();
+  final ProfileService _profileService = ProfileService();
   Map<String, String> currentOTPs = {};
   Map<String, int> timers = {};
   Map<String, bool> blurredCodes = {};
@@ -29,6 +33,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isSyncing = false;
   bool _allBlurred = false;
   bool _hasInternetError = false;
+  String? _profilePhotoUrl;
+  String? _username;
 
   @override
   void initState() {
@@ -39,6 +45,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
     _animationController.forward();
     _startTimer();
+    _loadProfileData();
+  }
+
+  Future<void> _loadProfileData() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _username = prefs.getString('current_user') ?? 'User';
+    });
+    
+    final profile = await _profileService.getProfile();
+    if (profile != null && mounted) {
+      setState(() {
+        _profilePhotoUrl = profile['profile']?['profile_photo'];
+      });
+    }
   }
 
   void _startTimer() {
@@ -122,21 +143,62 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           padding: EdgeInsets.fromLTRB(20, 16, 12, 16),
           child: Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
+              // Profile Photo - Clickable to go to Profile Settings
+              GestureDetector(
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ProfileScreen()),
+                  );
+                  if (result == true) {
+                    _loadProfileData();
+                  }
+                },
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: _profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty
+                        ? Image.network(
+                            'http://localhost:8000$_profilePhotoUrl',
+                            fit: BoxFit.cover,
+                            width: 44,
+                            height: 44,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.white.withOpacity(0.2),
+                                child: Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            color: Colors.white.withOpacity(0.2),
+                            child: Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                  ),
                 ),
-                child: Icon(Icons.shield_rounded, color: Colors.white, size: 24),
               ),
               SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Authenticator',
+                    'BeatzLock Authenticator',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -145,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                   ),
                   Text(
-                    'Two-Factor Security',
+                    _username ?? 'Two-Factor Security',
                     style: TextStyle(fontSize: 11, color: Colors.white60),
                   ),
                 ],
