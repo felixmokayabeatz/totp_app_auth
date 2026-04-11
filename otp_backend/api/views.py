@@ -5,7 +5,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from .models import EncryptedData
+from django.utils import timezone
+from .models import EncryptedData, SyncLog
 from .serializers import UserSerializer, EncryptedDataSerializer, RegisterSerializer
 
 class AuthViewSet(viewsets.GenericViewSet):
@@ -69,26 +70,54 @@ class SyncViewSet(viewsets.GenericViewSet):
         data_type = request.data.get('data_type')
         encrypted_content = request.data.get('encrypted_content')
         version = request.data.get('version', 1)
+        device_id = request.data.get('device_id', 'unknown')
         
+        # Get or create the encrypted data record
         obj, created = EncryptedData.objects.update_or_create(
             user=request.user,
             data_type=data_type,
             defaults={
                 'encrypted_content': encrypted_content,
                 'version': version,
+                'synced_at': timezone.now(),  # Update synced_at timestamp
             }
         )
-        return Response({'status': 'synced', 'version': obj.version})
+        
+        # Log the sync activity
+        SyncLog.objects.create(
+            user=request.user,
+            device_id=device_id,
+            sync_type='upload',
+            status='success'
+        )
+        
+        return Response({
+            'status': 'synced', 
+            'version': obj.version,
+            'synced_at': obj.synced_at.isoformat() if obj.synced_at else None
+        })
     
     @action(detail=False, methods=['get'], url_path='get-data')
     def get_data(self, request):
         data_type = request.query_params.get('data_type')
+        device_id = request.query_params.get('device_id', 'unknown')
+        
         try:
             data = EncryptedData.objects.get(user=request.user, data_type=data_type)
+            
+            # Log download activity
+            SyncLog.objects.create(
+                user=request.user,
+                device_id=device_id,
+                sync_type='download',
+                status='success'
+            )
+            
             return Response({
                 'encrypted_content': data.encrypted_content,
                 'version': data.version,
                 'updated_at': data.updated_at,
+                'synced_at': data.synced_at.isoformat() if data.synced_at else None,
             })
         except EncryptedData.DoesNotExist:
             return Response({'status': 'no_data'}, status=404)

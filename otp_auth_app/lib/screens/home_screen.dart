@@ -45,13 +45,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       duration: Duration(milliseconds: 500),
     );
     _animationController.forward();
-    _initUserBox();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    await _initUserBox();
     _startTimer();
     _loadProfileData();
   }
 
   Future<void> _initUserBox() async {
     _userBox = await _syncService.getUserBox();
+    
+    // NEVER fall back to old box - only use user's own box
+    print('User box: ${await _syncService.getCurrentUserBoxName()} has ${_userBox?.length ?? 0} accounts');
+    
     setState(() {});
   }
 
@@ -308,7 +316,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 context,
                 MaterialPageRoute(builder: (_) => AddAccountScreen()),
               );
-              if (result == true) _updateAllOTPs();
+              if (result == true) {
+                await _initUserBox();
+                _updateAllOTPs();
+              }
             },
             child: Container(
               margin: EdgeInsets.only(right: 8),
@@ -666,12 +677,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
 
     if (confirmed == true) {
-      await _userBox?.delete(id);
-      setState(() {
-        currentOTPs.remove(id);
-        timers.remove(id);
-        blurredCodes.remove(id);
-      });
+      try {
+        if (_userBox?.containsKey(id) == true) {
+          await _userBox?.delete(id);
+          print('Account deleted from local box');
+          
+          // Sync to cloud to remove it there too
+          await _syncService.syncAccounts();
+          
+          setState(() {
+            currentOTPs.remove(id);
+            timers.remove(id);
+            blurredCodes.remove(id);
+          });
+          
+          _showSnackBar('Account deleted successfully', Colors.green);
+        } else {
+          print('Account not found in box');
+          _showSnackBar('Account not found', Colors.red);
+        }
+      } catch (e) {
+        print('Error deleting account: $e');
+        _showSnackBar('Failed to delete account', Colors.red);
+      }
     }
   }
 
@@ -684,10 +712,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       setState(() => _isSyncing = false);
       
       if (success) {
+        // Refresh the box and OTPs after sync
+        await _initUserBox();
+        _updateAllOTPs();
         _showSnackBar('Sync completed!', Colors.green);
         setState(() => _hasInternetError = false);
-        await _initUserBox(); // Refresh the box
-        _updateAllOTPs(); // Refresh OTPs
       } else {
         _showSnackBar('No internet connection or server unavailable', Colors.orange);
         setState(() => _hasInternetError = true);

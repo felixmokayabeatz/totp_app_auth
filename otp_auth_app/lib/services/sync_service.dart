@@ -23,14 +23,15 @@ class SyncService {
   
   String? _encryptionKey;
   
-  // Get user-specific box name
   Future<String> _getUserBoxName() async {
     final prefs = await SharedPreferences.getInstance();
-    final username = prefs.getString('current_user') ?? 'default';
+    final username = prefs.getString('current_user');
+    if (username == null || username.isEmpty) {
+      return 'otp_accounts_default';
+    }
     return 'otp_accounts_$username';
   }
   
-  // Get user-specific box
   Future<Box<OTPAccount>> _getUserBox() async {
     final boxName = await _getUserBoxName();
     if (!Hive.isBoxOpen(boxName)) {
@@ -44,7 +45,7 @@ class SyncService {
     final token = prefs.getString('access_token');
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
-      print('Auth header set with token: ${token.substring(0, 20)}...');
+      print('Auth header set');
     } else {
       print('No token found');
     }
@@ -105,13 +106,16 @@ class SyncService {
     if (_encryptionKey == null) {
       final prefs = await SharedPreferences.getInstance();
       final username = prefs.getString('current_user');
-      _encryptionKey = EncryptionService.generateKey(
-        username ?? 'default',
-        'otp_auth_salt_2024'
-      );
+      if (username == null || username.isEmpty) {
+        print('No username found for encryption - using default');
+        _encryptionKey = EncryptionService.generateKey('default_user', 'otp_auth_salt_2024');
+      } else {
+        _encryptionKey = EncryptionService.generateKey(username, 'otp_auth_salt_2024');
+      }
+      print('Encryption key initialized for user: $username');
     }
   }
-  
+
   Future<bool> register(String username, String email, String password) async {
     try {
       final response = await _dio.post('auth/register/', data: {
@@ -163,7 +167,10 @@ class SyncService {
         await _updateAuthHeader();
         await _initEncryption();
         
-        // Download and MERGE accounts (not clear)
+        // Get user box (will be empty for new users)
+        final userBox = await _getUserBox();
+        print('User box: ${await _getUserBoxName()} has ${userBox.length} accounts');
+        
         await downloadAndMergeAccounts();
         return true;
       }
@@ -177,27 +184,42 @@ class SyncService {
   Future<void> downloadAndMergeAccounts() async {
     await _updateAuthHeader();
     
+    await _initEncryption();
+    
+    if (_encryptionKey == null) {
+      print('Encryption key is null - cannot download');
+      return;
+    }
+    
+    final prefs = await SharedPreferences.getInstance();
+    String deviceId = prefs.getString('device_id') ?? '';
+    if (deviceId.isEmpty) {
+      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('device_id', deviceId);
+    }
+    
     try {
       print('Downloading accounts from cloud...');
       final response = await _requestWithRetry(() => _dio.get(
         'sync/get-data/',
-        queryParameters: {'data_type': 'otp_accounts'},
+        queryParameters: {
+          'data_type': 'otp_accounts',
+          'device_id': deviceId,
+        },
       ));
       
       print('Download response status: ${response.statusCode}');
       
       if (response.statusCode == 200 && response.data['encrypted_content'] != null) {
         final encryptedContent = response.data['encrypted_content'];
-        await _initEncryption();
         final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
         
-        // Parse cloud accounts
         final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
-        print('Cloud accounts: ${cloudAccounts.length}');
+        final syncedAt = response.data['synced_at'];
+        print('Cloud accounts: ${cloudAccounts.length} (last synced: $syncedAt)');
         
         final userBox = await _getUserBox();
         
-        // MERGE: Add cloud accounts that don't exist locally
         int addedCount = 0;
         for (var cloudAccount in cloudAccounts) {
           if (!userBox.containsKey(cloudAccount['id'])) {
@@ -213,16 +235,13 @@ class SyncService {
             addedCount++;
           }
         }
-        print('Merged $addedCount new accounts from cloud');
+        print('Added $addedCount accounts from cloud');
         print('Total local accounts: ${userBox.length}');
       } else if (response.statusCode == 404) {
         print('No cloud accounts found');
       }
     } on DioError catch (e) {
       print('Download error: ${e.message}');
-      if (e.response?.statusCode == 401) {
-        print('Token invalid - please login again');
-      }
     } catch (e) {
       print('Download error: $e');
     }
@@ -246,84 +265,21 @@ class SyncService {
     
     final userBox = await _getUserBox();
     
-    // FIRST: Download cloud accounts to get latest version
+    await _initEncryption();
+    
+    if (_encryptionKey == null) {
+      print('Encryption key is null - cannot sync');
+      return false;
+    }
+    
+    // Get or generate device ID
+    String deviceId = prefs.getString('device_id') ?? '';
+    if (deviceId.isEmpty) {
+      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('device_id', deviceId);
+    }
+    
     try {
-      print('Downloading cloud accounts before sync...');
-      final downloadResponse = await _requestWithRetry(() => _dio.get(
-        'sync/get-data/',
-        queryParameters: {'data_type': 'otp_accounts'},
-      ));
-      
-      Map<String, dynamic> cloudAccountsMap = {};
-      int cloudVersion = 0;
-      
-      if (downloadResponse.statusCode == 200 && downloadResponse.data['encrypted_content'] != null) {
-        final encryptedContent = downloadResponse.data['encrypted_content'];
-        await _initEncryption();
-        final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
-        final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
-        cloudVersion = downloadResponse.data['version'] ?? 0;
-        
-        // Create map of cloud accounts by ID
-        for (var account in cloudAccounts) {
-          cloudAccountsMap[account['id']] = account;
-        }
-        print('Cloud has ${cloudAccounts.length} accounts');
-      }
-      
-      // SECOND: Merge local and cloud (cloud wins on conflicts)
-      final localAccounts = userBox.values.toList();
-      final Map<String, dynamic> mergedAccounts = {};
-      
-      // Add all local accounts first
-      for (var account in localAccounts) {
-        mergedAccounts[account.id] = {
-          'id': account.id,
-          'service': account.service,
-          'secret': account.encryptedSecret,
-          'issuer': account.issuer,
-          'createdAt': account.createdAt.toIso8601String(),
-          'source': 'local'
-        };
-      }
-      
-      // Add/overwrite with cloud accounts
-      int addedFromCloud = 0;
-      for (var entry in cloudAccountsMap.entries) {
-        if (!mergedAccounts.containsKey(entry.key)) {
-          // Cloud has account that local doesn't - add it
-          mergedAccounts[entry.key] = {
-            'id': entry.value['id'],
-            'service': entry.value['service'],
-            'secret': entry.value['secret'],
-            'issuer': entry.value['issuer'],
-            'createdAt': entry.value['createdAt'],
-            'source': 'cloud'
-          };
-          addedFromCloud++;
-        }
-      }
-      
-      print('Merge result: ${mergedAccounts.length} total accounts ($addedFromCloud new from cloud)');
-      
-      // THIRD: Update local database with merged data
-      for (var entry in mergedAccounts.entries) {
-        final accountData = entry.value;
-        if (!userBox.containsKey(entry.key)) {
-          // Add new account to local
-          final newAccount = OTPAccount(
-            id: accountData['id'],
-            service: accountData['service'],
-            secret: accountData['secret'],
-            issuer: accountData['issuer'],
-            createdAt: DateTime.parse(accountData['createdAt']),
-            userId: await _getCurrentUserId(),
-          );
-          await userBox.put(newAccount.id, newAccount);
-        }
-      }
-      
-      // FOURTH: Upload merged data to cloud (backup)
       final finalAccountsData = userBox.values.map((a) => ({
         'id': a.id,
         'service': a.service,
@@ -334,28 +290,27 @@ class SyncService {
       
       final jsonString = jsonEncode(finalAccountsData);
       final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
-      final newVersion = (cloudVersion + 1);
       
       print('Uploading ${finalAccountsData.length} accounts to cloud...');
       final uploadResponse = await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
         'encrypted_content': encryptedContent,
-        'version': newVersion,
+        'version': finalAccountsData.length,
+        'device_id': deviceId,  // Send device ID
       });
       
       if (uploadResponse.statusCode == 200) {
-        print('Sync successful - ${finalAccountsData.length} accounts synced');
+        final syncedAt = uploadResponse.data['synced_at'];
+        print('Sync successful - ${finalAccountsData.length} accounts synced at $syncedAt');
         return true;
       } else {
         print('Sync upload failed: ${uploadResponse.statusCode}');
         return false;
       }
-      
     } on DioError catch (e) {
       print('Sync error: ${e.message}');
-      if (e.response?.statusCode == 401) {
-        print('Token expired - please login again');
-        await prefs.remove('access_token');
+      if (e.response?.data != null) {
+        print('Response: ${e.response?.data}');
       }
       return false;
     } catch (e) {
@@ -394,15 +349,6 @@ class SyncService {
   
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    final currentUser = prefs.getString('current_user');
-    
-    // Close user-specific box
-    if (currentUser != null) {
-      final boxName = 'otp_accounts_$currentUser';
-      if (Hive.isBoxOpen(boxName)) {
-        await Hive.box(boxName).close();
-      }
-    }
     
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
@@ -411,6 +357,8 @@ class SyncService {
     await prefs.remove('user_id');
     _encryptionKey = null;
     _dio.options.headers.remove('Authorization');
+    
+    print('Logged out successfully');
   }
   
   Future<bool> isLoggedIn() async {
@@ -488,9 +436,13 @@ class SyncService {
     }
   }
 
-  // Add to lib/services/sync_service.dart
   Future<Box<OTPAccount>> getUserBox() async {
     return await _getUserBox();
   }
 
+  Future<String> getCurrentUserBoxName() async {
+    return await _getUserBoxName();
+  }
+
+  
 }

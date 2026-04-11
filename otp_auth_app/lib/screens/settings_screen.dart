@@ -203,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
-    final otpCodeController = TextEditingController(); // SEPARATE CONTROLLER for OTP
+    final otpCodeController = TextEditingController();
     bool _obscureCurrent = true;
     bool _obscureNew = true;
     bool _obscureConfirm = true;
@@ -310,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             border: Border.all(color: _accent.withOpacity(0.3)),
                           ),
                           child: TextField(
-                            controller: otpCodeController, // SEPARATE CONTROLLER
+                            controller: otpCodeController,
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
                             keyboardType: TextInputType.number,
@@ -329,7 +329,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Current Password
                         Container(
                           decoration: BoxDecoration(
                             color: _isDark ? Colors.white12 : Colors.grey.shade50,
@@ -353,8 +352,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         SizedBox(height: 16),
-                        
-                        // New Password
                         Container(
                           decoration: BoxDecoration(
                             color: _isDark ? Colors.white12 : Colors.grey.shade50,
@@ -378,8 +375,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ),
-                        
-                        // Password Strength
                         if (newPasswordController.text.isNotEmpty) ...[
                           SizedBox(height: 8),
                           Row(
@@ -405,8 +400,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ],
                           ),
                         ],
-                        
-                        // Password Length Slider
                         SizedBox(height: 8),
                         Row(
                           children: [
@@ -433,8 +426,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
-                        
-                        // Suggest Password Button
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton.icon(
@@ -453,10 +444,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ),
-                        
                         SizedBox(height: 8),
-                        
-                        // Confirm Password
                         Container(
                           decoration: BoxDecoration(
                             color: _isDark ? Colors.white12 : Colors.grey.shade50,
@@ -485,7 +473,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             actions: [
               TextButton(
                 onPressed: () {
-                  // Clean up controllers when closing
                   currentPasswordController.dispose();
                   newPasswordController.dispose();
                   confirmPasswordController.dispose();
@@ -517,7 +504,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           );
                           
                           if (changed) {
-                            // Clean up controllers
                             currentPasswordController.dispose();
                             newPasswordController.dispose();
                             confirmPasswordController.dispose();
@@ -960,18 +946,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _syncNow() async {
     setState(() => _isSyncing = true);
-    await _syncService.syncAccounts();
+    final success = await _syncService.syncAccounts();
     setState(() => _isSyncing = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-        SizedBox(width: 8),
-        Text('Sync complete'),
-      ]),
-      backgroundColor: Color(0xFF10B981),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+          SizedBox(width: 8),
+          Text('Sync complete'),
+        ]),
+        backgroundColor: Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Sync failed - check connection'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
+    }
   }
 
   void _clearAllData() async {
@@ -1005,15 +1001,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+    
     if (confirmed == true) {
-      final otpBox = Hive.box<OTPAccount>('otp_accounts');
-      await otpBox.clear();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('All data cleared'),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
+      try {
+        final userBox = await _syncService.getUserBox();
+        final count = userBox.length;
+        await userBox.clear();
+        await _syncService.syncAccounts();
+        
+        print('Cleared $count accounts from user box');
+        
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('All data cleared ($count accounts)'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+        
+        Navigator.pop(context);
+        
+      } catch (e) {
+        print('Error clearing data: $e');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to clear data: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
     }
   }
 

@@ -320,12 +320,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   void _saveAccount() async {
     if (_formKey.currentState!.validate()) {
-      final otpBox = Hive.box<OTPAccount>('otp_accounts');
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('current_user') ?? 'default_user';
-
+      final syncService = SyncService();
+      
+      // Get the USER-SPECIFIC box, not the generic one
+      final userBox = await syncService.getUserBox();
+      
       final serviceName = _serviceController.text.trim();
-      final exists = otpBox.values.any(
+      final exists = userBox.values.any(
         (a) => a.service.toLowerCase() == serviceName.toLowerCase(),
       );
 
@@ -360,10 +363,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         userId: userId,
       );
 
-      await otpBox.put(newAccount.id, newAccount);
+      // Save to USER-SPECIFIC box
+      await userBox.put(newAccount.id, newAccount);
 
       try {
-        await SyncService().syncAccounts();
+        await syncService.syncAccounts();
       } catch (e) {
         debugPrint('Sync error: $e');
       }

@@ -8,7 +8,7 @@ class AppConfig {
   static const String prodMediaUrl = 'http://153.75.224.243/media/';
   
   // Change this to false when building for production
-  static const bool isDevelopment = false;
+  static const bool isDevelopment = true;  // Set to false for production build
   
   static String get apiUrl {
     return isDevelopment ? devApiUrl : prodApiUrl;
