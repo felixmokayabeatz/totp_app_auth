@@ -215,11 +215,11 @@ class SyncService {
         final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
         
         final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
-        final syncedAt = response.data['synced_at'];
-        print('Cloud accounts: ${cloudAccounts.length} (last synced: $syncedAt)');
+        print('Cloud accounts: ${cloudAccounts.length}');
         
         final userBox = await _getUserBox();
         
+        // MERGE: Add cloud accounts that don't exist locally
         int addedCount = 0;
         for (var cloudAccount in cloudAccounts) {
           if (!userBox.containsKey(cloudAccount['id'])) {
@@ -233,12 +233,17 @@ class SyncService {
             );
             await userBox.put(newAccount.id, newAccount);
             addedCount++;
+            print('Added cloud account: ${cloudAccount['service']}');
           }
         }
-        print('Added $addedCount accounts from cloud');
+        print('Added $addedCount new accounts from cloud');
         print('Total local accounts: ${userBox.length}');
+        
+        // After merging, upload to cloud to ensure cloud has everything
+        await syncAccounts();
+        
       } else if (response.statusCode == 404) {
-        print('No cloud accounts found');
+        print('No cloud accounts found - will upload local on first sync');
       }
     } on DioError catch (e) {
       print('Download error: ${e.message}');
@@ -272,7 +277,7 @@ class SyncService {
       return false;
     }
     
-    // Get or generate device ID
+    // Get device ID
     String deviceId = prefs.getString('device_id') ?? '';
     if (deviceId.isEmpty) {
       deviceId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -280,6 +285,90 @@ class SyncService {
     }
     
     try {
+      // STEP 1: DOWNLOAD cloud accounts first
+      print('Downloading cloud accounts...');
+      final downloadResponse = await _requestWithRetry(() => _dio.get(
+        'sync/get-data/',
+        queryParameters: {
+          'data_type': 'otp_accounts',
+          'device_id': deviceId,
+        },
+      ));
+      
+      Map<String, dynamic> cloudAccountsMap = {};
+      int cloudVersion = 0;
+      
+      if (downloadResponse.statusCode == 200 && downloadResponse.data['encrypted_content'] != null) {
+        final encryptedContent = downloadResponse.data['encrypted_content'];
+        final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
+        final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
+        cloudVersion = downloadResponse.data['version'] ?? 0;
+        
+        for (var account in cloudAccounts) {
+          cloudAccountsMap[account['id']] = account;
+        }
+        print('Cloud has ${cloudAccounts.length} accounts');
+      }
+      
+      // STEP 2: Get local accounts
+      final localAccountsMap = <String, dynamic>{};
+      for (var account in userBox.values) {
+        localAccountsMap[account.id] = {
+          'id': account.id,
+          'service': account.service,
+          'secret': account.encryptedSecret,
+          'issuer': account.issuer,
+          'createdAt': account.createdAt.toIso8601String(),
+          'lastModified': account.createdAt.toIso8601String(),
+        };
+      }
+      print('Local has ${localAccountsMap.length} accounts');
+      
+      // STEP 3: MERGE - combine both, cloud wins on conflicts
+      final mergedAccounts = <String, dynamic>{};
+      int addedFromCloud = 0;
+      int addedFromLocal = 0;
+      
+      // Add all local accounts first
+      for (var entry in localAccountsMap.entries) {
+        mergedAccounts[entry.key] = entry.value;
+        addedFromLocal++;
+      }
+      
+      // Add/overwrite with cloud accounts
+      for (var entry in cloudAccountsMap.entries) {
+        if (!mergedAccounts.containsKey(entry.key)) {
+          mergedAccounts[entry.key] = entry.value;
+          addedFromCloud++;
+        } else {
+          // Cloud account exists - update local later
+          mergedAccounts[entry.key] = entry.value;
+        }
+      }
+      
+      print('Merge result: ${mergedAccounts.length} total accounts ($addedFromCloud from cloud, $addedFromLocal from local)');
+      
+      // STEP 4: UPDATE LOCAL with merged data
+      int updatedLocally = 0;
+      for (var entry in mergedAccounts.entries) {
+        if (!userBox.containsKey(entry.key)) {
+          // Add new account to local
+          final accountData = entry.value;
+          final newAccount = OTPAccount(
+            id: accountData['id'],
+            service: accountData['service'],
+            secret: accountData['secret'],
+            issuer: accountData['issuer'],
+            createdAt: DateTime.parse(accountData['createdAt']),
+            userId: await _getCurrentUserId(),
+          );
+          await userBox.put(newAccount.id, newAccount);
+          updatedLocally++;
+        }
+      }
+      print('Updated local with $updatedLocally new accounts');
+      
+      // STEP 5: UPLOAD merged data to cloud (backup)
       final finalAccountsData = userBox.values.map((a) => ({
         'id': a.id,
         'service': a.service,
@@ -290,23 +379,24 @@ class SyncService {
       
       final jsonString = jsonEncode(finalAccountsData);
       final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
+      final newVersion = cloudVersion + 1;
       
       print('Uploading ${finalAccountsData.length} accounts to cloud...');
       final uploadResponse = await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
         'encrypted_content': encryptedContent,
-        'version': finalAccountsData.length,
-        'device_id': deviceId,  // Send device ID
+        'version': newVersion,
+        'device_id': deviceId,
       });
       
       if (uploadResponse.statusCode == 200) {
-        final syncedAt = uploadResponse.data['synced_at'];
-        print('Sync successful - ${finalAccountsData.length} accounts synced at $syncedAt');
+        print('Sync successful - ${finalAccountsData.length} accounts synced');
         return true;
       } else {
         print('Sync upload failed: ${uploadResponse.statusCode}');
         return false;
       }
+      
     } on DioError catch (e) {
       print('Sync error: ${e.message}');
       if (e.response?.data != null) {
