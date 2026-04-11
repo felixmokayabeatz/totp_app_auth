@@ -12,7 +12,7 @@ class SyncService {
   
   SyncService() {
     _dio = Dio(BaseOptions(
-      baseUrl: AppConfig.apiUrl,  // Use config instead of hardcoded
+      baseUrl: AppConfig.apiUrl,
       connectTimeout: Duration(seconds: 30),
       receiveTimeout: Duration(seconds: 30),
       headers: {
@@ -22,6 +22,22 @@ class SyncService {
   }
   
   String? _encryptionKey;
+  
+  // Get user-specific box name
+  Future<String> _getUserBoxName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('current_user') ?? 'default';
+    return 'otp_accounts_$username';
+  }
+  
+  // Get user-specific box
+  Future<Box<OTPAccount>> _getUserBox() async {
+    final boxName = await _getUserBoxName();
+    if (!Hive.isBoxOpen(boxName)) {
+      await Hive.openBox<OTPAccount>(boxName);
+    }
+    return Hive.box<OTPAccount>(boxName);
+  }
   
   Future<void> _updateAuthHeader() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,7 +64,6 @@ class SyncService {
     
     try {
       print('Refreshing token...');
-      // Change from 'auth/refresh/' to 'token/refresh/'
       final response = await _dio.post('token/refresh/', data: {
         'refresh': refreshToken,
       });
@@ -147,6 +162,8 @@ class SyncService {
         
         await _updateAuthHeader();
         await _initEncryption();
+        
+        // Download and MERGE accounts (not clear)
         await downloadAndMergeAccounts();
         return true;
       }
@@ -173,10 +190,31 @@ class SyncService {
         final encryptedContent = response.data['encrypted_content'];
         await _initEncryption();
         final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
-        print('Cloud accounts downloaded and decrypted');
         
-        final localBox = Hive.box<OTPAccount>('otp_accounts');
-        print('Local accounts before merge: ${localBox.length}');
+        // Parse cloud accounts
+        final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
+        print('Cloud accounts: ${cloudAccounts.length}');
+        
+        final userBox = await _getUserBox();
+        
+        // MERGE: Add cloud accounts that don't exist locally
+        int addedCount = 0;
+        for (var cloudAccount in cloudAccounts) {
+          if (!userBox.containsKey(cloudAccount['id'])) {
+            final newAccount = OTPAccount(
+              id: cloudAccount['id'],
+              service: cloudAccount['service'],
+              secret: cloudAccount['secret'],
+              issuer: cloudAccount['issuer'],
+              createdAt: DateTime.parse(cloudAccount['createdAt']),
+              userId: await _getCurrentUserId(),
+            );
+            await userBox.put(newAccount.id, newAccount);
+            addedCount++;
+          }
+        }
+        print('Merged $addedCount new accounts from cloud');
+        print('Total local accounts: ${userBox.length}');
       } else if (response.statusCode == 404) {
         print('No cloud accounts found');
       }
@@ -190,6 +228,11 @@ class SyncService {
     }
   }
   
+  Future<String> _getCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('current_user') ?? 'default_user';
+  }
+  
   Future<bool> syncAccounts() async {
     await _updateAuthHeader();
     
@@ -201,38 +244,115 @@ class SyncService {
       return false;
     }
     
-    final otpBox = Hive.box<OTPAccount>('otp_accounts');
-    final accountsData = otpBox.values.map((a) => ({
-      'id': a.id,
-      'service': a.service,
-      'secret': a.encryptedSecret,
-      'issuer': a.issuer,
-      'createdAt': a.createdAt.toIso8601String(),
-    })).toList();
+    final userBox = await _getUserBox();
     
-    await _initEncryption();
-    final jsonString = jsonEncode(accountsData); // Use jsonEncode instead of toString()
-    final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
-    
+    // FIRST: Download cloud accounts to get latest version
     try {
-      print('Syncing ${accountsData.length} accounts...');
-      final response = await _dio.post('sync/sync/', data: {
+      print('Downloading cloud accounts before sync...');
+      final downloadResponse = await _requestWithRetry(() => _dio.get(
+        'sync/get-data/',
+        queryParameters: {'data_type': 'otp_accounts'},
+      ));
+      
+      Map<String, dynamic> cloudAccountsMap = {};
+      int cloudVersion = 0;
+      
+      if (downloadResponse.statusCode == 200 && downloadResponse.data['encrypted_content'] != null) {
+        final encryptedContent = downloadResponse.data['encrypted_content'];
+        await _initEncryption();
+        final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
+        final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
+        cloudVersion = downloadResponse.data['version'] ?? 0;
+        
+        // Create map of cloud accounts by ID
+        for (var account in cloudAccounts) {
+          cloudAccountsMap[account['id']] = account;
+        }
+        print('Cloud has ${cloudAccounts.length} accounts');
+      }
+      
+      // SECOND: Merge local and cloud (cloud wins on conflicts)
+      final localAccounts = userBox.values.toList();
+      final Map<String, dynamic> mergedAccounts = {};
+      
+      // Add all local accounts first
+      for (var account in localAccounts) {
+        mergedAccounts[account.id] = {
+          'id': account.id,
+          'service': account.service,
+          'secret': account.encryptedSecret,
+          'issuer': account.issuer,
+          'createdAt': account.createdAt.toIso8601String(),
+          'source': 'local'
+        };
+      }
+      
+      // Add/overwrite with cloud accounts
+      int addedFromCloud = 0;
+      for (var entry in cloudAccountsMap.entries) {
+        if (!mergedAccounts.containsKey(entry.key)) {
+          // Cloud has account that local doesn't - add it
+          mergedAccounts[entry.key] = {
+            'id': entry.value['id'],
+            'service': entry.value['service'],
+            'secret': entry.value['secret'],
+            'issuer': entry.value['issuer'],
+            'createdAt': entry.value['createdAt'],
+            'source': 'cloud'
+          };
+          addedFromCloud++;
+        }
+      }
+      
+      print('Merge result: ${mergedAccounts.length} total accounts ($addedFromCloud new from cloud)');
+      
+      // THIRD: Update local database with merged data
+      for (var entry in mergedAccounts.entries) {
+        final accountData = entry.value;
+        if (!userBox.containsKey(entry.key)) {
+          // Add new account to local
+          final newAccount = OTPAccount(
+            id: accountData['id'],
+            service: accountData['service'],
+            secret: accountData['secret'],
+            issuer: accountData['issuer'],
+            createdAt: DateTime.parse(accountData['createdAt']),
+            userId: await _getCurrentUserId(),
+          );
+          await userBox.put(newAccount.id, newAccount);
+        }
+      }
+      
+      // FOURTH: Upload merged data to cloud (backup)
+      final finalAccountsData = userBox.values.map((a) => ({
+        'id': a.id,
+        'service': a.service,
+        'secret': a.encryptedSecret,
+        'issuer': a.issuer,
+        'createdAt': a.createdAt.toIso8601String(),
+      })).toList();
+      
+      final jsonString = jsonEncode(finalAccountsData);
+      final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
+      final newVersion = (cloudVersion + 1);
+      
+      print('Uploading ${finalAccountsData.length} accounts to cloud...');
+      final uploadResponse = await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
         'encrypted_content': encryptedContent,
-        'version': accountsData.length,
+        'version': newVersion,
       });
       
-      if (response.statusCode == 200) {
-        print('Sync successful - ${accountsData.length} accounts synced');
+      if (uploadResponse.statusCode == 200) {
+        print('Sync successful - ${finalAccountsData.length} accounts synced');
         return true;
       } else {
-        print('Sync failed with status: ${response.statusCode}');
-        print('Response: ${response.data}');
+        print('Sync upload failed: ${uploadResponse.statusCode}');
         return false;
       }
+      
     } on DioError catch (e) {
       print('Sync error: ${e.message}');
-      print('Response: ${e.response?.data}');
       if (e.response?.statusCode == 401) {
         print('Token expired - please login again');
         await prefs.remove('access_token');
@@ -274,6 +394,16 @@ class SyncService {
   
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
+    final currentUser = prefs.getString('current_user');
+    
+    // Close user-specific box
+    if (currentUser != null) {
+      final boxName = 'otp_accounts_$currentUser';
+      if (Hive.isBoxOpen(boxName)) {
+        await Hive.box(boxName).close();
+      }
+    }
+    
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
     await prefs.remove('current_user');
@@ -307,7 +437,7 @@ class SyncService {
     
     try {
       final response = await _dio.post(
-        'auth/change_password/',  // Note: underscore, not hyphen
+        'auth/change_password/',
         data: {
           'current_password': currentPassword,
           'new_password': newPassword,
@@ -331,30 +461,36 @@ class SyncService {
   }
 
   Future<bool> sendPasswordResetCode(String email) async {
-  try {
-    final response = await _dio.post('send-reset-code/', data: {
-      'email': email,
-    });
-    print('Send reset code response: ${response.data}');
-    return response.data['success'] == true;
-  } catch (e) {
-    print('Send reset code error: $e');
-    return false;
+    try {
+      final response = await _dio.post('send-reset-code/', data: {
+        'email': email,
+      });
+      print('Send reset code response: ${response.data}');
+      return response.data['success'] == true;
+    } catch (e) {
+      print('Send reset code error: $e');
+      return false;
+    }
   }
-}
 
-Future<bool> resetPassword(String email, String code, String newPassword) async {
-  try {
-    final response = await _dio.post('reset-password/', data: {
-      'email': email,
-      'code': code,
-      'new_password': newPassword,
-    });
-    print('Reset password response: ${response.data}');
-    return response.statusCode == 200;
-  } catch (e) {
-    print('Reset password error: $e');
-    return false;
+  Future<bool> resetPassword(String email, String code, String newPassword) async {
+    try {
+      final response = await _dio.post('reset-password/', data: {
+        'email': email,
+        'code': code,
+        'new_password': newPassword,
+      });
+      print('Reset password response: ${response.data}');
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Reset password error: $e');
+      return false;
+    }
   }
-}
+
+  // Add to lib/services/sync_service.dart
+  Future<Box<OTPAccount>> getUserBox() async {
+    return await _getUserBox();
+  }
+
 }

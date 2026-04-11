@@ -16,8 +16,6 @@ import 'profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 
-
-
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -37,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _hasInternetError = false;
   String? _profilePhotoUrl;
   String? _username;
+  Box<OTPAccount>? _userBox;
 
   @override
   void initState() {
@@ -46,8 +45,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       duration: Duration(milliseconds: 500),
     );
     _animationController.forward();
+    _initUserBox();
     _startTimer();
     _loadProfileData();
+  }
+
+  Future<void> _initUserBox() async {
+    _userBox = await _syncService.getUserBox();
+    setState(() {});
   }
 
   Future<void> _loadProfileData() async {
@@ -74,12 +79,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _updateAllOTPs() async {
-    final otpBox = Hive.box<OTPAccount>('otp_accounts');
+    if (_userBox == null) return;
+    
     final newOTPs = <String, String>{};
     final newTimers = <String, int>{};
     final userId = await _getUserId();
 
-    for (var account in otpBox.values) {
+    for (var account in _userBox!.values) {
       final secret = account.getSecret(userId);
       newOTPs[account.id] = await _otpService.generateOTP(secret);
       newTimers[account.id] = 30 - (DateTime.now().second % 30);
@@ -145,7 +151,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           padding: EdgeInsets.fromLTRB(20, 16, 12, 16),
           child: Row(
             children: [
-              // Profile Photo - Clickable to go to Profile Settings
               GestureDetector(
                 onTap: () async {
                   final result = await Navigator.push(
@@ -166,8 +171,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       width: 2,
                     ),
                   ),
-                  
-                  // In _loadProfileData method, update the image URL:
                   child: ClipOval(
                     child: _profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty
                         ? Image.network(
@@ -337,8 +340,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildAccountsList(bool isDark) {
-    final otpBox = Hive.box<OTPAccount>('otp_accounts');
-    var accounts = otpBox.values.toList();
+    if (_userBox == null) {
+      return Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+        ),
+      );
+    }
+    
+    var accounts = _userBox!.values.toList();
 
     if (_searchQuery.isNotEmpty) {
       accounts = accounts
@@ -656,7 +666,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
 
     if (confirmed == true) {
-      await Hive.box<OTPAccount>('otp_accounts').delete(id);
+      await _userBox?.delete(id);
       setState(() {
         currentOTPs.remove(id);
         timers.remove(id);
@@ -676,6 +686,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       if (success) {
         _showSnackBar('Sync completed!', Colors.green);
         setState(() => _hasInternetError = false);
+        await _initUserBox(); // Refresh the box
+        _updateAllOTPs(); // Refresh OTPs
       } else {
         _showSnackBar('No internet connection or server unavailable', Colors.orange);
         setState(() => _hasInternetError = true);
