@@ -10,11 +10,18 @@ NC='\033[0m'
 # Configuration
 APP_NAME="beatzlock"
 APP_USER="felixmokayabeatz"
-APP_PATH="/home/$APP_USER/totp_app"  # Changed from beatzlock to totp_app
-BACKEND_PATH="$APP_PATH/otp_backend"  # Your backend is inside otp_backend folder
+APP_PATH="/home/$APP_USER/totp_app"
+BACKEND_PATH="$APP_PATH/otp_backend"
 VENV_PATH="$APP_PATH/totp_app_venv"
 PORT="8002"
 DOMAIN="153.75.224.243"
+
+# Superuser credentials
+SUPERUSER_USERNAME="felixmokayabeatz"
+SUPERUSER_EMAIL="felixmokaya675@gmail.com"
+SUPERUSER_PASSWORD="Ableton@2429"
+SUPERUSER_FIRST_NAME="Felix"
+SUPERUSER_LAST_NAME="Mokaya"
 
 # Function to show menu
 show_menu() {
@@ -31,6 +38,7 @@ show_menu() {
     echo -e "${GREEN}8.${NC} Reload Nginx Only"
     echo -e "${GREEN}9.${NC} Backup Database"
     echo -e "${GREEN}10.${NC} Show Port Status"
+    echo -e "${GREEN}11.${NC} Create Django Superuser"
     echo -e "${RED}0.${NC} Exit"
     echo -e "${BLUE}========================================${NC}"
     echo -n "Choose option: "
@@ -72,6 +80,68 @@ check_services() {
     echo ""
     echo -e "${BLUE}Port $PORT:${NC}"
     check_port
+}
+
+# Function to create Django superuser
+create_superuser() {
+    echo -e "${YELLOW}Creating Django superuser...${NC}"
+    
+    # Activate virtual environment
+    source $VENV_PATH/bin/activate
+    
+    # Navigate to backend directory
+    cd $BACKEND_PATH
+    
+    # Check if superuser already exists
+    echo -e "${BLUE}Checking if superuser exists...${NC}"
+    USER_EXISTS=$(python manage.py shell -c "from django.contrib.auth.models import User; print(User.objects.filter(username='$SUPERUSER_USERNAME').exists())" 2>/dev/null)
+    
+    if [ "$USER_EXISTS" = "True" ]; then
+        echo -e "${YELLOW}⚠ Superuser '$SUPERUSER_USERNAME' already exists.${NC}"
+        echo -n "Do you want to delete and recreate? (y/N): "
+        read -r recreate
+        if [[ "$recreate" =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Deleting existing superuser...${NC}"
+            python manage.py shell -c "from django.contrib.auth.models import User; User.objects.filter(username='$SUPERUSER_USERNAME').delete()"
+            echo -e "${GREEN}✓ Existing superuser deleted${NC}"
+        else
+            echo -e "${GREEN}✓ Keeping existing superuser${NC}"
+            return 0
+        fi
+    fi
+    
+    # Create superuser using Django's createsuperuser command with environment variables
+    echo -e "${BLUE}Creating superuser...${NC}"
+    echo -e "Username: ${GREEN}$SUPERUSER_USERNAME${NC}"
+    echo -e "Email: ${GREEN}$SUPERUSER_EMAIL${NC}"
+    echo -e "First Name: ${GREEN}$SUPERUSER_FIRST_NAME${NC}"
+    echo -e "Last Name: ${GREEN}$SUPERUSER_LAST_NAME${NC}"
+    
+    # Use Django's shell to create superuser (bypasses password prompts)
+    python manage.py shell << EOF
+from django.contrib.auth.models import User
+if not User.objects.filter(username='$SUPERUSER_USERNAME').exists():
+    user = User.objects.create_superuser(
+        username='$SUPERUSER_USERNAME',
+        email='$SUPERUSER_EMAIL',
+        password='$SUPERUSER_PASSWORD'
+    )
+    user.first_name = '$SUPERUSER_FIRST_NAME'
+    user.last_name = '$SUPERUSER_LAST_NAME'
+    user.save()
+    print('Superuser created successfully!')
+else:
+    print('Superuser already exists')
+EOF
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Superuser created successfully!${NC}"
+        echo -e "${YELLOW}You can now login at: http://$DOMAIN/admin/${NC}"
+        echo -e "  Username: ${GREEN}$SUPERUSER_USERNAME${NC}"
+        echo -e "  Password: ${GREEN}$SUPERUSER_PASSWORD${NC}"
+    else
+        echo -e "${RED}✗ Failed to create superuser${NC}"
+    fi
 }
 
 # Function to copy config files from repo to system locations
@@ -117,23 +187,23 @@ full_deploy() {
     echo -e "${GREEN}Starting full deployment...${NC}"
     
     # Update system
-    echo -e "${YELLOW}[1/8] Updating system packages...${NC}"
+    echo -e "${YELLOW}[1/9] Updating system packages...${NC}"
     sudo apt update && sudo apt upgrade -y
     
     # Install dependencies
-    echo -e "${YELLOW}[2/8] Installing dependencies...${NC}"
+    echo -e "${YELLOW}[2/9] Installing dependencies...${NC}"
     sudo apt install -y python3 python3-pip python3-venv nginx git curl
     
     # Create directories
-    echo -e "${YELLOW}[3/8] Creating directories...${NC}"
+    echo -e "${YELLOW}[3/9] Creating directories...${NC}"
     mkdir -p $APP_PATH/logs $BACKEND_PATH/media $BACKEND_PATH/staticfiles
     
     # Pull latest code (since repo already cloned)
-    echo -e "${YELLOW}[4/8] Pulling latest code from GitHub...${NC}"
+    echo -e "${YELLOW}[4/9] Pulling latest code from GitHub...${NC}"
     cd $APP_PATH && git pull
     
     # Setup virtual environment
-    echo -e "${YELLOW}[5/8] Setting up Python environment...${NC}"
+    echo -e "${YELLOW}[5/9] Setting up Python environment...${NC}"
     if [ ! -d "$VENV_PATH" ]; then
         python3 -m venv $VENV_PATH
         echo -e "${GREEN}✓ Virtual environment created${NC}"
@@ -145,21 +215,22 @@ full_deploy() {
     pip install -r $BACKEND_PATH/requirements.txt gunicorn psycopg2-binary
     
     # Run migrations
-    echo -e "${YELLOW}[6/8] Running migrations...${NC}"
+    echo -e "${YELLOW}[6/9] Running migrations...${NC}"
     cd $BACKEND_PATH
     python manage.py migrate
     python manage.py collectstatic --noinput
     
     # Copy config files from repo to system
-    echo -e "${YELLOW}[7/8] Installing configuration files...${NC}"
+    echo -e "${YELLOW}[7/9] Installing configuration files...${NC}"
     copy_config_files
     
     # Update systemd service file with correct paths
-    echo -e "${YELLOW}[8/8] Updating service file with correct paths...${NC}"
+    echo -e "${YELLOW}[8/9] Updating service file with correct paths...${NC}"
     sudo sed -i "s|/home/felixmokayabeatz/beatzlock|$APP_PATH|g" /etc/systemd/system/beatzlock.service
     sudo sed -i "s|/home/felixmokayabeatz/beatzlock/backend|$BACKEND_PATH|g" /etc/systemd/system/beatzlock.service
     
     # Restart services
+    echo -e "${YELLOW}[9/9] Starting services...${NC}"
     sudo systemctl daemon-reload
     sudo systemctl enable beatzlock
     sudo systemctl restart beatzlock
@@ -167,6 +238,14 @@ full_deploy() {
     
     echo -e "${GREEN}✓ Full deployment complete!${NC}"
     check_services
+    
+    # Ask if user wants to create superuser
+    echo ""
+    echo -n "Do you want to create a Django superuser? (y/N): "
+    read -r create_su
+    if [[ "$create_su" =~ ^[Yy]$ ]]; then
+        create_superuser
+    fi
 }
 
 # Function for quick deploy
@@ -276,6 +355,7 @@ while true; do
         8) reload_nginx ;;
         9) backup_db ;;
         10) check_port ;;
+        11) create_superuser ;;
         0) echo -e "${GREEN}Goodbye!${NC}"; exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
