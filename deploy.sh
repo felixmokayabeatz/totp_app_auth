@@ -1,0 +1,283 @@
+#!/bin/bash
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Configuration
+APP_NAME="beatzlock"
+APP_USER="felixmokayabeatz"
+APP_PATH="/home/$APP_USER/beatzlock"
+BACKEND_PATH="$APP_PATH/backend"
+VENV_PATH="$APP_PATH/venv"
+GIT_REPO="https://github.com/felixmokayabeatz/totp_app.git"
+PORT="8002"
+DOMAIN="153.75.224.243"
+
+# Function to show menu
+show_menu() {
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}    BeatzLock Authenticator Manager${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${GREEN}1.${NC} Full Deploy (First time or full update)"
+    echo -e "${GREEN}2.${NC} Quick Deploy (Pull & restart only)"
+    echo -e "${GREEN}3.${NC} Check Services Status"
+    echo -e "${GREEN}4.${NC} Restart Services"
+    echo -e "${GREEN}5.${NC} View Logs"
+    echo -e "${GREEN}6.${NC} Stop Services"
+    echo -e "${GREEN}7.${NC} Start Services"
+    echo -e "${GREEN}8.${NC} Reload Nginx Only"
+    echo -e "${GREEN}9.${NC} Backup Database"
+    echo -e "${GREEN}10.${NC} Show Port Status"
+    echo -e "${RED}0.${NC} Exit"
+    echo -e "${BLUE}========================================${NC}"
+    echo -n "Choose option: "
+}
+
+# Function to check if port is in use
+check_port() {
+    if sudo netstat -tlnp | grep -q ":$PORT "; then
+        echo -e "${YELLOW}⚠ Port $PORT is in use${NC}"
+        sudo netstat -tlnp | grep ":$PORT "
+        return 0
+    else
+        echo -e "${GREEN}✓ Port $PORT is free${NC}"
+        return 1
+    fi
+}
+
+# Function to check service status
+check_services() {
+    echo -e "${YELLOW}Checking services...${NC}"
+    echo ""
+    
+    echo -e "${BLUE}Gunicorn (Django):${NC}"
+    if sudo systemctl is-active --quiet beatzlock; then
+        echo -e "${GREEN}✓ Running${NC}"
+        sudo systemctl status beatzlock --no-pager | grep -E "Active:|Main PID:|CGroup:"
+    else
+        echo -e "${RED}✗ Not running${NC}"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Nginx:${NC}"
+    if sudo systemctl is-active --quiet nginx; then
+        echo -e "${GREEN}✓ Running${NC}"
+    else
+        echo -e "${RED}✗ Not running${NC}"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}Port $PORT:${NC}"
+    check_port
+}
+
+# Function to copy config files from repo to system locations
+copy_config_files() {
+    echo -e "${YELLOW}Copying configuration files...${NC}"
+    
+    # Copy systemd service file
+    if [ -f "$BACKEND_PATH/nginx/beatzlock.service" ]; then
+        sudo cp "$BACKEND_PATH/nginx/beatzlock.service" /etc/systemd/system/
+        echo -e "${GREEN}✓ Copied beatzlock.service${NC}"
+    else
+        echo -e "${RED}✗ beatzlock.service not found in repo!${NC}"
+        return 1
+    fi
+    
+    # Copy nginx config file
+    if [ -f "$BACKEND_PATH/nginx/beatzlock.conf" ]; then
+        sudo cp "$BACKEND_PATH/nginx/beatzlock.conf" /etc/nginx/sites-available/beatzlock
+        echo -e "${GREEN}✓ Copied beatzlock.conf${NC}"
+    else
+        echo -e "${RED}✗ beatzlock.conf not found in repo!${NC}"
+        return 1
+    fi
+    
+    # Create symbolic link if not exists
+    if [ ! -L "/etc/nginx/sites-enabled/beatzlock" ]; then
+        sudo ln -sf /etc/nginx/sites-available/beatzlock /etc/nginx/sites-enabled/
+        echo -e "${GREEN}✓ Created symbolic link${NC}"
+    fi
+    
+    # Remove default nginx site
+    if [ -L "/etc/nginx/sites-enabled/default" ]; then
+        sudo rm -f /etc/nginx/sites-enabled/default
+        echo -e "${GREEN}✓ Removed default nginx site${NC}"
+    fi
+    
+    echo -e "${GREEN}✓ All config files copied successfully${NC}"
+    return 0
+}
+
+# Function to full deploy
+full_deploy() {
+    echo -e "${GREEN}Starting full deployment...${NC}"
+    
+    # Update system
+    echo -e "${YELLOW}[1/8] Updating system packages...${NC}"
+    sudo apt update && sudo apt upgrade -y
+    
+    # Install dependencies
+    echo -e "${YELLOW}[2/8] Installing dependencies...${NC}"
+    sudo apt install -y python3 python3-pip python3-venv nginx git curl
+    
+    # Create directories
+    echo -e "${YELLOW}[3/8] Creating directories...${NC}"
+    mkdir -p $APP_PATH $APP_PATH/logs $BACKEND_PATH/media $BACKEND_PATH/staticfiles
+    
+    # Clone or pull repo
+    echo -e "${YELLOW}[4/8] Getting code from GitHub...${NC}"
+    if [ -d "$BACKEND_PATH/.git" ]; then
+        cd $BACKEND_PATH && git pull
+    else
+        git clone $GIT_REPO $APP_PATH
+    fi
+    
+    # Setup virtual environment
+    echo -e "${YELLOW}[5/8] Setting up Python environment...${NC}"
+    if [ ! -d "$VENV_PATH" ]; then
+        python3 -m venv $VENV_PATH
+    fi
+    source $VENV_PATH/bin/activate
+    pip install --upgrade pip
+    pip install -r $BACKEND_PATH/requirements.txt gunicorn psycopg2-binary
+    
+    # Run migrations
+    echo -e "${YELLOW}[6/8] Running migrations...${NC}"
+    cd $BACKEND_PATH
+    python manage.py migrate
+    python manage.py collectstatic --noinput
+    
+    # Copy config files from repo to system
+    echo -e "${YELLOW}[7/8] Installing configuration files...${NC}"
+    copy_config_files
+    
+    # Restart services
+    echo -e "${YELLOW}[8/8] Starting services...${NC}"
+    sudo systemctl daemon-reload
+    sudo systemctl enable beatzlock
+    sudo systemctl restart beatzlock
+    sudo nginx -t && sudo systemctl restart nginx
+    
+    echo -e "${GREEN}✓ Full deployment complete!${NC}"
+    check_services
+}
+
+# Function for quick deploy
+quick_deploy() {
+    echo -e "${YELLOW}Quick deployment...${NC}"
+    
+    # Pull latest code
+    echo -e "${BLUE}Pulling latest code...${NC}"
+    cd $BACKEND_PATH && git pull
+    
+    # Update dependencies
+    echo -e "${BLUE}Updating dependencies...${NC}"
+    source $VENV_PATH/bin/activate
+    pip install -r requirements.txt
+    
+    # Run migrations
+    echo -e "${BLUE}Running migrations...${NC}"
+    python manage.py migrate
+    python manage.py collectstatic --noinput
+    
+    # Copy config files (in case they changed)
+    echo -e "${BLUE}Updating configuration files...${NC}"
+    copy_config_files
+    
+    # Restart service
+    echo -e "${BLUE}Restarting services...${NC}"
+    sudo systemctl daemon-reload
+    sudo systemctl restart beatzlock
+    sudo nginx -t && sudo systemctl reload nginx
+    
+    echo -e "${GREEN}✓ Quick deploy complete!${NC}"
+    check_services
+}
+
+# Function to restart services
+restart_services() {
+    echo -e "${YELLOW}Restarting services...${NC}"
+    sudo systemctl restart beatzlock
+    sudo systemctl restart nginx
+    echo -e "${GREEN}✓ Services restarted${NC}"
+    sleep 2
+    check_services
+}
+
+# Function to stop services
+stop_services() {
+    echo -e "${YELLOW}Stopping services...${NC}"
+    sudo systemctl stop beatzlock
+    sudo systemctl stop nginx
+    echo -e "${GREEN}✓ Services stopped${NC}"
+}
+
+# Function to start services
+start_services() {
+    echo -e "${YELLOW}Starting services...${NC}"
+    sudo systemctl start beatzlock
+    sudo systemctl start nginx
+    echo -e "${GREEN}✓ Services started${NC}"
+    sleep 2
+    check_services
+}
+
+# Function to view logs
+view_logs() {
+    echo -e "${BLUE}Recent logs:${NC}"
+    sudo journalctl -u beatzlock -n 50 --no-pager
+    echo ""
+    echo -e "${YELLOW}Press Ctrl+C to exit live logs${NC}"
+    sleep 2
+    sudo journalctl -u beatzlock -f
+}
+
+# Function to reload nginx only
+reload_nginx() {
+    echo -e "${YELLOW}Reloading Nginx...${NC}"
+    sudo nginx -t
+    if [ $? -eq 0 ]; then
+        sudo systemctl reload nginx
+        echo -e "${GREEN}✓ Nginx reloaded successfully${NC}"
+    else
+        echo -e "${RED}✗ Nginx config has errors${NC}"
+    fi
+}
+
+# Function to backup database
+backup_db() {
+    echo -e "${YELLOW}Backing up database...${NC}"
+    BACKUP_FILE="$APP_PATH/backup_$(date +%Y%m%d_%H%M%S).sql"
+    sqlite3 $BACKEND_PATH/db.sqlite3 ".backup $BACKUP_FILE"
+    echo -e "${GREEN}✓ Database backed up to: $BACKUP_FILE${NC}"
+}
+
+# Main loop
+while true; do
+    show_menu
+    read choice
+    
+    case $choice in
+        1) full_deploy ;;
+        2) quick_deploy ;;
+        3) check_services ;;
+        4) restart_services ;;
+        5) view_logs ;;
+        6) stop_services ;;
+        7) start_services ;;
+        8) reload_nginx ;;
+        9) backup_db ;;
+        10) check_port ;;
+        0) echo -e "${GREEN}Goodbye!${NC}"; exit 0 ;;
+        *) echo -e "${RED}Invalid option${NC}" ;;
+    esac
+    
+    echo ""
+    echo -n "Press Enter to continue..."
+    read
+done
