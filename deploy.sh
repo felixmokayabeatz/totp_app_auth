@@ -12,7 +12,7 @@ APP_NAME="beatzlock"
 APP_USER="felixmokayabeatz"
 APP_PATH="/home/$APP_USER/totp_app"  # Changed from beatzlock to totp_app
 BACKEND_PATH="$APP_PATH/otp_backend"  # Your backend is inside otp_backend folder
-VENV_PATH="$APP_PATH/venv"
+VENV_PATH="$APP_PATH/totp_app_venv"
 PORT="8002"
 DOMAIN="153.75.224.243"
 
