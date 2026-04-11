@@ -10,10 +10,9 @@ NC='\033[0m'
 # Configuration
 APP_NAME="beatzlock"
 APP_USER="felixmokayabeatz"
-APP_PATH="/home/$APP_USER/beatzlock"
-BACKEND_PATH="$APP_PATH/backend"
+APP_PATH="/home/$APP_USER/totp_app"  # Changed from beatzlock to totp_app
+BACKEND_PATH="$APP_PATH/otp_backend"  # Your backend is inside otp_backend folder
 VENV_PATH="$APP_PATH/venv"
-GIT_REPO="https://github.com/felixmokayabeatz/totp_app.git"
 PORT="8002"
 DOMAIN="153.75.224.243"
 
@@ -84,7 +83,7 @@ copy_config_files() {
         sudo cp "$BACKEND_PATH/nginx/beatzlock.service" /etc/systemd/system/
         echo -e "${GREEN}✓ Copied beatzlock.service${NC}"
     else
-        echo -e "${RED}✗ beatzlock.service not found in repo!${NC}"
+        echo -e "${RED}✗ beatzlock.service not found in $BACKEND_PATH/nginx/${NC}"
         return 1
     fi
     
@@ -93,7 +92,7 @@ copy_config_files() {
         sudo cp "$BACKEND_PATH/nginx/beatzlock.conf" /etc/nginx/sites-available/beatzlock
         echo -e "${GREEN}✓ Copied beatzlock.conf${NC}"
     else
-        echo -e "${RED}✗ beatzlock.conf not found in repo!${NC}"
+        echo -e "${RED}✗ beatzlock.conf not found in $BACKEND_PATH/nginx/${NC}"
         return 1
     fi
     
@@ -127,20 +126,19 @@ full_deploy() {
     
     # Create directories
     echo -e "${YELLOW}[3/8] Creating directories...${NC}"
-    mkdir -p $APP_PATH $APP_PATH/logs $BACKEND_PATH/media $BACKEND_PATH/staticfiles
+    mkdir -p $APP_PATH/logs $BACKEND_PATH/media $BACKEND_PATH/staticfiles
     
-    # Clone or pull repo
-    echo -e "${YELLOW}[4/8] Getting code from GitHub...${NC}"
-    if [ -d "$BACKEND_PATH/.git" ]; then
-        cd $BACKEND_PATH && git pull
-    else
-        git clone $GIT_REPO $APP_PATH
-    fi
+    # Pull latest code (since repo already cloned)
+    echo -e "${YELLOW}[4/8] Pulling latest code from GitHub...${NC}"
+    cd $APP_PATH && git pull
     
     # Setup virtual environment
     echo -e "${YELLOW}[5/8] Setting up Python environment...${NC}"
     if [ ! -d "$VENV_PATH" ]; then
         python3 -m venv $VENV_PATH
+        echo -e "${GREEN}✓ Virtual environment created${NC}"
+    else
+        echo -e "${GREEN}✓ Virtual environment already exists${NC}"
     fi
     source $VENV_PATH/bin/activate
     pip install --upgrade pip
@@ -156,8 +154,12 @@ full_deploy() {
     echo -e "${YELLOW}[7/8] Installing configuration files...${NC}"
     copy_config_files
     
+    # Update systemd service file with correct paths
+    echo -e "${YELLOW}[8/8] Updating service file with correct paths...${NC}"
+    sudo sed -i "s|/home/felixmokayabeatz/beatzlock|$APP_PATH|g" /etc/systemd/system/beatzlock.service
+    sudo sed -i "s|/home/felixmokayabeatz/beatzlock/backend|$BACKEND_PATH|g" /etc/systemd/system/beatzlock.service
+    
     # Restart services
-    echo -e "${YELLOW}[8/8] Starting services...${NC}"
     sudo systemctl daemon-reload
     sudo systemctl enable beatzlock
     sudo systemctl restart beatzlock
@@ -173,15 +175,16 @@ quick_deploy() {
     
     # Pull latest code
     echo -e "${BLUE}Pulling latest code...${NC}"
-    cd $BACKEND_PATH && git pull
+    cd $APP_PATH && git pull
     
     # Update dependencies
     echo -e "${BLUE}Updating dependencies...${NC}"
     source $VENV_PATH/bin/activate
-    pip install -r requirements.txt
+    pip install -r $BACKEND_PATH/requirements.txt
     
     # Run migrations
     echo -e "${BLUE}Running migrations...${NC}"
+    cd $BACKEND_PATH
     python manage.py migrate
     python manage.py collectstatic --noinput
     
