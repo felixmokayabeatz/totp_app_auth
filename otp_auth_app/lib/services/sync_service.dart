@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/otp_account.dart';
 import 'encryption_service.dart';
+import '../config/app_config.dart';
+import 'dart:convert';
 
 class SyncService {
   late Dio _dio;
@@ -10,7 +12,7 @@ class SyncService {
   
   SyncService() {
     _dio = Dio(BaseOptions(
-      baseUrl: 'http://localhost:8000/api/',
+      baseUrl: AppConfig.apiUrl,  // Use config instead of hardcoded
       connectTimeout: Duration(seconds: 30),
       receiveTimeout: Duration(seconds: 30),
       headers: {
@@ -46,7 +48,8 @@ class SyncService {
     
     try {
       print('Refreshing token...');
-      final response = await _dio.post('auth/refresh/', data: {
+      // Change from 'auth/refresh/' to 'token/refresh/'
+      final response = await _dio.post('token/refresh/', data: {
         'refresh': refreshToken,
       });
       
@@ -208,26 +211,32 @@ class SyncService {
     })).toList();
     
     await _initEncryption();
-    final jsonString = accountsData.toString();
+    final jsonString = jsonEncode(accountsData); // Use jsonEncode instead of toString()
     final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
     
     try {
       print('Syncing ${accountsData.length} accounts...');
-      final response = await _requestWithRetry(() => _dio.post('sync/sync/', data: {
+      final response = await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
         'encrypted_content': encryptedContent,
         'version': accountsData.length,
-      }));
+      });
       
       if (response.statusCode == 200) {
         print('Sync successful - ${accountsData.length} accounts synced');
         return true;
       } else {
         print('Sync failed with status: ${response.statusCode}');
+        print('Response: ${response.data}');
         return false;
       }
     } on DioError catch (e) {
       print('Sync error: ${e.message}');
+      print('Response: ${e.response?.data}');
+      if (e.response?.statusCode == 401) {
+        print('Token expired - please login again');
+        await prefs.remove('access_token');
+      }
       return false;
     } catch (e) {
       print('Sync error: $e');

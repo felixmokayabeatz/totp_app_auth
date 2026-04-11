@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/profile_service.dart';
 import '../providers/theme_provider.dart';
+import '../config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -49,14 +50,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     setState(() {
       _isLoading = true;
     });
-    
-    // Debug: Check token
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-    print('Token exists: ${token != null}');
-    if (token != null) {
-      print('Token length: ${token.length}');
-    }
     
     final profile = await _profileService.getProfile();
     
@@ -115,7 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     });
     
     if (success) {
-      await _loadProfile(); // Reload to get the URL
+      await _loadProfile();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Profile photo updated!'),
@@ -272,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                       )
                                     : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty
                                         ? Image.network(
-                                            'http://localhost:8000${_profileImageUrl!}',
+                                            '${AppConfig.mediaUrl}${_profileImageUrl!.replaceFirst('/media/', '')}',
                                             fit: BoxFit.cover,
                                             width: 120,
                                             height: 120,

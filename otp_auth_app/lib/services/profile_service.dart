@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http_parser/http_parser.dart';
+import '../config/app_config.dart';
 
 class ProfileService {
   late Dio _dio;
@@ -9,7 +10,7 @@ class ProfileService {
   
   ProfileService() {
     _dio = Dio(BaseOptions(
-      baseUrl: 'http://localhost:8000/api/',
+      baseUrl: AppConfig.apiUrl,  // Use config
       connectTimeout: Duration(seconds: 30),
       receiveTimeout: Duration(seconds: 30),
     ));

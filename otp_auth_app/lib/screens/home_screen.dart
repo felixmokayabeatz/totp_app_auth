@@ -14,6 +14,8 @@ import 'login_screen.dart';
 import 'show_qr_screen.dart';
 import 'profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_config.dart';
+
 
 
 class HomeScreen extends StatefulWidget {
@@ -164,31 +166,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       width: 2,
                     ),
                   ),
+                  
+                  // In _loadProfileData method, update the image URL:
                   child: ClipOval(
                     child: _profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty
                         ? Image.network(
-                            'http://localhost:8000$_profilePhotoUrl',
+                            '${AppConfig.mediaUrl}${_profilePhotoUrl!.replaceFirst('/media/', '')}',
                             fit: BoxFit.cover,
                             width: 44,
                             height: 44,
                             errorBuilder: (context, error, stackTrace) {
                               return Container(
                                 color: Colors.white.withOpacity(0.2),
-                                child: Icon(
-                                  Icons.person,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
+                                child: Icon(Icons.person, color: Colors.white, size: 24),
                               );
                             },
                           )
                         : Container(
                             color: Colors.white.withOpacity(0.2),
-                            child: Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                            child: Icon(Icons.person, color: Colors.white, size: 24),
                           ),
                   ),
                 ),

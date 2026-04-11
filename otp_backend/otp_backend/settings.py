@@ -22,8 +22,7 @@ except ImportError:
 # ALLOWED_HOSTS - Fixed version
 if DEBUG:
     # Parse the string correctly if it comes from env
-    allowed_hosts_str = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,153.75.224.243')
-    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_str.split(',')]
+    ALLOWED_HOSTS = ['*']
 else:
     ALLOWED_HOSTS = ['153.75.224.243', 'localhost', '127.0.0.1']
 
