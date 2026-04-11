@@ -203,11 +203,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
+    final otpCodeController = TextEditingController(); // SEPARATE CONTROLLER for OTP
     bool _obscureCurrent = true;
     bool _obscureNew = true;
     bool _obscureConfirm = true;
     bool _show2FA = false;
-    String _otpCode = '';
     double _passwordStrength = 0.0;
     String _passwordStrengthText = '';
     Color _passwordStrengthColor = Colors.grey;
@@ -216,11 +216,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     void _checkPasswordStrength() {
       final password = newPasswordController.text;
       if (password.isEmpty) {
-        setState(() {
-          _passwordStrength = 0.0;
-          _passwordStrengthText = '';
-          _passwordStrengthColor = Colors.grey;
-        });
+        if (mounted) {
+          setState(() {
+            _passwordStrength = 0.0;
+            _passwordStrengthText = '';
+            _passwordStrengthColor = Colors.grey;
+          });
+        }
         return;
       }
       
@@ -231,19 +233,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (password.contains(RegExp(r'[A-Z]'))) score += 25;
       if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) score += 25;
       
-      setState(() {
-        _passwordStrength = score / 100;
-        if (score < 50) {
-          _passwordStrengthText = 'Weak';
-          _passwordStrengthColor = Colors.red;
-        } else if (score < 75) {
-          _passwordStrengthText = 'Medium';
-          _passwordStrengthColor = Colors.orange;
-        } else {
-          _passwordStrengthText = 'Strong';
-          _passwordStrengthColor = Colors.green;
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _passwordStrength = score / 100;
+          if (score < 50) {
+            _passwordStrengthText = 'Weak';
+            _passwordStrengthColor = Colors.red;
+          } else if (score < 75) {
+            _passwordStrengthText = 'Medium';
+            _passwordStrengthColor = Colors.orange;
+          } else {
+            _passwordStrengthText = 'Strong';
+            _passwordStrengthColor = Colors.green;
+          }
+        });
+      }
     }
 
     String _generateStrongPassword(int length) {
@@ -306,14 +310,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             border: Border.all(color: _accent.withOpacity(0.3)),
                           ),
                           child: TextField(
-                            onChanged: (value) => _otpCode = value,
+                            controller: otpCodeController, // SEPARATE CONTROLLER
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
                             keyboardType: TextInputType.number,
                             maxLength: 6,
                             decoration: InputDecoration(
-                              hintText: '000000',
-                              hintStyle: TextStyle(fontSize: 24, letterSpacing: 4),
+                              hintText: 'Enter 6-digit code',
+                              hintStyle: TextStyle(fontSize: 16, letterSpacing: 0),
                               border: InputBorder.none,
                               counterText: '',
                               contentPadding: EdgeInsets.symmetric(vertical: 16),
@@ -438,6 +442,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               final strongPassword = _generateStrongPassword(_passwordLength.toInt());
                               setState(() {
                                 newPasswordController.text = strongPassword;
+                                confirmPasswordController.text = strongPassword;
                                 _checkPasswordStrength();
                               });
                             },
@@ -479,13 +484,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  // Clean up controllers when closing
+                  currentPasswordController.dispose();
+                  newPasswordController.dispose();
+                  confirmPasswordController.dispose();
+                  otpCodeController.dispose();
+                  Navigator.pop(context);
+                },
                 child: Text('Cancel', style: TextStyle(color: _textSecondary)),
               ),
               ElevatedButton(
                 onPressed: _show2FA
                     ? () async {
-                        if (_otpCode.length != 6) {
+                        String otpCode = otpCodeController.text;
+                        if (otpCode.length != 6) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Please enter 6-digit code'), backgroundColor: Colors.red),
                           );
@@ -495,7 +508,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         final prefs = await SharedPreferences.getInstance();
                         final username = prefs.getString('current_user') ?? '';
                         
-                        final isValid = await _syncService.verify2FACode(username, _otpCode);
+                        final isValid = await _syncService.verify2FACode(username, otpCode);
                         
                         if (isValid) {
                           final changed = await _syncService.changePassword(
@@ -504,6 +517,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           );
                           
                           if (changed) {
+                            // Clean up controllers
+                            currentPasswordController.dispose();
+                            newPasswordController.dispose();
+                            confirmPasswordController.dispose();
+                            otpCodeController.dispose();
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
