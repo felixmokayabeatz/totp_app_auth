@@ -6,6 +6,7 @@ import 'login_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 import '../providers/auth_provider.dart';
+import '../services/sync_service.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
@@ -43,7 +44,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       
       if (mounted) {
         if (token != null && token.isNotEmpty) {
-          // User is logged in - load user data and go to Home
+          // Restore encryption key
+          final syncService = SyncService();
+          await syncService.restoreEncryptionKey();
+          
+          // Load user data and go to Home
           final email = prefs.getString('user_email') ?? '';
           final username = prefs.getString('current_user') ?? '';
           final userId = prefs.getString('user_id') ?? '';

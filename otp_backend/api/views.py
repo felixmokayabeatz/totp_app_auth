@@ -226,16 +226,33 @@ def verify_delete_otp(request):
         return Response({'success': False, 'error': str(e)}, status=500)
     
 
+from django.utils import timezone
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_sync_preference(request):
     enabled = request.data.get('sync_enabled', True)
-    obj, _ = EncryptedData.objects.update_or_create(
+
+    obj, created = EncryptedData.objects.update_or_create(
         user=request.user,
         data_type='sync_preference',
-        defaults={'encrypted_content': 'true' if enabled else 'false'}
+        defaults={
+            'encrypted_content': 'true' if enabled else 'false',
+            'synced_at': timezone.now(),
+            'deleted_accounts': 'N/A'
+        }
     )
-    return Response({'success': True, 'sync_enabled': enabled})
+
+    return Response({
+        'success': True,
+        'sync_enabled': enabled,
+        'synced_at': obj.synced_at,
+        'deleted_accounts': obj.deleted_accounts
+    })
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

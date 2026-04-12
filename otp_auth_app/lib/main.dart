@@ -11,7 +11,6 @@ import 'screens/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Set minimum window size
   appWindow.minSize = Size(900, 700);
   appWindow.size = Size(900, 700);
   appWindow.alignment = Alignment.center;
@@ -28,6 +27,7 @@ void main() async {
   await Hive.openBox<OTPAccount>('otp_accounts');
   await Hive.openBox<PasswordEntry>('passwords');
   await Hive.openBox('settings');
+  await Hive.openBox('secure_data');  // ADD THIS LINE
   
   runApp(MyApp());
   appWindow.show();

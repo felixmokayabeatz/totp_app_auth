@@ -29,7 +29,7 @@ urlpatterns = [
     path('api/send-delete-otp/', send_delete_otp, name='send_delete_otp'),
     path('api/verify-delete-otp/', verify_delete_otp, name='verify_delete_otp'),
 
-    path('sync-preference/', set_sync_preference),
-    path('sync-preference/get/', get_sync_preference),
+    path('api/sync-preference/', set_sync_preference, name='set_sync_preference'),
+    path('api/sync-preference/get/', get_sync_preference, name='get_sync_preference'),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

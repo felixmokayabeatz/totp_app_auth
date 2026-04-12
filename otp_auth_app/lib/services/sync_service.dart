@@ -1,4 +1,3 @@
-// lib/services/sync_service.dart
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -27,18 +26,32 @@ class SyncService {
   // ─── Sync-enabled preference key ─────────────────────────────────────────
   static const _syncEnabledKey = 'sync_to_cloud_enabled';
 
+  // ─── Encryption key storage in Hive ──────────────────────────────────────
+  Future<void> _storeEncryptionKey(String key) async {
+    final box = await Hive.openBox('secure_data');
+    await box.put('encryption_key', key);
+  }
+
+  Future<String?> _getStoredEncryptionKey() async {
+    final box = await Hive.openBox('secure_data');
+    return box.get('encryption_key');
+  }
+
+  Future<void> _clearStoredEncryptionKey() async {
+    final box = await Hive.openBox('secure_data');
+    await box.delete('encryption_key');
+  }
+
   // ─── Sync preference ──────────────────────────────────────────────────────
   Future<bool> isSyncEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_syncEnabledKey) ?? true;
   }
 
-// Call this when user toggles the switch — saves locally AND pushes to server
   Future<void> setSyncEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_syncEnabledKey, value);
     
-    // Push to server so other devices pick it up
     try {
       await _updateAuthHeader();
       await _dio.post('sync-preference/', data: {'sync_enabled': value});
@@ -48,7 +61,6 @@ class SyncService {
     }
   }
 
-  // Call this periodically to check if another device changed the preference
   Future<void> refreshSyncPreferenceFromServer() async {
     try {
       await _updateAuthHeader();
@@ -127,9 +139,6 @@ class SyncService {
   }
 
   // ─── Encryption init ──────────────────────────────────────────────────────
-  // Key = sha256(username + password + constant salt)
-  // Password never stored anywhere, only used in memory to derive the key.
-  // Salt is constant so the key never changes across time or devices.
   void _initEncryption(String username, String password) {
     if (_encryptionKey != null) return;
     _encryptionKey = EncryptionService.generateKey(
@@ -172,7 +181,7 @@ class SyncService {
         await prefs.setString('user_email', email);
         await prefs.setString('user_id', response.data['user']['id'].toString());
         await _updateAuthHeader();
-        _initEncryption(username, password); // key derived from username + password
+        _initEncryption(username, password);
         return true;
       }
       return false;
@@ -182,6 +191,7 @@ class SyncService {
     }
   }
 
+  // ─── Login ────────────────────────────────────────────────────────────────
   Future<bool> login(String username, String password) async {
     try {
       final response = await _dio.post('auth/login/', data: {
@@ -196,11 +206,19 @@ class SyncService {
         await prefs.setString('user_email', response.data['user']['email'] ?? '');
         await prefs.setString('user_id', response.data['user']['id'].toString());
         await _updateAuthHeader();
-        _initEncryption(username, password);
+        
+        // Generate and STORE encryption key in Hive
+        final encryptionKey = EncryptionService.generateKey(
+          username + password, 
+          'beatzLockKenya2099'
+        );
+        
+        await _storeEncryptionKey(encryptionKey);
+        _encryptionKey = encryptionKey;
+        
         final userBox = await _getUserBox();
         print('User box ${await _getUserBoxName()} has ${userBox.length} accounts');
         
-        // ── FIX: only download if sync is enabled ──
         if (await isSyncEnabled()) {
           await downloadAndMergeAccounts();
         }
@@ -211,6 +229,18 @@ class SyncService {
       print('Login error: $e');
       return false;
     }
+  }
+
+  // ─── Restore encryption key on app restart ───────────────────────────────
+  Future<bool> restoreEncryptionKey() async {
+    final storedKey = await _getStoredEncryptionKey();
+    if (storedKey != null && storedKey.isNotEmpty) {
+      _encryptionKey = storedKey;
+      print('Encryption key restored from Hive');
+      return true;
+    }
+    print('No stored encryption key found');
+    return false;
   }
 
   // ─── Delete a single account ──────────────────────────────────────────────
@@ -268,12 +298,9 @@ class SyncService {
   }
 
   // ─── Download and merge ───────────────────────────────────────────────────
-  // NOTE: _encryptionKey is already set by login() before this is called.
-  // So no need to init encryption here again.
   Future<void> downloadAndMergeAccounts() async {
     await _updateAuthHeader();
 
-    // If key is not set (e.g. token refresh session), we cannot decrypt
     if (_encryptionKey == null) {
       print('Encryption key not set - user must log in first');
       return;
@@ -319,8 +346,6 @@ class SyncService {
             final id = ca['id'] as String;
             if (tombstones.contains(id)) continue;
             if (!userBox.containsKey(id)) {
-              // secret from cloud is PLAIN
-              // OTPAccount constructor encrypts it locally with userId key
               final newAccount = OTPAccount(
                 id: id,
                 service: ca['service'],
@@ -368,7 +393,6 @@ class SyncService {
     final token = prefs.getString('access_token');
     if (token == null || token.isEmpty) return false;
 
-    // If key not set, cannot encrypt/decrypt - user must log in first
     if (_encryptionKey == null) {
       print('Encryption key not set - user must log in first');
       return false;
@@ -387,7 +411,6 @@ class SyncService {
       int cloudVersion = 0;
       List<String> cloudDeletedAccounts = [];
 
-      // STEP 1: Download cloud data
       try {
         final downloadResponse = await _requestWithRetry(() => _dio.get(
           'sync/get-data/',
@@ -432,11 +455,9 @@ class SyncService {
         }
       }
 
-      // STEP 2: Fetch tombstones
       final tombstones = await _fetchTombstones();
       print('Tombstones: $tombstones');
 
-      // STEP 3: Get local accounts, skip tombstoned ones
       final userId = await _getCurrentUserId();
       final localAccountsMap = <String, dynamic>{};
       for (var a in userBox.values) {
@@ -448,15 +469,12 @@ class SyncService {
       }
       print('Local has ${localAccountsMap.length} accounts');
 
-      // STEP 4: Merge cloud accounts not present locally
       int addedFromCloud = 0;
       for (var entry in cloudAccountsMap.entries) {
         final id = entry.key;
         if (tombstones.contains(id)) continue;
         if (!localAccountsMap.containsKey(id) && !userBox.containsKey(id)) {
           final a = entry.value;
-          // secret from cloud is PLAIN
-          // OTPAccount constructor encrypts it locally with userId key
           final newAcc = OTPAccount(
             id: id,
             service: a['service'],
@@ -471,7 +489,6 @@ class SyncService {
       }
       print('Added $addedFromCloud accounts from cloud');
 
-      // STEP 5: Upload merged data with PLAIN secrets inside encrypted envelope
       final finalData = await Future.wait(
         userBox.values
             .where((a) => !tombstones.contains(a.id))
@@ -480,7 +497,7 @@ class SyncService {
           return {
             'id': a.id,
             'service': a.service,
-            'secret': plainSecret, // PLAIN inside encrypted envelope
+            'secret': plainSecret,
             'issuer': a.issuer,
             'createdAt': a.createdAt.toIso8601String(),
           };
@@ -593,12 +610,9 @@ class SyncService {
     final username = await _getCurrentUserId();
 
     try {
-      // STEP 1: Decrypt all local secrets with OLD key before changing anything
-      // _encryptionKey is still the OLD key at this point
       final userBox = await _getUserBox();
       final tombstones = await _fetchTombstones();
 
-      // Grab plain secrets using old encryption key (via _decryptSecretForUpload)
       final plainAccounts = await Future.wait(
         userBox.values
             .where((a) => !tombstones.contains(a.id))
@@ -614,7 +628,6 @@ class SyncService {
         }).toList(),
       );
 
-      // STEP 2: Change password on server
       final r = await _dio.post('auth/change_password/', data: {
         'current_password': currentPassword,
         'new_password': newPassword,
@@ -622,12 +635,9 @@ class SyncService {
 
       if (r.statusCode != 200) return false;
 
-      // STEP 3: Derive new encryption key from new password
-      _encryptionKey = null; // wipe old key
-      _initEncryption(username, newPassword); // derive new key
+      _encryptionKey = null;
+      _initEncryption(username, newPassword);
 
-      // STEP 4: Re-encrypt all secrets locally with new userId key
-      // and re-upload to server with new envelope key
       for (var account in plainAccounts) {
         final id = account['id'] as String;
         if (userBox.containsKey(id)) {
@@ -637,7 +647,6 @@ class SyncService {
         }
       }
 
-      // STEP 5: Upload re-encrypted data to server with new envelope key
       final encrypted = EncryptionService.simpleEncrypt(
         jsonEncode(plainAccounts), _encryptionKey!);
 
@@ -648,6 +657,9 @@ class SyncService {
         'device_id': prefs.getString('device_id') ?? 'unknown',
         'deleted_accounts': '[]',
       });
+
+      // Update stored encryption key
+      await _storeEncryptionKey(_encryptionKey!);
 
       print('Password changed and data re-encrypted successfully');
       return true;
@@ -679,6 +691,7 @@ class SyncService {
     }
   }
 
+  // ─── Logout ───────────────────────────────────────────────────────────────
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('access_token');
@@ -686,7 +699,10 @@ class SyncService {
     await prefs.remove('current_user');
     await prefs.remove('user_email');
     await prefs.remove('user_id');
-    _encryptionKey = null; // key wiped from memory on logout
+    
+    await _clearStoredEncryptionKey();
+    
+    _encryptionKey = null;
     _dio.options.headers.remove('Authorization');
   }
 

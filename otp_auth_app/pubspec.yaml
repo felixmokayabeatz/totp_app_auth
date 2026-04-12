@@ -36,6 +36,7 @@ dependencies:
   http_parser: ^4.0.2
   file_selector_windows: ^0.9.3+5
   
+  
 
 dev_dependencies:
   flutter_test:
