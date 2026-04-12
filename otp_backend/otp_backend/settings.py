@@ -147,9 +147,21 @@ USE_TZ = True
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
+
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 if DEBUG:
     print(f"DEBUG: {DEBUG}")
     print(f"ALLOWED_HOSTS: {ALLOWED_HOSTS}")
+    print(f"EMAIL_BACKEND: {EMAIL_BACKEND}")
+    print(f"EMAIL_HOST: {EMAIL_HOST}")
+    print(f"EMAIL_PORT: {EMAIL_PORT}")
+    print(f"EMAIL_USE_TLS: {EMAIL_USE_TLS}")
+    print(f"EMAIL_HOST_USER: {EMAIL_HOST_USER}")
+    print(f"EMAIL_HOST_PASSWORD: {'True' if EMAIL_HOST_PASSWORD else None}")
+    print(f"SERVER_IP: {SERVER_IP}")
