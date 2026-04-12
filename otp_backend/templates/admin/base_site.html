@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrahead %}
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+    <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+{% endblock %}
+
+{% block branding %}
+    <h1 id="site-name">
+        <a href="{% url 'admin:index' %}">
+            <img src="{% static 'favicon.ico' %}" alt="BeatzLock" style="height: 28px; vertical-align: middle; margin-right: 10px;">
+            BeatzLock Admin
+        </a>
+    </h1>
+{% endblock %}
