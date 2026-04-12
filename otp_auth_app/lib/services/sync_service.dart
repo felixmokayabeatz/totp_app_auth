@@ -245,33 +245,47 @@ class SyncService {
       ));
 
       if (response.statusCode == 200 && response.data['encrypted_content'] != null) {
-        final decrypted = EncryptionService.simpleDecrypt(
-          response.data['encrypted_content'], _encryptionKey!);
-        final List<dynamic> cloudAccounts = jsonDecode(decrypted);
-        final userBox = await _getUserBox();
-
-        // Fetch tombstoned IDs so we never re-add them
-        final tombstones = await _fetchTombstones();
-
-        int added = 0;
-        for (var ca in cloudAccounts) {
-          final id = ca['id'] as String;
-          if (tombstones.contains(id)) continue; // skip tombstoned
-          if (!userBox.containsKey(id)) {
-            final newAccount = OTPAccount(
-              id: id,
-              service: ca['service'],
-              secret: ca['secret'],
-              issuer: ca['issuer'],
-              createdAt: DateTime.parse(ca['createdAt']),
-              userId: await _getCurrentUserId(),
-            );
-            await userBox.put(newAccount.id, newAccount);
-            added++;
-          }
+        final encryptedContent = response.data['encrypted_content'];
+        
+        if (encryptedContent.toString().isEmpty) {
+          print('Cloud has no data');
+          return;
         }
-        print('Merged $added accounts from cloud');
-        await syncAccounts();
+        
+        final decrypted = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
+        
+        if (decrypted.isEmpty || decrypted.trim().isEmpty) {
+          print('Decrypted content is empty');
+          return;
+        }
+        
+        try {
+          final List<dynamic> cloudAccounts = jsonDecode(decrypted);
+          final userBox = await _getUserBox();
+          final tombstones = await _fetchTombstones();
+
+          int added = 0;
+          for (var ca in cloudAccounts) {
+            final id = ca['id'] as String;
+            if (tombstones.contains(id)) continue;
+            if (!userBox.containsKey(id)) {
+              final newAccount = OTPAccount(
+                id: id,
+                service: ca['service'],
+                secret: ca['secret'],
+                issuer: ca['issuer'],
+                createdAt: DateTime.parse(ca['createdAt']),
+                userId: await _getCurrentUserId(),
+              );
+              await userBox.put(newAccount.id, newAccount);
+              added++;
+            }
+          }
+          print('Merged $added accounts from cloud');
+          await syncAccounts();
+        } catch (jsonError) {
+          print('Failed to parse cloud JSON: $jsonError');
+        }
       }
     } catch (e) {
       print('downloadAndMergeAccounts error: $e');
@@ -294,7 +308,7 @@ class SyncService {
     // Respect sync-enabled preference
     if (!(await isSyncEnabled())) {
       print('Sync disabled by user preference');
-      return true; // not an error
+      return true;
     }
 
     await _updateAuthHeader();
@@ -313,7 +327,6 @@ class SyncService {
     }
 
     try {
-      // STEP 1: Download cloud accounts (404 means no data yet - that's fine)
       Map<String, dynamic> cloudAccountsMap = {};
       int cloudVersion = 0;
       List<String> cloudDeletedAccounts = [];
@@ -328,19 +341,35 @@ class SyncService {
         ));
 
         if (downloadResponse.statusCode == 200 && downloadResponse.data['encrypted_content'] != null) {
-          final decrypted = EncryptionService.simpleDecrypt(
-            downloadResponse.data['encrypted_content'], _encryptionKey!);
-          final List<dynamic> cloudAccounts = jsonDecode(decrypted);
-          cloudVersion = downloadResponse.data['version'] ?? 0;
+          final encryptedContent = downloadResponse.data['encrypted_content'];
           
-          for (var a in cloudAccounts) {
-            cloudAccountsMap[a['id']] = a;
+          // Handle empty encrypted content
+          if (encryptedContent.toString().isEmpty) {
+            print('Cloud has empty data');
+          } else {
+            final decrypted = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
+            // Check if decrypted content is valid JSON
+            if (decrypted.isNotEmpty && decrypted.trim().isNotEmpty) {
+              try {
+                final List<dynamic> cloudAccounts = jsonDecode(decrypted);
+                cloudVersion = downloadResponse.data['version'] ?? 0;
+                
+                for (var a in cloudAccounts) {
+                  cloudAccountsMap[a['id']] = a;
+                }
+                
+                if (downloadResponse.data['deleted_accounts'] != null) {
+                  cloudDeletedAccounts = List<String>.from(jsonDecode(downloadResponse.data['deleted_accounts']));
+                }
+                print('Cloud has ${cloudAccounts.length} accounts');
+              } catch (jsonError) {
+                print('Failed to parse cloud JSON: $jsonError');
+                print('Decrypted content: $decrypted');
+              }
+            } else {
+              print('Cloud decrypted content is empty');
+            }
           }
-          
-          if (downloadResponse.data['deleted_accounts'] != null) {
-            cloudDeletedAccounts = List<String>.from(jsonDecode(downloadResponse.data['deleted_accounts']));
-          }
-          print('Cloud has ${cloudAccounts.length} accounts');
         }
       } on DioException catch (e) {
         if (e.response?.statusCode == 404) {
@@ -348,7 +377,6 @@ class SyncService {
         } else {
           print('Download error: ${e.message}');
         }
-        // Continue with empty cloud data
       }
 
       // STEP 2: Fetch tombstones
