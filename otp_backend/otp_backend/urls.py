@@ -7,9 +7,10 @@ from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 
-from api.views import AuthViewSet, SyncViewSet, send_delete_otp, verify_delete_otp
+from api.views import AuthViewSet, SyncViewSet, send_delete_otp, verify_delete_otp, set_sync_preference, get_sync_preference
 from twofa.views import send_2fa_code, verify_2fa_code, send_password_reset_code, reset_password
 from accounts.views import ProfileViewSet
+
 
 router = DefaultRouter()
 router.register(r'auth', AuthViewSet, basename='auth')
@@ -27,4 +28,8 @@ urlpatterns = [
     path('api/reset-password/', reset_password, name='reset_password'),
     path('api/send-delete-otp/', send_delete_otp, name='send_delete_otp'),
     path('api/verify-delete-otp/', verify_delete_otp, name='verify_delete_otp'),
+
+    path('sync-preference/', set_sync_preference),
+    path('sync-preference/get/', get_sync_preference),
+
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

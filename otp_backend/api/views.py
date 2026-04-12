@@ -224,3 +224,24 @@ def verify_delete_otp(request):
         return Response({'success': False, 'error': 'Invalid or expired code'}, status=400)
     except Exception as e:
         return Response({'success': False, 'error': str(e)}, status=500)
+    
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_sync_preference(request):
+    enabled = request.data.get('sync_enabled', True)
+    obj, _ = EncryptedData.objects.update_or_create(
+        user=request.user,
+        data_type='sync_preference',
+        defaults={'encrypted_content': 'true' if enabled else 'false'}
+    )
+    return Response({'success': True, 'sync_enabled': enabled})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_sync_preference(request):
+    try:
+        data = EncryptedData.objects.get(user=request.user, data_type='sync_preference')
+        return Response({'sync_enabled': data.encrypted_content == 'true'})
+    except EncryptedData.DoesNotExist:
+        return Response({'sync_enabled': True})

@@ -7,8 +7,7 @@ import '../providers/theme_provider.dart';
 import '../services/sync_service.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import '../models/otp_account.dart';
+import 'dart:async';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -19,11 +18,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
   bool _isSyncing = false;
   bool _syncEnabled = true;
+  Timer? _syncPrefTimer; // ← add this
 
   @override
   void initState() {
     super.initState();
     _loadSyncPreference();
+    // Poll every 30 seconds for changes from other devices
+    _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      await _syncService.refreshSyncPreferenceFromServer();
+      final enabled = await _syncService.isSyncEnabled();
+      if (mounted && enabled != _syncEnabled) {
+        setState(() => _syncEnabled = enabled);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncPrefTimer?.cancel(); // ← cancel timer on dispose
+    super.dispose();
   }
 
   Future<void> _loadSyncPreference() async {
@@ -120,12 +134,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : 'Sync disabled – local only',
               value: _syncEnabled,
               onChanged: (val) async {
+                // Update locally and push to server immediately
                 await _syncService.setSyncEnabled(val);
                 setState(() => _syncEnabled = val);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(val
-                      ? 'Cloud sync enabled'
-                      : 'Cloud sync disabled – your accounts stay local only'),
+                      ? 'Cloud sync enabled on all devices'
+                      : 'Cloud sync disabled on all devices'),
                   backgroundColor: val ? const Color(0xFF10B981) : Colors.orange,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

@@ -27,14 +27,44 @@ class SyncService {
   // ─── Sync-enabled preference key ─────────────────────────────────────────
   static const _syncEnabledKey = 'sync_to_cloud_enabled';
 
+  // ─── Sync preference ──────────────────────────────────────────────────────
   Future<bool> isSyncEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_syncEnabledKey) ?? true;
   }
 
+// Call this when user toggles the switch — saves locally AND pushes to server
   Future<void> setSyncEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_syncEnabledKey, value);
+    
+    // Push to server so other devices pick it up
+    try {
+      await _updateAuthHeader();
+      await _dio.post('sync-preference/', data: {'sync_enabled': value});
+      print('Sync preference pushed to server: $value');
+    } catch (e) {
+      print('Failed to push sync preference: $e');
+    }
+  }
+
+  // Call this periodically to check if another device changed the preference
+  Future<void> refreshSyncPreferenceFromServer() async {
+    try {
+      await _updateAuthHeader();
+      final response = await _dio.get('sync-preference/get/');
+      if (response.statusCode == 200) {
+        final serverValue = response.data['sync_enabled'] as bool;
+        final prefs = await SharedPreferences.getInstance();
+        final localValue = prefs.getBool(_syncEnabledKey) ?? true;
+        if (serverValue != localValue) {
+          await prefs.setBool(_syncEnabledKey, serverValue);
+          print('Sync preference updated from server: $serverValue');
+        }
+      }
+    } catch (e) {
+      print('Failed to fetch sync preference: $e');
+    }
   }
 
   // ─── Box helpers ──────────────────────────────────────────────────────────
@@ -152,7 +182,6 @@ class SyncService {
     }
   }
 
-  // ─── Login ────────────────────────────────────────────────────────────────
   Future<bool> login(String username, String password) async {
     try {
       final response = await _dio.post('auth/login/', data: {
@@ -167,10 +196,14 @@ class SyncService {
         await prefs.setString('user_email', response.data['user']['email'] ?? '');
         await prefs.setString('user_id', response.data['user']['id'].toString());
         await _updateAuthHeader();
-        _initEncryption(username, password); // key derived from username + password
+        _initEncryption(username, password);
         final userBox = await _getUserBox();
         print('User box ${await _getUserBoxName()} has ${userBox.length} accounts');
-        await downloadAndMergeAccounts();
+        
+        // ── FIX: only download if sync is enabled ──
+        if (await isSyncEnabled()) {
+          await downloadAndMergeAccounts();
+        }
         return true;
       }
       return false;
