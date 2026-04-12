@@ -1,4 +1,3 @@
-// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -37,6 +36,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String? _profilePhotoUrl;
   String? _username;
   Box<OTPAccount>? _userBox;
+  
+  // New: Track sync status for warning messages
+  bool _isSyncEnabled = true;
 
   @override
   void initState() {
@@ -47,6 +49,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
     _animationController.forward();
     _loadData();
+    _loadSyncStatus();
+  }
+
+  Future<void> _loadSyncStatus() async {
+    _isSyncEnabled = await _syncService.isSyncEnabled();
+    setState(() {});
   }
 
   Future<void> _loadData() async {
@@ -85,8 +93,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final newTimers = <String, int>{};
 
     for (var account in _userBox!.values) {
-      // generateOTP internally uses the normalised counter – same result every
-      // call within the same 30-second window regardless of millisecond drift.
       newOTPs[account.id] = await _otpService.generateOTP(account.secret);
       newTimers[account.id] = _otpService.secondsRemaining();
       blurredCodes.putIfAbsent(account.id, () => false);
@@ -113,12 +119,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDark = themeProvider.isDarkMode;
+    final accountCount = _userBox?.length ?? 0;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
       body: Column(
         children: [
-          _buildHeader(isDark),
+          _buildHeader(isDark, accountCount),
           _buildSearchBar(isDark),
           Expanded(child: _buildAccountsList(isDark)),
         ],
@@ -126,8 +133,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ─── Header ───────────────────────────────────────────────────────────────
-  Widget _buildHeader(bool isDark) {
+  // ─── Header with account count ───────────────────────────────────────────
+  Widget _buildHeader(bool isDark, int accountCount) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
@@ -168,16 +175,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('BeatzLock Authenticator',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.3)),
-                  Text(_username ?? 'Two-Factor Security',
-                      style: const TextStyle(fontSize: 11, color: Colors.white60)),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('BeatzLock Authenticator',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.3)),
+                    Row(
+                      children: [
+                        Text(_username ?? 'Two-Factor Security',
+                            style: const TextStyle(fontSize: 11, color: Colors.white60)),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$accountCount ${accountCount == 1 ? 'account' : 'accounts'}',
+                            style: const TextStyle(fontSize: 9, color: Colors.white70),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
               _headerAction(_allBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded, _toggleBlurAll,
                   tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
               _headerAction(Icons.sync_rounded, _syncData, tooltip: 'Sync', loading: _isSyncing),
@@ -266,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ─── Accounts list ────────────────────────────────────────────────────────
+  // ─── Accounts list with creation date ─────────────────────────────────────
   Widget _buildAccountsList(bool isDark) {
     if (_userBox == null) {
       return const Center(child: CircularProgressIndicator(
@@ -274,6 +298,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
 
     var accounts = _userBox!.values.toList();
+    // Sort by creation date (newest first)
+    accounts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
     if (_searchQuery.isNotEmpty) {
       accounts = accounts
           .where((a) =>
@@ -317,6 +344,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final timer = timers[account.id] ?? 30;
         final isBlurred = blurredCodes[account.id] ?? false;
         final isExpiring = timer <= 5;
+        
+        // Format creation date
+        final addedDate = _formatDate(account.createdAt);
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
@@ -361,6 +391,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 style: TextStyle(fontSize: 12,
                                     color: isDark ? Colors.white38 : Colors.grey[500]),
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
+                          // Added date
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_today, size: 10, color: isDark ? Colors.white38 : Colors.grey[400]),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Added $addedDate',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: isDark ? Colors.white38 : Colors.grey[400],
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -427,7 +471,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     const Spacer(),
                     _accountAction(
                       Icons.delete_outline_rounded, 'Delete',
-                      () => _showDeleteAccountDialog(account.id),
+                      () => _showDeleteAccountDialog(account.id, account.service),
                       isDark, destructive: true,
                     ),
                   ],
@@ -440,13 +484,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ─── Delete account dialog ────────────────────────────────────────────────
-  void _showDeleteAccountDialog(String accountId) async {
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays == 0) {
+      return 'today';
+    } else if (difference.inDays == 1) {
+      return 'yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inDays < 30) {
+      final weeks = (difference.inDays / 7).floor();
+      return '$weeks ${weeks == 1 ? 'week' : 'weeks'} ago';
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
+    }
+  }
+
+  // ─── Delete account dialog with enhanced warnings ─────────────────────────
+  void _showDeleteAccountDialog(String accountId, String serviceName) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final textSecondary = isDark ? Colors.white38 : Colors.grey.shade500;
-
+    
+    // First, show the choice dialog
     final choice = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
@@ -455,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         title: Row(children: [
           const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 24),
           const SizedBox(width: 10),
-          Text('Delete Account', style: TextStyle(color: textPrimary, fontSize: 17)),
+          Text('Delete "$serviceName"', style: TextStyle(color: textPrimary, fontSize: 17, fontWeight: FontWeight.bold)),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -467,15 +530,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             _deleteOptionTile(
               icon: Icons.phone_android_rounded,
               title: 'This device only',
-              subtitle: 'Other devices keep the account',
+              subtitle: _isSyncEnabled 
+                  ? '⚠️ Cloud sync is ON. This account may come back when you sync!' 
+                  : 'Local only. Other devices keep the account.',
               color: Colors.orange,
               onTap: () => Navigator.pop(context, 'local'),
             ),
             const SizedBox(height: 8),
             _deleteOptionTile(
               icon: Icons.cloud_off_rounded,
-              title: 'Everywhere',
-              subtitle: 'Removed from all devices & cloud permanently',
+              title: 'Everywhere (Permanent)',
+              subtitle: 'Removed from all devices & cloud. Cannot be undone!',
               color: Colors.red,
               onTap: () => Navigator.pop(context, 'everywhere'),
             ),
@@ -493,14 +558,54 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (choice == null || choice == 'cancel') return;
 
     if (choice == 'local') {
+      // Show warning about sync if enabled
+      if (_isSyncEnabled) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: cardColor,
+            title: Row(children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+              const SizedBox(width: 10),
+              Text('Sync Warning', style: TextStyle(color: textPrimary, fontSize: 17)),
+            ]),
+            content: Text(
+              '⚠️ Cloud sync is currently ENABLED.\n\n'
+              'If you delete this account locally only, it may be restored from the cloud when you sync.\n\n'
+              'To permanently delete this account, choose "Everywhere" instead.\n\n'
+              'Are you sure you want to delete locally only?',
+              style: TextStyle(color: textSecondary, fontSize: 13),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text('Cancel', style: TextStyle(color: textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                child: const Text('Delete Locally'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+      }
+      
       await _syncService.deleteAccountLocalOnly(accountId);
       setState(() {
         currentOTPs.remove(accountId);
         timers.remove(accountId);
         blurredCodes.remove(accountId);
       });
-      _showSnackBar('Account removed from this device', Colors.orange);
+      _showSnackBar('Account removed from this device only', Colors.orange);
+      
     } else if (choice == 'everywhere') {
+      // Show final confirmation with "DELETE" typing
+      final confirmed = await _showDeleteConfirmationDialog(context, serviceName, cardColor, textPrimary, textSecondary);
+      if (!confirmed) return;
+      
       _showSnackBar('Deleting everywhere…', Colors.grey);
       final ok = await _syncService.deleteAccountEverywhere(accountId);
       if (ok) {
@@ -509,11 +614,114 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           timers.remove(accountId);
           blurredCodes.remove(accountId);
         });
-        _showSnackBar('Account deleted everywhere', Colors.red);
+        _showSnackBar('Account deleted from all devices', Colors.red);
       } else {
         _showSnackBar('Failed to delete from cloud – try again', Colors.red);
       }
     }
+  }
+  
+  Future<bool> _showDeleteConfirmationDialog(BuildContext context, String serviceName, Color cardColor, Color textPrimary, Color textSecondary) async {
+    final TextEditingController confirmController = TextEditingController();
+    bool canDelete = false;
+    
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: cardColor,
+          title: Row(children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            const SizedBox(width: 10),
+            Text('PERMANENT DELETION', style: TextStyle(color: Colors.red, fontSize: 17, fontWeight: FontWeight.bold)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This action is IRREVERSIBLE and will delete "$serviceName" from ALL your devices and the cloud.',
+                style: TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.warning, color: Colors.red, size: 32),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This cannot be undone!',
+                      style: TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Type "DELETE" below to confirm:',
+                style: TextStyle(color: textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: confirmController,
+                onChanged: (value) {
+                  setState(() {
+                    canDelete = value.toUpperCase() == 'DELETE';
+                  });
+                },
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18, 
+                  fontWeight: FontWeight.bold,
+                  color: canDelete ? Colors.red : textPrimary,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Type DELETE here',
+                  hintStyle: TextStyle(color: textSecondary, fontSize: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: Colors.red.withOpacity(0.5)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Colors.red, width: 2),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                confirmController.dispose();
+                Navigator.pop(context, false);
+              },
+              child: Text('Cancel', style: TextStyle(color: textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: canDelete ? () {
+                confirmController.dispose();
+                Navigator.pop(context, true);
+              } : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete Forever'),
+            ),
+          ],
+        ),
+      ),
+    ) ?? false;
   }
 
   Widget _deleteOptionTile({
@@ -614,7 +822,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _syncData() async {
-    // Check if sync is enabled first
     final syncEnabled = await _syncService.isSyncEnabled();
     
     if (!syncEnabled) {
