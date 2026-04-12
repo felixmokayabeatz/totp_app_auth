@@ -8,8 +8,6 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 
 from api.views import AuthViewSet, SyncViewSet, send_delete_otp, verify_delete_otp
-
-from api.views import AuthViewSet, SyncViewSet
 from twofa.views import send_2fa_code, verify_2fa_code, send_password_reset_code, reset_password
 from accounts.views import ProfileViewSet
 
@@ -27,8 +25,6 @@ urlpatterns = [
     path('api/verify-2fa/', verify_2fa_code, name='verify_2fa'),
     path('api/send-reset-code/', send_password_reset_code, name='send_reset_code'),
     path('api/reset-password/', reset_password, name='reset_password'),
-
     path('api/send-delete-otp/', send_delete_otp, name='send_delete_otp'),
     path('api/verify-delete-otp/', verify_delete_otp, name='verify_delete_otp'),
-
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

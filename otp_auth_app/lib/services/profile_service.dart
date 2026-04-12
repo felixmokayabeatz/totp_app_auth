@@ -30,7 +30,7 @@ class ProfileService {
     
     try {
       print('Refreshing token for profile service...');
-      final response = await _dio.post('auth/refresh/', data: {
+      final response = await _dio.post('token/refresh/', data: {
         'refresh': refreshToken,
       });
       
