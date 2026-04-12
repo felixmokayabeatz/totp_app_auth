@@ -108,21 +108,15 @@ class SyncService {
     return prefs.getString('current_user') ?? 'default_user';
   }
 
-  // ─── THE FIX: decrypt the locally-encrypted secret back to plain text ─────
-  // The cloud envelope is already encrypted with simpleEncrypt/simpleDecrypt.
-  // So secrets inside must be PLAIN so every device can read them correctly.
+  // ─── Decrypt local secret back to plain for uploading ────────────────────
   Future<String> _decryptSecretForUpload(String storedSecret) async {
-    // If it is already plain Base32, just return it as-is
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
     final isRawBase32 = RegExp(r'^[A-Z2-7a-z]+$').hasMatch(strippedSpaces);
     if (isRawBase32) return storedSecret;
-
-    // Otherwise decrypt it using the local user key
     try {
       final userId = await _getCurrentUserId();
       return EncryptionService.decryptSecret(storedSecret, userId);
     } catch (e) {
-      // If decryption fails just return as-is to avoid data loss
       return storedSecret;
     }
   }
@@ -279,17 +273,15 @@ class SyncService {
             final id = ca['id'] as String;
             if (tombstones.contains(id)) continue;
             if (!userBox.containsKey(id)) {
-              // ── FIX: secret from cloud is PLAIN text, encrypt it locally ──
-              final plainSecret = ca['secret'] as String;
-              final localEncryptedSecret = EncryptionService.encryptSecret(plainSecret, userId);
-
+              // secret from cloud is PLAIN - pass it directly, 
+              // OTPAccount constructor will encrypt it with local key
               final newAccount = OTPAccount(
                 id: id,
                 service: ca['service'],
-                secret: localEncryptedSecret, // stored encrypted with THIS device's key
+                secret: ca['secret'], // plain, constructor encrypts it
                 issuer: ca['issuer'],
                 createdAt: DateTime.parse(ca['createdAt']),
-                userId: userId,
+                userId: userId,       // triggers setSecret() inside constructor
               );
               await userBox.put(newAccount.id, newAccount);
               added++;
@@ -407,23 +399,20 @@ class SyncService {
       print('Local has ${localAccountsMap.length} accounts');
 
       // STEP 4: Merge cloud accounts into local if not already present
+      // secret from cloud is PLAIN - pass directly, constructor encrypts it
       int addedFromCloud = 0;
       for (var entry in cloudAccountsMap.entries) {
         final id = entry.key;
         if (tombstones.contains(id)) continue;
         if (!localAccountsMap.containsKey(id) && !userBox.containsKey(id)) {
           final a = entry.value;
-          // ── FIX: secret from cloud is PLAIN, encrypt with local key ──
-          final plainSecret = a['secret'] as String;
-          final localEncryptedSecret = EncryptionService.encryptSecret(plainSecret, userId);
-
           final newAcc = OTPAccount(
             id: id,
             service: a['service'],
-            secret: localEncryptedSecret, // encrypted with THIS device's key
+            secret: a['secret'], // plain, constructor encrypts it
             issuer: a['issuer'],
             createdAt: DateTime.parse(a['createdAt']),
-            userId: userId,
+            userId: userId,      // triggers setSecret() inside constructor
           );
           await userBox.put(id, newAcc);
           addedFromCloud++;
@@ -432,7 +421,7 @@ class SyncService {
       print('Added $addedFromCloud accounts from cloud');
 
       // STEP 5: Upload merged data
-      // ── FIX: decrypt each secret before uploading so cloud always has PLAIN secrets ──
+      // decrypt each local secret back to plain before uploading
       final finalData = await Future.wait(
         userBox.values
             .where((a) => !tombstones.contains(a.id))
@@ -441,7 +430,7 @@ class SyncService {
           return {
             'id': a.id,
             'service': a.service,
-            'secret': plainSecret, // PLAIN secret in the cloud envelope
+            'secret': plainSecret, // always PLAIN in cloud envelope
             'issuer': a.issuer,
             'createdAt': a.createdAt.toIso8601String(),
           };
@@ -505,7 +494,6 @@ class SyncService {
       return false;
     }
     try {
-      print('Sending delete OTP request with token...');
       final response = await _dio.post(
         'send-delete-otp/',
         data: {'username': username},
@@ -514,7 +502,6 @@ class SyncService {
           'Content-Type': 'application/json',
         }),
       );
-      print('Delete OTP response: ${response.data}');
       return response.data['success'] == true;
     } catch (e) {
       print('sendDeleteOtp error: $e');
@@ -530,12 +517,8 @@ class SyncService {
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
-    if (token == null) {
-      print('No token available for verify delete OTP');
-      return false;
-    }
+    if (token == null) return false;
     try {
-      print('Verifying delete OTP...');
       final response = await _dio.post(
         'verify-delete-otp/',
         data: {'username': username, 'code': code},
@@ -577,8 +560,7 @@ class SyncService {
     }
   }
 
-  Future<bool> resetPassword(
-      String email, String code, String newPassword) async {
+  Future<bool> resetPassword(String email, String code, String newPassword) async {
     try {
       final r = await _dio.post('reset-password/', data: {
         'email': email,

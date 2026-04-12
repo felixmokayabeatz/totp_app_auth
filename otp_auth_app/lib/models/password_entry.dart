@@ -1,3 +1,5 @@
+// models/password_entry.dart
+
 import 'package:hive/hive.dart';
 
 part 'password_entry.g.dart';
