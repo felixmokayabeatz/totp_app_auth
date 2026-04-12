@@ -1,3 +1,4 @@
+// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -25,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final OTPService _otpService = OTPService();
   final SyncService _syncService = SyncService();
   final ProfileService _profileService = ProfileService();
+
   Map<String, String> currentOTPs = {};
   Map<String, int> timers = {};
   Map<String, bool> blurredCodes = {};
@@ -32,7 +34,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String _searchQuery = '';
   bool _isSyncing = false;
   bool _allBlurred = false;
-  bool _hasInternetError = false;
   String? _profilePhotoUrl;
   String? _username;
   Box<OTPAccount>? _userBox;
@@ -42,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 500),
     );
     _animationController.forward();
     _loadData();
@@ -56,29 +57,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   Future<void> _initUserBox() async {
     _userBox = await _syncService.getUserBox();
-    
-    // NEVER fall back to old box - only use user's own box
     print('User box: ${await _syncService.getCurrentUserBoxName()} has ${_userBox?.length ?? 0} accounts');
-    
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _username = prefs.getString('current_user') ?? 'User';
-    });
-    
+    if (mounted) setState(() => _username = prefs.getString('current_user') ?? 'User');
     final profile = await _profileService.getProfile();
     if (profile != null && mounted) {
-      setState(() {
-        _profilePhotoUrl = profile['profile']?['profile_photo'];
-      });
+      setState(() => _profilePhotoUrl = profile['profile']?['profile_photo']);
     }
   }
 
   void _startTimer() {
-    Future.delayed(Duration(seconds: 1), () {
+    Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         _updateAllOTPs();
         _startTimer();
@@ -88,18 +81,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _updateAllOTPs() async {
     if (_userBox == null) return;
-    
     final newOTPs = <String, String>{};
     final newTimers = <String, int>{};
-    final userId = await _getUserId();
 
     for (var account in _userBox!.values) {
-      final secret = account.getSecret(userId);
-      newOTPs[account.id] = await _otpService.generateOTP(secret);
-      newTimers[account.id] = 30 - (DateTime.now().second % 30);
-      if (!blurredCodes.containsKey(account.id)) {
-        blurredCodes[account.id] = false;
-      }
+      // generateOTP internally uses the normalised counter – same result every
+      // call within the same 30-second window regardless of millisecond drift.
+      newOTPs[account.id] = await _otpService.generateOTP(account.secret);
+      newTimers[account.id] = _otpService.secondsRemaining();
+      blurredCodes.putIfAbsent(account.id, () => false);
     }
 
     if (mounted) {
@@ -108,11 +98,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         timers = newTimers;
       });
     }
-  }
-
-  Future<String> _getUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('current_user') ?? 'default_user';
   }
 
   void _toggleBlurAll() {
@@ -130,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final isDark = themeProvider.isDarkMode;
 
     return Scaffold(
-      backgroundColor: isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF),
+      backgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
       body: Column(
         children: [
           _buildHeader(isDark),
@@ -141,111 +126,69 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // ─── Header ───────────────────────────────────────────────────────────────
   Widget _buildHeader(bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Color(0xFF1A1A2E) : Color(0xFF4F46E5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 16, 12, 16),
+          padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
           child: Row(
             children: [
               GestureDetector(
                 onTap: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ProfileScreen()),
-                  );
-                  if (result == true) {
-                    _loadProfileData();
-                  }
+                  final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen()));
+                  if (result == true) _loadProfileData();
                 },
                 child: Container(
-                  width: 44,
-                  height: 44,
+                  width: 44, height: 44,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 2,
-                    ),
+                    border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                   ),
                   child: ClipOval(
                     child: _profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty
                         ? Image.network(
                             '${AppConfig.mediaUrl}${_profilePhotoUrl!.replaceFirst('/media/', '')}',
-                            fit: BoxFit.cover,
-                            width: 44,
-                            height: 44,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.white.withOpacity(0.2),
-                                child: Icon(Icons.person, color: Colors.white, size: 24),
-                              );
-                            },
+                            fit: BoxFit.cover, width: 44, height: 44,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: Colors.white.withOpacity(0.2),
+                              child: const Icon(Icons.person, color: Colors.white, size: 24),
+                            ),
                           )
                         : Container(
                             color: Colors.white.withOpacity(0.2),
-                            child: Icon(Icons.person, color: Colors.white, size: 24),
+                            child: const Icon(Icons.person, color: Colors.white, size: 24),
                           ),
                   ),
                 ),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'BeatzLock Authenticator',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  Text(
-                    _username ?? 'Two-Factor Security',
-                    style: TextStyle(fontSize: 11, color: Colors.white60),
-                  ),
+                  const Text('BeatzLock Authenticator',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.3)),
+                  Text(_username ?? 'Two-Factor Security',
+                      style: const TextStyle(fontSize: 11, color: Colors.white60)),
                 ],
               ),
-              Spacer(),
+              const Spacer(),
+              _headerAction(_allBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded, _toggleBlurAll,
+                  tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
+              _headerAction(Icons.sync_rounded, _syncData, tooltip: 'Sync', loading: _isSyncing),
+              _headerAction(Icons.settings_rounded,
+                  () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen())),
+                  tooltip: 'Settings'),
               _headerAction(
-                _allBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                _toggleBlurAll,
-                tooltip: _allBlurred ? 'Show codes' : 'Hide codes',
-              ),
-              _headerAction(
-                Icons.sync_rounded,
-                _syncData,
-                tooltip: 'Sync',
-                loading: _isSyncing,
-              ),
-              _headerAction(
-                Icons.settings_rounded,
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen())),
-                tooltip: 'Settings',
-              ),
-              _headerAction(
-                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
-                tooltip: 'Toggle theme',
-              ),
-              _headerAction(
-                Icons.logout_rounded,
-                _logout,
-                tooltip: 'Logout',
-              ),
+                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(),
+                  tooltip: 'Toggle theme'),
+              _headerAction(Icons.logout_rounded, _logout, tooltip: 'Logout'),
             ],
           ),
         ),
@@ -260,87 +203,60 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          width: 40,
-          height: 40,
-          margin: EdgeInsets.symmetric(horizontal: 2),
+          width: 40, height: 40,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.12),
             borderRadius: BorderRadius.circular(10),
           ),
           child: loading
-              ? Padding(
-                  padding: EdgeInsets.all(10),
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
+              ? const Padding(padding: EdgeInsets.all(10),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : Icon(icon, color: Colors.white, size: 20),
         ),
       ),
     );
   }
 
+  // ─── Search bar ───────────────────────────────────────────────────────────
   Widget _buildSearchBar(bool isDark) {
     return Container(
-      margin: EdgeInsets.fromLTRB(16, 16, 16, 8),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       decoration: BoxDecoration(
-        color: isDark ? Color(0xFF1E1E32) : Colors.white,
+        color: isDark ? const Color(0xFF1E1E32) : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Row(
         children: [
           Expanded(
             child: TextField(
-              style: TextStyle(
-                color: isDark ? Colors.white : Color(0xFF1A1A2E),
-                fontSize: 14,
-              ),
+              style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1A1A2E), fontSize: 14),
               onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
               decoration: InputDecoration(
                 hintText: 'Search accounts…',
                 hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400], fontSize: 14),
                 prefixIcon: Icon(Icons.search_rounded, color: isDark ? Colors.white38 : Colors.grey[400], size: 20),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
           ),
           GestureDetector(
             onTap: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => AddAccountScreen()),
-              );
-              if (result == true) {
-                await _initUserBox();
-                _updateAllOTPs();
-              }
+              final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => AddAccountScreen()));
+              if (result == true) { await _initUserBox(); _updateAllOTPs(); }
             },
             child: Container(
-              margin: EdgeInsets.only(right: 8),
-              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Color(0xFF4F46E5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(color: const Color(0xFF4F46E5), borderRadius: BorderRadius.circular(10)),
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.add_rounded, color: Colors.white, size: 18),
                   SizedBox(width: 4),
-                  Text(
-                    'Add',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  Text('Add', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -350,17 +266,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // ─── Accounts list ────────────────────────────────────────────────────────
   Widget _buildAccountsList(bool isDark) {
     if (_userBox == null) {
-      return Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5))));
     }
-    
-    var accounts = _userBox!.values.toList();
 
+    var accounts = _userBox!.values.toList();
     if (_searchQuery.isNotEmpty) {
       accounts = accounts
           .where((a) =>
@@ -375,38 +288,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: 80, height: 80,
               decoration: BoxDecoration(
-                color: isDark ? Color(0xFF1E1E32) : Colors.white,
+                color: isDark ? const Color(0xFF1E1E32) : Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20),
-                ],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20)],
               ),
-              child: Icon(Icons.security_rounded, size: 40, color: Color(0xFF4F46E5)),
+              child: const Icon(Icons.security_rounded, size: 40, color: Color(0xFF4F46E5)),
             ),
-            SizedBox(height: 20),
-            Text(
-              'No accounts yet',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white70 : Color(0xFF1A1A2E),
-              ),
-            ),
-            SizedBox(height: 6),
-            Text(
-              'Tap Add to get started',
-              style: TextStyle(color: isDark ? Colors.white38 : Colors.grey[500], fontSize: 13),
-            ),
+            const SizedBox(height: 20),
+            Text('No accounts yet',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : const Color(0xFF1A1A2E))),
+            const SizedBox(height: 6),
+            Text('Tap Add to get started',
+                style: TextStyle(color: isDark ? Colors.white38 : Colors.grey[500], fontSize: 13)),
           ],
         ),
       );
     }
 
     return ListView.builder(
-      padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       itemCount: accounts.length,
       itemBuilder: (context, index) {
         final account = accounts[index];
@@ -416,10 +319,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final isExpiring = timer <= 5;
 
         return AnimatedContainer(
-          duration: Duration(milliseconds: 300),
-          margin: EdgeInsets.only(bottom: 12),
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: isDark ? Color(0xFF1E1E32) : Colors.white,
+            color: isDark ? const Color(0xFF1E1E32) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isExpiring
@@ -427,150 +330,105 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   : (isDark ? Colors.white.withOpacity(0.06) : Colors.transparent),
               width: 1.5,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-                blurRadius: 12,
-                offset: Offset(0, 3),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+                blurRadius: 12, offset: const Offset(0, 3))],
           ),
           child: Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 Row(
                   children: [
                     Container(
-                      width: 44,
-                      height: 44,
+                      width: 44, height: 44,
                       decoration: BoxDecoration(
-                        color: Color(0xFF4F46E5).withOpacity(0.12),
+                        color: const Color(0xFF4F46E5).withOpacity(0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        _getServiceIcon(account.service),
-                        color: Color(0xFF4F46E5),
-                        size: 22,
-                      ),
+                      child: Icon(_getServiceIcon(account.service), color: const Color(0xFF4F46E5), size: 22),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            account.service,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : Color(0xFF1A1A2E),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          Text(account.service,
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white : const Color(0xFF1A1A2E)),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
                           if (account.issuer != null)
-                            Text(
-                              account.issuer!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark ? Colors.white38 : Colors.grey[500],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            Text(account.issuer!,
+                                style: TextStyle(fontSize: 12,
+                                    color: isDark ? Colors.white38 : Colors.grey[500]),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Container(
-                          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
                             color: isExpiring
                                 ? Colors.red.withOpacity(0.1)
-                                : Color(0xFF4F46E5).withOpacity(0.08),
+                                : const Color(0xFF4F46E5).withOpacity(0.08),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             isBlurred ? '●●● ●●●' : _formatOtp(otp),
                             style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: isExpiring
-                                  ? Colors.red
-                                  : (isDark ? Colors.white : Color(0xFF1A1A2E)),
-                              letterSpacing: 3,
-                              fontFamily: 'monospace',
+                              fontSize: 22, fontWeight: FontWeight.w700,
+                              color: isExpiring ? Colors.red : (isDark ? Colors.white : const Color(0xFF1A1A2E)),
+                              letterSpacing: 3, fontFamily: 'monospace',
                             ),
                           ),
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          '${timer}s',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isExpiring ? Colors.red : (isDark ? Colors.white38 : Colors.grey[500]),
-                          ),
-                        ),
+                        const SizedBox(height: 4),
+                        Text('${timer}s',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                                color: isExpiring ? Colors.red : (isDark ? Colors.white38 : Colors.grey[500]))),
                       ],
                     ),
                   ],
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: timer / 30,
                     backgroundColor: isDark ? Colors.white10 : Colors.grey[100],
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      isExpiring ? Colors.red : Color(0xFF4F46E5),
-                    ),
+                    valueColor: AlwaysStoppedAnimation<Color>(isExpiring ? Colors.red : const Color(0xFF4F46E5)),
                     minHeight: 4,
                   ),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 Row(
                   children: [
-                    _accountAction(
-                      Icons.copy_rounded,
-                      'Copy',
-                      () => _copyToClipboard(otp),
-                      isDark,
-                    ),
-                    SizedBox(width: 8),
+                    _accountAction(Icons.copy_rounded, 'Copy', () => _copyToClipboard(otp), isDark),
+                    const SizedBox(width: 8),
                     _accountAction(
                       isBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded,
                       isBlurred ? 'Show' : 'Hide',
                       () => setState(() => blurredCodes[account.id] = !isBlurred),
                       isDark,
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     _accountAction(
-                      Icons.qr_code_rounded,
-                      'QR',
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
+                      Icons.qr_code_rounded, 'QR',
+                      () => Navigator.push(context, MaterialPageRoute(
                           builder: (_) => ShowQRScreen(
-                            secret: account.secret,
-                            service: account.service,
-                            issuer: account.issuer,
-                          ),
-                        ),
-                      ),
+                              secret: account.secret,
+                              service: account.service,
+                              issuer: account.issuer))),
                       isDark,
                     ),
-                    Spacer(),
+                    const Spacer(),
                     _accountAction(
-                      Icons.delete_outline_rounded,
-                      'Delete',
-                      () => _deleteAccount(account.id),
-                      isDark,
-                      destructive: true,
+                      Icons.delete_outline_rounded, 'Delete',
+                      () => _showDeleteAccountDialog(account.id),
+                      isDark, destructive: true,
                     ),
                   ],
                 ),
@@ -582,6 +440,124 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // ─── Delete account dialog ────────────────────────────────────────────────
+  void _showDeleteAccountDialog(String accountId) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
+    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final textSecondary = isDark ? Colors.white38 : Colors.grey.shade500;
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: cardColor,
+        title: Row(children: [
+          const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 24),
+          const SizedBox(width: 10),
+          Text('Delete Account', style: TextStyle(color: textPrimary, fontSize: 17)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Where should this account be deleted?',
+                style: TextStyle(color: textSecondary, fontSize: 13)),
+            const SizedBox(height: 16),
+            _deleteOptionTile(
+              icon: Icons.phone_android_rounded,
+              title: 'This device only',
+              subtitle: 'Other devices keep the account',
+              color: Colors.orange,
+              onTap: () => Navigator.pop(context, 'local'),
+            ),
+            const SizedBox(height: 8),
+            _deleteOptionTile(
+              icon: Icons.cloud_off_rounded,
+              title: 'Everywhere',
+              subtitle: 'Removed from all devices & cloud permanently',
+              color: Colors.red,
+              onTap: () => Navigator.pop(context, 'everywhere'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'cancel'),
+            child: Text('Cancel', style: TextStyle(color: textSecondary)),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || choice == 'cancel') return;
+
+    if (choice == 'local') {
+      await _syncService.deleteAccountLocalOnly(accountId);
+      setState(() {
+        currentOTPs.remove(accountId);
+        timers.remove(accountId);
+        blurredCodes.remove(accountId);
+      });
+      _showSnackBar('Account removed from this device', Colors.orange);
+    } else if (choice == 'everywhere') {
+      _showSnackBar('Deleting everywhere…', Colors.grey);
+      final ok = await _syncService.deleteAccountEverywhere(accountId);
+      if (ok) {
+        setState(() {
+          currentOTPs.remove(accountId);
+          timers.remove(accountId);
+          blurredCodes.remove(accountId);
+        });
+        _showSnackBar('Account deleted everywhere', Colors.red);
+      } else {
+        _showSnackBar('Failed to delete from cloud – try again', Colors.red);
+      }
+    }
+  }
+
+  Widget _deleteOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: color)),
+                  Text(subtitle, style: TextStyle(fontSize: 11, color: color.withOpacity(0.7))),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: color.withOpacity(0.5), size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
   String _formatOtp(String otp) {
     if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
     return otp;
@@ -592,35 +568,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: destructive
-              ? Colors.red.withOpacity(0.08)
+          color: destructive ? Colors.red.withOpacity(0.08)
               : (isDark ? Colors.white.withOpacity(0.06) : Colors.grey[50]),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: destructive
-                ? Colors.red.withOpacity(0.2)
+            color: destructive ? Colors.red.withOpacity(0.2)
                 : (isDark ? Colors.white12 : Colors.grey[200]!),
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 15,
-              color: destructive ? Colors.red : (isDark ? Colors.white60 : Colors.grey[600]),
-            ),
-            SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: destructive ? Colors.red : (isDark ? Colors.white60 : Colors.grey[600]),
-              ),
-            ),
+            Icon(icon, size: 15,
+                color: destructive ? Colors.red : (isDark ? Colors.white60 : Colors.grey[600])),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500,
+                color: destructive ? Colors.red : (isDark ? Colors.white60 : Colors.grey[600]))),
           ],
         ),
       ),
@@ -645,104 +610,38 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _copyToClipboard(String otp) async {
     await Clipboard.setData(ClipboardData(text: otp.replaceAll(' ', '')));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-        SizedBox(width: 8),
-        Text('Copied to clipboard'),
-      ]),
-      backgroundColor: Color(0xFF10B981),
-      duration: Duration(seconds: 2),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
-  }
-
-  void _deleteAccount(String id) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Account'),
-        content: Text('This action cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        if (_userBox?.containsKey(id) == true) {
-          await _userBox?.delete(id);
-          print('Account deleted from local box');
-          
-          // Sync to cloud to remove it there too
-          await _syncService.syncAccounts();
-          
-          setState(() {
-            currentOTPs.remove(id);
-            timers.remove(id);
-            blurredCodes.remove(id);
-          });
-          
-          _showSnackBar('Account deleted successfully', Colors.green);
-        } else {
-          print('Account not found in box');
-          _showSnackBar('Account not found', Colors.red);
-        }
-      } catch (e) {
-        print('Error deleting account: $e');
-        _showSnackBar('Failed to delete account', Colors.red);
-      }
-    }
+    _showSnackBar('Copied to clipboard', const Color(0xFF10B981));
   }
 
   void _syncData() async {
     setState(() => _isSyncing = true);
-    
     try {
       final success = await _syncService.syncAccounts();
-      
       setState(() => _isSyncing = false);
-      
       if (success) {
-        // Refresh the box and OTPs after sync
         await _initUserBox();
         _updateAllOTPs();
         _showSnackBar('Sync completed!', Colors.green);
-        setState(() => _hasInternetError = false);
       } else {
-        _showSnackBar('No internet connection or server unavailable', Colors.orange);
-        setState(() => _hasInternetError = true);
+        _showSnackBar('No internet or server unavailable', Colors.orange);
       }
     } catch (e) {
       setState(() => _isSyncing = false);
-      _showSnackBar('Sync failed: ${e.toString().substring(0, 50)}...', Colors.red);
-      setState(() => _hasInternetError = true);
+      _showSnackBar('Sync failed', Colors.red);
     }
   }
-  
+
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(
-        children: [
-          Icon(
-            color == Colors.green ? Icons.check_circle_rounded : Icons.error_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-          SizedBox(width: 10),
-          Expanded(child: Text(message)),
-        ],
-      ),
+      content: Row(children: [
+        Icon(color == Colors.green || color == const Color(0xFF10B981)
+            ? Icons.check_circle_rounded : Icons.info_rounded,
+            color: Colors.white, size: 20),
+        const SizedBox(width: 10),
+        Expanded(child: Text(message)),
+      ]),
       backgroundColor: color,
-      duration: Duration(seconds: 3),
+      duration: const Duration(seconds: 3),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
@@ -751,21 +650,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Logout'),
-        content: Text('Your codes will remain saved on this device.'),
+        title: const Text('Logout'),
+        content: const Text('Your codes will remain saved on this device.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF4F46E5), foregroundColor: Colors.white),
-            child: Text('Logout'),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5), foregroundColor: Colors.white),
+            child: const Text('Logout'),
           ),
         ],
       ),
     );
-
     if (confirmed == true) {
       await _syncService.logout();
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginScreen()));

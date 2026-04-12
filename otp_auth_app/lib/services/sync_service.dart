@@ -1,3 +1,4 @@
+// lib/services/sync_service.dart
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -7,31 +8,43 @@ import '../config/app_config.dart';
 import 'dart:convert';
 
 class SyncService {
-  late Dio _dio;
-  bool _isRefreshing = false;
-  
-  SyncService() {
+  // ─── Singleton ────────────────────────────────────────────────────────────
+  static final SyncService _instance = SyncService._internal();
+  factory SyncService() => _instance;
+  SyncService._internal() {
     _dio = Dio(BaseOptions(
       baseUrl: AppConfig.apiUrl,
-      connectTimeout: Duration(seconds: 30),
-      receiveTimeout: Duration(seconds: 30),
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {'Content-Type': 'application/json'},
     ));
   }
-  
+
+  late Dio _dio;
+  bool _isRefreshing = false;
   String? _encryptionKey;
-  
+
+  // ─── Sync-enabled preference key ─────────────────────────────────────────
+  static const _syncEnabledKey = 'sync_to_cloud_enabled';
+
+  Future<bool> isSyncEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_syncEnabledKey) ?? true; // default ON
+  }
+
+  Future<void> setSyncEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_syncEnabledKey, value);
+  }
+
+  // ─── Box helpers ──────────────────────────────────────────────────────────
   Future<String> _getUserBoxName() async {
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString('current_user');
-    if (username == null || username.isEmpty) {
-      return 'otp_accounts_default';
-    }
+    if (username == null || username.isEmpty) return 'otp_accounts_default';
     return 'otp_accounts_$username';
   }
-  
+
   Future<Box<OTPAccount>> _getUserBox() async {
     final boxName = await _getUserBoxName();
     if (!Hive.isBoxOpen(boxName)) {
@@ -39,83 +52,63 @@ class SyncService {
     }
     return Hive.box<OTPAccount>(boxName);
   }
-  
+
+  Future<Box<OTPAccount>> getUserBox() async => await _getUserBox();
+  Future<String> getCurrentUserBoxName() async => await _getUserBoxName();
+
+  // ─── Auth helpers ─────────────────────────────────────────────────────────
   Future<void> _updateAuthHeader() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
-      print('Auth header set');
-    } else {
-      print('No token found');
     }
   }
-  
+
   Future<bool> _refreshToken() async {
     if (_isRefreshing) return false;
-    
     _isRefreshing = true;
     final prefs = await SharedPreferences.getInstance();
     final refreshToken = prefs.getString('refresh_token');
-    
-    if (refreshToken == null) {
-      _isRefreshing = false;
-      return false;
-    }
-    
+    if (refreshToken == null) { _isRefreshing = false; return false; }
     try {
-      print('Refreshing token...');
-      final response = await _dio.post('token/refresh/', data: {
-        'refresh': refreshToken,
-      });
-      
+      final response = await _dio.post('token/refresh/', data: {'refresh': refreshToken});
       if (response.statusCode == 200) {
-        final newAccessToken = response.data['access'];
-        await prefs.setString('access_token', newAccessToken);
+        await prefs.setString('access_token', response.data['access']);
         await _updateAuthHeader();
-        print('Token refreshed successfully');
         _isRefreshing = false;
         return true;
       }
-      _isRefreshing = false;
-      return false;
-    } catch (e) {
-      print('Token refresh failed: $e');
-      _isRefreshing = false;
-      return false;
-    }
+    } catch (_) {}
+    _isRefreshing = false;
+    return false;
   }
-  
+
   Future<Response> _requestWithRetry(Future<Response> Function() request) async {
     try {
       return await request();
-    } on DioError catch (e) {
+    } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        print('Token expired, attempting refresh...');
         final refreshed = await _refreshToken();
-        if (refreshed) {
-          print('Retrying request with new token...');
-          return await request();
-        }
+        if (refreshed) return await request();
       }
       rethrow;
     }
   }
-  
+
   Future<void> _initEncryption() async {
-    if (_encryptionKey == null) {
-      final prefs = await SharedPreferences.getInstance();
-      final username = prefs.getString('current_user');
-      if (username == null || username.isEmpty) {
-        print('No username found for encryption - using default');
-        _encryptionKey = EncryptionService.generateKey('default_user', 'otp_auth_salt_2024');
-      } else {
-        _encryptionKey = EncryptionService.generateKey(username, 'otp_auth_salt_2024');
-      }
-      print('Encryption key initialized for user: $username');
-    }
+    if (_encryptionKey != null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('current_user') ?? 'default_user';
+    _encryptionKey = EncryptionService.generateKey(username, 'otp_auth_salt_2024');
   }
 
+  Future<String> _getCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('current_user') ?? 'default_user';
+  }
+
+  // ─── Register / Login ─────────────────────────────────────────────────────
   Future<bool> register(String username, String email, String password) async {
     try {
       final response = await _dio.post('auth/register/', data: {
@@ -123,16 +116,13 @@ class SyncService {
         'email': email,
         'password': password,
       });
-      
       if (response.statusCode == 200 || response.statusCode == 201) {
         final prefs = await SharedPreferences.getInstance();
-        final accessToken = response.data['access'];
-        await prefs.setString('access_token', accessToken);
+        await prefs.setString('access_token', response.data['access']);
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
         await prefs.setString('user_email', email);
         await prefs.setString('user_id', response.data['user']['id'].toString());
-        
         await _updateAuthHeader();
         await _initEncryption();
         return true;
@@ -143,34 +133,24 @@ class SyncService {
       return false;
     }
   }
-  
+
   Future<bool> login(String username, String password) async {
     try {
       final response = await _dio.post('auth/login/', data: {
         'username': username,
         'password': password,
       });
-      
       if (response.statusCode == 200) {
         final prefs = await SharedPreferences.getInstance();
-        final accessToken = response.data['access'];
-        await prefs.setString('access_token', accessToken);
+        await prefs.setString('access_token', response.data['access']);
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
-        
-        final userEmail = response.data['user']['email'] ?? '';
-        await prefs.setString('user_email', userEmail);
+        await prefs.setString('user_email', response.data['user']['email'] ?? '');
         await prefs.setString('user_id', response.data['user']['id'].toString());
-        
-        print('Saved user data - Username: $username, Email: $userEmail');
-        
         await _updateAuthHeader();
         await _initEncryption();
-        
-        // Get user box (will be empty for new users)
         final userBox = await _getUserBox();
-        print('User box: ${await _getUserBoxName()} has ${userBox.length} accounts');
-        
+        print('User box ${await _getUserBoxName()} has ${userBox.length} accounts');
         await downloadAndMergeAccounts();
         return true;
       }
@@ -180,266 +160,308 @@ class SyncService {
       return false;
     }
   }
-  
+
+  // ─── Delete a single account ──────────────────────────────────────────────
+
+  /// Delete locally only. Other devices are untouched.
+  Future<void> deleteAccountLocalOnly(String accountId) async {
+    final userBox = await _getUserBox();
+    await userBox.delete(accountId);
+    print('Deleted $accountId locally only');
+  }
+
+  /// Delete everywhere:
+  ///   1. Mark the account as a tombstone on the server so any device that
+  ///      tries to sync it back gets rejected and the server strips it.
+  ///   2. Remove from local box.
+  Future<bool> deleteAccountEverywhere(String accountId) async {
+    await _updateAuthHeader();
+    try {
+      // Tell server: tombstone this account ID
+      final response = await _requestWithRetry(() => _dio.post(
+        'sync/delete-account/',
+        data: {'account_id': accountId},
+      ));
+      if (response.statusCode == 200) {
+        final userBox = await _getUserBox();
+        await userBox.delete(accountId);
+        print('Deleted $accountId everywhere');
+        return true;
+      }
+      print('Server delete failed: ${response.statusCode}');
+      return false;
+    } catch (e) {
+      print('deleteAccountEverywhere error: $e');
+      return false;
+    }
+  }
+
+  // ─── Delete ALL accounts ──────────────────────────────────────────────────
+
+  /// Delete all accounts locally only.
+  Future<void> deleteAllLocalOnly() async {
+    final userBox = await _getUserBox();
+    await userBox.clear();
+    print('Cleared all accounts locally');
+  }
+
+  /// Delete all accounts everywhere (server tombstones all, local cleared).
+  Future<bool> deleteAllEverywhere() async {
+    await _updateAuthHeader();
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.post('sync/delete-all-accounts/'),
+      );
+      if (response.statusCode == 200) {
+        final userBox = await _getUserBox();
+        await userBox.clear();
+        print('Deleted all accounts everywhere');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('deleteAllEverywhere error: $e');
+      return false;
+    }
+  }
+
+  // ─── Sync ─────────────────────────────────────────────────────────────────
   Future<void> downloadAndMergeAccounts() async {
     await _updateAuthHeader();
-    
     await _initEncryption();
-    
-    if (_encryptionKey == null) {
-      print('Encryption key is null - cannot download');
-      return;
-    }
-    
+    if (_encryptionKey == null) return;
+
     final prefs = await SharedPreferences.getInstance();
     String deviceId = prefs.getString('device_id') ?? '';
     if (deviceId.isEmpty) {
       deviceId = DateTime.now().millisecondsSinceEpoch.toString();
       await prefs.setString('device_id', deviceId);
     }
-    
+
     try {
-      print('Downloading accounts from cloud...');
       final response = await _requestWithRetry(() => _dio.get(
         'sync/get-data/',
-        queryParameters: {
-          'data_type': 'otp_accounts',
-          'device_id': deviceId,
-        },
+        queryParameters: {'data_type': 'otp_accounts', 'device_id': deviceId},
       ));
-      
-      print('Download response status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200 && response.data['encrypted_content'] != null) {
-        final encryptedContent = response.data['encrypted_content'];
-        final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
-        
-        final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
-        print('Cloud accounts: ${cloudAccounts.length}');
-        
+        final decrypted = EncryptionService.simpleDecrypt(
+          response.data['encrypted_content'], _encryptionKey!);
+        final List<dynamic> cloudAccounts = jsonDecode(decrypted);
         final userBox = await _getUserBox();
-        
-        // MERGE: Add cloud accounts that don't exist locally
-        int addedCount = 0;
-        for (var cloudAccount in cloudAccounts) {
-          if (!userBox.containsKey(cloudAccount['id'])) {
+
+        // Fetch tombstoned IDs so we never re-add them
+        final tombstones = await _fetchTombstones();
+
+        int added = 0;
+        for (var ca in cloudAccounts) {
+          final id = ca['id'] as String;
+          if (tombstones.contains(id)) continue; // skip tombstoned
+          if (!userBox.containsKey(id)) {
             final newAccount = OTPAccount(
-              id: cloudAccount['id'],
-              service: cloudAccount['service'],
-              secret: cloudAccount['secret'],
-              issuer: cloudAccount['issuer'],
-              createdAt: DateTime.parse(cloudAccount['createdAt']),
+              id: id,
+              service: ca['service'],
+              secret: ca['secret'],
+              issuer: ca['issuer'],
+              createdAt: DateTime.parse(ca['createdAt']),
               userId: await _getCurrentUserId(),
             );
             await userBox.put(newAccount.id, newAccount);
-            addedCount++;
-            print('Added cloud account: ${cloudAccount['service']}');
+            added++;
           }
         }
-        print('Added $addedCount new accounts from cloud');
-        print('Total local accounts: ${userBox.length}');
-        
-        // After merging, upload to cloud to ensure cloud has everything
+        print('Merged $added accounts from cloud');
         await syncAccounts();
-        
-      } else if (response.statusCode == 404) {
-        print('No cloud accounts found - will upload local on first sync');
       }
-    } on DioError catch (e) {
-      print('Download error: ${e.message}');
     } catch (e) {
-      print('Download error: $e');
+      print('downloadAndMergeAccounts error: $e');
     }
   }
-  
-  Future<String> _getCurrentUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('current_user') ?? 'default_user';
+
+  Future<Set<String>> _fetchTombstones() async {
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.get('sync/tombstones/'));
+      if (response.statusCode == 200) {
+        final List ids = response.data['tombstoned_ids'] ?? [];
+        return ids.cast<String>().toSet();
+      }
+    } catch (_) {}
+    return {};
   }
-  
+
   Future<bool> syncAccounts() async {
+    // Respect sync-enabled preference
+    if (!(await isSyncEnabled())) {
+      print('Sync disabled by user preference');
+      return true; // not an error
+    }
+
     await _updateAuthHeader();
-    
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
-    
-    if (token == null || token.isEmpty) {
-      print('No access token found - cannot sync');
-      return false;
-    }
-    
+    if (token == null || token.isEmpty) return false;
+
     final userBox = await _getUserBox();
-    
     await _initEncryption();
-    
-    if (_encryptionKey == null) {
-      print('Encryption key is null - cannot sync');
-      return false;
-    }
-    
-    // Get device ID
+    if (_encryptionKey == null) return false;
+
     String deviceId = prefs.getString('device_id') ?? '';
     if (deviceId.isEmpty) {
       deviceId = DateTime.now().millisecondsSinceEpoch.toString();
       await prefs.setString('device_id', deviceId);
     }
-    
+
     try {
-      // STEP 1: DOWNLOAD cloud accounts first
-      print('Downloading cloud accounts...');
+      // 1. Download
       final downloadResponse = await _requestWithRetry(() => _dio.get(
         'sync/get-data/',
-        queryParameters: {
-          'data_type': 'otp_accounts',
-          'device_id': deviceId,
-        },
+        queryParameters: {'data_type': 'otp_accounts', 'device_id': deviceId},
       ));
-      
+
       Map<String, dynamic> cloudAccountsMap = {};
       int cloudVersion = 0;
-      
-      if (downloadResponse.statusCode == 200 && downloadResponse.data['encrypted_content'] != null) {
-        final encryptedContent = downloadResponse.data['encrypted_content'];
-        final decryptedContent = EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
-        final List<dynamic> cloudAccounts = jsonDecode(decryptedContent);
+
+      if (downloadResponse.statusCode == 200 &&
+          downloadResponse.data['encrypted_content'] != null) {
+        final decrypted = EncryptionService.simpleDecrypt(
+          downloadResponse.data['encrypted_content'], _encryptionKey!);
+        final List<dynamic> cloudAccounts = jsonDecode(decrypted);
         cloudVersion = downloadResponse.data['version'] ?? 0;
-        
-        for (var account in cloudAccounts) {
-          cloudAccountsMap[account['id']] = account;
+        for (var a in cloudAccounts) {
+          cloudAccountsMap[a['id']] = a;
         }
-        print('Cloud has ${cloudAccounts.length} accounts');
       }
-      
-      // STEP 2: Get local accounts
-      final localAccountsMap = <String, dynamic>{};
-      for (var account in userBox.values) {
-        localAccountsMap[account.id] = {
-          'id': account.id,
-          'service': account.service,
-          'secret': account.encryptedSecret,
-          'issuer': account.issuer,
-          'createdAt': account.createdAt.toIso8601String(),
-          'lastModified': account.createdAt.toIso8601String(),
+
+      // 2. Fetch tombstones so we don't re-add deleted accounts
+      final tombstones = await _fetchTombstones();
+
+      // 3. Merge: local wins for new, cloud fills in missing, tombstones excluded
+      final localMap = <String, dynamic>{};
+      for (var a in userBox.values) {
+        if (tombstones.contains(a.id)) {
+          // Server says this is deleted everywhere – remove locally too
+          await userBox.delete(a.id);
+          continue;
+        }
+        localMap[a.id] = {
+          'id': a.id,
+          'service': a.service,
+          'secret': a.encryptedSecret,
+          'issuer': a.issuer,
+          'createdAt': a.createdAt.toIso8601String(),
         };
       }
-      print('Local has ${localAccountsMap.length} accounts');
-      
-      // STEP 3: MERGE - combine both, cloud wins on conflicts
-      final mergedAccounts = <String, dynamic>{};
-      int addedFromCloud = 0;
-      int addedFromLocal = 0;
-      
-      // Add all local accounts first
-      for (var entry in localAccountsMap.entries) {
-        mergedAccounts[entry.key] = entry.value;
-        addedFromLocal++;
-      }
-      
-      // Add/overwrite with cloud accounts
+
       for (var entry in cloudAccountsMap.entries) {
-        if (!mergedAccounts.containsKey(entry.key)) {
-          mergedAccounts[entry.key] = entry.value;
-          addedFromCloud++;
-        } else {
-          // Cloud account exists - update local later
-          mergedAccounts[entry.key] = entry.value;
-        }
-      }
-      
-      print('Merge result: ${mergedAccounts.length} total accounts ($addedFromCloud from cloud, $addedFromLocal from local)');
-      
-      // STEP 4: UPDATE LOCAL with merged data
-      int updatedLocally = 0;
-      for (var entry in mergedAccounts.entries) {
-        if (!userBox.containsKey(entry.key)) {
-          // Add new account to local
-          final accountData = entry.value;
-          final newAccount = OTPAccount(
-            id: accountData['id'],
-            service: accountData['service'],
-            secret: accountData['secret'],
-            issuer: accountData['issuer'],
-            createdAt: DateTime.parse(accountData['createdAt']),
+        final id = entry.key;
+        if (tombstones.contains(id)) continue; // server tombstoned
+        if (!localMap.containsKey(id) && !userBox.containsKey(id)) {
+          // New from cloud – add locally
+          final a = entry.value;
+          final newAcc = OTPAccount(
+            id: id,
+            service: a['service'],
+            secret: a['secret'],
+            issuer: a['issuer'],
+            createdAt: DateTime.parse(a['createdAt']),
             userId: await _getCurrentUserId(),
           );
-          await userBox.put(newAccount.id, newAccount);
-          updatedLocally++;
+          await userBox.put(id, newAcc);
+          localMap[id] = a;
         }
       }
-      print('Updated local with $updatedLocally new accounts');
-      
-      // STEP 5: UPLOAD merged data to cloud (backup)
-      final finalAccountsData = userBox.values.map((a) => ({
-        'id': a.id,
-        'service': a.service,
-        'secret': a.encryptedSecret,
-        'issuer': a.issuer,
-        'createdAt': a.createdAt.toIso8601String(),
-      })).toList();
-      
-      final jsonString = jsonEncode(finalAccountsData);
-      final encryptedContent = EncryptionService.simpleEncrypt(jsonString, _encryptionKey!);
-      final newVersion = cloudVersion + 1;
-      
-      print('Uploading ${finalAccountsData.length} accounts to cloud...');
+
+      // 4. Upload merged set
+      final finalData = userBox.values
+          .where((a) => !tombstones.contains(a.id))
+          .map((a) => {
+                'id': a.id,
+                'service': a.service,
+                'secret': a.encryptedSecret,
+                'issuer': a.issuer,
+                'createdAt': a.createdAt.toIso8601String(),
+              })
+          .toList();
+
+      final encrypted = EncryptionService.simpleEncrypt(
+          jsonEncode(finalData), _encryptionKey!);
+
       final uploadResponse = await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
-        'encrypted_content': encryptedContent,
-        'version': newVersion,
+        'encrypted_content': encrypted,
+        'version': cloudVersion + 1,
         'device_id': deviceId,
       });
-      
-      if (uploadResponse.statusCode == 200) {
-        print('Sync successful - ${finalAccountsData.length} accounts synced');
-        return true;
-      } else {
-        print('Sync upload failed: ${uploadResponse.statusCode}');
-        return false;
-      }
-      
-    } on DioError catch (e) {
-      print('Sync error: ${e.message}');
-      if (e.response?.data != null) {
-        print('Response: ${e.response?.data}');
-      }
-      return false;
+
+      return uploadResponse.statusCode == 200;
     } catch (e) {
-      print('Sync error: $e');
+      print('syncAccounts error: $e');
       return false;
     }
   }
-  
+
+  // ─── 2FA / password helpers ───────────────────────────────────────────────
   Future<bool> send2FACode(String username, String password) async {
     try {
-      final response = await _dio.post('send-2fa/', data: {
-        'username': username,
-        'password': password,
-      });
-      print('Send 2FA response: ${response.data}');
-      return response.data['success'] == true;
-    } catch (e) {
-      print('Send 2FA error: $e');
-      return false;
-    }
+      final r = await _dio.post('send-2fa/', data: {'username': username, 'password': password});
+      return r.data['success'] == true;
+    } catch (e) { print('send2FA error: $e'); return false; }
   }
-  
+
   Future<bool> verify2FACode(String username, String code) async {
     try {
-      final response = await _dio.post('verify-2fa/', data: {
-        'username': username,
-        'code': code,
-      });
-      print('Verify 2FA response: ${response.data}');
-      return response.data['success'] == true;
-    } catch (e) {
-      print('Verify 2FA error: $e');
-      return false;
-    }
+      final r = await _dio.post('verify-2fa/', data: {'username': username, 'code': code});
+      return r.data['success'] == true;
+    } catch (e) { print('verify2FA error: $e'); return false; }
   }
-  
+
+  Future<bool> sendDeleteOtp(String username) async {
+    try {
+      final r = await _dio.post('send-delete-otp/', data: {'username': username});
+      return r.data['success'] == true;
+    } catch (e) { print('sendDeleteOtp error: $e'); return false; }
+  }
+
+  Future<bool> verifyDeleteOtp(String username, String code) async {
+    try {
+      final r = await _dio.post('verify-delete-otp/', data: {'username': username, 'code': code});
+      return r.data['success'] == true;
+    } catch (e) { print('verifyDeleteOtp error: $e'); return false; }
+  }
+
+  Future<bool> changePassword(String currentPassword, String newPassword) async {
+    await _updateAuthHeader();
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    if (token == null) return false;
+    try {
+      final r = await _dio.post('auth/change_password/', data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      });
+      return r.statusCode == 200;
+    } catch (e) { print('changePassword error: $e'); return false; }
+  }
+
+  Future<bool> sendPasswordResetCode(String email) async {
+    try {
+      final r = await _dio.post('send-reset-code/', data: {'email': email});
+      return r.data['success'] == true;
+    } catch (e) { return false; }
+  }
+
+  Future<bool> resetPassword(String email, String code, String newPassword) async {
+    try {
+      final r = await _dio.post('reset-password/', data: {
+        'email': email, 'code': code, 'new_password': newPassword,
+      });
+      return r.statusCode == 200;
+    } catch (e) { return false; }
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    
     await prefs.remove('access_token');
     await prefs.remove('refresh_token');
     await prefs.remove('current_user');
@@ -447,92 +469,16 @@ class SyncService {
     await prefs.remove('user_id');
     _encryptionKey = null;
     _dio.options.headers.remove('Authorization');
-    
-    print('Logged out successfully');
   }
-  
+
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = await prefs.getString('access_token');
+    final token = prefs.getString('access_token');
     return token != null && token.isNotEmpty;
   }
-  
+
   Future<String?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('current_user');
   }
-
-  Future<bool> changePassword(String currentPassword, String newPassword) async {
-    await _updateAuthHeader();
-    
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-    
-    if (token == null) {
-      print('No token available');
-      return false;
-    }
-    
-    try {
-      final response = await _dio.post(
-        'auth/change_password/',
-        data: {
-          'current_password': currentPassword,
-          'new_password': newPassword,
-        },
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-          },
-        ),
-      );
-      
-      if (response.statusCode == 200) {
-        print('Password changed successfully');
-        return true;
-      }
-      return false;
-    } catch (e) {
-      print('Change password error: $e');
-      return false;
-    }
-  }
-
-  Future<bool> sendPasswordResetCode(String email) async {
-    try {
-      final response = await _dio.post('send-reset-code/', data: {
-        'email': email,
-      });
-      print('Send reset code response: ${response.data}');
-      return response.data['success'] == true;
-    } catch (e) {
-      print('Send reset code error: $e');
-      return false;
-    }
-  }
-
-  Future<bool> resetPassword(String email, String code, String newPassword) async {
-    try {
-      final response = await _dio.post('reset-password/', data: {
-        'email': email,
-        'code': code,
-        'new_password': newPassword,
-      });
-      print('Reset password response: ${response.data}');
-      return response.statusCode == 200;
-    } catch (e) {
-      print('Reset password error: $e');
-      return false;
-    }
-  }
-
-  Future<Box<OTPAccount>> getUserBox() async {
-    return await _getUserBox();
-  }
-
-  Future<String> getCurrentUserBoxName() async {
-    return await _getUserBoxName();
-  }
-
-  
 }

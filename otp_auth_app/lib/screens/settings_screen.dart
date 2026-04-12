@@ -1,3 +1,4 @@
+// lib/screens/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,12 +18,24 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
   bool _isSyncing = false;
+  bool _syncEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSyncPreference();
+  }
+
+  Future<void> _loadSyncPreference() async {
+    final enabled = await _syncService.isSyncEnabled();
+    if (mounted) setState(() => _syncEnabled = enabled);
+  }
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _accent => Color(0xFF4F46E5);
-  Color get _bgColor => _isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF);
-  Color get _cardColor => _isDark ? Color(0xFF1E1E32) : Colors.white;
-  Color get _textPrimary => _isDark ? Colors.white : Color(0xFF1A1A2E);
+  Color get _accent => const Color(0xFF4F46E5);
+  Color get _bgColor => _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
+  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white38 : Colors.grey.shade500;
   Color get _dividerColor => _isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100;
 
@@ -34,23 +47,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: AppBar(
-        title: Text(
-          'Settings',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Colors.white),
-        ),
-        backgroundColor: _isDark ? Color(0xFF1A1A2E) : _accent,
+        title: const Text('Settings',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Colors.white)),
+        backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: ListView(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         children: [
           _profileCard(authProvider),
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           _sectionLabel('Appearance'),
           _settingsCard([
@@ -70,7 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => _showColorPicker(themeProvider),
             ),
           ]),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
           _sectionLabel('Security & Backup'),
           _settingsCard([
@@ -91,18 +102,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.sync_rounded,
               label: 'Sync Now',
-              sub: 'Manually sync with cloud',
+              sub: _syncEnabled ? 'Manually sync with cloud' : 'Cloud sync is disabled',
               trailing: _isSyncing
                   ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
-                    )
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: _accent))
                   : null,
-              onTap: _syncNow,
+              onTap: _syncEnabled ? _syncNow : null,
+            ),
+            _dividerLine(),
+            // ── Sync toggle ──────────────────────────────────────────────
+            _switchTile(
+              icon: Icons.cloud_sync_rounded,
+              label: 'Sync to Cloud',
+              sub: _syncEnabled
+                  ? 'Accounts sync automatically'
+                  : 'Sync disabled – local only',
+              value: _syncEnabled,
+              onChanged: (val) async {
+                await _syncService.setSyncEnabled(val);
+                setState(() => _syncEnabled = val);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(val
+                      ? 'Cloud sync enabled'
+                      : 'Cloud sync disabled – your accounts stay local only'),
+                  backgroundColor: val ? const Color(0xFF10B981) : Colors.orange,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ));
+              },
             ),
           ]),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
           _sectionLabel('Account'),
           _settingsCard([
@@ -110,19 +141,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.person_outline_rounded,
               label: 'Profile',
               sub: 'Edit profile information',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ProfileScreen()),
-                );
-              },
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen())),
             ),
             _dividerLine(),
             _tappableTile(
               icon: Icons.lock_outline_rounded,
               label: 'Change Password',
               sub: 'Update your password',
-              onTap: () => _showChangePasswordDialog(),
+              onTap: _showChangePasswordDialog,
             ),
             _dividerLine(),
             _tappableTile(
@@ -132,7 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => _soon('Notifications'),
             ),
           ]),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
           _sectionLabel('About'),
           _settingsCard([
@@ -161,11 +187,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.star_outline_rounded,
               label: 'Rate the App',
               sub: 'Love it? Leave a review',
-              trailing: Icon(Icons.star_rounded, color: Colors.amber, size: 20),
+              trailing: const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
               onTap: () => _soon('Rate Us'),
             ),
           ]),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
           _sectionLabel('Danger Zone'),
           _settingsCard([
@@ -177,14 +203,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: _clearAllData,
             ),
           ]),
-          SizedBox(height: 20),
+          const SizedBox(height: 20),
 
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(
               onPressed: _logout,
-              icon: Icon(Icons.logout_rounded),
-              label: Text('Logout', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Logout', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
@@ -193,12 +219,245 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
-          SizedBox(height: 32),
+          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
+  // ─── Clear all data (with local/everywhere choice) ────────────────────────
+  void _clearAllData() async {
+    // Step 1: ask local-only vs everywhere
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Row(children: [
+          const Icon(Icons.warning_rounded, color: Colors.red, size: 24),
+          const SizedBox(width: 10),
+          Text('Clear All Data', style: TextStyle(color: _textPrimary, fontSize: 17)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This will permanently delete ALL your OTP accounts.',
+                style: TextStyle(color: _textSecondary, fontSize: 13)),
+            const SizedBox(height: 16),
+            _deleteOptionTile(
+              icon: Icons.phone_android_rounded,
+              title: 'This device only',
+              subtitle: 'Other devices keep their copies. You can re-sync from cloud later.',
+              color: Colors.orange,
+              onTap: () => Navigator.pop(context, 'local'),
+            ),
+            const SizedBox(height: 8),
+            _deleteOptionTile(
+              icon: Icons.cloud_off_rounded,
+              title: 'Everywhere (all devices + cloud)',
+              subtitle: 'Permanent. Requires OTP verification.',
+              color: Colors.red,
+              onTap: () => Navigator.pop(context, 'everywhere'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'cancel'),
+            child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null || choice == 'cancel') return;
+
+    if (choice == 'local') {
+      // No extra confirmation needed – just delete locally
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title: Text('Delete local copy?', style: TextStyle(color: _textPrimary)),
+          content: Text(
+            'All accounts will be removed from this device. You can re-sync from cloud later.',
+            style: TextStyle(color: _textSecondary, fontSize: 13),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+              child: const Text('Delete Local'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
+
+      await _syncService.deleteAllLocalOnly();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('All accounts removed from this device. Sync to restore.'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
+      Navigator.pop(context);
+      return;
+    }
+
+    // ── "Everywhere" path: require OTP ──────────────────────────────────────
+    final prefs = await SharedPreferences.getInstance();
+    final username = prefs.getString('current_user') ?? '';
+
+    // Send OTP
+    final otpSent = await _syncService.sendDeleteOtp(username);
+    if (!otpSent) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Failed to send verification code. Check your connection.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
+    // Ask user to enter OTP
+    final otpController = TextEditingController();
+    final verified = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Text('Confirm Deletion', style: TextStyle(color: _textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.email_outlined, size: 48, color: Colors.red),
+            const SizedBox(height: 12),
+            Text(
+              'A 6-digit verification code was sent to your email. Enter it to permanently delete ALL accounts everywhere.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              decoration: BoxDecoration(
+                color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withOpacity(0.4)),
+              ),
+              child: TextField(
+                controller: otpController,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  hintText: '000000',
+                  hintStyle: TextStyle(fontSize: 18, letterSpacing: 2),
+                  border: InputBorder.none,
+                  counterText: '',
+                  contentPadding: EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () { otpController.dispose(); Navigator.pop(context, false); },
+            child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              final code = otpController.text.trim();
+              if (code.length != 6) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Enter the 6-digit code'),
+                  backgroundColor: Colors.red,
+                ));
+                return;
+              }
+              final ok = await _syncService.verifyDeleteOtp(username, code);
+              otpController.dispose();
+              Navigator.pop(context, ok);
+            },
+            child: const Text('Delete Everything'),
+          ),
+        ],
+      ),
+    );
+
+    if (verified != true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Invalid code – deletion cancelled'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
+    final ok = await _syncService.deleteAllEverywhere();
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('All accounts deleted everywhere'),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ));
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Failed to delete from cloud – try again'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  Widget _deleteOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: color)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: TextStyle(fontSize: 11, color: color.withOpacity(0.7))),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: color.withOpacity(0.5), size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Change password dialog (unchanged from original) ─────────────────────
   void _showChangePasswordDialog() {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -213,71 +472,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Color _passwordStrengthColor = Colors.grey;
     double _passwordLength = 16;
 
-    void _checkPasswordStrength() {
-      final password = newPasswordController.text;
-      if (password.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _passwordStrength = 0.0;
-            _passwordStrengthText = '';
-            _passwordStrengthColor = Colors.grey;
-          });
-        }
-        return;
-      }
-      
+    void checkStrength(StateSetter setState) {
+      final pw = newPasswordController.text;
+      if (pw.isEmpty) { setState(() { _passwordStrength = 0; _passwordStrengthText = ''; }); return; }
       int score = 0;
-      if (password.length >= 12) score += 25;
-      else if (password.length >= 8) score += 15;
-      if (password.contains(RegExp(r'[0-9]'))) score += 25;
-      if (password.contains(RegExp(r'[A-Z]'))) score += 25;
-      if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) score += 25;
-      
-      if (mounted) {
-        setState(() {
-          _passwordStrength = score / 100;
-          if (score < 50) {
-            _passwordStrengthText = 'Weak';
-            _passwordStrengthColor = Colors.red;
-          } else if (score < 75) {
-            _passwordStrengthText = 'Medium';
-            _passwordStrengthColor = Colors.orange;
-          } else {
-            _passwordStrengthText = 'Strong';
-            _passwordStrengthColor = Colors.green;
-          }
-        });
-      }
+      if (pw.length >= 12) score += 25; else if (pw.length >= 8) score += 15;
+      if (pw.contains(RegExp(r'[0-9]'))) score += 25;
+      if (pw.contains(RegExp(r'[A-Z]'))) score += 25;
+      if (pw.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) score += 25;
+      setState(() {
+        _passwordStrength = score / 100;
+        if (score < 50) { _passwordStrengthText = 'Weak'; _passwordStrengthColor = Colors.red; }
+        else if (score < 75) { _passwordStrengthText = 'Medium'; _passwordStrengthColor = Colors.orange; }
+        else { _passwordStrengthText = 'Strong'; _passwordStrengthColor = Colors.green; }
+      });
     }
 
-    String _generateStrongPassword(int length) {
-      const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-      const lowercase = 'abcdefghijkmnopqrstuvwxyz';
-      const numbers = '23456789';
-      const symbols = r'!@#$%^&*()_+-=[]{}|;:,.<>?';
-      
-      String password = '';
+    String generatePassword(int length) {
+      const up = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      const lo = 'abcdefghijkmnopqrstuvwxyz';
+      const nu = '23456789';
+      const sy = r'!@#$%^&*()_+-=[]{}|;:,.<>?';
       final random = DateTime.now().millisecondsSinceEpoch;
-      
-      password += uppercase[random % uppercase.length];
-      password += lowercase[(random + 1) % lowercase.length];
-      password += numbers[(random + 2) % numbers.length];
-      password += symbols[(random + 3) % symbols.length];
-      
-      final allChars = uppercase + lowercase + numbers + symbols;
-      for (int i = password.length; i < length; i++) {
-        final randomIndex = (random + i) % allChars.length;
-        password += allChars[randomIndex];
-      }
-      
-      List<String> chars = password.split('');
+      String pw = up[random % up.length] + lo[(random + 1) % lo.length] +
+          nu[(random + 2) % nu.length] + sy[(random + 3) % sy.length];
+      final all = up + lo + nu + sy;
+      for (int i = pw.length; i < length; i++) pw += all[(random + i) % all.length];
+      final chars = pw.split('');
       for (int i = chars.length - 1; i > 0; i--) {
         final j = (random + i) % (i + 1);
-        final temp = chars[i];
-        chars[i] = chars[j];
-        chars[j] = temp;
+        final t = chars[i]; chars[i] = chars[j]; chars[j] = t;
       }
-      
       return chars.join();
     }
 
@@ -285,389 +510,255 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Text(_show2FA ? 'Verify 2FA Code' : 'Change Password'),
-            content: Container(
-              width: 350,
-              child: _show2FA
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.email_outlined, size: 50, color: _accent),
-                        SizedBox(height: 16),
-                        Text(
-                          'A verification code has been sent to your email',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: _textSecondary),
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(_show2FA ? 'Verify 2FA Code' : 'Change Password'),
+          content: SizedBox(
+            width: 350,
+            child: _show2FA
+                ? Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.email_outlined, size: 50, color: _accent),
+                    const SizedBox(height: 16),
+                    Text('A verification code has been sent to your email',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13, color: _textSecondary)),
+                    const SizedBox(height: 20),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _accent.withOpacity(0.3)),
+                      ),
+                      child: TextField(
+                        controller: otpCodeController,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        decoration: const InputDecoration(
+                          hintText: 'Enter 6-digit code',
+                          hintStyle: TextStyle(fontSize: 16, letterSpacing: 0),
+                          border: InputBorder.none,
+                          counterText: '',
+                          contentPadding: EdgeInsets.symmetric(vertical: 16),
                         ),
-                        SizedBox(height: 20),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: _accent.withOpacity(0.3)),
-                          ),
-                          child: TextField(
-                            controller: otpCodeController,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
-                            keyboardType: TextInputType.number,
-                            maxLength: 6,
-                            decoration: InputDecoration(
-                              hintText: 'Enter 6-digit code',
-                              hintStyle: TextStyle(fontSize: 16, letterSpacing: 0),
-                              border: InputBorder.none,
-                              counterText: '',
-                              contentPadding: EdgeInsets.symmetric(vertical: 16),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: _accent.withOpacity(0.3)),
-                          ),
-                          child: TextField(
-                            controller: currentPasswordController,
-                            obscureText: _obscureCurrent,
-                            decoration: InputDecoration(
-                              labelText: 'Current Password',
-                              labelStyle: TextStyle(color: _textSecondary),
-                              prefixIcon: Icon(Icons.lock_outline, color: _accent),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
-                                onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: _accent.withOpacity(0.3)),
-                          ),
-                          child: TextField(
-                            controller: newPasswordController,
-                            obscureText: _obscureNew,
-                            onChanged: (_) => _checkPasswordStrength(),
-                            decoration: InputDecoration(
-                              labelText: 'New Password',
-                              labelStyle: TextStyle(color: _textSecondary),
-                              prefixIcon: Icon(Icons.lock_outline, color: _accent),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
-                                onPressed: () => setState(() => _obscureNew = !_obscureNew),
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            ),
-                          ),
-                        ),
-                        if (newPasswordController.text.isNotEmpty) ...[
-                          SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: LinearProgressIndicator(
-                                  value: _passwordStrength,
-                                  backgroundColor: Colors.grey.shade300,
-                                  valueColor: AlwaysStoppedAnimation<Color>(_passwordStrengthColor),
-                                  minHeight: 4,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                _passwordStrengthText,
-                                style: TextStyle(
-                                  color: _passwordStrengthColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(Icons.format_size, size: 18, color: _accent),
-                            SizedBox(width: 8),
-                            Text(
-                              'Length: ${_passwordLength.toInt()}',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: _accent),
-                            ),
-                            Expanded(
-                              child: Slider(
-                                value: _passwordLength,
-                                min: 8,
-                                max: 20,
-                                divisions: 12,
-                                activeColor: _accent,
-                                inactiveColor: Colors.grey.shade300,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _passwordLength = value;
-                                  });
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: () {
-                              final strongPassword = _generateStrongPassword(_passwordLength.toInt());
-                              setState(() {
-                                newPasswordController.text = strongPassword;
-                                confirmPasswordController.text = strongPassword;
-                                _checkPasswordStrength();
-                              });
-                            },
-                            icon: Icon(Icons.auto_awesome, size: 16, color: _accent),
-                            label: Text(
-                              'Suggest strong password',
-                              style: TextStyle(fontSize: 12, color: _accent),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: _isDark ? Colors.white12 : Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: _accent.withOpacity(0.3)),
-                          ),
-                          child: TextField(
-                            controller: confirmPasswordController,
-                            obscureText: _obscureConfirm,
-                            decoration: InputDecoration(
-                              labelText: 'Confirm New Password',
-                              labelStyle: TextStyle(color: _textSecondary),
-                              prefixIcon: Icon(Icons.lock_outline, color: _accent),
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
-                                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  currentPasswordController.dispose();
-                  newPasswordController.dispose();
-                  confirmPasswordController.dispose();
-                  otpCodeController.dispose();
-                  Navigator.pop(context);
-                },
-                child: Text('Cancel', style: TextStyle(color: _textSecondary)),
-              ),
-              ElevatedButton(
-                onPressed: _show2FA
-                    ? () async {
-                        String otpCode = otpCodeController.text;
-                        if (otpCode.length != 6) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Please enter 6-digit code'), backgroundColor: Colors.red),
-                          );
-                          return;
-                        }
-                        
-                        final prefs = await SharedPreferences.getInstance();
-                        final username = prefs.getString('current_user') ?? '';
-                        
-                        final isValid = await _syncService.verify2FACode(username, otpCode);
-                        
-                        if (isValid) {
-                          final changed = await _syncService.changePassword(
-                            currentPasswordController.text,
-                            newPasswordController.text,
-                          );
-                          
-                          if (changed) {
-                            currentPasswordController.dispose();
-                            newPasswordController.dispose();
-                            confirmPasswordController.dispose();
-                            otpCodeController.dispose();
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Password changed successfully! Please login again.'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                            Future.delayed(Duration(seconds: 2), () {
-                              _logout();
-                            });
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Failed to change password'), backgroundColor: Colors.red),
-                            );
-                          }
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Invalid verification code'), backgroundColor: Colors.red),
-                          );
-                        }
-                      }
-                    : () async {
-                        if (currentPasswordController.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Please enter current password'), backgroundColor: Colors.red),
-                          );
-                          return;
-                        }
-                        if (newPasswordController.text.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Please enter new password'), backgroundColor: Colors.red),
-                          );
-                          return;
-                        }
-                        if (newPasswordController.text.length < 8) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Password must be at least 8 characters'), backgroundColor: Colors.red),
-                          );
-                          return;
-                        }
-                        if (newPasswordController.text != confirmPasswordController.text) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('New passwords do not match'), backgroundColor: Colors.red),
-                          );
-                          return;
-                        }
-                        if (_passwordStrength < 0.5) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Please use a stronger password'), backgroundColor: Colors.red),
-                          );
-                          return;
-                        }
-                        
-                        final prefs = await SharedPreferences.getInstance();
-                        final username = prefs.getString('current_user') ?? '';
-                        
-                        final sent = await _syncService.send2FACode(username, currentPasswordController.text);
-                        
-                        if (sent) {
+                  ])
+                : Column(mainAxisSize: MainAxisSize.min, children: [
+                    _pwField(currentPasswordController, 'Current Password', _obscureCurrent,
+                        () => setState(() => _obscureCurrent = !_obscureCurrent)),
+                    const SizedBox(height: 16),
+                    _pwField(newPasswordController, 'New Password', _obscureNew,
+                        () => setState(() => _obscureNew = !_obscureNew),
+                        onChange: () => checkStrength(setState)),
+                    if (newPasswordController.text.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Expanded(child: LinearProgressIndicator(
+                            value: _passwordStrength,
+                            backgroundColor: Colors.grey.shade300,
+                            valueColor: AlwaysStoppedAnimation<Color>(_passwordStrengthColor),
+                            minHeight: 4,
+                            borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(width: 8),
+                        Text(_passwordStrengthText,
+                            style: TextStyle(color: _passwordStrengthColor,
+                                fontWeight: FontWeight.bold, fontSize: 12)),
+                      ]),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Icon(Icons.format_size, size: 18, color: _accent),
+                      const SizedBox(width: 8),
+                      Text('Length: ${_passwordLength.toInt()}',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: _accent)),
+                      Expanded(child: Slider(
+                        value: _passwordLength, min: 8, max: 20, divisions: 12,
+                        activeColor: _accent, inactiveColor: Colors.grey.shade300,
+                        onChanged: (v) => setState(() => _passwordLength = v),
+                      )),
+                    ]),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          final pw = generatePassword(_passwordLength.toInt());
                           setState(() {
-                            _show2FA = true;
+                            newPasswordController.text = pw;
+                            confirmPasswordController.text = pw;
+                            checkStrength(setState);
                           });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('2FA code sent to your email!'), backgroundColor: Colors.green),
-                          );
+                        },
+                        icon: Icon(Icons.auto_awesome, size: 16, color: _accent),
+                        label: Text('Suggest strong password',
+                            style: TextStyle(fontSize: 12, color: _accent)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _pwField(confirmPasswordController, 'Confirm New Password', _obscureConfirm,
+                        () => setState(() => _obscureConfirm = !_obscureConfirm)),
+                  ]),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                currentPasswordController.dispose();
+                newPasswordController.dispose();
+                confirmPasswordController.dispose();
+                otpCodeController.dispose();
+                Navigator.pop(context);
+              },
+              child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              onPressed: _show2FA
+                  ? () async {
+                      if (otpCodeController.text.length != 6) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Enter 6-digit code'), backgroundColor: Colors.red));
+                        return;
+                      }
+                      final prefs = await SharedPreferences.getInstance();
+                      final username = prefs.getString('current_user') ?? '';
+                      final valid = await _syncService.verify2FACode(username, otpCodeController.text);
+                      if (valid) {
+                        final changed = await _syncService.changePassword(
+                            currentPasswordController.text, newPasswordController.text);
+                        currentPasswordController.dispose();
+                        newPasswordController.dispose();
+                        confirmPasswordController.dispose();
+                        otpCodeController.dispose();
+                        Navigator.pop(context);
+                        if (changed) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Password changed! Please login again.'),
+                              backgroundColor: Colors.green));
+                          Future.delayed(const Duration(seconds: 2), _logout);
                         } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Invalid current password'), backgroundColor: Colors.red),
-                          );
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Failed to change password'), backgroundColor: Colors.red));
                         }
-                      },
-                child: Text(_show2FA ? 'Verify & Change' : 'Send Code'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          );
-        },
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Invalid code'), backgroundColor: Colors.red));
+                      }
+                    }
+                  : () async {
+                      if (currentPasswordController.text.isEmpty ||
+                          newPasswordController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Fill all fields'), backgroundColor: Colors.red));
+                        return;
+                      }
+                      if (newPasswordController.text.length < 8) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Min 8 characters'), backgroundColor: Colors.red));
+                        return;
+                      }
+                      if (newPasswordController.text != confirmPasswordController.text) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Passwords don\'t match'), backgroundColor: Colors.red));
+                        return;
+                      }
+                      if (_passwordStrength < 0.5) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Use a stronger password'), backgroundColor: Colors.red));
+                        return;
+                      }
+                      final prefs = await SharedPreferences.getInstance();
+                      final username = prefs.getString('current_user') ?? '';
+                      final sent = await _syncService.send2FACode(username, currentPasswordController.text);
+                      if (sent) {
+                        setState(() => _show2FA = true);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Code sent to your email'), backgroundColor: Colors.green));
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Invalid current password'), backgroundColor: Colors.red));
+                      }
+                    },
+              child: Text(_show2FA ? 'Verify & Change' : 'Send Code'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  Widget _pwField(TextEditingController ctrl, String label, bool obscure, VoidCallback toggleObscure,
+      {VoidCallback? onChange}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _isDark ? Colors.white12 : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _accent.withOpacity(0.3)),
+      ),
+      child: TextField(
+        controller: ctrl,
+        obscureText: obscure,
+        onChanged: onChange != null ? (_) => onChange() : null,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: _textSecondary),
+          prefixIcon: Icon(Icons.lock_outline, color: _accent),
+          suffixIcon: IconButton(
+            icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
+            onPressed: toggleObscure,
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        ),
+      ),
+    );
+  }
+
+  // ─── UI helpers ───────────────────────────────────────────────────────────
   Widget _profileCard(AuthProvider authProvider) {
     return Container(
-      padding: EdgeInsets.all(20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(_isDark ? 0.2 : 0.06),
-            blurRadius: 12,
-            offset: Offset(0, 3),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(_isDark ? 0.2 : 0.06),
+            blurRadius: 12, offset: const Offset(0, 3))],
       ),
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: _accent.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(16),
-            ),
+            width: 52, height: 52,
+            decoration: BoxDecoration(color: _accent.withOpacity(0.12), borderRadius: BorderRadius.circular(16)),
             child: Icon(Icons.person_rounded, color: _accent, size: 28),
           ),
-          SizedBox(width: 14),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  authProvider.userEmail ?? 'User',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: _textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Premium Account',
-                  style: TextStyle(fontSize: 12, color: _textSecondary),
-                ),
+                Text(authProvider.userEmail ?? 'User',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _textPrimary),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text('Premium Account', style: TextStyle(fontSize: 12, color: _textSecondary)),
               ],
             ),
           ),
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Color(0xFF10B981).withOpacity(0.1),
+              color: const Color(0xFF10B981).withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Color(0xFF10B981).withOpacity(0.3)),
+              border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF10B981),
-                  ),
-                ),
-                SizedBox(width: 5),
-                Text(
-                  'Active',
-                  style: TextStyle(
-                    color: Color(0xFF10B981),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Container(width: 6, height: 6,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981))),
+                const SizedBox(width: 5),
+                const Text('Active', style: TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -678,16 +769,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _sectionLabel(String text) {
     return Padding(
-      padding: EdgeInsets.only(left: 4, bottom: 10),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: _textSecondary,
-          letterSpacing: 1.0,
-        ),
-      ),
+      padding: const EdgeInsets.only(left: 4, bottom: 10),
+      child: Text(text.toUpperCase(),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _textSecondary, letterSpacing: 1.0)),
     );
   }
 
@@ -696,21 +780,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(_isDark ? 0.2 : 0.05),
-            blurRadius: 12,
-            offset: Offset(0, 3),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(_isDark ? 0.2 : 0.05),
+            blurRadius: 12, offset: const Offset(0, 3))],
       ),
       child: Column(children: children),
     );
   }
 
-  Widget _dividerLine() {
-    return Divider(height: 1, indent: 68, endIndent: 16, color: _dividerColor);
-  }
+  Widget _dividerLine() =>
+      Divider(height: 1, indent: 68, endIndent: 16, color: _dividerColor);
 
   Widget _switchTile({
     required IconData icon,
@@ -720,33 +798,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required ValueChanged<bool> onChanged,
   }) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           _iconBox(icon),
-          SizedBox(width: 14),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: _textPrimary,
-                  ),
-                ),
-                SizedBox(height: 2),
+                Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _textPrimary)),
+                const SizedBox(height: 2),
                 Text(sub, style: TextStyle(fontSize: 12, color: _textSecondary)),
               ],
             ),
           ),
           Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: Colors.white,
-            activeTrackColor: _accent,
+            value: value, onChanged: onChanged,
+            activeColor: Colors.white, activeTrackColor: _accent,
             inactiveThumbColor: Colors.grey.shade400,
             inactiveTrackColor: _isDark ? Colors.white12 : Colors.grey.shade200,
           ),
@@ -765,41 +834,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) {
     final color = destructive ? Colors.red : _textPrimary;
     final subColor = destructive ? Colors.red.shade300 : _textSecondary;
-
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             _iconBox(icon, destructive: destructive),
-            SizedBox(width: 14),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: color,
-                    ),
-                  ),
-                  SizedBox(height: 2),
+                  Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color)),
+                  const SizedBox(height: 2),
                   Text(sub, style: TextStyle(fontSize: 12, color: subColor)),
                 ],
               ),
             ),
-            trailing ??
-                (onTap != null
-                    ? Icon(
-                        Icons.chevron_right_rounded,
-                        color: _isDark ? Colors.white24 : Colors.grey.shade300,
-                        size: 20,
-                      )
-                    : SizedBox.shrink()),
+            trailing ?? (onTap != null
+                ? Icon(Icons.chevron_right_rounded,
+                    color: _isDark ? Colors.white24 : Colors.grey.shade300, size: 20)
+                : const SizedBox.shrink()),
           ],
         ),
       ),
@@ -808,53 +865,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _iconBox(IconData icon, {bool destructive = false}) {
     return Container(
-      width: 38,
-      height: 38,
+      width: 38, height: 38,
       decoration: BoxDecoration(
-        color: destructive
-            ? Colors.red.withOpacity(0.08)
-            : _accent.withOpacity(0.08),
+        color: destructive ? Colors.red.withOpacity(0.08) : _accent.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Icon(
-        icon,
-        size: 18,
-        color: destructive ? Colors.red : _accent,
-      ),
+      child: Icon(icon, size: 18, color: destructive ? Colors.red : _accent),
     );
   }
 
   Widget _colorDot(Color color) {
     return Container(
-      width: 24,
-      height: 24,
+      width: 24, height: 24,
       decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: _isDark ? Colors.white24 : Colors.grey.shade200,
-          width: 2,
-        ),
+        color: color, shape: BoxShape.circle,
+        border: Border.all(color: _isDark ? Colors.white24 : Colors.grey.shade200, width: 2),
       ),
     );
   }
 
   Widget _versionBadge(String version) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Color(0xFF10B981).withOpacity(0.1),
+        color: const Color(0xFF10B981).withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Color(0xFF10B981).withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
       ),
-      child: Text(
-        version,
-        style: TextStyle(
-          color: Color(0xFF10B981),
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      child: Text(version,
+          style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -864,70 +903,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
         decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: EdgeInsets.fromLTRB(24, 12, 24, 32),
+            color: _cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
+            Center(child: Container(width: 36, height: 4,
                 decoration: BoxDecoration(
-                  color: _isDark ? Colors.white24 : Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Accent Color',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: _textPrimary,
-              ),
-            ),
-            SizedBox(height: 16),
+                    color: _isDark ? Colors.white24 : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 20),
+            Text('Accent Color', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _textPrimary)),
+            const SizedBox(height: 16),
             Wrap(
-              spacing: 14,
-              runSpacing: 14,
+              spacing: 14, runSpacing: 14,
               children: themeProvider.accentColors.asMap().entries.map((entry) {
                 final selected = themeProvider.accentColorIndex == entry.key;
                 return GestureDetector(
-                  onTap: () {
-                    themeProvider.setAccentColor(entry.key);
-                    Navigator.pop(context);
-                  },
+                  onTap: () { themeProvider.setAccentColor(entry.key); Navigator.pop(context); },
                   child: AnimatedContainer(
-                    duration: Duration(milliseconds: 200),
-                    width: 48,
-                    height: 48,
+                    duration: const Duration(milliseconds: 200),
+                    width: 48, height: 48,
                     decoration: BoxDecoration(
-                      color: entry.value,
-                      shape: BoxShape.circle,
-                      border: selected
-                          ? Border.all(color: _textPrimary, width: 3)
-                          : null,
-                      boxShadow: [
-                        BoxShadow(
-                          color: entry.value.withOpacity(0.4),
-                          blurRadius: 8,
-                          offset: Offset(0, 3),
-                        ),
-                      ],
+                      color: entry.value, shape: BoxShape.circle,
+                      border: selected ? Border.all(color: _textPrimary, width: 3) : null,
+                      boxShadow: [BoxShadow(color: entry.value.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 3))],
                     ),
-                    child: selected
-                        ? Icon(Icons.check_rounded, color: Colors.white, size: 20)
-                        : null,
+                    child: selected ? const Icon(Icons.check_rounded, color: Colors.white, size: 20) : null,
                   ),
                 );
               }).toList(),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -940,7 +948,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: _accent,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      duration: Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
     ));
   }
 
@@ -948,87 +956,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isSyncing = true);
     final success = await _syncService.syncAccounts();
     setState(() => _isSyncing = false);
-    
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Row(children: [
-          Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-          SizedBox(width: 8),
-          Text('Sync complete'),
-        ]),
-        backgroundColor: Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Sync failed - check connection'),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
-    }
-  }
-
-  void _clearAllData() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: _cardColor,
-        title: Row(children: [
-          Icon(Icons.warning_rounded, color: Colors.red, size: 24),
-          SizedBox(width: 10),
-          Text('Clear All Data', style: TextStyle(color: _textPrimary, fontSize: 17)),
-        ]),
-        content: Text(
-          'This will permanently delete ALL your OTP accounts. This cannot be undone.',
-          style: TextStyle(color: _textSecondary, fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-    
-    if (confirmed == true) {
-      try {
-        final userBox = await _syncService.getUserBox();
-        final count = userBox.length;
-        await userBox.clear();
-        await _syncService.syncAccounts();
-        
-        print('Cleared $count accounts from user box');
-        
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('All data cleared ($count accounts)'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ));
-        
-        Navigator.pop(context);
-        
-      } catch (e) {
-        print('Error clearing data: $e');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed to clear data: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ));
-      }
-    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(success ? 'Sync complete' : 'Sync failed – check connection'),
+      backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
   }
 
   void _logout() async {
@@ -1038,22 +971,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text('Logout', style: TextStyle(color: _textPrimary)),
-        content: Text(
-          'Your codes will remain saved on this device.',
-          style: TextStyle(color: _textSecondary, fontSize: 13),
-        ),
+        content: Text('Your codes will remain saved on this device.',
+            style: TextStyle(color: _textSecondary, fontSize: 13)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF4F46E5),
-              foregroundColor: Colors.white,
-            ),
-            child: Text('Logout'),
+            style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white),
+            child: const Text('Logout'),
           ),
         ],
       ),
@@ -1062,10 +987,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await Provider.of<AuthProvider>(context, listen: false).logout();
       await _syncService.logout();
       Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => LoginScreen()),
-        (route) => false,
-      );
+          context, MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
     }
   }
 }

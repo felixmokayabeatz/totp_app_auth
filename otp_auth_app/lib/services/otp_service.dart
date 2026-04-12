@@ -1,3 +1,4 @@
+// lib/services/otp_service.dart
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
@@ -6,9 +7,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'encryption_service.dart';
 
 class OTPService {
+  // Singleton so all callers share the same cached userId
+  static final OTPService _instance = OTPService._internal();
+  factory OTPService() => _instance;
+  OTPService._internal();
+
+  String? _cachedUserId;
+
   Future<String> getCurrentUserId() async {
+    if (_cachedUserId != null) return _cachedUserId!;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('current_user') ?? 'default_user';
+    _cachedUserId = prefs.getString('current_user') ?? 'default_user';
+    return _cachedUserId!;
+  }
+
+  void clearCachedUserId() {
+    _cachedUserId = null;
+  }
+
+  /// Returns the current TOTP counter (30-second window).
+  /// Using integer division means ALL calls in the same 30s window get
+  /// the exact same counter → the exact same OTP for the same secret.
+  int _currentCounter() {
+    final epochSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return epochSeconds ~/ 30; // integer division – no floating point drift
+  }
+
+  /// Seconds remaining in the current 30-second window.
+  int secondsRemaining() {
+    final epochSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return 30 - (epochSeconds % 30);
   }
 
   Future<String> generateOTP(String encryptedSecret) async {
@@ -18,7 +46,6 @@ class OTPService {
       final userId = await getCurrentUserId();
       final secret = _safeDecrypt(encryptedSecret, userId);
 
-      // Strip everything that is not a valid Base32 character
       final cleanSecret = secret
           .toUpperCase()
           .replaceAll(RegExp(r'[^A-Z2-7]'), '');
@@ -28,13 +55,12 @@ class OTPService {
         return 'Error';
       }
 
-      debugPrint('Decoding secret: $cleanSecret');
-
       final key = _base32Decode(cleanSecret);
       if (key.isEmpty) return 'Error';
 
-      final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final counter = (timestamp / 30).floor();
+      // Use the normalised counter – same for every call in the same window
+      final counter = _currentCounter();
+
       final counterBytes = ByteData(8)..setInt64(0, counter);
       final hmac = Hmac(sha1, key);
       final hash = hmac.convert(counterBytes.buffer.asUint8List());
@@ -45,9 +71,7 @@ class OTPService {
           ((hash.bytes[offset + 2] & 0xff) << 8) |
           (hash.bytes[offset + 3] & 0xff);
 
-      final otp = (code % 1000000).toString().padLeft(6, '0');
-      debugPrint('Generated OTP: $otp');
-      return otp;
+      return (code % 1000000).toString().padLeft(6, '0');
     } catch (e) {
       debugPrint('OTP Error: $e');
       return 'Error';
@@ -55,21 +79,15 @@ class OTPService {
   }
 
   String _safeDecrypt(String storedSecret, String userId) {
-    // If it looks like raw Base32 (only A-Z, 2-7, spaces) → it's unencrypted legacy
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
     final isRawBase32 = RegExp(r'^[A-Z2-7a-z]+$').hasMatch(strippedSpaces);
 
     if (isRawBase32) {
-      // Already plain Base32 — no decryption needed
-      debugPrint('Secret is raw Base32, using directly');
       return storedSecret;
     }
 
-    // Looks like base64 encrypted output — try to decrypt
     try {
-      final decrypted = EncryptionService.decryptSecret(storedSecret, userId);
-      debugPrint('Decrypted successfully');
-      return decrypted;
+      return EncryptionService.decryptSecret(storedSecret, userId);
     } catch (e) {
       debugPrint('Decryption failed: $e, using raw');
       return storedSecret;
@@ -93,7 +111,6 @@ class OTPService {
       }
     }
 
-    debugPrint('Decoded ${result.length} bytes');
     return Uint8List.fromList(result);
   }
 }
