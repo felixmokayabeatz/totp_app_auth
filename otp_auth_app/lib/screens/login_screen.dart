@@ -4,7 +4,8 @@ import '../providers/auth_provider.dart';
 import 'home_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:flutter/services.dart';
+import 'dart:async';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -37,7 +38,11 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _resetEmail;
   double _passwordLength = 16;
   double _resetPasswordLength = 16;
-  
+  int _resendCooldown = 0;
+  Timer? _resendTimer;
+  int _resetResendCooldown = 0;
+  Timer? _resetResendTimer;
+
   // Password strength variables
   double _passwordStrength = 0.0;
   String _passwordStrengthText = '';
@@ -49,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String _resetPasswordStrengthText = '';
   Color _resetPasswordStrengthColor = Colors.grey;
   List<String> _resetPasswordSuggestions = [];
-  
+ 
   @override
   void initState() {
     super.initState();
@@ -208,6 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final strongPassword = _generateStrongPassword(length);
     setState(() {
       _passwordController.text = strongPassword;
+      _confirmPasswordController.text = strongPassword;
       _checkPasswordStrength();
     });
     _showSuccess('Strong password generated! (${length} characters)');
@@ -222,6 +228,104 @@ class _LoginScreenState extends State<LoginScreen> {
       _checkResetPasswordStrength();
     });
     _showSuccess('Strong password generated! (${length} characters)');
+  }
+  
+  void _startResendTimer() {
+    _resendTimer?.cancel();
+    setState(() {
+      _resendCooldown = 60;
+    });
+    _resendTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendCooldown <= 1) {
+        timer.cancel();
+        setState(() {
+          _resendCooldown = 0;
+        });
+      } else {
+        setState(() {
+          _resendCooldown--;
+        });
+      }
+    });
+  }
+  
+  void _resend2FACode() async {
+    if (_resendCooldown > 0) {
+      _showError('Please wait ${_resendCooldown} seconds before resending');
+      return;
+    }
+    if (_tempUsername == null) {
+      _showError('Session expired. Please login again.');
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+    });
+    final sent = await _syncService.send2FACode(
+      _tempUsername!,
+      _passwordController.text,
+    );
+    setState(() {
+      _isLoading = false;
+    });
+    if (sent) {
+      _startResendTimer();
+      _showSuccess('New 2FA code sent to your email!');
+    } else {
+      _showError('Failed to send code. Please try again.');
+    }
+  }
+  
+  void _startResetResendTimer() {
+    _resetResendTimer?.cancel();
+    setState(() {
+      _resetResendCooldown = 60;
+    });
+    _resetResendTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resetResendCooldown <= 1) {
+        timer.cancel();
+        setState(() {
+          _resetResendCooldown = 0;
+        });
+      } else {
+        setState(() {
+          _resetResendCooldown--;
+        });
+      }
+    });
+  }
+  
+  void _resendResetCode() async {
+    if (_resetResendCooldown > 0) {
+      _showError('Please wait ${_resetResendCooldown} seconds before resending');
+      return;
+    }
+    if (_resetEmail == null && _resetEmailController.text.isEmpty) {
+      _showError('No email address found. Please go back and enter your email again.');
+      return;
+    }
+    final email = _resetEmail ?? _resetEmailController.text;
+    setState(() {
+      _isLoading = true;
+    });
+    final sent = await _syncService.sendPasswordResetCode(email);
+    setState(() {
+      _isLoading = false;
+    });
+    if (sent) {
+      _startResetResendTimer();
+      _showSuccess('New reset code sent to your email!');
+    } else {
+      _showError('Failed to send code. Please try again.');
+    }
   }
   
   @override
@@ -326,6 +430,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           counterText: '',
                         ),
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(6),
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                       ),
                       SizedBox(height: 16),
                       Container(
@@ -447,6 +555,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: _resetResendCooldown == 0 ? _resendResetCode : null,
+                            child: Text(
+                              _resetResendCooldown > 0 
+                                  ? 'Resend code (${_resetResendCooldown}s)'
+                                  : 'Resend code',
+                              style: TextStyle(
+                                color: _resetResendCooldown > 0 ? Colors.grey : Color(0xFF667eea),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       TextButton(
                         onPressed: () {
                           setState(() {
@@ -455,6 +580,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             _resetOtpCodeController.clear();
                             _resetNewPasswordController.clear();
                             _resetConfirmPasswordController.clear();
+                            _resetResendCooldown = 0;
+                            _resetResendTimer?.cancel();
                           });
                         },
                         child: Text('Back to Login'),
@@ -727,12 +854,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 24, letterSpacing: 4),
                         keyboardType: TextInputType.number,
+                        maxLength: 6,
                         decoration: InputDecoration(
                           labelText: 'Enter 6-digit code',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
+                          counterText: '',
                         ),
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(6),
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                       ),
                       SizedBox(height: 24),
                       ElevatedButton(
@@ -750,6 +883,23 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: _resendCooldown == 0 ? _resend2FACode : null,
+                            child: Text(
+                              _resendCooldown > 0 
+                                  ? 'Resend code (${_resendCooldown}s)'
+                                  : 'Resend code',
+                              style: TextStyle(
+                                color: _resendCooldown > 0 ? Colors.grey : Color(0xFF667eea),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       TextButton(
                         onPressed: () {
@@ -776,50 +926,42 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Please enter username');
       return;
     }
-    
     if (_passwordController.text.isEmpty) {
       _showError('Please enter password');
       return;
     }
-    
     if (!_isLogin) {
       if (_emailController.text.isEmpty) {
         _showError('Please enter email');
         return;
       }
-      
       if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
         _showError('Please enter a valid email address');
         return;
       }
-      
       if (_passwordController.text != _confirmPasswordController.text) {
         _showError('Passwords do not match');
         return;
       }
-      
       if (_passwordStrength < 0.5) {
         _showError('Please use a stronger password');
         return;
       }
     }
-    
     setState(() {
       _isLoading = true;
     });
-    
     if (_isLogin) {
       final sent = await _syncService.send2FACode(
         _usernameController.text,
         _passwordController.text,
       );
-      
       setState(() {
         _isLoading = false;
       });
-      
       if (sent) {
         _tempUsername = _usernameController.text;
+        _startResendTimer();
         setState(() {
           _show2FA = true;
         });
@@ -833,11 +975,9 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailController.text.trim(),
         _passwordController.text,
       );
-      
       setState(() {
         _isLoading = false;
       });
-      
       if (success) {
         _showSuccess('Registration successful! Please login.');
         setState(() {
@@ -856,17 +996,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Please enter your email address');
       return;
     }
-    
     setState(() {
       _isLoading = true;
     });
-    
     final sent = await _syncService.sendPasswordResetCode(_resetEmailController.text);
-    
     setState(() {
       _isLoading = false;
     });
-    
     if (sent) {
       _resetEmail = _resetEmailController.text;
       setState(() {
@@ -883,46 +1019,37 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Please enter verification code');
       return;
     }
-    
     if (_resetOtpCodeController.text.length != 6) {
       _showError('Please enter a valid 6-digit code');
       return;
     }
-    
     if (_resetNewPasswordController.text.isEmpty) {
       _showError('Please enter new password');
       return;
     }
-    
     if (_resetNewPasswordController.text.length < 8) {
       _showError('Password must be at least 8 characters');
       return;
     }
-    
     if (_resetNewPasswordController.text != _resetConfirmPasswordController.text) {
       _showError('Passwords do not match');
       return;
     }
-    
     if (_resetPasswordStrength < 0.5) {
       _showError('Please use a stronger password');
       return;
     }
-    
     setState(() {
       _isLoading = true;
     });
-    
     final success = await _syncService.resetPassword(
       _resetEmail!,
       _resetOtpCodeController.text,
       _resetNewPasswordController.text,
     );
-    
     setState(() {
       _isLoading = false;
     });
-    
     if (success) {
       _showSuccess('Password reset successfully! Please login with your new password.');
       setState(() {
@@ -942,21 +1069,17 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Please enter verification code');
       return;
     }
-    
     if (_otpCodeController.text.length != 6) {
       _showError('Please enter a valid 6-digit code');
       return;
     }
-    
     setState(() {
       _isLoading = true;
     });
-    
     final isValid = await _syncService.verify2FACode(
       _tempUsername ?? _usernameController.text,
       _otpCodeController.text,
     );
-    
     if (!isValid) {
       setState(() {
         _isLoading = false;
@@ -964,28 +1087,23 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Invalid verification code');
       return;
     }
-    
     bool success = await _syncService.login(
       _tempUsername ?? _usernameController.text,
       _passwordController.text,
     );
-    
     setState(() {
       _isLoading = false;
     });
-    
     if (success) {
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString('user_email') ?? '';
       final username = prefs.getString('current_user') ?? '';
       final userId = prefs.getString('user_id') ?? '';
-      
       await Provider.of<AuthProvider>(context, listen: false).setUserData(
         username, 
         email, 
         userId
       );
-      
       Navigator.pushReplacement(
         context, 
         MaterialPageRoute(builder: (_) => HomeScreen()),
@@ -1019,6 +1137,8 @@ class _LoginScreenState extends State<LoginScreen> {
   
   @override
   void dispose() {
+    _resendTimer?.cancel();
+    _resetResendTimer?.cancel();
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
