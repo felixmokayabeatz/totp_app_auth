@@ -614,6 +614,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _syncData() async {
+    // Check if sync is enabled first
+    final syncEnabled = await _syncService.isSyncEnabled();
+    
+    if (!syncEnabled) {
+      _showSnackBar('Sync is disabled. Enable it in Settings → Sync to Cloud', Colors.orange);
+      return;
+    }
+    
     setState(() => _isSyncing = true);
     try {
       final success = await _syncService.syncAccounts();

@@ -107,8 +107,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? SizedBox(
                       width: 18, height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: _accent))
-                  : null,
-              onTap: _syncEnabled ? _syncNow : null,
+                  : (_syncEnabled ? null : const Icon(Icons.lock_outline, size: 16, color: Colors.grey)),
+              onTap: _syncEnabled ? _syncNow : null,  // Disable when sync is off
             ),
             _dividerLine(),
             // ── Sync toggle ──────────────────────────────────────────────
@@ -953,9 +953,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _syncNow() async {
+    // Check if sync is enabled
+    if (!_syncEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Sync is disabled. Enable "Sync to Cloud" first.'),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
+      return;
+    }
+    
     setState(() => _isSyncing = true);
     final success = await _syncService.syncAccounts();
     setState(() => _isSyncing = false);
+    
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(success ? 'Sync complete' : 'Sync failed – check connection'),
       backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
