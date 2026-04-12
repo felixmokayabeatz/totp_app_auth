@@ -236,21 +236,29 @@ from rest_framework.response import Response
 def set_sync_preference(request):
     enabled = request.data.get('sync_enabled', True)
 
-    obj, created = EncryptedData.objects.update_or_create(
+    obj, created = EncryptedData.objects.get_or_create(
         user=request.user,
         data_type='sync_preference',
         defaults={
             'encrypted_content': 'true' if enabled else 'false',
             'synced_at': timezone.now(),
-            'deleted_accounts': 'N/A'
+            'deleted_accounts': 'N/A',
+            'version': 1
         }
     )
+
+    if not created:
+        obj.encrypted_content = 'true' if enabled else 'false'
+        obj.synced_at = timezone.now()
+        obj.deleted_accounts = 'N/A'
+        obj.version += 1
+        obj.save()
 
     return Response({
         'success': True,
         'sync_enabled': enabled,
-        'synced_at': obj.synced_at,
-        'deleted_accounts': obj.deleted_accounts
+        'version': obj.version,
+        'synced_at': obj.synced_at
     })
 
 
