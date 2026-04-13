@@ -6,10 +6,21 @@ chmod +x deploy.sh
 ```
 
 # To fresh build flutter app with fresh dependencies install run
+
+## On Windows
+
 ```bash
 flutter clean                                               
 flutter pub get                                                      
 flutter run -d windows
+```
+
+## On Linux/Ubuntu
+
+```bash
+flutter clean                                               
+flutter pub get                                                      
+flutter run -d linux
 ```
 
 # To just build the flutter app(Windows) run
