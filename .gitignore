@@ -76,6 +76,7 @@ Thumbs.db
 
 android-ndk-r28c-linux.zip
 android-ndk-r28c/
+deb_pkg/
 installer/
 totp_app_venv
 local.py
