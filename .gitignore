@@ -74,7 +74,8 @@ db.sqlite3
 .DS_Store
 Thumbs.db
 
-
+android-ndk-r28c-linux.zip
+android-ndk-r28c/
 totp_app_venv
 local.py
 .codex

@@ -127,6 +127,86 @@ Check available devices:
 flutter devices
 ```
 
+If Flutter does not detect any Android device, check `adb` first:
+
+```bash
+adb devices
+```
+
+If `adb devices` shows no connected devices, restart the ADB server and check again:
+
+```bash
+adb kill-server
+adb start-server
+adb devices
+```
+
+If no physical device appears, list the available Android emulators:
+
+```bash
+flutter emulators
+```
+
+Example output:
+
+```text
+1 available emulator:
+
+Id             • Name           • Manufacturer • Platform
+Pixel_6_API_34 • Pixel 6 API 34 • Google       • android
+```
+
+### Start an Emulator on Ubuntu
+
+Launch an emulator from the terminal with:
+
+```bash
+flutter emulators --launch <emulator-id>
+```
+
+For example:
+
+```bash
+flutter emulators --launch Pixel_6_API_34
+```
+
+After the emulator starts, verify it is available:
+
+```bash
+flutter devices
+```
+
+### Start an Emulator on Windows
+
+If you are using Windows, you can start the emulator from Android Studio:
+
+1. Open Android Studio.
+2. Click `More Actions` on the welcome screen, or open `Tools > Device Manager` from a project.
+3. In `Device Manager`, find your virtual device.
+4. Click the `Play` button to start the emulator.
+5. Wait for Android to finish booting, then run:
+
+```bash
+flutter devices
+```
+
+If the emulator still does not appear in Flutter, run:
+
+```bash
+flutter doctor
+```
+
+You can also try:
+
+```bash
+flutter devices --device-timeout 20
+```
+
+For additional troubleshooting, visit:
+
+- https://flutter.dev/setup/
+- https://developer.android.com/studio/run/managing-avds
+
 ### Debug Run
 
 Run on Android:
