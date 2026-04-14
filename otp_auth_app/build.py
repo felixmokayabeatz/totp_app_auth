@@ -2,6 +2,7 @@
 """
 Flutter Build Automation Script
 Supports: Linux (.deb), Windows (.exe + Inno Setup), Android (.apk)
+Features: Build, Run, and Create installers
 """
 
 import os
@@ -10,6 +11,7 @@ import subprocess
 import platform
 import sys
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -31,49 +33,79 @@ APP_BINARY_NAME = "otp_auth_app"
 DEB_PACKAGE_NAME = "beatzlock"
 APP_VERSION = "1.0.0"
 APP_MAINTAINER = "Your Name <your.email@example.com>"
-APP_DESCRIPTION = "BeatzLock"
+APP_DESCRIPTION = "BeatzLock OTP Authentication App"
 
-# ==================== HELPER FUNCTIONS ====================
-def run(cmd, cwd=None):
+# Color codes for terminal output (Windows & Linux compatible)
+class Colors:
+    """ANSI color codes for terminal output"""
+    if platform.system() == "Windows":
+        # Windows doesn't support ANSI by default, but we'll still use them
+        # They work in Windows Terminal and PowerShell 7+
+        pass
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    END = '\033[0m'
+
+def print_color(text, color=Colors.WHITE):
+    """Print colored text (works on both Windows and Linux)"""
+    # Check if running in a terminal that supports colors
+    if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+        print(f"{color}{text}{Colors.END}")
+    else:
+        print(text)
+
+def run(cmd, cwd=None, shell=True, capture_output=False):
     """Run shell command with error handling"""
-    print(f"\n>>> Running: {cmd}\n")
+    print_color(f"\n>>> Running: {cmd}", Colors.CYAN)
     try:
-        result = subprocess.run(cmd, shell=True, check=True, cwd=cwd, 
-                               capture_output=False, text=True)
-        return result
+        if capture_output:
+            result = subprocess.run(cmd, shell=shell, check=True, cwd=cwd, 
+                                   capture_output=True, text=True)
+            return result
+        else:
+            result = subprocess.run(cmd, shell=shell, check=True, cwd=cwd, 
+                                   capture_output=False, text=True)
+            return result
     except subprocess.CalledProcessError as e:
-        print(f"❌ Command failed with exit code {e.returncode}")
-        print(f"Error: {e}")
+        print_color(f"❌ Command failed with exit code {e.returncode}", Colors.RED)
+        if capture_output and hasattr(e, 'stderr'):
+            print_color(f"Error: {e.stderr}", Colors.RED)
+        elif capture_output and hasattr(e, 'stdout'):
+            print_color(f"Output: {e.stdout}", Colors.RED)
+        else:
+            print_color(f"Error: {e}", Colors.RED)
         return None
 
 def ensure_dirs():
     """Create necessary directories"""
     for dir_path in [LINUX_DIR, WINDOWS_DIR, ANDROID_DIR]:
         os.makedirs(dir_path, exist_ok=True)
-        print(f"✓ Directory ready: {dir_path}")
+        print_color(f"✓ Directory ready: {dir_path}", Colors.GREEN)
 
 def check_flutter():
     """Verify Flutter is installed and configured"""
-    result = run("flutter --version", cwd=PROJECT_DIR)
+    result = run("flutter --version", cwd=PROJECT_DIR, capture_output=True)
     if not result:
-        print("❌ Flutter not found! Please install Flutter first.")
+        print_color("❌ Flutter not found! Please install Flutter first.", Colors.RED)
         return False
     
-    # Check for required platforms
-    result = run("flutter doctor", cwd=PROJECT_DIR)
+    # Quick check - don't run full doctor unless needed
     return True
 
-def copy_with_progress(src, dst):
-    """Copy file/folder with progress indication"""
-    if os.path.isfile(src):
-        size = os.path.getsize(src)
-        print(f"📁 Copying {os.path.basename(src)} ({size // 1024} KB)")
-        shutil.copy2(src, dst)
-    elif os.path.isdir(src):
-        if os.path.exists(dst):
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst)
-        print(f"📁 Copied directory: {os.path.basename(src)}")
+def check_device_connected():
+    """Check if an Android device/emulator is connected"""
+    result = run("adb devices", cwd=PROJECT_DIR, capture_output=True)
+    if result and result.stdout:
+        lines = result.stdout.strip().split('\n')
+        devices = [l for l in lines[1:] if l.strip() and 'device' in l and 'offline' not in l]
+        return len(devices) > 0
+    return False
 
 def save_build_metadata(platform_name, file_path):
     """Save build information to JSON log"""
@@ -96,12 +128,172 @@ def save_build_metadata(platform_name, file_path):
     with open(log_file, 'w') as f:
         json.dump(logs, f, indent=2)
     
-    print(f"✓ Build info saved to {log_file}")
+    print_color(f"✓ Build info saved to {log_file}", Colors.GREEN)
 
-# ==================== LINUX BUILD ====================
-def build_linux_deb():
+def clean_windows_cache():
+    """Clean Windows build cache to fix CMake generator mismatch"""
+    print_color("\n🧹 Cleaning Windows CMake cache...", Colors.YELLOW)
+    
+    # Paths to clean
+    paths_to_clean = [
+        Path(PROJECT_DIR) / "build/windows",
+        Path(PROJECT_DIR) / "windows/CMakeCache.txt",
+        Path(PROJECT_DIR) / "windows/CMakeFiles",
+        Path(PROJECT_DIR) / "windows/flutter/ephemeral",
+        Path(PROJECT_DIR) / ".dart_tool",
+    ]
+    
+    for path in paths_to_clean:
+        if path.exists():
+            if path.is_file():
+                path.unlink()
+                print_color(f"✓ Removed file: {path}", Colors.GREEN)
+            elif path.is_dir():
+                shutil.rmtree(path)
+                print_color(f"✓ Removed directory: {path}", Colors.GREEN)
+    
+    # Run flutter clean
+    run("flutter clean", cwd=PROJECT_DIR)
+    
+    print_color("✅ Windows CMake cache cleaned!", Colors.GREEN)
+
+# ==================== RUN FUNCTIONS ====================
+def run_linux():
+    """Run the Linux app in debug mode"""
+    print_color("\n🐧 Running Linux app...", Colors.CYAN)
+    
+    if platform.system() != "Linux":
+        print_color("⚠️  Linux app can only be run on Linux!", Colors.YELLOW)
+        return False
+    
+    print_color("Starting Linux app (press Ctrl+C to stop)...", Colors.GREEN)
+    run("flutter run -d linux", cwd=PROJECT_DIR)
+    return True
+
+def run_linux_release():
+    """Run the Linux app in release mode"""
+    print_color("\n🐧 Running Linux app (RELEASE mode)...", Colors.CYAN)
+    
+    if platform.system() != "Linux":
+        print_color("⚠️  Linux app can only be run on Linux!", Colors.YELLOW)
+        return False
+    
+    # Build first
+    if not build_linux_deb(skip_installer=True):
+        print_color("❌ Build failed, cannot run", Colors.RED)
+        return False
+    
+    # Run the built binary
+    bundle_path = SCRIPT_DIR / "build/linux/x64/release/bundle"
+    binary_path = bundle_path / APP_BINARY_NAME
+    
+    if binary_path.exists():
+        print_color(f"Running: {binary_path}", Colors.GREEN)
+        subprocess.Popen([str(binary_path)], cwd=str(bundle_path))
+        return True
+    else:
+        print_color(f"❌ Binary not found at {binary_path}", Colors.RED)
+        return False
+
+def run_windows():
+    """Run the Windows app in debug mode"""
+    print_color("\n🪟 Running Windows app...", Colors.CYAN)
+    
+    if platform.system() != "Windows":
+        print_color("⚠️  Windows app can only be run on Windows!", Colors.YELLOW)
+        return False
+    
+    print_color("Starting Windows app (press Ctrl+C to stop)...", Colors.GREEN)
+    run("flutter run -d windows", cwd=PROJECT_DIR)
+    return True
+
+def run_windows_release():
+    """Run the Windows app in release mode"""
+    print_color("\n🪟 Running Windows app (RELEASE mode)...", Colors.CYAN)
+    
+    if platform.system() != "Windows":
+        print_color("⚠️  Windows app can only be run on Windows!", Colors.YELLOW)
+        return False
+    
+    # Clean cache first
+    clean_windows_cache()
+    
+    # Build
+    if not run("flutter build windows --release", cwd=PROJECT_DIR):
+        print_color("❌ Build failed, cannot run", Colors.RED)
+        return False
+    
+    # Run the built binary
+    exe_path = os.path.join(PROJECT_DIR, "build/windows/runner/Release", f"{APP_BINARY_NAME}.exe")
+    
+    if os.path.exists(exe_path):
+        print_color(f"Running: {exe_path}", Colors.GREEN)
+        os.startfile(exe_path)
+        return True
+    else:
+        print_color(f"❌ Executable not found at {exe_path}", Colors.RED)
+        return False
+
+def run_android():
+    """Run Android app on connected device/emulator"""
+    print_color("\n📱 Running Android app...", Colors.CYAN)
+    
+    if not check_device_connected():
+        print_color("⚠️  No Android device/emulator detected!", Colors.YELLOW)
+        print_color("   Please start an emulator or connect a device via USB", Colors.YELLOW)
+        choice = input("   Continue anyway? (y/n): ").lower()
+        if choice != 'y':
+            return False
+    
+    print_color("Starting Android app (press Ctrl+C to stop)...", Colors.GREEN)
+    run("flutter run", cwd=PROJECT_DIR)
+    return True
+
+def run_android_release():
+    """Run Android app in release mode"""
+    print_color("\n📱 Running Android app (RELEASE mode)...", Colors.CYAN)
+    
+    if not check_device_connected():
+        print_color("⚠️  No Android device/emulator detected!", Colors.YELLOW)
+        choice = input("   Continue anyway? (y/n): ").lower()
+        if choice != 'y':
+            return False
+    
+    print_color("Building and installing release APK...", Colors.GREEN)
+    run("flutter run --release", cwd=PROJECT_DIR)
+    return True
+
+def run_web():
+    """Run the app in web browser"""
+    print_color("\n🌐 Running Web app...", Colors.CYAN)
+    
+    print_color("Starting web server (press Ctrl+C to stop)...", Colors.GREEN)
+    print_color("   Open Chrome to see the app", Colors.BLUE)
+    run("flutter run -d chrome", cwd=PROJECT_DIR)
+    return True
+
+def list_devices():
+    """List available devices for running"""
+    print_color("\n📱 Available devices:", Colors.CYAN)
+    run("flutter devices", cwd=PROJECT_DIR)
+
+def hot_reload():
+    """Run with hot reload for development"""
+    print_color("\n🔥 Running with hot reload (development mode)...", Colors.CYAN)
+    print_color("   Press 'r' for hot reload", Colors.BLUE)
+    print_color("   Press 'R' for hot restart", Colors.BLUE)
+    print_color("   Press 'q' to quit", Colors.BLUE)
+    print_color("   Press 'h' for help", Colors.BLUE)
+    
+    if platform.system() == "Windows":
+        run("flutter run", cwd=PROJECT_DIR)
+    else:
+        run("flutter run", cwd=PROJECT_DIR)
+
+# ==================== BUILD FUNCTIONS ====================
+def build_linux_deb(skip_installer=False):
     """Build Debian .deb package"""
-    print("\n🐧 Building Linux .deb package...")
+    print_color("\n🐧 Building Linux .deb package...", Colors.CYAN)
     
     # Build Flutter Linux app
     if not run("flutter build linux --release", cwd=PROJECT_DIR):
@@ -109,8 +301,11 @@ def build_linux_deb():
     
     bundle_path = SCRIPT_DIR / "build/linux/x64/release/bundle"
     if not bundle_path.exists():
-        print("❌ Linux build failed - bundle not found")
+        print_color("❌ Linux build failed - bundle not found", Colors.RED)
         return False
+    
+    if skip_installer:
+        return True
     
     deb_dir = WORKSPACE_DIR / "deb_pkg"
     if deb_dir.exists():
@@ -175,14 +370,13 @@ exit 0
     shutil.move(str(deb_output), final_deb_path)
     save_build_metadata("linux_deb", str(final_deb_path))
     
-    print(f"✅ Linux .deb created: {final_deb_path}")
+    print_color(f"✅ Linux .deb created: {final_deb_path}", Colors.GREEN)
     return True
 
 def build_linux():
     """Build the Linux Debian package."""
     return build_linux_deb()
 
-# ==================== WINDOWS BUILD ====================
 def create_inno_script():
     """Generate Inno Setup script dynamically"""
     inno_script = f"""; Inno Setup Script for {APP_NAME}
@@ -222,20 +416,25 @@ Type: filesandordirs; Name: "{{app}}"
 
 def build_windows():
     """Build Windows .exe installer using Inno Setup"""
-    print("\n Windows Building Windows app...")
+    print_color("\n🪟 Building Windows app...", Colors.CYAN)
     
     if platform.system() != "Windows":
-        print("⚠️  Windows build must be run on Windows!")
-        print("   Use: GitHub Actions, Windows VM, or actual Windows machine")
+        print_color("⚠️  Windows build must be run on Windows!", Colors.YELLOW)
+        print_color("   Use: GitHub Actions, Windows VM, or actual Windows machine", Colors.YELLOW)
         return False
     
+    # Clean CMake cache before building (fixes generator mismatch)
+    clean_windows_cache()
+    
     # Build Flutter Windows app
+    print_color("\n🔨 Building Flutter Windows app...", Colors.BLUE)
     if not run("flutter build windows --release", cwd=PROJECT_DIR):
+        print_color("❌ Flutter build failed. Try manually running: flutter clean && flutter build windows --release", Colors.RED)
         return False
     
     exe_path = os.path.join(PROJECT_DIR, "build/windows/runner/Release")
     if not os.path.exists(exe_path):
-        print("❌ Windows build failed")
+        print_color(f"❌ Windows build failed - output not found at {exe_path}", Colors.RED)
         return False
     
     # Copy to staging directory
@@ -243,6 +442,7 @@ def build_windows():
     if os.path.exists(staging_dir):
         shutil.rmtree(staging_dir)
     shutil.copytree(exe_path, staging_dir)
+    print_color(f"✓ App files copied to {staging_dir}", Colors.GREEN)
     
     # Create Inno Setup script
     inno_script = create_inno_script()
@@ -251,30 +451,34 @@ def build_windows():
     iscc_paths = [
         r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
         r"C:\Program Files\Inno Setup 6\ISCC.exe",
+        r"C:\Program Files (x86)\Inno Setup 7\ISCC.exe",
+        r"C:\Program Files\Inno Setup 7\ISCC.exe",
     ]
     
     iscc_found = False
     for path in iscc_paths:
         if os.path.exists(path):
             iscc_found = True
+            print_color(f"\n📦 Creating Inno Setup installer...", Colors.BLUE)
             if not run(f'"{path}" "{inno_script}"', cwd=PROJECT_DIR):
                 return False
             break
     
     if not iscc_found:
-        print("❌ Inno Setup not found! Please install from: https://jrsoftware.org/isdl.php")
-        print(f"   Build files are in {staging_dir}")
+        print_color("❌ Inno Setup not found! Please install from: https://jrsoftware.org/isdl.php", Colors.RED)
+        print_color(f"   Build files are in {staging_dir}", Colors.YELLOW)
+        print_color("   You can manually create the installer using Inno Setup with the script at:", Colors.YELLOW)
+        print_color(f"   {inno_script}", Colors.YELLOW)
         return False
     
-    print(f"✅ Windows installer created in {WINDOWS_DIR}")
+    print_color(f"✅ Windows installer created in {WINDOWS_DIR}", Colors.GREEN)
     return True
 
-# ==================== ANDROID BUILD ====================
 def build_android():
     """Build Android APK and App Bundle"""
-    print("\n📱 Building Android app...")
+    print_color("\n📱 Building Android app...", Colors.CYAN)
     
-    print("\nAndroid Build Options:")
+    print_color("\nAndroid Build Options:", Colors.BOLD)
     print("1. APK (Universal)")
     print("2. App Bundle (.aab - for Play Store)")
     print("3. Split APKs (per ABI)")
@@ -285,6 +489,7 @@ def build_android():
     success = True
     
     if choice == "1" or choice == "4":
+        print_color("\n🔨 Building APK...", Colors.BLUE)
         if not run("flutter build apk --release", cwd=PROJECT_DIR):
             success = False
         else:
@@ -293,9 +498,10 @@ def build_android():
                 apk_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_v{APP_VERSION}.apk")
                 shutil.copy(apk_path, apk_dest)
                 save_build_metadata("android_apk", apk_dest)
-                print(f"✅ APK created: {apk_dest}")
+                print_color(f"✅ APK created: {apk_dest}", Colors.GREEN)
     
     if choice == "2" or choice == "4":
+        print_color("\n🔨 Building App Bundle...", Colors.BLUE)
         if not run("flutter build appbundle --release", cwd=PROJECT_DIR):
             success = False
         else:
@@ -304,9 +510,10 @@ def build_android():
                 aab_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_v{APP_VERSION}.aab")
                 shutil.copy(aab_path, aab_dest)
                 save_build_metadata("android_aab", aab_dest)
-                print(f"✅ App Bundle created: {aab_dest}")
+                print_color(f"✅ App Bundle created: {aab_dest}", Colors.GREEN)
     
     if choice == "3":
+        print_color("\n🔨 Building Split APKs...", Colors.BLUE)
         if not run("flutter build apk --release --split-per-abi", cwd=PROJECT_DIR):
             success = False
         else:
@@ -316,43 +523,54 @@ def build_android():
                 if os.path.exists(src):
                     dst = os.path.join(ANDROID_DIR, apk.replace("app-", f"{APP_NAME}_"))
                     shutil.copy(src, dst)
-                    print(f"✅ {dst}")
+                    print_color(f"✅ {dst}", Colors.GREEN)
     
     return success
 
 # ==================== UTILITIES ====================
 def clean_all():
     """Clean all build artifacts"""
-    print("\n🧹 Cleaning build artifacts...")
+    print_color("\n🧹 Cleaning all build artifacts...", Colors.YELLOW)
     
     dirs_to_clean = [
         SCRIPT_DIR / "build",
         WORKSPACE_DIR / "deb_pkg",
         SCRIPT_DIR / ".dart_tool",
+        SCRIPT_DIR / "windows/CMakeCache.txt",
+        SCRIPT_DIR / "windows/CMakeFiles",
+        SCRIPT_DIR / "windows/flutter/ephemeral",
     ]
+    
     for dir_path in dirs_to_clean:
         if dir_path.exists():
-            shutil.rmtree(dir_path)
-            print(f"✓ Removed {dir_path}")
+            if dir_path.is_file():
+                dir_path.unlink()
+                print_color(f"✓ Removed file: {dir_path}", Colors.GREEN)
+            else:
+                shutil.rmtree(dir_path)
+                print_color(f"✓ Removed directory: {dir_path}", Colors.GREEN)
     
     # Clean Flutter cache
     run("flutter clean", cwd=PROJECT_DIR)
     
-    print("✅ Clean complete!")
+    print_color("✅ Clean complete!", Colors.GREEN)
 
 def list_builds():
     """List all previously built installers"""
-    print("\n📦 Previously built installers:")
+    print_color("\n📦 Previously built installers:", Colors.CYAN)
     
+    found = False
     for platform_dir in [LINUX_DIR, WINDOWS_DIR, ANDROID_DIR]:
         if os.path.exists(platform_dir) and os.listdir(platform_dir):
-            print(f"\n{platform_dir.split('/')[-1].upper()}:")
+            found = True
+            print_color(f"\n{Path(platform_dir).name.upper()}:", Colors.BOLD)
             for file in os.listdir(platform_dir):
                 file_path = os.path.join(platform_dir, file)
                 size = os.path.getsize(file_path) // (1024 * 1024)
                 print(f"  📄 {file} ({size} MB)")
-        else:
-            print(f"\n{platform_dir.split('/')[-1].upper()}: No builds found")
+    
+    if not found:
+        print_color("\nNo builds found yet. Run a build first!", Colors.YELLOW)
 
 def open_installer_dir():
     """Open installer directory in file manager"""
@@ -360,9 +578,49 @@ def open_installer_dir():
         if platform.system() == "Linux":
             run(f'xdg-open "{INSTALLER_DIR}"')
         elif platform.system() == "Windows":
-            run(f'explorer "{INSTALLER_DIR}"')
+            os.startfile(INSTALLER_DIR)
         else:
-            print(f"Installer directory: {INSTALLER_DIR}")
+            print_color(f"Installer directory: {INSTALLER_DIR}", Colors.BLUE)
+
+def fix_windows_build():
+    """Specifically fix Windows build issues"""
+    print_color("\n🔧 Fixing Windows build environment...", Colors.YELLOW)
+    
+    # Clean all caches
+    clean_windows_cache()
+    
+    # Check Visual Studio
+    print_color("\n🔍 Checking Visual Studio installation...", Colors.BLUE)
+    vs_paths = [
+        r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat",
+        r"C:\Program Files\Microsoft Visual Studio\2019\Community\Common7\Tools\VsDevCmd.bat",
+    ]
+    
+    vs_found = False
+    for vs_path in vs_paths:
+        if os.path.exists(vs_path):
+            vs_found = True
+            print_color(f"✓ Found Visual Studio: {vs_path}", Colors.GREEN)
+            break
+    
+    if not vs_found:
+        print_color("⚠️  Visual Studio not found in standard locations", Colors.YELLOW)
+        print_color("   Make sure Visual Studio 2022 is installed with 'Desktop development with C++' workload", Colors.YELLOW)
+    
+    print_color("\n✅ Windows build fix complete!", Colors.GREEN)
+    print_color("   Now try building again with option 2", Colors.BLUE)
+
+def run_tests():
+    """Run Flutter tests"""
+    print_color("\n🧪 Running Flutter tests...", Colors.CYAN)
+    run("flutter test", cwd=PROJECT_DIR)
+
+def analyze_code():
+    """Run Flutter analyzer"""
+    print_color("\n🔍 Analyzing code...", Colors.CYAN)
+    run("flutter analyze", cwd=PROJECT_DIR)
 
 # ==================== MAIN MENU ====================
 def main_menu():
@@ -370,77 +628,150 @@ def main_menu():
     system = platform.system()
     
     while True:
-        print(f"""
-╔══════════════════════════════════════════╗
-║     Flutter Build Automation v{APP_VERSION}        ║
-║     System: {system}                         ║
-╚══════════════════════════════════════════╝
+        print_color(f"""
+╔════════════════════════════════════════════════════════════╗
+║           Flutter Build Automation v{APP_VERSION}                    ║
+║           System: {system}                                        
+╚════════════════════════════════════════════════════════════╝
 
-📦 Build Options:
-  1. 🐧 Linux (.deb)
-  2. 🪟 Windows (.exe + Inno Setup)
+{'📦 BUILD OPTIONS:':^50}
+  1. 🐧 Linux (.deb installer)
+  2. 🪟 Windows (.exe + Inno Setup installer)
   3. 📱 Android (.apk + .aab)
-  4. 🔨 Build ALL (for current OS)
 
-🛠️  Utilities:
-  5. 🧹 Clean all build files
-  6. 📋 List previous builds
-  7. 📂 Open installer directory
-  8. 🚪 Exit
+{'🚀 RUN OPTIONS:':^50}
+  4. 🐧 Run Linux (debug mode)
+  5. 🪟 Run Windows (debug mode)
+  6. 📱 Run Android (debug mode)
+  7. 🌐 Run Web (Chrome)
+  8. 🔥 Run with Hot Reload (development)
+
+{'⚡ RELEASE RUN OPTIONS:':^50}
+  9. 🐧 Run Linux (release mode)
+  10. 🪟 Run Windows (release mode)
+  11. 📱 Run Android (release mode)
+
+{'🛠️  UTILITIES:':^50}
+  12. 🧹 Clean all build files
+  13. 🔧 Fix Windows build (clear CMake cache)
+  14. 📋 List previous builds
+  15. 📂 Open installer directory
+  16. 📱 List available devices
+  17. 🧪 Run tests
+  18. 🔍 Analyze code
+  19. 🚪 Exit
 
 Current platform: {system}
 """)
         
-        choice = input("Enter your choice (1-8): ").strip()
+        choice = input("Enter your choice (1-19): ").strip()
 
-        if choice == "8":
-            print("\n👋 Goodbye!")
+        if choice == "19":
+            print_color("\n👋 Goodbye!", Colors.GREEN)
             break
-        elif choice in {"6", "7"}:
-            if choice == "6":
-                list_builds()
-            else:
-                open_installer_dir()
-            continue
-        elif choice == "5":
+        
+        # Utility options (no flutter check needed)
+        if choice == "12":
             clean_all()
+            input("\nPress Enter to continue...")
             continue
-
+        elif choice == "13":
+            if system == "Windows":
+                fix_windows_build()
+            else:
+                print_color("⚠️  This option is only for Windows!", Colors.YELLOW)
+            input("\nPress Enter to continue...")
+            continue
+        elif choice == "14":
+            list_builds()
+            input("\nPress Enter to continue...")
+            continue
+        elif choice == "15":
+            open_installer_dir()
+            input("\nPress Enter to continue...")
+            continue
+        elif choice == "16":
+            list_devices()
+            input("\nPress Enter to continue...")
+            continue
+        elif choice == "17":
+            run_tests()
+            input("\nPress Enter to continue...")
+            continue
+        elif choice == "18":
+            analyze_code()
+            input("\nPress Enter to continue...")
+            continue
+        
+        # Build and run options need flutter check
         if not check_flutter():
-            print("❌ Flutter not properly configured!")
+            print_color("❌ Flutter not properly configured!", Colors.RED)
+            input("\nPress Enter to continue...")
             continue
-
+        
         ensure_dirs()
-
+        
+        # Build options
         if choice == "1":
-            build_linux()
+            if system != "Linux":
+                print_color("⚠️  Linux builds require Linux OS!", Colors.YELLOW)
+                print_color("   This script must be run on Ubuntu/Debian", Colors.YELLOW)
+            else:
+                build_linux()
         elif choice == "2":
             if system != "Windows":
-                print("⚠️  Windows builds require Windows OS!")
-                print("   Use option 8 to exit, then run on Windows")
-                input("Press Enter to continue...")
+                print_color("⚠️  Windows builds require Windows OS!", Colors.YELLOW)
+                print_color("   Run this script on Windows", Colors.YELLOW)
             else:
                 build_windows()
         elif choice == "3":
             build_android()
+        
+        # Run options (debug)
         elif choice == "4":
-            if system == "Linux":
-                build_linux()
-                build_android()
-            elif system == "Windows":
-                build_windows()
-                build_android()
+            if system != "Linux":
+                print_color("⚠️  Linux run requires Linux OS!", Colors.YELLOW)
             else:
-                print("❌ Unsupported OS for building all targets")
+                run_linux()
+        elif choice == "5":
+            if system != "Windows":
+                print_color("⚠️  Windows run requires Windows OS!", Colors.YELLOW)
+            else:
+                run_windows()
+        elif choice == "6":
+            run_android()
+        elif choice == "7":
+            run_web()
+        elif choice == "8":
+            hot_reload()
+        
+        # Run options (release)
+        elif choice == "9":
+            if system != "Linux":
+                print_color("⚠️  Linux run requires Linux OS!", Colors.YELLOW)
+            else:
+                run_linux_release()
+        elif choice == "10":
+            if system != "Windows":
+                print_color("⚠️  Windows run requires Windows OS!", Colors.YELLOW)
+            else:
+                run_windows_release()
+        elif choice == "11":
+            run_android_release()
+        
         else:
-            print("❌ Invalid choice")
+            print_color("❌ Invalid choice", Colors.RED)
+        
+        input("\nPress Enter to continue...")
 
 if __name__ == "__main__":
     try:
         main_menu()
     except KeyboardInterrupt:
-        print("\n\n👋 Build cancelled. Goodbye!")
+        print_color("\n\n👋 Build cancelled. Goodbye!", Colors.YELLOW)
         sys.exit(0)
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print_color(f"\n❌ Unexpected error: {e}", Colors.RED)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
