@@ -62,9 +62,6 @@ media/
 staticfiles/
 db.sqlite3
 
-# Migrations (optional — usually keep them)
-# */migrations/*
-# !*/migrations/__init__.py
 
 # IDEs
 .vscode/
