@@ -10,12 +10,12 @@ class AppConfig {
   static const String devMediaUrlAndroid = 'http://10.0.2.2:8000/media/';
 
   // Production environment (your VPS)
-  static const String prodApiUrl = 'http://api.felixmokayabeatz.online/api/';
+  static const String prodApiUrl = 'https://api.felixmokayabeatz.online/api/';
   static const String prodMediaUrl =
-      'http://api.felixmokayabeatz.online/media/';
+      'https://api.felixmokayabeatz.online/media/';
 
   // Change this to false when building for production
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
   static String get apiUrl {
     if (!isDevelopment) return prodApiUrl;
