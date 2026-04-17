@@ -1,5 +1,3 @@
-# api/views.py
-
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -95,12 +93,20 @@ class SyncViewSet(viewsets.GenericViewSet):
             }
         )
         
-        SyncLog.objects.create(
+        # UPDATE instead of CREATE - one record per user
+        sync_log, created_log = SyncLog.objects.update_or_create(
             user=request.user,
-            device_id=device_id,
-            sync_type='upload',
-            status='success'
+            defaults={
+                'device_id': device_id,
+                'sync_type': 'upload',
+                'status': 'success',
+                'error_message': None,
+                'timestamp': timezone.now(),
+            }
         )
+        # Increment total syncs counter
+        sync_log.total_syncs = sync_log.total_syncs + 1
+        sync_log.save(update_fields=['total_syncs'])
         
         return Response({
             'status': 'synced', 
@@ -117,12 +123,20 @@ class SyncViewSet(viewsets.GenericViewSet):
         try:
             data = EncryptedData.objects.get(user=request.user, data_type=data_type)
             
-            SyncLog.objects.create(
+            # UPDATE instead of CREATE - one record per user
+            sync_log, created_log = SyncLog.objects.update_or_create(
                 user=request.user,
-                device_id=device_id,
-                sync_type='download',
-                status='success'
+                defaults={
+                    'device_id': device_id,
+                    'sync_type': 'download',
+                    'status': 'success',
+                    'error_message': None,
+                    'timestamp': timezone.now(),
+                }
             )
+            # Increment total syncs counter
+            sync_log.total_syncs = sync_log.total_syncs + 1
+            sync_log.save(update_fields=['total_syncs'])
             
             return Response({
                 'encrypted_content': data.encrypted_content,
@@ -165,12 +179,20 @@ class SyncViewSet(viewsets.GenericViewSet):
         except EncryptedData.DoesNotExist:
             pass
         
-        SyncLog.objects.create(
+        # UPDATE instead of CREATE - one record per user
+        sync_log, created_log = SyncLog.objects.update_or_create(
             user=request.user,
-            device_id=device_id,
-            sync_type='delete',
-            status='success'
+            defaults={
+                'device_id': device_id,
+                'sync_type': 'delete',
+                'status': 'success',
+                'error_message': None,
+                'timestamp': timezone.now(),
+            }
         )
+        # Increment total syncs counter
+        sync_log.total_syncs = sync_log.total_syncs + 1
+        sync_log.save(update_fields=['total_syncs'])
         
         return Response({'success': True, 'account_id': account_id})
     
@@ -178,6 +200,21 @@ class SyncViewSet(viewsets.GenericViewSet):
     def delete_all_accounts(self, request):
         EncryptedData.objects.filter(user=request.user, data_type='otp_accounts').delete()
         AccountTombstone.objects.get_or_create(user=request.user, account_id='__ALL__')
+        
+        # Update sync log for delete all
+        sync_log, created_log = SyncLog.objects.update_or_create(
+            user=request.user,
+            defaults={
+                'device_id': request.data.get('device_id', 'unknown'),
+                'sync_type': 'delete_all',
+                'status': 'success',
+                'error_message': None,
+                'timestamp': timezone.now(),
+            }
+        )
+        sync_log.total_syncs = sync_log.total_syncs + 1
+        sync_log.save(update_fields=['total_syncs'])
+        
         return Response({'success': True})
 
 

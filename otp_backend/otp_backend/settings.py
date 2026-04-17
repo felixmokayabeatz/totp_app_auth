@@ -114,12 +114,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'otp_backend.wsgi.application'
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DJANGO_DB_NAME'),
+        'USER': os.getenv('DJANGO_DB_USER'),
+        'PASSWORD': os.getenv('DJANGO_DB_PASSWORD'),
+        'HOST': os.getenv('DJANGO_DB_HOST'),
+        'PORT': os.getenv('DJANGO_DB_PORT_POSTGRESQL'),
     }
 }
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -161,3 +173,8 @@ if DEBUG:
     print(f"EMAIL_USE_TLS: {EMAIL_USE_TLS}")
     print(f"EMAIL_HOST_USER: {EMAIL_HOST_USER}")
     print(f"EMAIL_HOST_PASSWORD: {'True' if EMAIL_HOST_PASSWORD else None}")
+    print("==========The Db settings==========")
+    print(f"DB_NAME: {os.getenv('DJANGO_DB_NAME')}")
+    print(f"DB_USER: {os.getenv('DJANGO_DB_USER')}")    
+    print(f"DB_PASSWORD: {'True' if os.getenv('DJANGO_DB_PASSWORD') else None}")
+    print(f"DB_HOST: {os.getenv('DJANGO_DB_HOST')}")
