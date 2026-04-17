@@ -126,18 +126,25 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
-      body: Column(
-        children: [
-          _buildHeader(isDark, accountCount),
-          _buildSearchBar(isDark),
-          Expanded(child: _buildAccountsList(isDark)),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Check if it's a wide screen (laptop/desktop)
+          final isWideScreen = constraints.maxWidth > 600;
+
+          return Column(
+            children: [
+              _buildHeader(isDark, accountCount, isWideScreen),
+              _buildSearchBar(isDark, isWideScreen),
+              Expanded(child: _buildAccountsList(isDark)),
+            ],
+          );
+        },
       ),
     );
   }
 
-  // ─── Header with account count - FIXED for Android overflow ──────────────────
-  Widget _buildHeader(bool isDark, int accountCount) {
+  // ─── Header with account count - FIXED for desktop right alignment ──────────────────
+  Widget _buildHeader(bool isDark, int accountCount, bool isWideScreen) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
@@ -151,9 +158,10 @@ class _HomeScreenState extends State<HomeScreen>
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Row(
             children: [
+              // Left side - Profile picture and app info
               GestureDetector(
                 onTap: () async {
                   final result = await Navigator.push(context,
@@ -190,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,45 +240,83 @@ class _HomeScreenState extends State<HomeScreen>
                   ],
                 ),
               ),
-              Flexible(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _headerAction(
-                          _allBlurred
-                              ? Icons.visibility_rounded
-                              : Icons.visibility_off_rounded,
-                          _toggleBlurAll,
-                          tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
-                      const SizedBox(width: 2),
-                      _headerAction(Icons.sync_rounded, _syncData,
-                          tooltip: 'Sync', loading: _isSyncing),
-                      const SizedBox(width: 2),
-                      _headerAction(
-                          Icons.settings_rounded,
-                          () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => SettingsScreen())),
-                          tooltip: 'Settings'),
-                      const SizedBox(width: 2),
-                      _headerAction(
-                          isDark
-                              ? Icons.light_mode_rounded
-                              : Icons.dark_mode_rounded,
-                          () =>
-                              Provider.of<ThemeProvider>(context, listen: false)
-                                  .toggleTheme(),
-                          tooltip: 'Theme'),
-                      const SizedBox(width: 2),
-                      _headerAction(Icons.logout_rounded, _logout,
-                          tooltip: 'Logout'),
-                    ],
+              // Right side - Action buttons (properly aligned to the right)
+              if (!isWideScreen)
+                // Phone layout: scrollable buttons
+                Flexible(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _headerAction(
+                            _allBlurred
+                                ? Icons.visibility_rounded
+                                : Icons.visibility_off_rounded,
+                            _toggleBlurAll,
+                            tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
+                        const SizedBox(width: 2),
+                        _headerAction(Icons.sync_rounded, _syncData,
+                            tooltip: 'Sync', loading: _isSyncing),
+                        const SizedBox(width: 2),
+                        _headerAction(
+                            Icons.settings_rounded,
+                            () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => SettingsScreen())),
+                            tooltip: 'Settings'),
+                        const SizedBox(width: 2),
+                        _headerAction(
+                            isDark
+                                ? Icons.light_mode_rounded
+                                : Icons.dark_mode_rounded,
+                            () => Provider.of<ThemeProvider>(context,
+                                    listen: false)
+                                .toggleTheme(),
+                            tooltip: 'Theme'),
+                        const SizedBox(width: 2),
+                        _headerAction(Icons.logout_rounded, _logout,
+                            tooltip: 'Logout'),
+                      ],
+                    ),
                   ),
+                )
+              else
+                // Desktop layout: buttons fixed to the right
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _headerAction(
+                        _allBlurred
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_rounded,
+                        _toggleBlurAll,
+                        tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
+                    const SizedBox(width: 4),
+                    _headerAction(Icons.sync_rounded, _syncData,
+                        tooltip: 'Sync', loading: _isSyncing),
+                    const SizedBox(width: 4),
+                    _headerAction(
+                        Icons.settings_rounded,
+                        () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => SettingsScreen())),
+                        tooltip: 'Settings'),
+                    const SizedBox(width: 4),
+                    _headerAction(
+                        isDark
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                        () => Provider.of<ThemeProvider>(context, listen: false)
+                            .toggleTheme(),
+                        tooltip: 'Theme'),
+                    const SizedBox(width: 4),
+                    _headerAction(Icons.logout_rounded, _logout,
+                        tooltip: 'Logout'),
+                  ],
                 ),
-              ),
             ],
           ),
         ),
@@ -304,66 +350,84 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─── Search bar ───────────────────────────────────────────────────────────
-  Widget _buildSearchBar(bool isDark) {
+  // ─── Search bar with responsive width ───────────────────────────────────────────
+  Widget _buildSearchBar(bool isDark, bool isWideScreen) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E32) : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
+      constraints: BoxConstraints(
+        maxWidth: isWideScreen ? 600 : double.infinity,
       ),
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              style: TextStyle(
-                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                  fontSize: 14),
-              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Search accounts…',
-                hintStyle: TextStyle(
-                    color: isDark ? Colors.white38 : Colors.grey[400],
-                    fontSize: 14),
-                prefixIcon: Icon(Icons.search_rounded,
-                    color: isDark ? Colors.white38 : Colors.grey[400],
-                    size: 20),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: () async {
-              final result = await Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => AddAccountScreen()));
-              if (result == true) {
-                await _initUserBox();
-                _updateAllOTPs();
-              }
-            },
             child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                  color: const Color(0xFF4F46E5),
-                  borderRadius: BorderRadius.circular(10)),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
+                color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))
+                ],
+              ),
+              child: Row(
                 children: [
-                  Icon(Icons.add_rounded, color: Colors.white, size: 18),
-                  SizedBox(width: 4),
-                  Text('Add',
+                  Expanded(
+                    child: TextField(
                       style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
+                          color:
+                              isDark ? Colors.white : const Color(0xFF1A1A2E),
+                          fontSize: 14),
+                      onChanged: (v) =>
+                          setState(() => _searchQuery = v.toLowerCase()),
+                      decoration: InputDecoration(
+                        hintText: 'Search accounts…',
+                        hintStyle: TextStyle(
+                            color: isDark ? Colors.white38 : Colors.grey[400],
+                            fontSize: 14),
+                        prefixIcon: Icon(Icons.search_rounded,
+                            color: isDark ? Colors.white38 : Colors.grey[400],
+                            size: 20),
+                        border: InputBorder.none,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () async {
+                      final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => AddAccountScreen()));
+                      if (result == true) {
+                        await _initUserBox();
+                        _updateAllOTPs();
+                      }
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF4F46E5),
+                          borderRadius: BorderRadius.circular(10)),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_rounded,
+                              color: Colors.white, size: 18),
+                          SizedBox(width: 4),
+                          Text('Add',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -428,199 +492,205 @@ class _HomeScreenState extends State<HomeScreen>
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: accounts.length,
-      itemBuilder: (context, index) {
-        final account = accounts[index];
-        final otp = currentOTPs[account.id] ?? '------';
-        final timer = timers[account.id] ?? 30;
-        final isBlurred = blurredCodes[account.id] ?? false;
-        final isExpiring = timer <= 5;
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          itemCount: accounts.length,
+          itemBuilder: (context, index) {
+            final account = accounts[index];
+            final otp = currentOTPs[account.id] ?? '------';
+            final timer = timers[account.id] ?? 30;
+            final isBlurred = blurredCodes[account.id] ?? false;
+            final isExpiring = timer <= 5;
 
-        // Format creation date
-        final addedDate = _formatDate(account.createdAt);
+            // Format creation date
+            final addedDate = _formatDate(account.createdAt);
 
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E1E32) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isExpiring
-                  ? Colors.red.withOpacity(0.4)
-                  : (isDark
-                      ? Colors.white.withOpacity(0.06)
-                      : Colors.transparent),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3))
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isExpiring
+                      ? Colors.red.withOpacity(0.4)
+                      : (isDark
+                          ? Colors.white.withOpacity(0.06)
+                          : Colors.transparent),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3))
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
                   children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4F46E5).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(_getServiceIcon(account.service),
-                          color: const Color(0xFF4F46E5), size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(account.service,
-                              style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark
-                                      ? Colors.white
-                                      : const Color(0xFF1A1A2E)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis),
-                          if (account.issuer != null)
-                            Text(account.issuer!,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? Colors.white38
-                                        : Colors.grey[500]),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis),
-                          // Added date
-                          Row(
+                    Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4F46E5).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(_getServiceIcon(account.service),
+                              color: const Color(0xFF4F46E5), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.calendar_today,
-                                  size: 10,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : Colors.grey[400]),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Added $addedDate',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : Colors.grey[400],
-                                ),
+                              Text(account.service,
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1A1A2E)),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                              if (account.issuer != null)
+                                Text(account.issuer!,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? Colors.white38
+                                            : Colors.grey[500]),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                              // Added date
+                              Row(
+                                children: [
+                                  Icon(Icons.calendar_today,
+                                      size: 10,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.grey[400]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Added $addedDate',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.grey[400],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isExpiring
+                                    ? Colors.red.withOpacity(0.1)
+                                    : const Color(0xFF4F46E5).withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                isBlurred ? '●●● ●●●' : _formatOtp(otp),
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: isExpiring
+                                      ? Colors.red
+                                      : (isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1A1A2E)),
+                                  letterSpacing: 3,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text('${timer}s',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isExpiring
+                                        ? Colors.red
+                                        : (isDark
+                                            ? Colors.white38
+                                            : Colors.grey[500]))),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: timer / 30,
+                        backgroundColor:
+                            isDark ? Colors.white10 : Colors.grey[100],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            isExpiring ? Colors.red : const Color(0xFF4F46E5)),
+                        minHeight: 4,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    const SizedBox(height: 12),
+                    Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isExpiring
-                                ? Colors.red.withOpacity(0.1)
-                                : const Color(0xFF4F46E5).withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            isBlurred ? '●●● ●●●' : _formatOtp(otp),
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: isExpiring
-                                  ? Colors.red
-                                  : (isDark
-                                      ? Colors.white
-                                      : const Color(0xFF1A1A2E)),
-                              letterSpacing: 3,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
+                        _accountAction(Icons.copy_rounded, 'Copy',
+                            () => _copyToClipboard(otp), isDark),
+                        const SizedBox(width: 8),
+                        _accountAction(
+                          isBlurred
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
+                          isBlurred ? 'Show' : 'Hide',
+                          () => setState(
+                              () => blurredCodes[account.id] = !isBlurred),
+                          isDark,
                         ),
-                        const SizedBox(height: 4),
-                        Text('${timer}s',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isExpiring
-                                    ? Colors.red
-                                    : (isDark
-                                        ? Colors.white38
-                                        : Colors.grey[500]))),
+                        const SizedBox(width: 8),
+                        _accountAction(
+                          Icons.qr_code_rounded,
+                          'QR',
+                          () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => ShowQRScreen(
+                                      secret: account.secret,
+                                      service: account.service,
+                                      issuer: account.issuer))),
+                          isDark,
+                        ),
+                        const Spacer(),
+                        _accountAction(
+                          Icons.delete_outline_rounded,
+                          'Delete',
+                          () => _showDeleteAccountDialog(
+                              account.id, account.service),
+                          isDark,
+                          destructive: true,
+                        ),
                       ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: timer / 30,
-                    backgroundColor: isDark ? Colors.white10 : Colors.grey[100],
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                        isExpiring ? Colors.red : const Color(0xFF4F46E5)),
-                    minHeight: 4,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _accountAction(Icons.copy_rounded, 'Copy',
-                        () => _copyToClipboard(otp), isDark),
-                    const SizedBox(width: 8),
-                    _accountAction(
-                      isBlurred
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_rounded,
-                      isBlurred ? 'Show' : 'Hide',
-                      () =>
-                          setState(() => blurredCodes[account.id] = !isBlurred),
-                      isDark,
-                    ),
-                    const SizedBox(width: 8),
-                    _accountAction(
-                      Icons.qr_code_rounded,
-                      'QR',
-                      () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => ShowQRScreen(
-                                  secret: account.secret,
-                                  service: account.service,
-                                  issuer: account.issuer))),
-                      isDark,
-                    ),
-                    const Spacer(),
-                    _accountAction(
-                      Icons.delete_outline_rounded,
-                      'Delete',
-                      () =>
-                          _showDeleteAccountDialog(account.id, account.service),
-                      isDark,
-                      destructive: true,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
