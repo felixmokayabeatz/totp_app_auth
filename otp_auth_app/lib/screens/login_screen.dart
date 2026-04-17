@@ -22,9 +22,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final _resetNewPasswordController = TextEditingController();
   final _resetConfirmPasswordController = TextEditingController();
   final _resetOtpCodeController = TextEditingController();
-  
+
   final SyncService _syncService = SyncService();
-  
+
   bool _isLogin = true;
   bool _isLoading = false;
   bool _show2FA = false;
@@ -48,20 +48,20 @@ class _LoginScreenState extends State<LoginScreen> {
   String _passwordStrengthText = '';
   Color _passwordStrengthColor = Colors.grey;
   List<String> _passwordSuggestions = [];
-  
+
   // Reset password strength
   double _resetPasswordStrength = 0.0;
   String _resetPasswordStrengthText = '';
   Color _resetPasswordStrengthColor = Colors.grey;
   List<String> _resetPasswordSuggestions = [];
- 
+
   @override
   void initState() {
     super.initState();
     _passwordController.addListener(_checkPasswordStrength);
     _resetNewPasswordController.addListener(_checkResetPasswordStrength);
   }
-  
+
   void _checkPasswordStrength() {
     final password = _passwordController.text;
     if (password.isEmpty) {
@@ -73,10 +73,10 @@ class _LoginScreenState extends State<LoginScreen> {
       });
       return;
     }
-    
+
     int score = 0;
     List<String> suggestions = [];
-    
+
     if (password.length >= 12) {
       score += 25;
     } else if (password.length >= 8) {
@@ -84,25 +84,25 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       suggestions.add('Use at least 8 characters (12+ recommended)');
     }
-    
+
     if (password.contains(RegExp(r'[0-9]'))) {
       score += 25;
     } else {
       suggestions.add('Add a number');
     }
-    
+
     if (password.contains(RegExp(r'[A-Z]'))) {
       score += 25;
     } else {
       suggestions.add('Add an uppercase letter');
     }
-    
+
     if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) {
       score += 25;
     } else {
       suggestions.add('Add a special character (!@#\$%^&*)');
     }
-    
+
     setState(() {
       _passwordStrength = score / 100;
       if (score < 50) {
@@ -118,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _passwordSuggestions = suggestions;
     });
   }
-  
+
   void _checkResetPasswordStrength() {
     final password = _resetNewPasswordController.text;
     if (password.isEmpty) {
@@ -130,10 +130,10 @@ class _LoginScreenState extends State<LoginScreen> {
       });
       return;
     }
-    
+
     int score = 0;
     List<String> suggestions = [];
-    
+
     if (password.length >= 12) {
       score += 25;
     } else if (password.length >= 8) {
@@ -141,25 +141,25 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       suggestions.add('Use at least 8 characters (12+ recommended)');
     }
-    
+
     if (password.contains(RegExp(r'[0-9]'))) {
       score += 25;
     } else {
       suggestions.add('Add a number');
     }
-    
+
     if (password.contains(RegExp(r'[A-Z]'))) {
       score += 25;
     } else {
       suggestions.add('Add an uppercase letter');
     }
-    
+
     if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) {
       score += 25;
     } else {
       suggestions.add('Add a special character (!@#\$%^&*)');
     }
-    
+
     setState(() {
       _resetPasswordStrength = score / 100;
       if (score < 50) {
@@ -175,28 +175,28 @@ class _LoginScreenState extends State<LoginScreen> {
       _resetPasswordSuggestions = suggestions;
     });
   }
-  
+
   String _generateStrongPassword(int length) {
     const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const lowercase = 'abcdefghijkmnopqrstuvwxyz';
     const numbers = '23456789';
     const symbols = r'!@#$%^&*()_+-=[]{}|;:,.<>?';
-    
+
     String password = '';
     final random = DateTime.now().millisecondsSinceEpoch;
-    
+
     password += uppercase[random % uppercase.length];
     password += lowercase[(random + 1) % lowercase.length];
     password += numbers[(random + 2) % numbers.length];
     password += symbols[(random + 3) % symbols.length];
-    
+
     final allChars = uppercase + lowercase + numbers + symbols;
-    
+
     for (int i = password.length; i < length; i++) {
       final randomIndex = (random + i) % allChars.length;
       password += allChars[randomIndex];
     }
-    
+
     List<String> chars = password.split('');
     for (int i = chars.length - 1; i > 0; i--) {
       final j = (random + i) % (i + 1);
@@ -204,10 +204,10 @@ class _LoginScreenState extends State<LoginScreen> {
       chars[i] = chars[j];
       chars[j] = temp;
     }
-    
+
     return chars.join();
   }
-  
+
   void _suggestStrongPassword() {
     final length = _passwordLength.toInt();
     final strongPassword = _generateStrongPassword(length);
@@ -218,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     _showSuccess('Strong password generated! (${length} characters)');
   }
-  
+
   void _suggestResetStrongPassword() {
     final length = _resetPasswordLength.toInt();
     final strongPassword = _generateStrongPassword(length);
@@ -229,7 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     _showSuccess('Strong password generated! (${length} characters)');
   }
-  
+
   void _startResendTimer() {
     _resendTimer?.cancel();
     setState(() {
@@ -252,7 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     });
   }
-  
+
   void _resend2FACode() async {
     if (_resendCooldown > 0) {
       _showError('Please wait ${_resendCooldown} seconds before resending');
@@ -279,7 +279,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Failed to send code. Please try again.');
     }
   }
-  
+
   void _startResetResendTimer() {
     _resetResendTimer?.cancel();
     setState(() {
@@ -302,14 +302,16 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     });
   }
-  
+
   void _resendResetCode() async {
     if (_resetResendCooldown > 0) {
-      _showError('Please wait ${_resetResendCooldown} seconds before resending');
+      _showError(
+          'Please wait ${_resetResendCooldown} seconds before resending');
       return;
     }
     if (_resetEmail == null && _resetEmailController.text.isEmpty) {
-      _showError('No email address found. Please go back and enter your email again.');
+      _showError(
+          'No email address found. Please go back and enter your email again.');
       return;
     }
     final email = _resetEmail ?? _resetEmailController.text;
@@ -327,7 +329,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Failed to send code. Please try again.');
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -355,17 +357,21 @@ class _LoginScreenState extends State<LoginScreen> {
                     Icon(Icons.security, size: 80, color: Color(0xFF667eea)),
                     SizedBox(height: 20),
                     Text(
-                      _show2FA ? 'Enter 2FA Code' : 
-                      (_showResetPassword ? 'Reset Password' :
-                      (_showForgotPassword ? 'Forgot Password' :
-                      (_isLogin ? 'Welcome to BeatzLock' : 'Create BeatzLock Account'))),
+                      _show2FA
+                          ? 'Enter 2FA Code'
+                          : (_showResetPassword
+                              ? 'Reset Password'
+                              : (_showForgotPassword
+                                  ? 'Forgot Password'
+                                  : (_isLogin
+                                      ? 'Welcome to BeatzLock'
+                                      : 'Create BeatzLock Account'))),
                       style: TextStyle(
-                        fontSize: 28, 
+                        fontSize: 28,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     SizedBox(height: 30),
-                    
                     if (_showForgotPassword && !_showResetPassword) ...[
                       Text(
                         'Enter your email address to reset your password',
@@ -391,9 +397,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             ? SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : Text('Send Reset Code', style: TextStyle(fontSize: 18)),
+                            : Text('Send Reset Code',
+                                style: TextStyle(fontSize: 18)),
                         style: ElevatedButton.styleFrom(
                           minimumSize: Size(double.infinity, 50),
                           shape: RoundedRectangleBorder(
@@ -440,7 +448,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Color(0xFF667eea).withOpacity(0.3)),
+                          border: Border.all(
+                              color: Color(0xFF667eea).withOpacity(0.3)),
                         ),
                         child: TextField(
                           controller: _resetNewPasswordController,
@@ -449,13 +458,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'New Password',
                             labelStyle: TextStyle(color: Colors.grey.shade700),
-                            prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF667eea)),
+                            prefixIcon: Icon(Icons.lock_outline,
+                                color: Color(0xFF667eea)),
                             suffixIcon: IconButton(
-                              icon: Icon(_obscureResetPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                              onPressed: () => setState(() => _obscureResetPassword = !_obscureResetPassword),
+                              icon: Icon(
+                                  _obscureResetPassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: Colors.grey),
+                              onPressed: () => setState(() =>
+                                  _obscureResetPassword =
+                                      !_obscureResetPassword),
                             ),
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
                           ),
                         ),
                       ),
@@ -467,7 +484,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: LinearProgressIndicator(
                                 value: _resetPasswordStrength,
                                 backgroundColor: Colors.grey.shade300,
-                                valueColor: AlwaysStoppedAnimation<Color>(_resetPasswordStrengthColor),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    _resetPasswordStrengthColor),
                                 minHeight: 4,
                                 borderRadius: BorderRadius.circular(2),
                               ),
@@ -487,11 +505,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.format_size, size: 18, color: Color(0xFF667eea)),
+                          Icon(Icons.format_size,
+                              size: 18, color: Color(0xFF667eea)),
                           SizedBox(width: 8),
                           Text(
                             'Length: ${_resetPasswordLength.toInt()}',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF667eea)),
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF667eea)),
                           ),
                           Expanded(
                             child: Slider(
@@ -514,10 +536,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
                           onPressed: _suggestResetStrongPassword,
-                          icon: Icon(Icons.auto_awesome, size: 16, color: Color(0xFF667eea)),
+                          icon: Icon(Icons.auto_awesome,
+                              size: 16, color: Color(0xFF667eea)),
                           label: Text(
                             'Suggest strong password',
-                            style: TextStyle(fontSize: 12, color: Color(0xFF667eea)),
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF667eea)),
                           ),
                         ),
                       ),
@@ -526,7 +550,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Color(0xFF667eea).withOpacity(0.3)),
+                          border: Border.all(
+                              color: Color(0xFF667eea).withOpacity(0.3)),
                         ),
                         child: TextField(
                           controller: _resetConfirmPasswordController,
@@ -534,13 +559,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Confirm New Password',
                             labelStyle: TextStyle(color: Colors.grey.shade700),
-                            prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF667eea)),
+                            prefixIcon: Icon(Icons.lock_outline,
+                                color: Color(0xFF667eea)),
                             suffixIcon: IconButton(
-                              icon: Icon(_obscureResetConfirmPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                              onPressed: () => setState(() => _obscureResetConfirmPassword = !_obscureResetConfirmPassword),
+                              icon: Icon(
+                                  _obscureResetConfirmPassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: Colors.grey),
+                              onPressed: () => setState(() =>
+                                  _obscureResetConfirmPassword =
+                                      !_obscureResetConfirmPassword),
                             ),
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
                           ),
                         ),
                       ),
@@ -548,11 +581,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       ElevatedButton(
                         onPressed: _isLoading ? null : _resetPassword,
                         child: _isLoading
-                            ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : Text('Reset Password', style: TextStyle(fontSize: 18)),
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : Text('Reset Password',
+                                style: TextStyle(fontSize: 18)),
                         style: ElevatedButton.styleFrom(
                           minimumSize: Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -560,13 +599,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           TextButton(
-                            onPressed: _resetResendCooldown == 0 ? _resendResetCode : null,
+                            onPressed: _resetResendCooldown == 0
+                                ? _resendResetCode
+                                : null,
                             child: Text(
-                              _resetResendCooldown > 0 
+                              _resetResendCooldown > 0
                                   ? 'Resend code (${_resetResendCooldown}s)'
                                   : 'Resend code',
                               style: TextStyle(
-                                color: _resetResendCooldown > 0 ? Colors.grey : Color(0xFF667eea),
+                                color: _resetResendCooldown > 0
+                                    ? Colors.grey
+                                    : Color(0xFF667eea),
                               ),
                             ),
                           ),
@@ -599,7 +642,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       SizedBox(height: 16),
-                      
+
                       // Email field (only for registration)
                       if (!_isLogin) ...[
                         TextFormField(
@@ -615,7 +658,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         SizedBox(height: 16),
                       ],
-                      
+
                       // Password field with visibility toggle
                       TextFormField(
                         controller: _passwordController,
@@ -625,7 +668,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           prefixIcon: Icon(Icons.lock),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: Colors.grey,
                             ),
                             onPressed: () {
@@ -639,7 +684,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      
+
                       // Password strength indicator (only for registration)
                       if (!_isLogin && _passwordController.text.isNotEmpty) ...[
                         SizedBox(height: 8),
@@ -652,7 +697,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: LinearProgressIndicator(
                                     value: _passwordStrength,
                                     backgroundColor: Colors.grey.shade300,
-                                    valueColor: AlwaysStoppedAnimation<Color>(_passwordStrengthColor),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        _passwordStrengthColor),
                                     minHeight: 6,
                                     borderRadius: BorderRadius.circular(3),
                                   ),
@@ -688,19 +734,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                     SizedBox(height: 4),
-                                    ..._passwordSuggestions.map((suggestion) => Padding(
-                                      padding: EdgeInsets.only(left: 8, bottom: 2),
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.tips_and_updates, size: 12, color: Colors.amber.shade700),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            suggestion,
-                                            style: TextStyle(fontSize: 11, color: Colors.amber.shade800),
+                                    ..._passwordSuggestions.map((suggestion) =>
+                                        Padding(
+                                          padding: EdgeInsets.only(
+                                              left: 8, bottom: 2),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.tips_and_updates,
+                                                  size: 12,
+                                                  color: Colors.amber.shade700),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                suggestion,
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        Colors.amber.shade800),
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
-                                    )),
+                                        )),
                                   ],
                                 ),
                               ),
@@ -708,13 +761,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                       ],
-                      
+
                       // Password suggestion and length controls (only for registration)
                       if (!_isLogin) ...[
                         SizedBox(height: 8),
                         Row(
                           children: [
-                            Icon(Icons.format_size, size: 18, color: Color(0xFF667eea)),
+                            Icon(Icons.format_size,
+                                size: 18, color: Color(0xFF667eea)),
                             SizedBox(width: 8),
                             Text(
                               'Length: ${_passwordLength.toInt()}',
@@ -745,15 +799,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           alignment: Alignment.centerRight,
                           child: TextButton.icon(
                             onPressed: _suggestStrongPassword,
-                            icon: Icon(Icons.auto_awesome, size: 16, color: Color(0xFF667eea)),
+                            icon: Icon(Icons.auto_awesome,
+                                size: 16, color: Color(0xFF667eea)),
                             label: Text(
                               'Suggest strong password',
-                              style: TextStyle(fontSize: 12, color: Color(0xFF667eea)),
+                              style: TextStyle(
+                                  fontSize: 12, color: Color(0xFF667eea)),
                             ),
                           ),
                         ),
                       ],
-                      
+
                       // Confirm password field (only for registration)
                       if (!_isLogin) ...[
                         SizedBox(height: 8),
@@ -765,12 +821,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             prefixIcon: Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                                _obscureConfirmPassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
                                 color: Colors.grey,
                               ),
                               onPressed: () {
                                 setState(() {
-                                  _obscureConfirmPassword = !_obscureConfirmPassword;
+                                  _obscureConfirmPassword =
+                                      !_obscureConfirmPassword;
                                 });
                               },
                             ),
@@ -780,9 +839,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ],
-                      
+
                       SizedBox(height: 24),
-                      
+
                       ElevatedButton(
                         onPressed: _isLoading ? null : _submitLogin,
                         child: _isLoading
@@ -805,9 +864,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      
+
                       SizedBox(height: 16),
-                      
+
                       // Forgot Password link
                       if (_isLogin)
                         TextButton(
@@ -822,7 +881,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             style: TextStyle(color: Color(0xFF667eea)),
                           ),
                         ),
-                      
+
                       // Toggle login/register
                       TextButton(
                         onPressed: () {
@@ -836,9 +895,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           });
                         },
                         child: Text(
-                          _isLogin 
-                            ? 'No account? Register' 
-                            : 'Back to Login',
+                          _isLogin ? 'No account? Register' : 'Back to Login',
                         ),
                       ),
                     ] else ...[
@@ -874,7 +931,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ? SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : Text('Verify', style: TextStyle(fontSize: 18)),
                         style: ElevatedButton.styleFrom(
@@ -889,13 +947,16 @@ class _LoginScreenState extends State<LoginScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           TextButton(
-                            onPressed: _resendCooldown == 0 ? _resend2FACode : null,
+                            onPressed:
+                                _resendCooldown == 0 ? _resend2FACode : null,
                             child: Text(
-                              _resendCooldown > 0 
+                              _resendCooldown > 0
                                   ? 'Resend code (${_resendCooldown}s)'
                                   : 'Resend code',
                               style: TextStyle(
-                                color: _resendCooldown > 0 ? Colors.grey : Color(0xFF667eea),
+                                color: _resendCooldown > 0
+                                    ? Colors.grey
+                                    : Color(0xFF667eea),
                               ),
                             ),
                           ),
@@ -920,7 +981,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-  
+
   void _submitLogin() async {
     if (_usernameController.text.isEmpty) {
       _showError('Please enter username');
@@ -935,7 +996,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _showError('Please enter email');
         return;
       }
-      if (!_emailController.text.contains('@') || !_emailController.text.contains('.')) {
+      if (!_emailController.text.contains('@') ||
+          !_emailController.text.contains('.')) {
         _showError('Please enter a valid email address');
         return;
       }
@@ -990,7 +1052,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
   }
-  
+
   void _sendResetCode() async {
     if (_resetEmailController.text.isEmpty) {
       _showError('Please enter your email address');
@@ -999,7 +1061,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _isLoading = true;
     });
-    final sent = await _syncService.sendPasswordResetCode(_resetEmailController.text);
+    final sent =
+        await _syncService.sendPasswordResetCode(_resetEmailController.text);
     setState(() {
       _isLoading = false;
     });
@@ -1013,7 +1076,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('No account found with this email address');
     }
   }
-  
+
   void _resetPassword() async {
     if (_resetOtpCodeController.text.isEmpty) {
       _showError('Please enter verification code');
@@ -1031,7 +1094,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Password must be at least 8 characters');
       return;
     }
-    if (_resetNewPasswordController.text != _resetConfirmPasswordController.text) {
+    if (_resetNewPasswordController.text !=
+        _resetConfirmPasswordController.text) {
       _showError('Passwords do not match');
       return;
     }
@@ -1051,7 +1115,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = false;
     });
     if (success) {
-      _showSuccess('Password reset successfully! Please login with your new password.');
+      _showSuccess(
+          'Password reset successfully! Please login with your new password.');
       setState(() {
         _showResetPassword = false;
         _showForgotPassword = false;
@@ -1063,7 +1128,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Invalid verification code');
     }
   }
-  
+
   void _verify2FA() async {
     if (_otpCodeController.text.isEmpty) {
       _showError('Please enter verification code');
@@ -1099,20 +1164,17 @@ class _LoginScreenState extends State<LoginScreen> {
       final email = prefs.getString('user_email') ?? '';
       final username = prefs.getString('current_user') ?? '';
       final userId = prefs.getString('user_id') ?? '';
-      await Provider.of<AuthProvider>(context, listen: false).setUserData(
-        username, 
-        email, 
-        userId
-      );
+      await Provider.of<AuthProvider>(context, listen: false)
+          .setUserData(username, email, userId);
       Navigator.pushReplacement(
-        context, 
+        context,
         MaterialPageRoute(builder: (_) => HomeScreen()),
       );
     } else {
       _showError('Login failed');
     }
   }
-  
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1123,7 +1185,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-  
+
   void _showSuccess(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1134,7 +1196,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-  
+
   @override
   void dispose() {
     _resendTimer?.cancel();

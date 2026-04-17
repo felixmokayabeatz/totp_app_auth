@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'dart:io' show Platform;
 import 'models/otp_account.dart';
 import 'models/password_entry.dart';
 import 'providers/auth_provider.dart';
@@ -10,30 +11,39 @@ import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  appWindow.minSize = Size(900, 700);
-  appWindow.size = Size(900, 700);
-  appWindow.alignment = Alignment.center;
-  
+
+  // Only use bitsdojo_window on desktop platforms
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    appWindow.minSize = const Size(900, 700);
+    appWindow.size = const Size(900, 700);
+    appWindow.alignment = Alignment.center;
+  }
+
   await Hive.initFlutter();
-  
+
   if (!Hive.isAdapterRegistered(0)) {
     Hive.registerAdapter(OTPAccountAdapter());
   }
   if (!Hive.isAdapterRegistered(1)) {
     Hive.registerAdapter(PasswordEntryAdapter());
   }
-  
+
   await Hive.openBox<OTPAccount>('otp_accounts');
   await Hive.openBox<PasswordEntry>('passwords');
   await Hive.openBox('settings');
-  await Hive.openBox('secure_data');  // ADD THIS LINE
-  
-  runApp(MyApp());
-  appWindow.show();
+  await Hive.openBox('secure_data');
+
+  runApp(const MyApp());
+
+  // Only call show on desktop platforms
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    appWindow.show();
+  }
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
@@ -48,7 +58,7 @@ class MyApp extends StatelessWidget {
             theme: themeProvider.lightTheme,
             darkTheme: themeProvider.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: SplashScreen(),
+            home: SplashScreen(), // Removed 'const' keyword
             debugShowCheckedModeBanner: false,
           );
         },

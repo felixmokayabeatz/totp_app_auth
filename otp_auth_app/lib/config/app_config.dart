@@ -1,20 +1,39 @@
+import 'dart:io' show Platform;
+
 class AppConfig {
   // Development environment
-  static const String devApiUrl = 'http://localhost:8000/api/';
-  static const String devMediaUrl = 'http://localhost:8000/media/';
-  
+  static const String devApiUrlDesktop = 'http://localhost:8000/api/';
+  static const String devMediaUrlDesktop = 'http://localhost:8000/media/';
+
+  // For Android emulator - 10.0.2.2 is alias for host machine's localhost
+  static const String devApiUrlAndroid = 'http://10.0.2.2:8000/api/';
+  static const String devMediaUrlAndroid = 'http://10.0.2.2:8000/media/';
+
   // Production environment (your VPS)
-  static const String prodApiUrl = 'http://153.75.224.243/api/';
-  static const String prodMediaUrl = 'http://153.75.224.243/media/';
-  
+  static const String prodApiUrl = 'http://api.felixmokayabeatz.online/api/';
+  static const String prodMediaUrl =
+      'http://api.felixmokayabeatz.online/media/';
+
   // Change this to false when building for production
-  static const bool isDevelopment = true;
-  
+  static const bool isDevelopment = false;
+
   static String get apiUrl {
-    return isDevelopment ? devApiUrl : prodApiUrl;
+    if (!isDevelopment) return prodApiUrl;
+
+    // Check if running on Android
+    if (Platform.isAndroid) {
+      return devApiUrlAndroid;
+    }
+    return devApiUrlDesktop;
   }
-  
+
   static String get mediaUrl {
-    return isDevelopment ? devMediaUrl : prodMediaUrl;
+    if (!isDevelopment) return prodMediaUrl;
+
+    // Check if running on Android
+    if (Platform.isAndroid) {
+      return devMediaUrlAndroid;
+    }
+    return devMediaUrlDesktop;
   }
 }

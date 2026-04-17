@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'login_screen.dart';
 import 'home_screen.dart';
 import 'onboarding_screen.dart';
 import '../providers/auth_provider.dart';
@@ -13,53 +12,51 @@ class SplashScreen extends StatefulWidget {
   _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       vsync: this,
       duration: Duration(milliseconds: 2000),
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
     );
-    
+
     _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
     );
-    
+
     _animationController.forward();
-    
+
     Timer(Duration(seconds: 3), () async {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('access_token');
       final isFirstLaunch = prefs.getBool('is_first_launch') ?? true;
-      
+
       if (mounted) {
         if (token != null && token.isNotEmpty) {
           // Restore encryption key
           final syncService = SyncService();
           await syncService.restoreEncryptionKey();
-          
+
           // Load user data and go to Home
           final email = prefs.getString('user_email') ?? '';
           final username = prefs.getString('current_user') ?? '';
           final userId = prefs.getString('user_id') ?? '';
-          
+
           // Update AuthProvider with user data
-          await Provider.of<AuthProvider>(context, listen: false).setUserData(
-            username, 
-            email, 
-            userId
-          );
-          
+          await Provider.of<AuthProvider>(context, listen: false)
+              .setUserData(username, email, userId);
+
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => HomeScreen()),
@@ -68,19 +65,21 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           // User is NOT logged in - go to Onboarding
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => OnboardingScreen(isFirstLaunch: isFirstLaunch)),
+            MaterialPageRoute(
+                builder: (context) =>
+                    OnboardingScreen(isFirstLaunch: isFirstLaunch)),
           );
         }
       }
     });
   }
-  
+
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,7 +95,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         child: Stack(
           children: [
             ..._buildBackgroundCircles(),
-            
             Center(
               child: FadeTransition(
                 opacity: _fadeAnimation,
@@ -174,7 +172,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 ),
               ),
             ),
-            
             Positioned(
               bottom: 30,
               left: 0,
@@ -194,7 +191,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       ),
     );
   }
-  
+
   List<Widget> _buildBackgroundCircles() {
     return [
       Positioned(

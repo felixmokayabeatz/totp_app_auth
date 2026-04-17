@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="otp_auth_app"
+        android:label="BeatzLock Authenticator"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

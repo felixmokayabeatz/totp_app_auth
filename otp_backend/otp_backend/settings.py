@@ -24,11 +24,12 @@ if DEBUG:
     # Parse the string correctly if it comes from env
     ALLOWED_HOSTS = ['*']
 else:
-    ALLOWED_HOSTS = ['153.75.224.243', 'localhost', '127.0.0.1']
+    ALLOWED_HOSTS = [os.getenv('ALLOWED_HOSTS'), 'localhost', '127.0.0.1', 'api.felixmokayabeatz.online']
 
 # Also add the IP directly
-if '153.75.224.243' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('153.75.224.243')
+if 'api.felixmokayabeatz.online' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('api.felixmokayabeatz.online')
+    
 
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND')
 EMAIL_HOST = os.getenv('EMAIL_HOST')
@@ -36,8 +37,6 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-
-SERVER_IP = os.getenv('SERVER_IP', '153.75.224.243')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -72,16 +71,14 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://153.75.224.243",
-    "http://153.75.224.243:8000",
-    "http://153.75.224.243:8002",
+    "http://api.felixmokayabeatz.online",
 ]
 
 if DEBUG:
     CORS_ALLOWED_ORIGINS += [
         "http://localhost:8000",
         "http://127.0.0.1:8000",
-        "http://153.75.224.243",
+        "http://api.felixmokayabeatz.online",
     ]
 
 REST_FRAMEWORK = {
@@ -164,4 +161,3 @@ if DEBUG:
     print(f"EMAIL_USE_TLS: {EMAIL_USE_TLS}")
     print(f"EMAIL_HOST_USER: {EMAIL_HOST_USER}")
     print(f"EMAIL_HOST_PASSWORD: {'True' if EMAIL_HOST_PASSWORD else None}")
-    print(f"SERVER_IP: {SERVER_IP}")

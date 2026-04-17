@@ -1,27 +1,30 @@
+// onboarding_screen.dart
+
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
-import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final bool isFirstLaunch;
-  
-  const OnboardingScreen({Key? key, required this.isFirstLaunch}) : super(key: key);
-  
+
+  const OnboardingScreen({Key? key, required this.isFirstLaunch})
+      : super(key: key);
+
   @override
   _OnboardingScreenState createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> with TickerProviderStateMixin {
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with TickerProviderStateMixin {
   late PageController _pageController;
   int _currentPage = 0;
-  
+
   // Full onboarding for first-time users
   final List<OnboardingData> _fullPages = [
     OnboardingData(
       title: 'BeatzLock Authenticator',
       subtitle: 'Secure 2FA Codes',
-      description: 'Store and manage your two-factor authentication codes securely with military-grade encryption',
+      description:
+          'Store and manage your two-factor authentication codes securely with military-grade encryption',
       icon: Icons.security,
       gradientColors: [Color(0xFF667eea), Color(0xFF764ba2)],
       isNewUser: true,
@@ -29,7 +32,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     OnboardingData(
       title: 'Cloud Sync',
       subtitle: 'Never Lose Access',
-      description: 'Sync your codes across all your devices with end-to-end encryption. Never lose access again.',
+      description:
+          'Sync your codes across all your devices with end-to-end encryption. Never lose access again.',
       icon: Icons.cloud_sync,
       gradientColors: [Color(0xFF00b4db), Color(0xFF0083b0)],
       isNewUser: true,
@@ -37,7 +41,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     OnboardingData(
       title: 'QR Scanner',
       subtitle: 'Quick Setup',
-      description: 'Quickly add new accounts by scanning QR codes. Fast, secure, and hassle-free setup.',
+      description:
+          'Quickly add new accounts by scanning QR codes. Fast, secure, and hassle-free setup.',
       icon: Icons.qr_code_scanner,
       gradientColors: [Color(0xFF11998e), Color(0xFF38ef7d)],
       isNewUser: true,
@@ -45,39 +50,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
     OnboardingData(
       title: 'Get Started',
       subtitle: 'Join BeatzLock',
-      description: 'Create an account or login to start securing your 2FA codes',
+      description:
+          'Create an account or login to start securing your 2FA codes',
       icon: Icons.rocket_launch,
       gradientColors: [Color(0xFFf12711), Color(0xFFf5af19)],
       isNewUser: true,
     ),
   ];
-  
+
   // Simplified onboarding for returning/logged out users
   final List<OnboardingData> _returningPages = [
     OnboardingData(
       title: 'Welcome Back to',
       subtitle: 'BeatzLock Authenticator',
-      description: 'Login to access your secure 2FA codes and continue protecting your accounts',
+      description:
+          'Login to access your secure 2FA codes and continue protecting your accounts',
       icon: Icons.fingerprint,
       gradientColors: [Color(0xFF667eea), Color(0xFF764ba2)],
       isNewUser: false,
     ),
   ];
-  
-  List<OnboardingData> get _pages => widget.isFirstLaunch ? _fullPages : _returningPages;
-  
+
+  List<OnboardingData> get _pages =>
+      widget.isFirstLaunch ? _fullPages : _returningPages;
+
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
   }
-  
+
   @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,7 +121,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                     ),
                   ),
                 ),
-              
+
               Expanded(
                 child: PageView.builder(
                   controller: _pageController,
@@ -131,7 +139,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                   },
                 ),
               ),
-              
+
               _buildBottomBar(),
             ],
           ),
@@ -139,7 +147,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
       ),
     );
   }
-  
+
   Widget _buildBottomBar() {
     return Container(
       padding: EdgeInsets.all(24),
@@ -165,9 +173,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
                 ),
               ),
             ),
-          
+
           SizedBox(height: 32),
-          
+
           // Next/Login button
           AnimatedSwitcher(
             duration: Duration(milliseconds: 300),
@@ -190,8 +198,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 child: Text(
-                  _currentPage == _pages.length - 1 
-                      ? (widget.isFirstLaunch ? 'Get Started' : 'Continue to Login')
+                  _currentPage == _pages.length - 1
+                      ? (widget.isFirstLaunch
+                          ? 'Get Started'
+                          : 'Continue to Login')
                       : 'Next',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
@@ -207,9 +217,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> with TickerProvider
               ),
             ),
           ),
-          
+
           SizedBox(height: 16),
-          
+
           // Register link for returning users (instead of "Already have an account? Login")
           if (!widget.isFirstLaunch)
             Row(
@@ -254,7 +264,7 @@ class OnboardingData {
   final IconData icon;
   final List<Color> gradientColors;
   final bool isNewUser;
-  
+
   OnboardingData({
     required this.title,
     required this.subtitle,
@@ -268,9 +278,9 @@ class OnboardingData {
 class OnboardingPage extends StatelessWidget {
   final OnboardingData data;
   final bool isLastPage;
-  
+
   const OnboardingPage({required this.data, this.isLastPage = false});
-  
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -312,9 +322,9 @@ class OnboardingPage extends StatelessWidget {
               );
             },
           ),
-          
+
           SizedBox(height: 40),
-          
+
           // Title with BeatzLock branding
           Text(
             data.title,
@@ -326,9 +336,9 @@ class OnboardingPage extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
-          
+
           SizedBox(height: 8),
-          
+
           // Subtitle
           Text(
             data.subtitle,
@@ -340,9 +350,9 @@ class OnboardingPage extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
-          
+
           SizedBox(height: 20),
-          
+
           // Description
           Text(
             data.description,
@@ -353,7 +363,7 @@ class OnboardingPage extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
-          
+
           if (isLastPage && data.isNewUser) ...[
             SizedBox(height: 30),
             Container(
@@ -369,7 +379,8 @@ class OnboardingPage extends StatelessWidget {
                   SizedBox(width: 8),
                   Text(
                     '100% Free & Secure',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),

@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/otp_account.dart';
 import '../services/sync_service.dart';
@@ -18,10 +17,18 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   final _issuerController = TextEditingController();
   bool _isScanning = false;
   bool _cameraFailed = false;
+  bool _isProcessingQR = false;
+  MobileScannerController? _scannerController;
 
   bool get _isMobile => Platform.isAndroid || Platform.isIOS;
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    _scannerController = MobileScannerController();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,18 +47,26 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             Padding(
               padding: EdgeInsets.only(right: 8),
               child: TextButton.icon(
-                onPressed: () => setState(() {
-                  _isScanning = !_isScanning;
-                  if (!_isScanning) _cameraFailed = false;
-                }),
+                onPressed: () {
+                  setState(() {
+                    _isScanning = !_isScanning;
+                    if (!_isScanning) {
+                      _cameraFailed = false;
+                      _isProcessingQR = false;
+                    }
+                  });
+                },
                 icon: Icon(
-                  _isScanning ? Icons.edit_rounded : Icons.qr_code_scanner_rounded,
+                  _isScanning
+                      ? Icons.edit_rounded
+                      : Icons.qr_code_scanner_rounded,
                   color: Colors.white,
                   size: 18,
                 ),
                 label: Text(
                   _isScanning ? 'Manual' : 'Scan',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -67,28 +82,49 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     return Stack(
       children: [
         MobileScanner(
+          controller: _scannerController,
           onDetect: (capture) {
-            for (final barcode in capture.barcodes) {
-              if (barcode.rawValue != null) {
-                _parseQRCode(barcode.rawValue!);
-                break;
-              }
+            // Prevent multiple rapid scans
+            if (_isProcessingQR) return;
+
+            final barcode = capture.barcodes.first;
+            final String? code = barcode.rawValue;
+            if (code != null && mounted) {
+              _parseQRCode(code);
             }
           },
           errorBuilder: (context, error, child) {
+            String errorMessage = 'Camera unavailable';
+            // Check for permission error
+            if (error.toString().contains('Permission')) {
+              errorMessage =
+                  'Camera permission denied. Please grant permission in settings.';
+            }
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.camera_alt_rounded, color: Colors.red, size: 48),
                   SizedBox(height: 16),
-                  Text('Camera unavailable', style: TextStyle(color: Colors.white, fontSize: 16)),
+                  Text(
+                    errorMessage,
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
                   SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => setState(() {
                       _isScanning = false;
                       _cameraFailed = true;
+                      _isProcessingQR = false;
                     }),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Color(0xFF4F46E5),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                     child: Text('Enter manually'),
                   ),
                 ],
@@ -121,31 +157,94 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             ),
           ),
         ),
+        // Back button hint
+        Positioned(
+          top: 16,
+          left: 16,
+          child: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.white, size: 24),
+            onPressed: () => setState(() => _isScanning = false),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black54,
+              shape: CircleBorder(),
+            ),
+          ),
+        ),
       ],
     );
   }
 
   void _parseQRCode(String qrData) {
-    if (qrData.startsWith('otpauth://')) {
-      final uri = Uri.parse(qrData);
-      final secret = uri.queryParameters['secret'] ?? '';
-      // Strip spaces immediately on parse
-      final cleanSecret = secret.replaceAll(RegExp(r'\s+'), '');
-      final issuer = uri.queryParameters['issuer'];
-      final accountName = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
+    if (_isProcessingQR) return;
+    _isProcessingQR = true;
 
-      _serviceController.text = issuer ?? accountName.split(':').last;
-      _secretController.text = cleanSecret;
-      _issuerController.text = issuer ?? '';
+    try {
+      if (qrData.startsWith('otpauth://')) {
+        final uri = Uri.parse(qrData);
+        final secret = uri.queryParameters['secret'] ?? '';
+        // Strip spaces immediately on parse
+        final cleanSecret = secret.replaceAll(RegExp(r'\s+'), '');
+        final issuer = uri.queryParameters['issuer'];
+        final accountName =
+            uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
 
-      setState(() => _isScanning = false);
+        _serviceController.text = issuer ?? accountName.split(':').last;
+        _secretController.text = cleanSecret;
+        _issuerController.text = issuer ?? '';
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('QR code scanned!'),
-        backgroundColor: Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
+        if (mounted) {
+          setState(() {
+            _isScanning = false;
+            _cameraFailed = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                    child: Text('QR code scanned! Account details filled.')),
+              ],
+            ),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: Duration(seconds: 2),
+          ));
+        }
+      } else {
+        // Not a valid OTP auth QR code
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.warning_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                    child: Text(
+                        'Invalid QR code. Please scan a valid OTP setup QR.')),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ));
+        }
+        _isProcessingQR = false;
+      }
+    } catch (e) {
+      print('QR parse error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to parse QR code'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      _isProcessingQR = false;
     }
   }
 
@@ -162,15 +261,14 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 _cameraFailed
                     ? 'Camera failed. Enter the secret key manually.'
                     : 'On desktop, enter the secret key shown during 2FA setup.',
-                _cameraFailed ? Icons.warning_rounded : Icons.info_outline_rounded,
+                _cameraFailed
+                    ? Icons.warning_rounded
+                    : Icons.info_outline_rounded,
                 _cameraFailed ? Colors.orange : Color(0xFF4F46E5),
               ),
-
             SizedBox(height: 8),
-
             _sectionLabel('Service Details'),
             SizedBox(height: 10),
-
             _inputField(
               controller: _serviceController,
               label: 'Service Name',
@@ -185,11 +283,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               hint: 'e.g. Google LLC',
               icon: Icons.business_rounded,
             ),
-
             SizedBox(height: 20),
             _sectionLabel('Secret Key'),
             SizedBox(height: 10),
-
             _inputField(
               controller: _secretController,
               label: 'Secret Key',
@@ -198,18 +294,18 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               validator: (v) => v!.trim().isEmpty ? 'Required' : null,
               suffix: _isMobile && !_cameraFailed
                   ? IconButton(
-                      icon: Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF4F46E5)),
+                      icon: Icon(Icons.qr_code_scanner_rounded,
+                          color: Color(0xFF4F46E5)),
                       onPressed: () => setState(() {
                         _isScanning = true;
                         _cameraFailed = false;
+                        _isProcessingQR = false;
                       }),
                       tooltip: 'Scan QR',
                     )
                   : null,
             ),
-
             SizedBox(height: 32),
-
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -218,7 +314,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color(0xFF4F46E5),
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                   elevation: 0,
                 ),
                 child: Text(
@@ -259,7 +356,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           Icon(icon, color: color, size: 18),
           SizedBox(width: 10),
           Expanded(
-            child: Text(message, style: TextStyle(fontSize: 13, color: _isDark ? Colors.white70 : Colors.grey[700])),
+            child: Text(
+              message,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: _isDark ? Colors.white70 : Colors.grey[700]),
+            ),
           ),
         ],
       ),
@@ -279,7 +381,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         color: _isDark ? Color(0xFF1E1E32) : Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: Offset(0, 2)),
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: Offset(0, 2)),
         ],
       ),
       child: TextFormField(
@@ -291,18 +396,22 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         ),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: TextStyle(color: _isDark ? Colors.white38 : Colors.grey[500], fontSize: 13),
+          labelStyle: TextStyle(
+              color: _isDark ? Colors.white38 : Colors.grey[500], fontSize: 13),
           hintText: hint,
-          hintStyle: TextStyle(color: _isDark ? Colors.white24 : Colors.grey[400], fontSize: 13),
+          hintStyle: TextStyle(
+              color: _isDark ? Colors.white24 : Colors.grey[400], fontSize: 13),
           prefixIcon: Icon(icon, color: Color(0xFF4F46E5), size: 20),
           suffixIcon: suffix,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: _isDark ? Colors.white12 : Colors.grey[200]!),
+            borderSide:
+                BorderSide(color: _isDark ? Colors.white12 : Colors.grey[200]!),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: _isDark ? Colors.white12 : Colors.grey[200]!),
+            borderSide:
+                BorderSide(color: _isDark ? Colors.white12 : Colors.grey[200]!),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
@@ -323,10 +432,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('current_user') ?? 'default_user';
       final syncService = SyncService();
-      
+
       // Get the USER-SPECIFIC box, not the generic one
       final userBox = await syncService.getUserBox();
-      
+
       final serviceName = _serviceController.text.trim();
       final exists = userBox.values.any(
         (a) => a.service.toLowerCase() == serviceName.toLowerCase(),
@@ -337,7 +446,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           content: Text('An account for "$serviceName" already exists'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
         return;
       }
@@ -358,7 +468,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         service: serviceName,
         secret: rawSecret,
-        issuer: _issuerController.text.trim().isEmpty ? null : _issuerController.text.trim(),
+        issuer: _issuerController.text.trim().isEmpty
+            ? null
+            : _issuerController.text.trim(),
         createdAt: DateTime.now(),
         userId: userId,
       );
@@ -372,12 +484,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         debugPrint('Sync error: $e');
       }
 
-      Navigator.pop(context, true);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
     }
   }
 
   @override
   void dispose() {
+    _scannerController?.dispose();
     _serviceController.dispose();
     _secretController.dispose();
     _issuerController.dispose();
@@ -417,17 +532,25 @@ class _ScannerOverlayPainter extends CustomPainter {
     const r = 16.0;
 
     // top-left
-    canvas.drawLine(Offset(left + r, top), Offset(left + r + cLen, top), cornerPaint);
-    canvas.drawLine(Offset(left, top + r), Offset(left, top + r + cLen), cornerPaint);
+    canvas.drawLine(
+        Offset(left + r, top), Offset(left + r + cLen, top), cornerPaint);
+    canvas.drawLine(
+        Offset(left, top + r), Offset(left, top + r + cLen), cornerPaint);
     // top-right
-    canvas.drawLine(Offset(left + frameSize - r, top), Offset(left + frameSize - r - cLen, top), cornerPaint);
-    canvas.drawLine(Offset(left + frameSize, top + r), Offset(left + frameSize, top + r + cLen), cornerPaint);
+    canvas.drawLine(Offset(left + frameSize - r, top),
+        Offset(left + frameSize - r - cLen, top), cornerPaint);
+    canvas.drawLine(Offset(left + frameSize, top + r),
+        Offset(left + frameSize, top + r + cLen), cornerPaint);
     // bottom-left
-    canvas.drawLine(Offset(left + r, top + frameSize), Offset(left + r + cLen, top + frameSize), cornerPaint);
-    canvas.drawLine(Offset(left, top + frameSize - r), Offset(left, top + frameSize - r - cLen), cornerPaint);
+    canvas.drawLine(Offset(left + r, top + frameSize),
+        Offset(left + r + cLen, top + frameSize), cornerPaint);
+    canvas.drawLine(Offset(left, top + frameSize - r),
+        Offset(left, top + frameSize - r - cLen), cornerPaint);
     // bottom-right
-    canvas.drawLine(Offset(left + frameSize - r, top + frameSize), Offset(left + frameSize - r - cLen, top + frameSize), cornerPaint);
-    canvas.drawLine(Offset(left + frameSize, top + frameSize - r), Offset(left + frameSize, top + frameSize - r - cLen), cornerPaint);
+    canvas.drawLine(Offset(left + frameSize - r, top + frameSize),
+        Offset(left + frameSize - r - cLen, top + frameSize), cornerPaint);
+    canvas.drawLine(Offset(left + frameSize, top + frameSize - r),
+        Offset(left + frameSize, top + frameSize - r - cLen), cornerPaint);
   }
 
   @override

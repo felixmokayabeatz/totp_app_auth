@@ -1,6 +1,5 @@
 // lib/services/otp_service.dart
-import 'dart:convert';
-import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,9 +45,8 @@ class OTPService {
       final userId = await getCurrentUserId();
       final secret = _safeDecrypt(encryptedSecret, userId);
 
-      final cleanSecret = secret
-          .toUpperCase()
-          .replaceAll(RegExp(r'[^A-Z2-7]'), '');
+      final cleanSecret =
+          secret.toUpperCase().replaceAll(RegExp(r'[^A-Z2-7]'), '');
 
       if (cleanSecret.isEmpty) {
         debugPrint('Empty secret after cleaning');

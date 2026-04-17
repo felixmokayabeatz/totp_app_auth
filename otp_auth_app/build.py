@@ -432,7 +432,7 @@ def build_windows():
         print_color("❌ Flutter build failed. Try manually running: flutter clean && flutter build windows --release", Colors.RED)
         return False
     
-    exe_path = os.path.join(PROJECT_DIR, "build/windows/runner/Release")
+    exe_path = os.path.join(PROJECT_DIR, "build/windows/x64/runner/Release")
     if not os.path.exists(exe_path):
         print_color(f"❌ Windows build failed - output not found at {exe_path}", Colors.RED)
         return False

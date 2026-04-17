@@ -1,8 +1,9 @@
+// profile_screen.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
 import '../services/profile_service.dart';
 import '../providers/theme_provider.dart';
 import '../config/app_config.dart';
@@ -13,10 +14,11 @@ class ProfileScreen extends StatefulWidget {
   _ProfileScreenState createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   final ProfileService _profileService = ProfileService();
-  
+
   File? _profileImage;
   String? _profileImageUrl;
   String _bio = '';
@@ -25,7 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   String _userEmail = '';
   String _username = '';
   final TextEditingController _bioController = TextEditingController();
-  
+
   @override
   void initState() {
     super.initState();
@@ -37,7 +39,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     _loadUserData();
     _loadProfile();
   }
-  
+
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -45,14 +47,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       _username = prefs.getString('current_user') ?? 'User';
     });
   }
-  
+
   Future<void> _loadProfile() async {
     setState(() {
       _isLoading = true;
     });
-    
+
     final profile = await _profileService.getProfile();
-    
+
     if (profile != null) {
       setState(() {
         _profileImageUrl = profile['profile']?['profile_photo'];
@@ -66,7 +68,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       });
     }
   }
-  
+
   Future<void> _pickImage() async {
     try {
       final ImagePicker picker = ImagePicker();
@@ -74,12 +76,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         source: ImageSource.gallery,
         imageQuality: 80,
       );
-      
+
       if (image != null) {
         setState(() {
           _profileImage = File(image.path);
         });
-        
+
         await _uploadProfilePhoto();
       }
     } catch (e) {
@@ -93,20 +95,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       );
     }
   }
-  
+
   Future<void> _uploadProfilePhoto() async {
     if (_profileImage == null) return;
-    
+
     setState(() {
       _isUploading = true;
     });
-    
+
     final success = await _profileService.updateProfilePhoto(_profileImage!);
-    
+
     setState(() {
       _isUploading = false;
     });
-    
+
     if (success) {
       await _loadProfile();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -126,23 +128,23 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       );
     }
   }
-  
+
   Future<void> _updateBio() async {
     if (_bioController.text == _bio) {
       Navigator.pop(context);
       return;
     }
-    
+
     setState(() {
       _isUploading = true;
     });
-    
+
     final success = await _profileService.updateBio(_bioController.text);
-    
+
     setState(() {
       _isUploading = false;
     });
-    
+
     if (success) {
       setState(() {
         _bio = _bioController.text;
@@ -165,7 +167,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       );
     }
   }
-  
+
   void _showEditBioDialog() {
     showDialog(
       context: context,
@@ -199,12 +201,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDark = themeProvider.isDarkMode;
-    
+
     return Scaffold(
       backgroundColor: isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF),
       appBar: AppBar(
@@ -245,7 +247,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(
-                                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                                  colors: [
+                                    Color(0xFF4F46E5),
+                                    Color(0xFF7C3AED)
+                                  ],
                                 ),
                                 boxShadow: [
                                   BoxShadow(
@@ -263,13 +268,15 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                         width: 120,
                                         height: 120,
                                       )
-                                    : (_profileImageUrl != null && _profileImageUrl!.isNotEmpty
+                                    : (_profileImageUrl != null &&
+                                            _profileImageUrl!.isNotEmpty
                                         ? Image.network(
                                             '${AppConfig.mediaUrl}${_profileImageUrl!.replaceFirst('/media/', '')}',
                                             fit: BoxFit.cover,
                                             width: 120,
                                             height: 120,
-                                            errorBuilder: (context, error, stackTrace) {
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
                                               return Icon(
                                                 Icons.person,
                                                 size: 50,
@@ -339,7 +346,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       ],
                     ),
                   ),
-                  
+
                   // Bio Section
                   Container(
                     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -366,7 +373,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : Color(0xFF1A1A2E),
+                                color:
+                                    isDark ? Colors.white : Color(0xFF1A1A2E),
                               ),
                             ),
                             IconButton(
@@ -378,19 +386,23 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         ),
                         SizedBox(height: 8),
                         Text(
-                          _bio.isEmpty ? 'No bio yet. Tap edit to add one.' : _bio,
+                          _bio.isEmpty
+                              ? 'No bio yet. Tap edit to add one.'
+                              : _bio,
                           style: TextStyle(
                             fontSize: 14,
                             color: _bio.isEmpty
                                 ? (isDark ? Colors.white38 : Colors.grey[500])
                                 : (isDark ? Colors.white70 : Colors.grey[700]),
-                            fontStyle: _bio.isEmpty ? FontStyle.italic : FontStyle.normal,
+                            fontStyle: _bio.isEmpty
+                                ? FontStyle.italic
+                                : FontStyle.normal,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  
+
                   // Account Info Section
                   Container(
                     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -420,18 +432,19 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         SizedBox(height: 12),
                         _infoRow(Icons.email, 'Email', _userEmail, isDark),
                         _infoRow(Icons.person, 'Username', _username, isDark),
-                        _infoRow(Icons.security, '2FA Status', 'Enabled', isDark),
+                        _infoRow(
+                            Icons.security, '2FA Status', 'Enabled', isDark),
                       ],
                     ),
                   ),
-                  
+
                   SizedBox(height: 30),
                 ],
               ),
             ),
     );
   }
-  
+
   Widget _infoRow(IconData icon, String label, String value, bool isDark) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 8),
@@ -468,7 +481,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       ),
     );
   }
-  
+
   @override
   void dispose() {
     _animationController.dispose();
