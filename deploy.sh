@@ -14,7 +14,8 @@ APP_PATH="/home/$APP_USER/totp_app"
 BACKEND_PATH="$APP_PATH/otp_backend"
 VENV_PATH="$APP_PATH/totp_app_venv"
 PORT="8002"
-DOMAIN="153.75.224.243"
+DOMAIN="api.felixmokayabeatz.online"
+EMAIL="felixmokaya675@gmail.com"
 
 # Superuser credentials
 SUPERUSER_USERNAME="felixmokayabeatz"
@@ -39,6 +40,7 @@ show_menu() {
     echo -e "${GREEN}9.${NC} Backup Database"
     echo -e "${GREEN}10.${NC} Show Port Status"
     echo -e "${GREEN}11.${NC} Create Django Superuser"
+    echo -e "${GREEN}12.${NC} Install/ Renew SSL Certificate"
     echo -e "${RED}0.${NC} Exit"
     echo -e "${BLUE}========================================${NC}"
     echo -n "Choose option: "
@@ -52,6 +54,47 @@ check_port() {
         return 0
     else
         echo -e "${GREEN}✓ Port $PORT is free${NC}"
+        return 1
+    fi
+}
+
+# Function to install SSL certificate
+install_ssl() {
+    echo -e "${YELLOW}Installing/Updating SSL certificate for $DOMAIN...${NC}"
+    
+    # Install certbot if not installed
+    if ! command -v certbot &> /dev/null; then
+        echo -e "${BLUE}Installing Certbot...${NC}"
+        sudo apt update
+        sudo apt install -y certbot python3-certbot-nginx
+    fi
+    
+    # Ensure nginx is running
+    sudo systemctl start nginx
+    
+    # Get SSL certificate
+    echo -e "${BLUE}Obtaining SSL certificate...${NC}"
+    sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email $EMAIL --redirect
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ SSL certificate installed successfully!${NC}"
+        
+        # Setup auto-renewal
+        echo -e "${BLUE}Setting up auto-renewal...${NC}"
+        (sudo crontab -l 2>/dev/null; echo "0 0,12 * * * certbot renew --quiet --nginx") | sudo crontab -
+        echo -e "${GREEN}✓ Auto-renewal configured (twice daily)${NC}"
+        
+        # Test renewal
+        echo -e "${BLUE}Testing certificate renewal...${NC}"
+        sudo certbot renew --dry-run
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓ Auto-renewal test passed${NC}"
+        else
+            echo -e "${YELLOW}⚠ Auto-renewal test failed, but certificate is still valid${NC}"
+        fi
+    else
+        echo -e "${RED}✗ Failed to install SSL certificate${NC}"
+        echo -e "${YELLOW}Make sure your domain DNS is correctly pointing to this server${NC}"
         return 1
     fi
 }
@@ -75,6 +118,15 @@ check_services() {
         echo -e "${GREEN}✓ Running${NC}"
     else
         echo -e "${RED}✗ Not running${NC}"
+    fi
+    
+    echo ""
+    echo -e "${BLUE}SSL Certificate:${NC}"
+    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+        EXPIRY=$(sudo certbot certificates 2>/dev/null | grep -A 2 "$DOMAIN" | grep "Expiry Date" | cut -d: -f2-)
+        echo -e "${GREEN}✓ Installed${NC} - Expires:$EXPIRY"
+    else
+        echo -e "${YELLOW}⚠ Not installed${NC}"
     fi
     
     echo ""
@@ -110,14 +162,13 @@ create_superuser() {
         fi
     fi
     
-    # Create superuser using Django's createsuperuser command with environment variables
+    # Create superuser using Django's shell
     echo -e "${BLUE}Creating superuser...${NC}"
     echo -e "Username: ${GREEN}$SUPERUSER_USERNAME${NC}"
     echo -e "Email: ${GREEN}$SUPERUSER_EMAIL${NC}"
     echo -e "First Name: ${GREEN}$SUPERUSER_FIRST_NAME${NC}"
     echo -e "Last Name: ${GREEN}$SUPERUSER_LAST_NAME${NC}"
     
-    # Use Django's shell to create superuser (bypasses password prompts)
     python manage.py shell << EOF
 from django.contrib.auth.models import User
 if not User.objects.filter(username='$SUPERUSER_USERNAME').exists():
@@ -136,7 +187,7 @@ EOF
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Superuser created successfully!${NC}"
-        echo -e "${YELLOW}You can now login at: http://$DOMAIN/admin/${NC}"
+        echo -e "${YELLOW}You can now login at: https://$DOMAIN/admin/${NC}"
         echo -e "  Username: ${GREEN}$SUPERUSER_USERNAME${NC}"
         echo -e "  Password: ${GREEN}$SUPERUSER_PASSWORD${NC}"
     else
@@ -148,13 +199,17 @@ EOF
 copy_config_files() {
     echo -e "${YELLOW}Copying configuration files...${NC}"
     
+    # Create nginx directory if not exists
+    mkdir -p "$BACKEND_PATH/nginx"
+    
     # Copy systemd service file
     if [ -f "$BACKEND_PATH/nginx/beatzlock.service" ]; then
         sudo cp "$BACKEND_PATH/nginx/beatzlock.service" /etc/systemd/system/
         echo -e "${GREEN}✓ Copied beatzlock.service${NC}"
     else
         echo -e "${RED}✗ beatzlock.service not found in $BACKEND_PATH/nginx/${NC}"
-        return 1
+        echo -e "${YELLOW}Creating default service file...${NC}"
+        create_default_service_file
     fi
     
     # Copy nginx config file
@@ -163,7 +218,8 @@ copy_config_files() {
         echo -e "${GREEN}✓ Copied beatzlock.conf${NC}"
     else
         echo -e "${RED}✗ beatzlock.conf not found in $BACKEND_PATH/nginx/${NC}"
-        return 1
+        echo -e "${YELLOW}Creating default nginx config...${NC}"
+        create_default_nginx_config
     fi
     
     # Create symbolic link if not exists
@@ -182,28 +238,107 @@ copy_config_files() {
     return 0
 }
 
+# Create default service file if missing
+create_default_service_file() {
+    sudo tee /etc/systemd/system/beatzlock.service > /dev/null << EOF
+[Unit]
+Description=BeatzLock Authenticator Django Application
+After=network.target
+
+[Service]
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$BACKEND_PATH
+Environment="PATH=$VENV_PATH/bin"
+Environment="DJANGO_SETTINGS_MODULE=otp_backend.settings"
+Environment="DJANGO_ALLOWED_HOSTS=$DOMAIN,localhost,127.0.0.1"
+ExecStart=$VENV_PATH/bin/gunicorn otp_backend.wsgi:application --bind 127.0.0.1:$PORT --workers 3 --timeout 120
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    echo -e "${GREEN}✓ Created default service file${NC}"
+}
+
+# Create default nginx config if missing
+create_default_nginx_config() {
+    sudo tee /etc/nginx/sites-available/beatzlock > /dev/null << EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+    
+    location / {
+        return 301 https://\$server_name\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name $DOMAIN;
+    
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    
+    client_max_body_size 10M;
+    
+    location /api/ {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    location /admin/ {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+    
+    location /media/ {
+        alias $BACKEND_PATH/media/;
+    }
+    
+    location /static/ {
+        alias $BACKEND_PATH/staticfiles/;
+    }
+}
+EOF
+    echo -e "${GREEN}✓ Created default nginx config${NC}"
+}
+
 # Function to full deploy
 full_deploy() {
     echo -e "${GREEN}Starting full deployment...${NC}"
     
     # Update system
-    echo -e "${YELLOW}[1/9] Updating system packages...${NC}"
+    echo -e "${YELLOW}[1/11] Updating system packages...${NC}"
     sudo apt update && sudo apt upgrade -y
     
     # Install dependencies
-    echo -e "${YELLOW}[2/9] Installing dependencies...${NC}"
-    sudo apt install -y python3 python3-pip python3-venv nginx git curl
+    echo -e "${YELLOW}[2/11] Installing dependencies...${NC}"
+    sudo apt install -y python3 python3-pip python3-venv nginx git curl net-tools
     
     # Create directories
-    echo -e "${YELLOW}[3/9] Creating directories...${NC}"
+    echo -e "${YELLOW}[3/11] Creating directories...${NC}"
     mkdir -p $APP_PATH/logs $BACKEND_PATH/media $BACKEND_PATH/staticfiles
+    sudo mkdir -p /var/www/html
     
     # Pull latest code (since repo already cloned)
-    echo -e "${YELLOW}[4/9] Pulling latest code from GitHub...${NC}"
+    echo -e "${YELLOW}[4/11] Pulling latest code from GitHub...${NC}"
     cd $APP_PATH && git pull
     
     # Setup virtual environment
-    echo -e "${YELLOW}[5/9] Setting up Python environment...${NC}"
+    echo -e "${YELLOW}[5/11] Setting up Python environment...${NC}"
     if [ ! -d "$VENV_PATH" ]; then
         python3 -m venv $VENV_PATH
         echo -e "${GREEN}✓ Virtual environment created${NC}"
@@ -215,29 +350,36 @@ full_deploy() {
     pip install -r $BACKEND_PATH/requirements.txt gunicorn psycopg2-binary
     
     # Run migrations
-    echo -e "${YELLOW}[6/9] Running migrations...${NC}"
+    echo -e "${YELLOW}[6/11] Running migrations...${NC}"
     cd $BACKEND_PATH
     python manage.py migrate
     python manage.py collectstatic --noinput
     
     # Copy config files from repo to system
-    echo -e "${YELLOW}[7/9] Installing configuration files...${NC}"
+    echo -e "${YELLOW}[7/11] Installing configuration files...${NC}"
     copy_config_files
     
-    # Update systemd service file with correct paths
-    echo -e "${YELLOW}[8/9] Updating service file with correct paths...${NC}"
-    sudo sed -i "s|/home/felixmokayabeatz/beatzlock|$APP_PATH|g" /etc/systemd/system/beatzlock.service
-    sudo sed -i "s|/home/felixmokayabeatz/beatzlock/backend|$BACKEND_PATH|g" /etc/systemd/system/beatzlock.service
+    # Update allowed hosts in Django settings
+    echo -e "${YELLOW}[8/11] Updating Django settings...${NC}"
+    sed -i "s/ALLOWED_HOSTS = \[.*\]/ALLOWED_HOSTS = ['$DOMAIN', 'localhost', '127.0.0.1']/g" $BACKEND_PATH/otp_backend/settings.py 2>/dev/null || echo -e "${YELLOW}⚠ Could not update settings.py automatically, please update manually${NC}"
     
     # Restart services
-    echo -e "${YELLOW}[9/9] Starting services...${NC}"
+    echo -e "${YELLOW}[9/11] Starting services...${NC}"
     sudo systemctl daemon-reload
     sudo systemctl enable beatzlock
     sudo systemctl restart beatzlock
     sudo nginx -t && sudo systemctl restart nginx
     
-    echo -e "${GREEN}✓ Full deployment complete!${NC}"
+    # Install SSL
+    echo -e "${YELLOW}[10/11] Setting up SSL certificate...${NC}"
+    install_ssl
+    
+    echo -e "${YELLOW}[11/11] Final checks...${NC}"
+    sleep 3
     check_services
+    
+    echo -e "${GREEN}✓ Full deployment complete!${NC}"
+    echo -e "${GREEN}Your app is now available at: https://$DOMAIN${NC}"
     
     # Ask if user wants to create superuser
     echo ""
@@ -335,8 +477,12 @@ reload_nginx() {
 backup_db() {
     echo -e "${YELLOW}Backing up database...${NC}"
     BACKUP_FILE="$APP_PATH/backup_$(date +%Y%m%d_%H%M%S).sql"
-    sqlite3 $BACKEND_PATH/db.sqlite3 ".backup $BACKUP_FILE"
-    echo -e "${GREEN}✓ Database backed up to: $BACKUP_FILE${NC}"
+    if [ -f "$BACKEND_PATH/db.sqlite3" ]; then
+        sqlite3 $BACKEND_PATH/db.sqlite3 ".backup $BACKUP_FILE"
+        echo -e "${GREEN}✓ Database backed up to: $BACKUP_FILE${NC}"
+    else
+        echo -e "${RED}✗ Database file not found${NC}"
+    fi
 }
 
 # Main loop
@@ -356,6 +502,7 @@ while true; do
         9) backup_db ;;
         10) check_port ;;
         11) create_superuser ;;
+        12) install_ssl ;;
         0) echo -e "${GREEN}Goodbye!${NC}"; exit 0 ;;
         *) echo -e "${RED}Invalid option${NC}" ;;
     esac
