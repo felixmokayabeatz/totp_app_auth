@@ -1,256 +1,205 @@
-# logging_config.py
-
-import os
 import logging
-from logging.handlers import TimedRotatingFileHandler
+import re
 from datetime import datetime
 from pathlib import Path
 
-# Create logs directory structure
-BASE_DIR = Path(__file__).resolve().parent.parent
-LOGS_DIR = BASE_DIR / 'logs'
 
-def get_log_path(filename_prefix):
-    """Get log file path with year/month organization"""
-    current_date = datetime.now()
-    year = current_date.strftime('%Y')
-    month = current_date.strftime('%m')
-    day = current_date.strftime('%Y-%m-%d')
-    
-    # Create year/month directory
-    log_dir = LOGS_DIR / year / month
-    log_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Return full file path
-    return log_dir / f"{filename_prefix}_{day}.log"
+BASE_DIR = Path(__file__).resolve().parent.parent
+LOGS_DIR = BASE_DIR / "logs"
+
 
 def get_log_files_for_admin():
-    """Get all log files organized by year/month"""
+    """Return only error log files for the admin log viewer."""
     log_files = []
-    
-    if LOGS_DIR.exists():
-        # Get all year directories
-        for year_dir in sorted(LOGS_DIR.iterdir(), reverse=True):
-            if year_dir.is_dir() and year_dir.name.isdigit():
-                # Get all month directories
-                for month_dir in sorted(year_dir.iterdir(), reverse=True):
-                    if month_dir.is_dir() and month_dir.name.isdigit():
-                        # Get all log files in this month
-                        for log_file in sorted(month_dir.glob('*.log'), reverse=True):
-                            # Get file stats
-                            stat = log_file.stat()
-                            # Create relative path for URL
-                            rel_path = log_file.relative_to(BASE_DIR)
-                            
-                            log_files.append({
-                                'path': str(rel_path).replace('\\', '/'),
-                                'name': log_file.name,
-                                'size': stat.st_size,
-                                'size_display': format_size(stat.st_size),
-                                'modified': datetime.fromtimestamp(stat.st_mtime),
-                                'year': year_dir.name,
-                                'month': month_dir.name,
-                                'type': get_log_type(log_file.name),
-                                'line_count': count_lines(log_file)
-                            })
-    
+
+    if not LOGS_DIR.exists():
+        return log_files
+
+    for year_dir in sorted(LOGS_DIR.iterdir(), reverse=True):
+        if not year_dir.is_dir() or not year_dir.name.isdigit():
+            continue
+
+        for month_dir in sorted(year_dir.iterdir(), reverse=True):
+            if not month_dir.is_dir() or not month_dir.name.isdigit():
+                continue
+
+            for log_file in sorted(month_dir.glob("errors_*.log"), reverse=True):
+                stat = log_file.stat()
+                rel_path = log_file.relative_to(BASE_DIR)
+                log_files.append(
+                    {
+                        "path": str(rel_path).replace("\\", "/"),
+                        "name": log_file.name,
+                        "size": stat.st_size,
+                        "size_display": format_size(stat.st_size),
+                        "modified": datetime.fromtimestamp(stat.st_mtime),
+                        "year": year_dir.name,
+                        "month": month_dir.name,
+                        "type": "error",
+                        "line_count": count_lines(log_file),
+                    }
+                )
+
     return log_files
 
+
 def format_size(size):
-    """Format file size nicely"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024.0:
             return f"{size:.1f} {unit}"
         size /= 1024.0
     return f"{size:.1f} TB"
 
-def get_log_type(filename):
-    """Get log type from filename"""
-    if 'error' in filename.lower():
-        return 'error'
-    elif 'warning' in filename.lower():
-        return 'warning'
-    elif 'api' in filename.lower():
-        return 'api'
-    elif 'twofa' in filename.lower():
-        return '2fa'
-    elif 'sync' in filename.lower():
-        return 'sync'
-    else:
-        return 'info'
 
 def count_lines(filepath):
-    """Count lines in file efficiently"""
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return sum(1 for _ in f)
-    except:
+        with open(filepath, "r", encoding="utf-8") as file_handle:
+            return sum(1 for _ in file_handle)
+    except OSError:
         return 0
 
+
+class RedactingFormatter(logging.Formatter):
+    """Strip sensitive values from error logs."""
+
+    EMAIL_RE = re.compile(r"[\w.\-+%]+@[\w.\-]+\.[A-Za-z]{2,}")
+    IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+    KEY_VALUE_RE = re.compile(
+        r"\b(User|Username|Email|IP|Code|Device|Account ID)\s*:\s*([^\s,\]]+)",
+        re.IGNORECASE,
+    )
+
+    def format(self, record):
+        original_msg = record.msg
+        original_args = record.args
+        original_exc = record.exc_info
+
+        try:
+            rendered = record.getMessage()
+            record.msg = self._redact(rendered)
+            record.args = ()
+
+            if original_exc:
+                exc_text = self.formatException(original_exc)
+                redacted_exc = self._redact(exc_text)
+                formatted = super().format(record)
+                return f"{formatted}\n{redacted_exc}"
+
+            return super().format(record)
+        finally:
+            record.msg = original_msg
+            record.args = original_args
+            record.exc_info = original_exc
+
+    def _redact(self, value):
+        value = self.EMAIL_RE.sub("[redacted-email]", value)
+        value = self.IPV4_RE.sub("[redacted-ip]", value)
+        value = self.KEY_VALUE_RE.sub(lambda m: f"{m.group(1)}: [redacted]", value)
+        return value
+
+
 class DailyRotatingFileHandler(logging.Handler):
-    """Custom handler that creates daily log files in year/month folders"""
-    
+    """Create a daily error log file under logs/YYYY/MM/."""
+
     def __init__(self, filename_prefix, level=logging.NOTSET):
         super().__init__(level)
         self.filename_prefix = filename_prefix
         self.current_date = None
         self.handler = None
         self._create_handler()
-    
+
     def _create_handler(self):
-        """Create or recreate the file handler"""
         current_date = datetime.now().date()
-        
-        # If date changed, recreate handler
-        if self.current_date != current_date:
-            if self.handler:
-                self.handler.close()
-            
-            # Create new log file path
-            year = datetime.now().strftime('%Y')
-            month = datetime.now().strftime('%m')
-            day = datetime.now().strftime('%Y-%m-%d')
-            
-            log_dir = LOGS_DIR / year / month
-            log_dir.mkdir(parents=True, exist_ok=True)
-            
-            log_file = log_dir / f"{self.filename_prefix}_{day}.log"
-            
-            # Create new handler
-            self.handler = logging.FileHandler(log_file, encoding='utf-8')
+        if self.current_date == current_date:
+            return
+
+        if self.handler:
+            self.handler.close()
+
+        year = datetime.now().strftime("%Y")
+        month = datetime.now().strftime("%m")
+        day = datetime.now().strftime("%Y-%m-%d")
+
+        log_dir = LOGS_DIR / year / month
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        log_file = log_dir / f"{self.filename_prefix}_{day}.log"
+        self.handler = logging.FileHandler(log_file, encoding="utf-8")
+        if self.formatter:
             self.handler.setFormatter(self.formatter)
-            self.current_date = current_date
-    
+        self.current_date = current_date
+
     def setFormatter(self, formatter):
-        """Set formatter on handler"""
         super().setFormatter(formatter)
         if self.handler:
             self.handler.setFormatter(formatter)
-    
+
     def emit(self, record):
-        """Emit log record"""
         self._create_handler()
         if self.handler:
             self.handler.emit(record)
-    
+
     def close(self):
-        """Close handler"""
         if self.handler:
             self.handler.close()
         super().close()
 
+
 def get_logging_config(debug_mode):
-    """Return logging configuration dictionary"""
-    
-    # Create formatters
-    detailed_formatter = logging.Formatter(
-        '[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    simple_formatter = logging.Formatter(
-        '[%(asctime)s] %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    config = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'detailed': {
-                'format': '[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] - %(message)s',
-                'datefmt': '%Y-%m-%d %H:%M:%S'
-            },
-            'simple': {
-                'format': '[%(asctime)s] %(levelname)s - %(message)s',
-                'datefmt': '%Y-%m-%d %H:%M:%S'
+    del debug_mode
+
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "redacted_detailed": {
+                "()": RedactingFormatter,
+                "format": "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] - %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
             },
         },
-        'filters': {
-            'require_debug_true': {
-                '()': 'django.utils.log.RequireDebugTrue',
+        "handlers": {
+            "error_file": {
+                "()": DailyRotatingFileHandler,
+                "filename_prefix": "errors",
+                "formatter": "redacted_detailed",
+                "level": "ERROR",
             },
         },
-        'handlers': {
-            'console': {
-                'class': 'logging.StreamHandler',
-                'formatter': 'detailed',
-                'level': 'DEBUG',
-                'filters': ['require_debug_true'],
+        "loggers": {
+            "django": {
+                "handlers": ["error_file"],
+                "level": "ERROR",
+                "propagate": False,
             },
-            'error_file': {
-                '()': DailyRotatingFileHandler,
-                'filename_prefix': 'errors',
-                'formatter': 'detailed',
-                'level': 'ERROR',
+            "django.request": {
+                "handlers": ["error_file"],
+                "level": "ERROR",
+                "propagate": False,
             },
-            'warning_file': {
-                '()': DailyRotatingFileHandler,
-                'filename_prefix': 'warnings',
-                'formatter': 'detailed',
-                'level': 'WARNING',
+            "api": {
+                "handlers": ["error_file"],
+                "level": "ERROR",
+                "propagate": False,
             },
-            'info_file': {
-                '()': DailyRotatingFileHandler,
-                'filename_prefix': 'info',
-                'formatter': 'detailed',
-                'level': 'INFO',
+            "twofa": {
+                "handlers": ["error_file"],
+                "level": "ERROR",
+                "propagate": False,
             },
-            'api_file': {
-                '()': DailyRotatingFileHandler,
-                'filename_prefix': 'api',
-                'formatter': 'detailed',
-                'level': 'INFO',
+            "accounts": {
+                "handlers": ["error_file"],
+                "level": "ERROR",
+                "propagate": False,
             },
-            'twofa_file': {
-                '()': DailyRotatingFileHandler,
-                'filename_prefix': 'twofa',
-                'formatter': 'detailed',
-                'level': 'INFO',
-            },
-            'sync_file': {
-                '()': DailyRotatingFileHandler,
-                'filename_prefix': 'sync',
-                'formatter': 'detailed',
-                'level': 'INFO',
+            "beatzlocklogs": {
+                "handlers": ["error_file"],
+                "level": "ERROR",
+                "propagate": False,
             },
         },
-        'loggers': {
-            'django': {
-                'handlers': ['console', 'error_file', 'warning_file', 'info_file'],
-                'level': 'INFO',
-                'propagate': True,
-            },
-            'django.request': {
-                'handlers': ['error_file', 'warning_file'],
-                'level': 'ERROR',
-                'propagate': False,
-            },
-            'api': {
-                'handlers': ['console', 'api_file', 'error_file', 'warning_file'],
-                'level': 'DEBUG' if debug_mode else 'INFO',
-                'propagate': False,
-            },
-            'twofa': {
-                'handlers': ['console', 'twofa_file', 'error_file', 'warning_file'],
-                'level': 'DEBUG' if debug_mode else 'INFO',
-                'propagate': False,
-            },
-            'accounts': {
-                'handlers': ['console', 'error_file', 'warning_file'],
-                'level': 'DEBUG' if debug_mode else 'INFO',
-                'propagate': False,
-            },
-            'sync': {
-                'handlers': ['console', 'sync_file', 'error_file', 'warning_file'],
-                'level': 'DEBUG' if debug_mode else 'INFO',
-                'propagate': False,
-            },
-        },
-        'root': {
-            'handlers': ['console', 'error_file', 'warning_file'],
-            'level': 'WARNING',
+        "root": {
+            "handlers": ["error_file"],
+            "level": "ERROR",
         },
     }
-    
-    return config

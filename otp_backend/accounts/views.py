@@ -42,7 +42,7 @@ class ProfileViewSet(viewsets.GenericViewSet):
         except Exception as e:
             error_details = traceback.format_exc()
             debug_print(f"[PROFILE] ERROR: {str(e)}")
-            logger.error(f"Profile view error for user {request.user.username}: {str(e)}\n{error_details}")
+            logger.error("Profile view failed.\n%s", error_details)
             return Response({'error': str(e)}, status=500)
     
     @action(detail=False, methods=['post'])
@@ -87,7 +87,7 @@ class ProfileViewSet(viewsets.GenericViewSet):
             error_details = traceback.format_exc()
             debug_print(f"[PROFILE] ERROR updating profile: {str(e)}")
             debug_print(f"[PROFILE] Traceback:\n{error_details}")
-            logger.error(f"Profile update error for user {request.user.username}: {str(e)}\n{error_details}")
+            logger.error("Profile update failed.\n%s", error_details)
             return Response({'error': str(e)}, status=500)
 
 
@@ -131,7 +131,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 error_details = traceback.format_exc()
                 debug_print(f"[AUTH] ERROR saving user: {str(e)}")
                 debug_print(f"[AUTH] Traceback:\n{error_details}")
-                logger.error(f"Registration save error: {str(e)}\n{error_details}")
+                logger.error("Registration save failed.\n%s", error_details)
                 return Response({'error': 'Failed to create user'}, status=500)
         
         debug_print(f"[AUTH] Registration validation failed: {serializer.errors}")
@@ -196,7 +196,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             error_details = traceback.format_exc()
             debug_print(f"[AUTH] ERROR during login: {str(e)}")
             debug_print(f"[AUTH] Traceback:\n{error_details}")
-            logger.error(f"Login error: {str(e)}\n{error_details}")
+            logger.error("Login processing failed.\n%s", error_details)
             return Response({'error': 'Login failed'}, status=500)
 
 
@@ -275,7 +275,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] ERROR during sync: {str(e)}")
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
-            logger.error(f"Sync failed for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Sync failed.\n%s", error_details)
             return Response({'error': 'Sync failed', 'details': str(e) if django_settings.DEBUG else 'Internal error'}, status=500)
     
     @action(detail=False, methods=['get'], url_path='get-data')
@@ -334,5 +334,5 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] ERROR getting data: {str(e)}")
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
-            logger.error(f"Get data error for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Encrypted data retrieval failed.\n%s", error_details)
             return Response({'error': 'Failed to retrieve data'}, status=500)

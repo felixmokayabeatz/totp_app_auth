@@ -77,7 +77,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 error_details = traceback.format_exc()
                 debug_print(f"[AUTH] ERROR saving user: {str(e)}")
                 debug_print(f"[AUTH] Traceback:\n{error_details}")
-                logger.error(f"Registration save error: {str(e)}\n{error_details}")
+                logger.error("Registration save failed.\n%s", error_details)
                 return Response({'error': 'Failed to create user'}, status=500)
         
         debug_print(f"[AUTH] Registration validation FAILED: {serializer.errors}")
@@ -143,7 +143,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             error_details = traceback.format_exc()
             debug_print(f"[AUTH] ERROR during login: {str(e)}")
             debug_print(f"[AUTH] Traceback:\n{error_details}")
-            logger.error(f"Login error: {str(e)}\n{error_details}")
+            logger.error("Login processing failed.\n%s", error_details)
             return Response({'error': 'Login failed'}, status=500)
     
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
@@ -192,7 +192,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             error_details = traceback.format_exc()
             debug_print(f"[AUTH] ERROR changing password: {str(e)}")
             debug_print(f"[AUTH] Traceback:\n{error_details}")
-            logger.error(f"Password change error for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Password change failed.\n%s", error_details)
             return Response({'error': 'Failed to change password'}, status=500)
 
 
@@ -297,7 +297,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             except:
                 pass
             
-            logger.error(f"Sync upload failed for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Sync upload failed.\n%s", error_details)
             return Response({'error': 'Sync failed', 'details': str(e) if django_settings.DEBUG else 'Internal error'}, status=500)
     
     @action(detail=False, methods=['get'], url_path='get-data')
@@ -369,7 +369,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] ERROR during download: {str(e)}")
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
-            logger.error(f"Sync download error for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Sync download failed.\n%s", error_details)
             return Response({'error': 'Failed to retrieve data'}, status=500)
     
     @action(detail=False, methods=['get'], url_path='tombstones')
@@ -407,7 +407,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] ERROR getting tombstones: {str(e)}")
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
-            logger.error(f"Get tombstones error for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Tombstone retrieval failed.\n%s", error_details)
             return Response({'error': 'Failed to retrieve tombstones'}, status=500)
     
     @action(detail=False, methods=['post'], url_path='delete-account')
@@ -485,7 +485,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] ERROR deleting account: {str(e)}")
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
-            logger.error(f"Delete account error for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Account deletion failed.\n%s", error_details)
             return Response({'error': 'Failed to delete account'}, status=500)
     
     @action(detail=False, methods=['post'], url_path='delete-all-accounts')
@@ -541,7 +541,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] ERROR deleting all accounts: {str(e)}")
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
-            logger.error(f"Delete all accounts error for user {user.username}: {str(e)}\n{error_details}")
+            logger.error("Delete all accounts failed.\n%s", error_details)
             return Response({'error': 'Failed to delete accounts'}, status=500)
 
 
@@ -565,7 +565,7 @@ def send_delete_otp(request):
     
     if not user.email:
         debug_print(f"[DELETE OTP] ERROR: User has no email")
-        logger.error(f"Delete OTP - No email for user: {user.username}")
+        logger.error("Delete OTP cannot be sent because the account has no email address.")
         return Response({'success': False, 'error': 'No email associated with account'}, status=400)
     
     try:
@@ -607,7 +607,7 @@ def send_delete_otp(request):
         debug_print(f"[DELETE OTP] ERROR: {str(e)}")
         debug_print(f"[DELETE OTP] Traceback:\n{error_details}")
         
-        logger.error(f"Send delete OTP error for user {user.username}: {str(e)}\n{error_details}")
+        logger.error("Delete OTP sending failed.\n%s", error_details)
         print(f"Send delete OTP error: {e}")  # Keep original print for console
         
         return Response({'success': False, 'error': str(e)}, status=500)
@@ -669,7 +669,7 @@ def verify_delete_otp(request):
         debug_print(f"[DELETE OTP] ERROR: {str(e)}")
         debug_print(f"[DELETE OTP] Traceback:\n{error_details}")
         
-        logger.error(f"Verify delete OTP error for user {user.username}: {str(e)}\n{error_details}")
+        logger.error("Delete OTP verification failed.\n%s", error_details)
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
@@ -731,7 +731,7 @@ def set_sync_preference(request):
         debug_print(f"[SYNC PREF] ERROR: {str(e)}")
         debug_print(f"[SYNC PREF] Traceback:\n{error_details}")
         
-        logger.error(f"Set sync preference error for user {user.username}: {str(e)}\n{error_details}")
+        logger.error("Saving sync preference failed.\n%s", error_details)
         return Response({'error': str(e)}, status=500)
 
 
@@ -769,5 +769,5 @@ def get_sync_preference(request):
         debug_print(f"[SYNC PREF] ERROR: {str(e)}")
         debug_print(f"[SYNC PREF] Traceback:\n{error_details}")
         
-        logger.error(f"Get sync preference error for user {user.username}: {str(e)}\n{error_details}")
+        logger.error("Reading sync preference failed.\n%s", error_details)
         return Response({'sync_enabled': True})  # Return default on error

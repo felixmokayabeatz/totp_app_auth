@@ -69,7 +69,7 @@ def send_2fa_code(request):
         
         if not user.email:
             debug_print(f"[2FA] ERROR: User {user.username} has no email address")
-            logger.error(f"2FA request - No email for user: {user.username}")
+            logger.error("2FA code cannot be sent because the account has no email address.")
             return Response({'success': False, 'error': 'No email associated with account'}, status=400)
         
         debug_print(f"[2FA] User email: {user.email}")
@@ -121,7 +121,7 @@ def send_2fa_code(request):
         debug_print(error_details)
         debug_print(f"{'='*60}\n")
         
-        logger.error(f'2FA error for user {username}: {str(e)}\n{error_details}')
+        logger.error("2FA code sending failed.\n%s", error_details)
         return Response({'success': False, 'error': str(e)}, status=500)
     
 
@@ -199,7 +199,7 @@ def verify_2fa_code(request):
         debug_print(f"[2FA] Traceback:\n{error_details}")
         debug_print(f"{'='*60}\n")
         
-        logger.error(f'2FA verification error: {str(e)}\n{error_details}')
+        logger.error("2FA verification failed.\n%s", error_details)
         return Response({'success': False, 'error': str(e)}, status=500)
     
 
@@ -275,7 +275,7 @@ def send_password_reset_code(request):
         debug_print(f"[PASSWORD RESET] Traceback:\n{error_details}")
         debug_print(f"{'='*60}\n")
         
-        logger.error(f'Password reset error: {str(e)}\n{error_details}')
+        logger.error("Password reset code sending failed.\n%s", error_details)
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
@@ -386,5 +386,5 @@ def reset_password(request):
         debug_print(f"[PASSWORD RESET] Traceback:\n{error_details}")
         debug_print(f"{'='*60}\n")
         
-        logger.error(f'Reset password error: {str(e)}\n{error_details}')
+        logger.error("Password reset execution failed.\n%s", error_details)
         return Response({'success': False, 'error': str(e)}, status=500)
