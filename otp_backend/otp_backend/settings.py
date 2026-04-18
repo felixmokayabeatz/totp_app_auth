@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-DEBUG = os.getenv('DEBUG') == 'False'
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 #====================================================================
 # Local settings for development
@@ -19,16 +19,23 @@ except ImportError:
     pass
 #====================================================================
 
-# ALLOWED_HOSTS - Fixed version
+def _split_csv_env(*names):
+    values = []
+    for name in names:
+        raw = os.getenv(name, '')
+        if not raw:
+            continue
+        values.extend(part.strip() for part in raw.split(',') if part.strip())
+    return values
+
+
 if DEBUG:
-    # Parse the string correctly if it comes from env
     ALLOWED_HOSTS = ['*']
 else:
-    ALLOWED_HOSTS = [os.getenv('ALLOWED_HOSTS'), 'localhost', '127.0.0.1', 'api.felixmokayabeatz.online']
-
-# Also add the IP directly
-if 'api.felixmokayabeatz.online' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('api.felixmokayabeatz.online')
+    allowed_hosts = _split_csv_env('ALLOWED_HOSTS', 'DJANGO_ALLOWED_HOSTS')
+    ALLOWED_HOSTS = list(dict.fromkeys(
+        allowed_hosts + ['localhost', '127.0.0.1', 'api.felixmokayabeatz.online']
+    ))
     
 
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND')
@@ -71,6 +78,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://api.felixmokayabeatz.online",
     "http://api.felixmokayabeatz.online",
 ]
 
@@ -78,8 +86,15 @@ if DEBUG:
     CORS_ALLOWED_ORIGINS += [
         "http://localhost:8000",
         "http://127.0.0.1:8000",
+        "https://api.felixmokayabeatz.online",
         "http://api.felixmokayabeatz.online",
     ]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://api.felixmokayabeatz.online",
+]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
