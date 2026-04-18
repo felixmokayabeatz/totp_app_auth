@@ -16,10 +16,6 @@ class UserProfileAdmin(admin.ModelAdmin):
         ("User Info", {
             "fields": ("user", "profile_photo", "bio")
         }),
-        ("Encryption Keys ⚠️", {
-            "fields": ("encryption_public_key", "encryption_private_key"),
-            "classes": ("collapse",),  # collapsible section
-        }),
         ("Metadata", {
             "fields": ("updated_at",),
         }),

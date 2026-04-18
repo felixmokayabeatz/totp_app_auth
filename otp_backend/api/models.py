@@ -23,7 +23,6 @@ class EncryptedData(models.Model):
         return f"{self.user.username} - {self.data_type}"
 
 
-# FIXED: One record per user (not per sync) - using OneToOneField
 class SyncLog(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name='sync_log')
     device_id = models.CharField(max_length=255, blank=True, default='')
