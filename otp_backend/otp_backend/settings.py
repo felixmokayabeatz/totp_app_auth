@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'accounts',
     'api',
     'twofa',
+    'beatzlocklogs',
     'django_extensions',
 ]
 
@@ -179,6 +180,15 @@ STATICFILES_DIRS = [
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+
+# ===================
+# LOGGING CONFIGURATION
+# ===================
+from .logging_config import get_logging_config
+
+# Setup logging
+LOGGING = get_logging_config(DEBUG)
+    
 if DEBUG:
     print(f"DEBUG: {DEBUG}")
     print(f"ALLOWED_HOSTS: {ALLOWED_HOSTS}")
@@ -193,3 +203,7 @@ if DEBUG:
     print(f"DB_USER: {os.getenv('DJANGO_DB_USER')}")    
     print(f"DB_PASSWORD: {'True' if os.getenv('DJANGO_DB_PASSWORD') else None}")
     print(f"DB_HOST: {os.getenv('DJANGO_DB_HOST')}")
+    print("=" * 50)
+    print("DEBUG MODE ENABLED - Verbose logging active")
+    print(f"Logs directory: {BASE_DIR / 'logs'}")
+    print("=" * 50)

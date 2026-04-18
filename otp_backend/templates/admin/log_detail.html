@@ -1,0 +1,448 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Lora:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --ink:       #0d0b09;
+        --paper:     #f7f3ed;
+        --cream:     #fffdf9;
+        --w100:      #f0e8d8;
+        --w200:      #ddd0ba;
+        --w300:      #c4b49a;
+        --amber:     #c07b2a;
+        --amber-dk:  #8f5a1a;
+        --teal:      #2a6e69;
+        --danger:    #b83225;
+        --warn:      #a86a10;
+        --info-col:  #1a5fa8;
+        --debug-col: #3a8a4a;
+        --surface:   rgba(255, 253, 249, 0.93);
+        --panel-bg:  #141210;
+        --r:         20px;
+        --rsm:       10px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        background: var(--paper);
+        background-image:
+            radial-gradient(ellipse 70% 50% at 90% -10%, rgba(192,123,42,0.1) 0%, transparent 55%),
+            radial-gradient(ellipse 50% 40% at 0% 100%, rgba(42,110,105,0.08) 0%, transparent 50%);
+        font-family: 'Lora', Georgia, serif;
+        color: var(--ink);
+    }
+
+    #content { padding: 0; }
+
+    /* ── Shell ── */
+    .d-shell {
+        max-width: 1340px;
+        margin: 0 auto;
+        padding: 36px 32px 60px;
+    }
+
+    /* ── Hero ── */
+    .d-hero {
+        position: relative;
+        background: var(--ink);
+        border-radius: var(--r);
+        padding: 34px 40px 30px;
+        margin-bottom: 22px;
+        overflow: hidden;
+        color: #f7f3ed;
+    }
+
+    .d-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 24px,
+                rgba(255,255,255,0.022) 24px,
+                rgba(255,255,255,0.022) 25px
+            );
+        pointer-events: none;
+    }
+
+    .d-kicker {
+        font-family: 'DM Mono', monospace;
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--w300);
+        margin-bottom: 12px;
+    }
+
+    .d-title {
+        font-family: 'Syne', sans-serif;
+        font-size: clamp(26px, 4vw, 42px);
+        font-weight: 800;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        word-break: break-word;
+        color: #fffdf9;
+        margin-bottom: 16px;
+    }
+
+    .d-pills {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .d-pill {
+        font-family: 'DM Mono', monospace;
+        font-size: 12px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 999px;
+        padding: 7px 13px;
+        color: var(--w300);
+    }
+
+    /* ── Controls ── */
+    .d-controls {
+        background: var(--surface);
+        border: 1px solid var(--w200);
+        border-radius: var(--r);
+        padding: 22px 24px;
+        margin-bottom: 22px;
+        backdrop-filter: blur(4px);
+    }
+
+    .ctrl-row {
+        display: grid;
+        grid-template-columns: 2.2fr 1fr 1fr auto;
+        gap: 14px;
+        align-items: start;
+    }
+
+    .fld { display: flex; flex-direction: column; gap: 6px; }
+
+    .fld label {
+        font-family: 'DM Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #8a7e70;
+        height: 14px;
+        display: block;
+    }
+
+    .fld input,
+    .fld select {
+        border: 1px solid var(--w200);
+        border-radius: var(--rsm);
+        padding: 11px 14px;
+        height: 44px;
+        background: var(--cream);
+        color: var(--ink);
+        font-family: 'Lora', serif;
+        font-size: 14px;
+        transition: border-color 0.15s;
+        width: 100%;
+    }
+
+    .fld select {
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a7e70' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        padding-right: 36px;
+    }
+
+    .fld input[type="date"]::-webkit-calendar-picker-indicator {
+        opacity: 0.5;
+        cursor: pointer;
+        filter: invert(0.3) sepia(0.4) saturate(2) hue-rotate(5deg);
+    }
+
+    .fld input[type="date"]::-webkit-calendar-picker-indicator:hover {
+        opacity: 0.85;
+    }
+
+    .fld input:focus,
+    .fld select:focus {
+        outline: none;
+        border-color: var(--amber);
+    }
+
+    .ctrl-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding-top: 20px;
+    }
+
+    .btn {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 11px 20px;
+        font-family: 'Syne', sans-serif;
+        font-weight: 700;
+        font-size: 13px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: transform 0.14s, opacity 0.14s;
+        white-space: nowrap;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary { background: var(--ink);  color: #f7f3ed; }
+    .btn-ghost   { background: var(--w100); color: #5a4e40; border: 1px solid var(--w200); }
+
+    /* ── Stats ── */
+    .d-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 14px;
+        margin-bottom: 22px;
+    }
+
+    .s-tile {
+        background: var(--surface);
+        border: 1px solid var(--w200);
+        border-radius: var(--r);
+        padding: 18px 20px;
+        backdrop-filter: blur(4px);
+    }
+
+    .s-label {
+        font-family: 'DM Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #8a7e70;
+        margin-bottom: 6px;
+    }
+
+    .s-value {
+        font-family: 'Syne', sans-serif;
+        font-size: 30px;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--ink);
+    }
+
+    .s-value.danger { color: var(--danger); }
+    .s-value.warn   { color: var(--warn); }
+
+    /* ── Log Panel ── */
+    .log-panel {
+        background: var(--panel-bg);
+        border-radius: var(--r);
+        overflow: hidden;
+        border: 1px solid rgba(0,0,0,0.28);
+        box-shadow: 0 24px 48px rgba(0,0,0,0.28);
+    }
+
+    .log-topbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 20px;
+        background: #1e1b18;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .log-topbar-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #3a3530;
+    }
+
+    .log-topbar-label {
+        font-family: 'DM Mono', monospace;
+        font-size: 12px;
+        color: #8a8070;
+        margin-left: 4px;
+    }
+
+    .log-lines {
+        max-height: 70vh;
+        overflow-y: auto;
+        scrollbar-color: #3a3530 var(--panel-bg);
+    }
+
+    .log-lines::-webkit-scrollbar { width: 8px; }
+    .log-lines::-webkit-scrollbar-track { background: var(--panel-bg); }
+    .log-lines::-webkit-scrollbar-thumb { background: #3a3530; border-radius: 99px; }
+
+    .log-row {
+        display: flex;
+        font-family: 'DM Mono', monospace;
+        font-size: 12.5px;
+        line-height: 1.55;
+        border-bottom: 1px solid rgba(255,255,255,0.03);
+        transition: background 0.1s;
+    }
+
+    .log-row:hover { background: rgba(255,255,255,0.03); }
+
+    .log-gutter {
+        flex-shrink: 0;
+        width: 56px;
+        padding: 8px 14px 8px 10px;
+        text-align: right;
+        color: #4a4540;
+        font-size: 11px;
+        user-select: none;
+        border-right: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .log-level-bar {
+        flex-shrink: 0;
+        width: 4px;
+    }
+
+    .log-body {
+        flex: 1;
+        padding: 8px 18px;
+        color: #c8bfb0;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    /* level theming */
+    .lvl-error .log-level-bar  { background: var(--danger); }
+    .lvl-error .log-body       { color: #f09080; background: rgba(184,50,37,0.07); }
+    .lvl-error .log-gutter     { color: rgba(240,144,128,0.4); }
+
+    .lvl-warning .log-level-bar { background: var(--warn); }
+    .lvl-warning .log-body      { color: #e8b860; background: rgba(168,106,16,0.07); }
+    .lvl-warning .log-gutter    { color: rgba(232,184,96,0.4); }
+
+    .lvl-info .log-level-bar  { background: var(--info-col); }
+    .lvl-info .log-body       { color: #7ab4e8; }
+
+    .lvl-debug .log-level-bar { background: var(--debug-col); }
+    .lvl-debug .log-body      { color: #80c890; }
+
+    .log-empty {
+        padding: 36px;
+        text-align: center;
+        font-family: 'DM Mono', monospace;
+        font-size: 13px;
+        color: #5a5450;
+        font-style: italic;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+        .d-shell { padding: 18px 16px 48px; }
+        .ctrl-row { grid-template-columns: 1fr; }
+        .d-hero { padding: 24px 22px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-shell">
+
+    <header class="d-hero">
+        <div class="d-kicker">BeatzLock · Admin · Log Detail</div>
+        <h1 class="d-title">{{ log_name }}</h1>
+        <div class="d-pills">
+            <span class="d-pill">{{ file_size_display }}</span>
+            <span class="d-pill">Updated {{ modified|date:"Y-m-d H:i:s" }}</span>
+            <span class="d-pill">{{ total_lines }} lines in file</span>
+        </div>
+    </header>
+
+    <section class="d-controls">
+        <form method="get" class="ctrl-row">
+            <div class="fld">
+                <label for="search_text">Search inside log</label>
+                <input id="search_text" type="text" name="search_text" value="{{ search_text }}" placeholder="error, token, username, traceback…">
+            </div>
+            <div class="fld">
+                <label for="level">Level</label>
+                <select id="level" name="level">
+                    <option value=""        {% if not level_filter %}selected{% endif %}>All levels</option>
+                    <option value="ERROR"   {% if level_filter == 'ERROR'   %}selected{% endif %}>ERROR</option>
+                    <option value="WARNING" {% if level_filter == 'WARNING' %}selected{% endif %}>WARNING</option>
+                    <option value="INFO"    {% if level_filter == 'INFO'    %}selected{% endif %}>INFO</option>
+                    <option value="DEBUG"   {% if level_filter == 'DEBUG'   %}selected{% endif %}>DEBUG</option>
+                </select>
+            </div>
+            <div class="fld">
+                <label for="lines">Lines to show</label>
+                <select id="lines" name="lines">
+                    <option value="100"  {% if lines == 100  %}selected{% endif %}>100</option>
+                    <option value="500"  {% if lines == 500  %}selected{% endif %}>500</option>
+                    <option value="1000" {% if lines == 1000 %}selected{% endif %}>1 000</option>
+                    <option value="5000" {% if lines == 5000 %}selected{% endif %}>5 000</option>
+                    <option value="0"    {% if lines == 0    %}selected{% endif %}>All</option>
+                </select>
+            </div>
+            <div class="ctrl-actions">
+                <button type="submit" class="btn btn-primary">Apply</button>
+                <a href="{% url 'beatzlocklogs:log_detail' log_file %}" class="btn btn-ghost">Reset</a>
+                <a href="{% url 'beatzlocklogs:log_viewer' %}" class="btn btn-ghost">← Back</a>
+            </div>
+        </form>
+    </section>
+
+    <div class="d-stats">
+        <div class="s-tile">
+            <div class="s-label">Filtered Lines</div>
+            <div class="s-value">{{ filtered_lines }}</div>
+        </div>
+        <div class="s-tile">
+            <div class="s-label">Displayed</div>
+            <div class="s-value">{{ displayed_lines }}</div>
+        </div>
+        <div class="s-tile">
+            <div class="s-label">Errors</div>
+            <div class="s-value danger">{{ error_count }}</div>
+        </div>
+        <div class="s-tile">
+            <div class="s-label">Warnings</div>
+            <div class="s-value warn">{{ warning_count }}</div>
+        </div>
+        <div class="s-tile">
+            <div class="s-label">Info</div>
+            <div class="s-value">{{ info_count }}</div>
+        </div>
+    </div>
+
+    <section class="log-panel">
+        <div class="log-topbar">
+            <div class="log-topbar-dot"></div>
+            <div class="log-topbar-dot"></div>
+            <div class="log-topbar-dot"></div>
+            <span class="log-topbar-label">
+                Showing {% if lines == 0 %}all{% else %}up to {{ lines }}{% endif %} lines · {{ log_name }}
+            </span>
+        </div>
+        <div class="log-lines">
+            {% for line in log_lines %}
+                <div class="log-row {% if 'ERROR' in line %}lvl-error{% elif 'WARNING' in line %}lvl-warning{% elif 'INFO' in line %}lvl-info{% elif 'DEBUG' in line %}lvl-debug{% endif %}">
+                    <div class="log-gutter">{{ forloop.counter }}</div>
+                    <div class="log-level-bar"></div>
+                    <pre class="log-body">{{ line|escape }}</pre>
+                </div>
+            {% empty %}
+                <div class="log-empty">No log entries matched the current filter.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+</div>
+{% endblock %}

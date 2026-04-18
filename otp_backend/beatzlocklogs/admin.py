@@ -1,0 +1,30 @@
+from django.contrib import admin
+from django.urls import path
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.contrib.admin.views.decorators import staff_member_required
+
+from .views import log_viewer
+
+
+@method_decorator(staff_member_required, name="dispatch")
+class LogViewerAdmin(View):
+    """Expose the shared log viewer inside Django admin."""
+
+    def get(self, request, log_file=None):
+        return log_viewer(request, log_file=log_file)
+
+
+original_get_urls = admin.site.get_urls
+
+
+def custom_get_urls():
+    urls = original_get_urls()
+    custom_urls = [
+        path("logs/", LogViewerAdmin.as_view(), name="log_viewer"),
+        path("logs/<path:log_file>/", LogViewerAdmin.as_view(), name="log_detail"),
+    ]
+    return custom_urls + urls
+
+
+admin.site.get_urls = custom_get_urls

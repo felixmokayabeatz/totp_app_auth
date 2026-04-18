@@ -11,128 +11,324 @@ from django.conf import settings
 import json
 import random
 import string
+import logging
+import traceback
+from django.conf import settings as django_settings
 
 from .models import EncryptedData, SyncLog, AccountTombstone, DeleteOTPCode
 from .serializers import UserSerializer, EncryptedDataSerializer, RegisterSerializer
 from twofa.email_templates import get_delete_otp_email_template
 
+# ===================
+# LOGGING SETUP
+# ===================
+logger = logging.getLogger(__name__)
 
+
+def debug_print(*args, **kwargs):
+    """Conditional print only when DEBUG=True"""
+    if django_settings.DEBUG:
+        print(*args, **kwargs)
+
+
+# ===================
+# AUTH VIEWSET
+# ===================
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
     
     @action(detail=False, methods=['post'])
     def register(self, request):
+        start_time = __import__('time').time()
+        
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[AUTH] Register called")
+        debug_print(f"[AUTH] Username: {request.data.get('username')}")
+        debug_print(f"[AUTH] Email: {request.data.get('email')}")
+        debug_print(f"[AUTH] Request IP: {request.META.get('REMOTE_ADDR')}")
+        debug_print(f"[AUTH] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
+        debug_print(f"{'='*60}\n")
+        
+        logger.info(f"Registration attempt - IP: {request.META.get('REMOTE_ADDR')}, Username: {request.data.get('username')}")
+        
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.save()
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                'user': UserSerializer(user).data,
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-            })
+            debug_print(f"[AUTH] Registration data validation PASSED")
+            
+            try:
+                user = serializer.save()
+                debug_print(f"[AUTH] User created successfully - ID: {user.id}, Username: {user.username}, Email: {user.email}")
+                
+                refresh = RefreshToken.for_user(user)
+                
+                elapsed_time = __import__('time').time() - start_time
+                debug_print(f"[AUTH] Registration completed in {elapsed_time:.2f} seconds")
+                
+                logger.info(f"User registered successfully - Username: {user.username}, Email: {user.email}, ID: {user.id}")
+                
+                return Response({
+                    'user': UserSerializer(user).data,
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
+                })
+                
+            except Exception as e:
+                error_details = traceback.format_exc()
+                debug_print(f"[AUTH] ERROR saving user: {str(e)}")
+                debug_print(f"[AUTH] Traceback:\n{error_details}")
+                logger.error(f"Registration save error: {str(e)}\n{error_details}")
+                return Response({'error': 'Failed to create user'}, status=500)
+        
+        debug_print(f"[AUTH] Registration validation FAILED: {serializer.errors}")
+        logger.warning(f"Registration failed - Username: {request.data.get('username')}, Errors: {serializer.errors}")
         return Response(serializer.errors, status=400)
     
     @action(detail=False, methods=['post'])
     def login(self, request):
+        start_time = __import__('time').time()
         username = (request.data.get('username') or '').strip()
         password = request.data.get('password')
-
+        
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[AUTH] Login called")
+        debug_print(f"[AUTH] Username: {username}")
+        debug_print(f"[AUTH] Password provided: {'Yes' if password else 'No'}")
+        debug_print(f"[AUTH] Request IP: {request.META.get('REMOTE_ADDR')}")
+        debug_print(f"[AUTH] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
+        debug_print(f"{'='*60}\n")
+        
+        logger.info(f"Login attempt - Username: {username}, IP: {request.META.get('REMOTE_ADDR')}")
+        
+        if not username or not password:
+            debug_print(f"[AUTH] ERROR: Missing username or password")
+            logger.warning(f"Login missing credentials - Username: {username}")
+            return Response({'error': 'Username and password required'}, status=400)
+        
         try:
-            user_obj = User.objects.get(username__iexact=username)
-            auth_username = user_obj.username
-        except User.DoesNotExist:
-            auth_username = username
-
-        user = authenticate(
-            username=auth_username,
-            password=password
-        )
-        if user:
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                'user': UserSerializer(user).data,
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-            })
-        return Response({'error': 'Invalid credentials'}, status=401)
+            # Try to find user for case-insensitive lookup
+            debug_print(f"[AUTH] Looking up user: {username}")
+            try:
+                user_obj = User.objects.get(username__iexact=username)
+                auth_username = user_obj.username
+                debug_print(f"[AUTH] User found - ID: {user_obj.id}, Username: {auth_username}")
+            except User.DoesNotExist:
+                debug_print(f"[AUTH] User not found by username, will try direct authentication")
+                auth_username = username
+            
+            debug_print(f"[AUTH] Authenticating with username: {auth_username}")
+            user = authenticate(username=auth_username, password=password)
+            
+            if user:
+                debug_print(f"[AUTH] Authentication SUCCESS - User ID: {user.id}, Username: {user.username}")
+                
+                refresh = RefreshToken.for_user(user)
+                
+                elapsed_time = __import__('time').time() - start_time
+                debug_print(f"[AUTH] Login completed in {elapsed_time:.2f} seconds")
+                
+                logger.info(f"User logged in successfully - Username: {user.username}, ID: {user.id}, IP: {request.META.get('REMOTE_ADDR')}")
+                
+                return Response({
+                    'user': UserSerializer(user).data,
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
+                })
+            
+            debug_print(f"[AUTH] Authentication FAILED for user: {username}")
+            logger.warning(f"Failed login attempt - Username: {username}, IP: {request.META.get('REMOTE_ADDR')}")
+            return Response({'error': 'Invalid credentials'}, status=401)
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            debug_print(f"[AUTH] ERROR during login: {str(e)}")
+            debug_print(f"[AUTH] Traceback:\n{error_details}")
+            logger.error(f"Login error: {str(e)}\n{error_details}")
+            return Response({'error': 'Login failed'}, status=500)
     
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def change_password(self, request):
+        start_time = __import__('time').time()
         user = request.user
         current_password = request.data.get('current_password')
         new_password = request.data.get('new_password')
         
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[AUTH] change_password called")
+        debug_print(f"[AUTH] User: {user.username} (ID: {user.id})")
+        debug_print(f"[AUTH] Current password provided: {'Yes' if current_password else 'No'}")
+        debug_print(f"[AUTH] New password length: {len(new_password) if new_password else 0}")
+        debug_print(f"{'='*60}\n")
+        
+        logger.info(f"Password change attempt - User: {user.username}, IP: {request.META.get('REMOTE_ADDR')}")
+        
         if not current_password or not new_password:
+            debug_print(f"[AUTH] ERROR: Missing current or new password")
+            logger.warning(f"Password change missing fields - User: {user.username}")
             return Response({'error': 'Current password and new password are required'}, status=400)
         
         if not user.check_password(current_password):
+            debug_print(f"[AUTH] ERROR: Current password is incorrect")
+            logger.warning(f"Password change - Incorrect current password for user: {user.username}")
             return Response({'error': 'Current password is incorrect'}, status=400)
         
         if len(new_password) < 8:
+            debug_print(f"[AUTH] ERROR: New password too short (length: {len(new_password)})")
+            logger.warning(f"Password change - New password too short for user: {user.username}")
             return Response({'error': 'Password must be at least 8 characters'}, status=400)
         
-        user.set_password(new_password)
-        user.save()
-        
-        return Response({'success': 'Password changed successfully'})
+        try:
+            user.set_password(new_password)
+            user.save()
+            
+            elapsed_time = __import__('time').time() - start_time
+            debug_print(f"[AUTH] Password changed successfully in {elapsed_time:.2f} seconds")
+            
+            logger.info(f"Password changed successfully - User: {user.username}")
+            
+            return Response({'success': 'Password changed successfully'})
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            debug_print(f"[AUTH] ERROR changing password: {str(e)}")
+            debug_print(f"[AUTH] Traceback:\n{error_details}")
+            logger.error(f"Password change error for user {user.username}: {str(e)}\n{error_details}")
+            return Response({'error': 'Failed to change password'}, status=500)
 
 
+# ===================
+# SYNC VIEWSET
+# ===================
 class SyncViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = EncryptedDataSerializer
     
     @action(detail=False, methods=['post'])
     def sync(self, request):
+        start_time = __import__('time').time()
+        user = request.user
         data_type = request.data.get('data_type')
         encrypted_content = request.data.get('encrypted_content')
         version = request.data.get('version', 1)
         device_id = request.data.get('device_id', 'unknown')
         deleted_accounts = request.data.get('deleted_accounts', '[]')
         
-        obj, created = EncryptedData.objects.update_or_create(
-            user=request.user,
-            data_type=data_type,
-            defaults={
-                'encrypted_content': encrypted_content,
-                'version': version,
-                'synced_at': timezone.now(),
-                'deleted_accounts': deleted_accounts,
-            }
-        )
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[SYNC] Upload sync called")
+        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] Data type: {data_type}")
+        debug_print(f"[SYNC] Version: {version}")
+        debug_print(f"[SYNC] Device ID: {device_id}")
+        debug_print(f"[SYNC] Content length: {len(encrypted_content) if encrypted_content else 0}")
+        debug_print(f"[SYNC] Deleted accounts length: {len(deleted_accounts)}")
+        debug_print(f"{'='*60}\n")
         
-        # UPDATE instead of CREATE - one record per user
-        sync_log, created_log = SyncLog.objects.update_or_create(
-            user=request.user,
-            defaults={
-                'device_id': device_id,
-                'sync_type': 'upload',
-                'status': 'success',
-                'error_message': None,
-                'timestamp': timezone.now(),
-            }
-        )
-        # Increment total syncs counter
-        sync_log.total_syncs = sync_log.total_syncs + 1
-        sync_log.save(update_fields=['total_syncs'])
+        logger.info(f"Sync upload request - User: {user.username}, Type: {data_type}, Device: {device_id}, Version: {version}")
         
-        return Response({
-            'status': 'synced', 
-            'version': obj.version,
-            'synced_at': obj.synced_at.isoformat() if obj.synced_at else None,
-            'deleted_accounts': obj.deleted_accounts,
-        })
+        if not data_type:
+            debug_print(f"[SYNC] ERROR: Missing data_type")
+            logger.warning(f"Sync upload missing data_type - User: {user.username}")
+            return Response({'error': 'data_type is required'}, status=400)
+        
+        try:
+            # Create or update encrypted data
+            obj, created = EncryptedData.objects.update_or_create(
+                user=request.user,
+                data_type=data_type,
+                defaults={
+                    'encrypted_content': encrypted_content,
+                    'version': version,
+                    'synced_at': timezone.now(),
+                    'deleted_accounts': deleted_accounts,
+                }
+            )
+            
+            debug_print(f"[SYNC] EncryptedData record {'created' if created else 'updated'} - ID: {obj.id}, Version: {obj.version}")
+            
+            # Update sync log
+            sync_log, created_log = SyncLog.objects.update_or_create(
+                user=request.user,
+                defaults={
+                    'device_id': device_id,
+                    'sync_type': 'upload',
+                    'status': 'success',
+                    'error_message': None,
+                    'timestamp': timezone.now(),
+                }
+            )
+            
+            old_total = sync_log.total_syncs
+            sync_log.total_syncs = sync_log.total_syncs + 1
+            sync_log.save(update_fields=['total_syncs'])
+            
+            debug_print(f"[SYNC] Sync log {'created' if created_log else 'updated'} - Total syncs: {old_total} -> {sync_log.total_syncs}")
+            
+            elapsed_time = __import__('time').time() - start_time
+            debug_print(f"[SYNC] Upload sync completed in {elapsed_time:.2f} seconds")
+            
+            logger.info(f"Sync upload successful - User: {user.username}, Type: {data_type}, Created: {created}, Total syncs: {sync_log.total_syncs}")
+            
+            return Response({
+                'status': 'synced', 
+                'version': obj.version,
+                'synced_at': obj.synced_at.isoformat() if obj.synced_at else None,
+                'deleted_accounts': obj.deleted_accounts,
+            })
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            debug_print(f"[SYNC] ERROR during upload sync: {str(e)}")
+            debug_print(f"[SYNC] Traceback:\n{error_details}")
+            
+            # Log error in sync log
+            try:
+                sync_log, _ = SyncLog.objects.update_or_create(
+                    user=request.user,
+                    defaults={
+                        'device_id': device_id,
+                        'sync_type': 'upload',
+                        'status': 'error',
+                        'error_message': str(e)[:500],
+                        'timestamp': timezone.now(),
+                    }
+                )
+                sync_log.total_syncs = sync_log.total_syncs + 1
+                sync_log.save(update_fields=['total_syncs'])
+            except:
+                pass
+            
+            logger.error(f"Sync upload failed for user {user.username}: {str(e)}\n{error_details}")
+            return Response({'error': 'Sync failed', 'details': str(e) if django_settings.DEBUG else 'Internal error'}, status=500)
     
     @action(detail=False, methods=['get'], url_path='get-data')
     def get_data(self, request):
+        start_time = __import__('time').time()
+        user = request.user
         data_type = request.query_params.get('data_type')
         device_id = request.query_params.get('device_id', 'unknown')
+        
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[SYNC] Download data called")
+        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] Data type: {data_type}")
+        debug_print(f"[SYNC] Device ID: {device_id}")
+        debug_print(f"{'='*60}\n")
+        
+        logger.info(f"Sync download request - User: {user.username}, Type: {data_type}, Device: {device_id}")
+        
+        if not data_type:
+            debug_print(f"[SYNC] ERROR: Missing data_type")
+            logger.warning(f"Sync download missing data_type - User: {user.username}")
+            return Response({'error': 'data_type is required'}, status=400)
         
         try:
             data = EncryptedData.objects.get(user=request.user, data_type=data_type)
             
-            # UPDATE instead of CREATE - one record per user
+            debug_print(f"[SYNC] Data found - ID: {data.id}, Version: {data.version}")
+            debug_print(f"[SYNC] Content length: {len(data.encrypted_content) if data.encrypted_content else 0}")
+            debug_print(f"[SYNC] Last synced: {data.synced_at}")
+            
+            # Update sync log
             sync_log, created_log = SyncLog.objects.update_or_create(
                 user=request.user,
                 defaults={
@@ -143,9 +339,17 @@ class SyncViewSet(viewsets.GenericViewSet):
                     'timestamp': timezone.now(),
                 }
             )
-            # Increment total syncs counter
+            
+            old_total = sync_log.total_syncs
             sync_log.total_syncs = sync_log.total_syncs + 1
             sync_log.save(update_fields=['total_syncs'])
+            
+            debug_print(f"[SYNC] Sync log updated - Total syncs: {old_total} -> {sync_log.total_syncs}")
+            
+            elapsed_time = __import__('time').time() - start_time
+            debug_print(f"[SYNC] Download completed in {elapsed_time:.2f} seconds")
+            
+            logger.info(f"Sync download successful - User: {user.username}, Type: {data_type}, Version: {data.version}")
             
             return Response({
                 'encrypted_content': data.encrypted_content,
@@ -154,165 +358,416 @@ class SyncViewSet(viewsets.GenericViewSet):
                 'synced_at': data.synced_at.isoformat() if data.synced_at else None,
                 'deleted_accounts': data.deleted_accounts if hasattr(data, 'deleted_accounts') else '[]',
             })
+            
         except EncryptedData.DoesNotExist:
+            debug_print(f"[SYNC] No data found for type: {data_type}")
+            logger.info(f"No data found for user {user.username}, type: {data_type}")
             return Response({'status': 'no_data'}, status=404)
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            debug_print(f"[SYNC] ERROR during download: {str(e)}")
+            debug_print(f"[SYNC] Traceback:\n{error_details}")
+            
+            logger.error(f"Sync download error for user {user.username}: {str(e)}\n{error_details}")
+            return Response({'error': 'Failed to retrieve data'}, status=500)
     
     @action(detail=False, methods=['get'], url_path='tombstones')
     def tombstones(self, request):
-        ids = list(
-            AccountTombstone.objects
-            .filter(user=request.user)
-            .values_list('account_id', flat=True)
-        )
-        return Response({'tombstoned_ids': ids})
+        start_time = __import__('time').time()
+        user = request.user
+        
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[SYNC] Get tombstones called")
+        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"{'='*60}\n")
+        
+        logger.info(f"Get tombstones request - User: {user.username}")
+        
+        try:
+            ids = list(
+                AccountTombstone.objects
+                .filter(user=request.user)
+                .values_list('account_id', flat=True)
+            )
+            
+            debug_print(f"[SYNC] Found {len(ids)} tombstoned accounts")
+            if ids and django_settings.DEBUG:
+                debug_print(f"[SYNC] Tombstoned IDs: {ids[:10]}{'...' if len(ids) > 10 else ''}")
+            
+            elapsed_time = __import__('time').time() - start_time
+            debug_print(f"[SYNC] Tombstones retrieved in {elapsed_time:.2f} seconds")
+            
+            logger.info(f"Tombstones retrieved - User: {user.username}, Count: {len(ids)}")
+            
+            return Response({'tombstoned_ids': ids})
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            debug_print(f"[SYNC] ERROR getting tombstones: {str(e)}")
+            debug_print(f"[SYNC] Traceback:\n{error_details}")
+            
+            logger.error(f"Get tombstones error for user {user.username}: {str(e)}\n{error_details}")
+            return Response({'error': 'Failed to retrieve tombstones'}, status=500)
     
     @action(detail=False, methods=['post'], url_path='delete-account')
     def delete_account(self, request):
+        start_time = __import__('time').time()
+        user = request.user
         account_id = request.data.get('account_id')
         device_id = request.data.get('device_id', 'unknown')
         
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[SYNC] Delete account called")
+        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] Account ID: {account_id}")
+        debug_print(f"[SYNC] Device ID: {device_id}")
+        debug_print(f"{'='*60}\n")
+        
+        logger.info(f"Delete account request - User: {user.username}, Account ID: {account_id}, Device: {device_id}")
+        
         if not account_id:
+            debug_print(f"[SYNC] ERROR: Missing account_id")
+            logger.warning(f"Delete account missing account_id - User: {user.username}")
             return Response({'error': 'Account ID required'}, status=400)
         
-        # Create tombstone record
-        AccountTombstone.objects.get_or_create(user=request.user, account_id=account_id)
-        
-        # Also remove from EncryptedData if exists
         try:
-            data = EncryptedData.objects.get(user=request.user, data_type='otp_accounts')
-            deleted_accounts = json.loads(data.deleted_accounts) if data.deleted_accounts else []
-            if account_id not in deleted_accounts:
-                deleted_accounts.append(account_id)
-                data.deleted_accounts = json.dumps(deleted_accounts)
-                data.save()
-        except EncryptedData.DoesNotExist:
-            pass
-        
-        # UPDATE instead of CREATE - one record per user
-        sync_log, created_log = SyncLog.objects.update_or_create(
-            user=request.user,
-            defaults={
-                'device_id': device_id,
-                'sync_type': 'delete',
-                'status': 'success',
-                'error_message': None,
-                'timestamp': timezone.now(),
-            }
-        )
-        # Increment total syncs counter
-        sync_log.total_syncs = sync_log.total_syncs + 1
-        sync_log.save(update_fields=['total_syncs'])
-        
-        return Response({'success': True, 'account_id': account_id})
+            # Create tombstone record
+            tombstone, created = AccountTombstone.objects.get_or_create(user=request.user, account_id=account_id)
+            debug_print(f"[SYNC] Tombstone {'created' if created else 'already existed'} - ID: {tombstone.id}")
+            
+            # Also remove from EncryptedData if exists
+            try:
+                data = EncryptedData.objects.get(user=request.user, data_type='otp_accounts')
+                deleted_accounts = json.loads(data.deleted_accounts) if data.deleted_accounts else []
+                debug_print(f"[SYNC] Current deleted_accounts list length: {len(deleted_accounts)}")
+                
+                if account_id not in deleted_accounts:
+                    deleted_accounts.append(account_id)
+                    data.deleted_accounts = json.dumps(deleted_accounts)
+                    data.save()
+                    debug_print(f"[SYNC] Added account_id to deleted_accounts, new length: {len(deleted_accounts)}")
+                else:
+                    debug_print(f"[SYNC] Account_id already in deleted_accounts")
+                    
+            except EncryptedData.DoesNotExist:
+                debug_print(f"[SYNC] No EncryptedData record found for otp_accounts")
+            except Exception as e:
+                debug_print(f"[SYNC] Error updating EncryptedData: {str(e)}")
+            
+            # Update sync log
+            sync_log, created_log = SyncLog.objects.update_or_create(
+                user=request.user,
+                defaults={
+                    'device_id': device_id,
+                    'sync_type': 'delete',
+                    'status': 'success',
+                    'error_message': None,
+                    'timestamp': timezone.now(),
+                }
+            )
+            
+            old_total = sync_log.total_syncs
+            sync_log.total_syncs = sync_log.total_syncs + 1
+            sync_log.save(update_fields=['total_syncs'])
+            
+            debug_print(f"[SYNC] Sync log updated - Total syncs: {old_total} -> {sync_log.total_syncs}")
+            
+            elapsed_time = __import__('time').time() - start_time
+            debug_print(f"[SYNC] Account deletion completed in {elapsed_time:.2f} seconds")
+            
+            logger.info(f"Account deleted successfully - User: {user.username}, Account ID: {account_id}")
+            
+            return Response({'success': True, 'account_id': account_id})
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            debug_print(f"[SYNC] ERROR deleting account: {str(e)}")
+            debug_print(f"[SYNC] Traceback:\n{error_details}")
+            
+            logger.error(f"Delete account error for user {user.username}: {str(e)}\n{error_details}")
+            return Response({'error': 'Failed to delete account'}, status=500)
     
     @action(detail=False, methods=['post'], url_path='delete-all-accounts')
     def delete_all_accounts(self, request):
-        EncryptedData.objects.filter(user=request.user, data_type='otp_accounts').delete()
-        AccountTombstone.objects.get_or_create(user=request.user, account_id='__ALL__')
+        start_time = __import__('time').time()
+        user = request.user
+        device_id = request.data.get('device_id', 'unknown')
         
-        # Update sync log for delete all
-        sync_log, created_log = SyncLog.objects.update_or_create(
-            user=request.user,
-            defaults={
-                'device_id': request.data.get('device_id', 'unknown'),
-                'sync_type': 'delete_all',
-                'status': 'success',
-                'error_message': None,
-                'timestamp': timezone.now(),
-            }
-        )
-        sync_log.total_syncs = sync_log.total_syncs + 1
-        sync_log.save(update_fields=['total_syncs'])
+        debug_print(f"\n{'='*60}")
+        debug_print(f"[SYNC] Delete all accounts called")
+        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] Device ID: {device_id}")
+        debug_print(f"{'='*60}\n")
         
-        return Response({'success': True})
+        logger.warning(f"Delete all accounts request - User: {user.username}, Device: {device_id}")
+        
+        try:
+            # Delete all OTP accounts
+            deleted_count, _ = EncryptedData.objects.filter(user=request.user, data_type='otp_accounts').delete()
+            debug_print(f"[SYNC] Deleted {deleted_count} EncryptedData records")
+            
+            # Create global tombstone
+            tombstone, created = AccountTombstone.objects.get_or_create(user=request.user, account_id='__ALL__')
+            debug_print(f"[SYNC] Global tombstone {'created' if created else 'already existed'}")
+            
+            # Update sync log for delete all
+            sync_log, created_log = SyncLog.objects.update_or_create(
+                user=request.user,
+                defaults={
+                    'device_id': device_id,
+                    'sync_type': 'delete_all',
+                    'status': 'success',
+                    'error_message': None,
+                    'timestamp': timezone.now(),
+                }
+            )
+            
+            old_total = sync_log.total_syncs
+            sync_log.total_syncs = sync_log.total_syncs + 1
+            sync_log.save(update_fields=['total_syncs'])
+            
+            debug_print(f"[SYNC] Sync log updated - Total syncs: {old_total} -> {sync_log.total_syncs}")
+            
+            elapsed_time = __import__('time').time() - start_time
+            debug_print(f"[SYNC] Delete all accounts completed in {elapsed_time:.2f} seconds")
+            
+            logger.warning(f"All accounts deleted - User: {user.username}, Deleted count: {deleted_count}")
+            
+            return Response({'success': True, 'deleted_count': deleted_count})
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            debug_print(f"[SYNC] ERROR deleting all accounts: {str(e)}")
+            debug_print(f"[SYNC] Traceback:\n{error_details}")
+            
+            logger.error(f"Delete all accounts error for user {user.username}: {str(e)}\n{error_details}")
+            return Response({'error': 'Failed to delete accounts'}, status=500)
 
 
-# Separate API views for delete OTP
+# ===================
+# DELETE OTP VIEWS
+# ===================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_delete_otp(request):
+    start_time = __import__('time').time()
+    user = request.user
+    
+    debug_print(f"\n{'='*60}")
+    debug_print(f"[DELETE OTP] Send OTP called")
+    debug_print(f"[DELETE OTP] User: {user.username} (ID: {user.id})")
+    debug_print(f"[DELETE OTP] Email: {user.email}")
+    debug_print(f"[DELETE OTP] Request IP: {request.META.get('REMOTE_ADDR')}")
+    debug_print(f"{'='*60}\n")
+    
+    logger.info(f"Delete OTP request - User: {user.username}, IP: {request.META.get('REMOTE_ADDR')}")
+    
+    if not user.email:
+        debug_print(f"[DELETE OTP] ERROR: User has no email")
+        logger.error(f"Delete OTP - No email for user: {user.username}")
+        return Response({'success': False, 'error': 'No email associated with account'}, status=400)
+    
     try:
+        # Generate 6-digit code
         code = ''.join(random.choices(string.digits, k=6))
-        DeleteOTPCode.objects.create(user=request.user, code=code)
+        debug_print(f"[DELETE OTP] Generated code: {code}")
+        
+        # Delete old unused codes for this user
+        old_codes_deleted = DeleteOTPCode.objects.filter(user=user, used=False).delete()
+        debug_print(f"[DELETE OTP] Deleted {old_codes_deleted[0]} old unused codes")
+        
+        # Create new OTP
+        otp_obj = DeleteOTPCode.objects.create(user=user, code=code)
+        debug_print(f"[DELETE OTP] Created OTP record - ID: {otp_obj.id}")
         
         # Get email template
-        html_message = get_delete_otp_email_template(request.user.username, code)
+        html_message = get_delete_otp_email_template(user.username, code)
+        
+        debug_print(f"[DELETE OTP] Sending email to: {user.email}")
         
         send_mail(
             subject='BeatzLock – Confirm Delete All Accounts',
-            message=f'Your delete verification code is: {code}\n\nThis code expires in 10 minutes.',
+            message=f'Your delete verification code is: {code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.',
             from_email=settings.EMAIL_HOST_USER,
-            recipient_list=[request.user.email],
+            recipient_list=[user.email],
             html_message=html_message,
             fail_silently=False,
         )
-        return Response({'success': True})
+        
+        elapsed_time = __import__('time').time() - start_time
+        debug_print(f"[DELETE OTP] Email sent successfully in {elapsed_time:.2f} seconds")
+        
+        logger.info(f"Delete OTP sent successfully - User: {user.username}, Code: {code}")
+        
+        return Response({'success': True, 'message': f'Verification code sent to {user.email}'})
+        
     except Exception as e:
-        print(f"Send delete OTP error: {e}")
+        error_details = traceback.format_exc()
+        debug_print(f"[DELETE OTP] ERROR: {str(e)}")
+        debug_print(f"[DELETE OTP] Traceback:\n{error_details}")
+        
+        logger.error(f"Send delete OTP error for user {user.username}: {str(e)}\n{error_details}")
+        print(f"Send delete OTP error: {e}")  # Keep original print for console
+        
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def verify_delete_otp(request):
+    start_time = __import__('time').time()
+    user = request.user
     code = request.data.get('code', '')
+    
+    debug_print(f"\n{'='*60}")
+    debug_print(f"[DELETE OTP] Verify OTP called")
+    debug_print(f"[DELETE OTP] User: {user.username} (ID: {user.id})")
+    debug_print(f"[DELETE OTP] Code: {code}")
+    debug_print(f"{'='*60}\n")
+    
+    logger.info(f"Delete OTP verification - User: {user.username}, Code provided: {bool(code)}")
+    
+    if not code:
+        debug_print(f"[DELETE OTP] ERROR: No code provided")
+        logger.warning(f"Delete OTP verification - No code provided for user: {user.username}")
+        return Response({'success': False, 'error': 'Code is required'}, status=400)
+    
     try:
+        # Find the latest unused OTP for this user
         otp_obj = DeleteOTPCode.objects.filter(
-            user=request.user, 
+            user=user, 
             code=code, 
             used=False
         ).order_by('-created_at').first()
         
-        if otp_obj and otp_obj.is_valid():
+        if not otp_obj:
+            debug_print(f"[DELETE OTP] No valid OTP found for code: {code}")
+            logger.warning(f"Invalid delete OTP attempt - User: {user.username}, Code: {code}")
+            return Response({'success': False, 'error': 'Invalid or expired code'}, status=400)
+        
+        debug_print(f"[DELETE OTP] Found OTP - ID: {otp_obj.id}, Created: {otp_obj.created_at}")
+        
+        # Check if OTP is valid
+        if otp_obj.is_valid():
+            debug_print(f"[DELETE OTP] OTP is valid, marking as used")
             otp_obj.used = True
             otp_obj.save()
-            return Response({'success': True})
-        return Response({'success': False, 'error': 'Invalid or expired code'}, status=400)
+            
+            elapsed_time = __import__('time').time() - start_time
+            debug_print(f"[DELETE OTP] OTP verified successfully in {elapsed_time:.2f} seconds")
+            
+            logger.info(f"Delete OTP verified successfully - User: {user.username}")
+            return Response({'success': True, 'message': 'Code verified successfully'})
+        else:
+            debug_print(f"[DELETE OTP] OTP has expired - Created: {otp_obj.created_at}")
+            logger.warning(f"Delete OTP expired - User: {user.username}, Created: {otp_obj.created_at}")
+            return Response({'success': False, 'error': 'Code has expired (10 minute limit)'}, status=400)
+        
     except Exception as e:
+        error_details = traceback.format_exc()
+        debug_print(f"[DELETE OTP] ERROR: {str(e)}")
+        debug_print(f"[DELETE OTP] Traceback:\n{error_details}")
+        
+        logger.error(f"Verify delete OTP error for user {user.username}: {str(e)}\n{error_details}")
         return Response({'success': False, 'error': str(e)}, status=500)
-    
 
-from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 
+# ===================
+# SYNC PREFERENCE VIEWS
+# ===================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_sync_preference(request):
+    start_time = __import__('time').time()
+    user = request.user
     enabled = request.data.get('sync_enabled', True)
-
-    obj, created = EncryptedData.objects.get_or_create(
-        user=request.user,
-        data_type='sync_preference',
-        defaults={
-            'encrypted_content': 'true' if enabled else 'false',
-            'synced_at': timezone.now(),
-            'deleted_accounts': 'N/A',
-            'version': 1
-        }
-    )
-
-    if not created:
-        obj.encrypted_content = 'true' if enabled else 'false'
-        obj.synced_at = timezone.now()
-        obj.deleted_accounts = 'N/A'
-        obj.version += 1
-        obj.save()
-
-    return Response({
-        'success': True,
-        'sync_enabled': enabled,
-        'version': obj.version,
-        'synced_at': obj.synced_at
-    })
+    
+    debug_print(f"\n{'='*60}")
+    debug_print(f"[SYNC PREF] Set preference called")
+    debug_print(f"[SYNC PREF] User: {user.username} (ID: {user.id})")
+    debug_print(f"[SYNC PREF] Sync enabled: {enabled}")
+    debug_print(f"{'='*60}\n")
+    
+    logger.info(f"Set sync preference - User: {user.username}, Enabled: {enabled}")
+    
+    try:
+        obj, created = EncryptedData.objects.get_or_create(
+            user=request.user,
+            data_type='sync_preference',
+            defaults={
+                'encrypted_content': 'true' if enabled else 'false',
+                'synced_at': timezone.now(),
+                'deleted_accounts': 'N/A',
+                'version': 1
+            }
+        )
+        
+        debug_print(f"[SYNC PREF] Record {'created' if created else 'retrieved'} - ID: {obj.id}, Version: {obj.version}")
+        
+        if not created:
+            old_value = obj.encrypted_content
+            obj.encrypted_content = 'true' if enabled else 'false'
+            obj.synced_at = timezone.now()
+            obj.deleted_accounts = 'N/A'
+            obj.version += 1
+            obj.save()
+            debug_print(f"[SYNC PREF] Updated preference - Old: {old_value}, New: {obj.encrypted_content}, New Version: {obj.version}")
+        
+        elapsed_time = __import__('time').time() - start_time
+        debug_print(f"[SYNC PREF] Preference saved in {elapsed_time:.2f} seconds")
+        
+        logger.info(f"Sync preference saved - User: {user.username}, Enabled: {enabled}, Version: {obj.version}")
+        
+        return Response({
+            'success': True,
+            'sync_enabled': enabled,
+            'version': obj.version,
+            'synced_at': obj.synced_at
+        })
+        
+    except Exception as e:
+        error_details = traceback.format_exc()
+        debug_print(f"[SYNC PREF] ERROR: {str(e)}")
+        debug_print(f"[SYNC PREF] Traceback:\n{error_details}")
+        
+        logger.error(f"Set sync preference error for user {user.username}: {str(e)}\n{error_details}")
+        return Response({'error': str(e)}, status=500)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_sync_preference(request):
+    start_time = __import__('time').time()
+    user = request.user
+    
+    debug_print(f"\n{'='*60}")
+    debug_print(f"[SYNC PREF] Get preference called")
+    debug_print(f"[SYNC PREF] User: {user.username} (ID: {user.id})")
+    debug_print(f"{'='*60}\n")
+    
+    logger.info(f"Get sync preference - User: {user.username}")
+    
     try:
         data = EncryptedData.objects.get(user=request.user, data_type='sync_preference')
-        return Response({'sync_enabled': data.encrypted_content == 'true'})
+        enabled = data.encrypted_content == 'true'
+        
+        debug_print(f"[SYNC PREF] Retrieved preference - Enabled: {enabled}, Version: {data.version}")
+        
+        elapsed_time = __import__('time').time() - start_time
+        debug_print(f"[SYNC PREF] Preference retrieved in {elapsed_time:.2f} seconds")
+        
+        return Response({'sync_enabled': enabled})
+        
     except EncryptedData.DoesNotExist:
+        debug_print(f"[SYNC PREF] No preference found, returning default (True)")
+        logger.info(f"No sync preference for user {user.username}, using default True")
         return Response({'sync_enabled': True})
+        
+    except Exception as e:
+        error_details = traceback.format_exc()
+        debug_print(f"[SYNC PREF] ERROR: {str(e)}")
+        debug_print(f"[SYNC PREF] Traceback:\n{error_details}")
+        
+        logger.error(f"Get sync preference error for user {user.username}: {str(e)}\n{error_details}")
+        return Response({'sync_enabled': True})  # Return default on error
