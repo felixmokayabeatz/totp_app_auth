@@ -17,13 +17,19 @@ logger = logging.getLogger(__name__)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def send_2fa_code(request):
-    username = request.data.get('username')
+    username = (request.data.get('username') or '').strip()
     password = request.data.get('password')
     
     if not username or not password:
         return Response({'success': False, 'error': 'Username and password required'}, status=400)
     
-    user = authenticate(username=username, password=password)
+    try:
+        user_obj = User.objects.get(username__iexact=username)
+        auth_username = user_obj.username
+    except User.DoesNotExist:
+        auth_username = username
+
+    user = authenticate(username=auth_username, password=password)
     
     if not user:
         return Response({'success': False, 'error': 'Invalid username or password'}, status=401)
@@ -64,14 +70,14 @@ def send_2fa_code(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_2fa_code(request):
-    username = request.data.get('username')
-    code = request.data.get('code')
+    username = (request.data.get('username') or '').strip()
+    code = (request.data.get('code') or '').strip()
     
     if not username or not code:
         return Response({'success': False, 'error': 'Username and code required'}, status=400)
     
     try:
-        user = User.objects.get(username=username)
+        user = User.objects.get(username__iexact=username)
         
         # Get the LATEST unused code
         verification = EmailVerification.objects.filter(
@@ -99,13 +105,13 @@ def verify_2fa_code(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def send_password_reset_code(request):
-    email = request.data.get('email')
+    email = (request.data.get('email') or '').strip()
     
     if not email:
         return Response({'success': False, 'error': 'Email required'}, status=400)
     
     try:
-        user = User.objects.get(email=email)
+        user = User.objects.get(email__iexact=email)
         
         # Delete ALL old unused reset codes for this user
         EmailVerification.objects.filter(user=user, is_used=False).delete()
@@ -141,8 +147,8 @@ def send_password_reset_code(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def reset_password(request):
-    email = request.data.get('email')
-    code = request.data.get('code')
+    email = (request.data.get('email') or '').strip()
+    code = (request.data.get('code') or '').strip()
     new_password = request.data.get('new_password')
     
     if not email or not code or not new_password:
@@ -152,7 +158,7 @@ def reset_password(request):
         return Response({'success': False, 'error': 'Password must be at least 8 characters'}, status=400)
     
     try:
-        user = User.objects.get(email=email)
+        user = User.objects.get(email__iexact=email)
         
         # Get the LATEST unused reset code
         verification = EmailVerification.objects.filter(

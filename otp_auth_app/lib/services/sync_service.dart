@@ -195,7 +195,7 @@ class SyncService {
   Future<bool> login(String username, String password) async {
     try {
       final response = await _dio.post('auth/login/', data: {
-        'username': username,
+        'username': username.trim(),
         'password': password,
       });
       if (response.statusCode == 200) {
@@ -533,7 +533,7 @@ class SyncService {
   Future<bool> send2FACode(String username, String password) async {
     try {
       final r = await _dio.post('send-2fa/',
-          data: {'username': username, 'password': password});
+          data: {'username': username.trim(), 'password': password});
       return r.data['success'] == true;
     } catch (e) {
       print('send2FA error: $e');
@@ -544,7 +544,7 @@ class SyncService {
   Future<bool> verify2FACode(String username, String code) async {
     try {
       final r = await _dio.post('verify-2fa/',
-          data: {'username': username, 'code': code});
+          data: {'username': username.trim(), 'code': code.trim()});
       return r.data['success'] == true;
     } catch (e) {
       print('verify2FA error: $e');
@@ -671,7 +671,8 @@ class SyncService {
 
   Future<bool> sendPasswordResetCode(String email) async {
     try {
-      final r = await _dio.post('send-reset-code/', data: {'email': email});
+      final r =
+          await _dio.post('send-reset-code/', data: {'email': email.trim()});
       return r.data['success'] == true;
     } catch (e) {
       return false;
@@ -681,8 +682,8 @@ class SyncService {
   Future<bool> resetPassword(String email, String code, String newPassword) async {
     try {
       final r = await _dio.post('reset-password/', data: {
-        'email': email,
-        'code': code,
+        'email': email.trim(),
+        'code': code.trim(),
         'new_password': newPassword,
       });
       return r.statusCode == 200;

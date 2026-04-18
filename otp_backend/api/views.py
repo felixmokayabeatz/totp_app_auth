@@ -36,9 +36,18 @@ class AuthViewSet(viewsets.GenericViewSet):
     
     @action(detail=False, methods=['post'])
     def login(self, request):
+        username = (request.data.get('username') or '').strip()
+        password = request.data.get('password')
+
+        try:
+            user_obj = User.objects.get(username__iexact=username)
+            auth_username = user_obj.username
+        except User.DoesNotExist:
+            auth_username = username
+
         user = authenticate(
-            username=request.data.get('username'), 
-            password=request.data.get('password')
+            username=auth_username,
+            password=password
         )
         if user:
             refresh = RefreshToken.for_user(user)
