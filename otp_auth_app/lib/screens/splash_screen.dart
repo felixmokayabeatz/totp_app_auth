@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'home_screen.dart';
-import 'onboarding_screen.dart';
+import 'login_screen.dart';
 import '../providers/auth_provider.dart';
 import '../services/sync_service.dart';
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
   @override
-  _SplashScreenState createState() => _SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
 class _SplashScreenState extends State<SplashScreen>
@@ -24,7 +26,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 2000),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -37,37 +39,40 @@ class _SplashScreenState extends State<SplashScreen>
 
     _animationController.forward();
 
-    Timer(Duration(seconds: 3), () async {
+    // Navigate after animation
+    Timer(const Duration(seconds: 2), () async {
+      if (!mounted) return;
+
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('access_token');
-      final isFirstLaunch = prefs.getBool('is_first_launch') ?? true;
 
-      if (mounted) {
-        if (token != null && token.isNotEmpty) {
-          // Restore encryption key
-          final syncService = SyncService();
-          await syncService.restoreEncryptionKey();
+      if (token != null && token.isNotEmpty) {
+        // Restore encryption key
+        final syncService = SyncService();
+        await syncService.restoreEncryptionKey();
 
-          // Load user data and go to Home
-          final email = prefs.getString('user_email') ?? '';
-          final username = prefs.getString('current_user') ?? '';
-          final userId = prefs.getString('user_id') ?? '';
+        // Get user data
+        final email = prefs.getString('user_email') ?? '';
+        final username = prefs.getString('current_user') ?? '';
+        final userId = prefs.getString('user_id') ?? '';
 
-          // Update AuthProvider with user data
-          await Provider.of<AuthProvider>(context, listen: false)
-              .setUserData(username, email, userId);
+        // Update AuthProvider
+        await Provider.of<AuthProvider>(context, listen: false)
+            .setUserData(username, email, userId);
 
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomeScreen()),
-          );
-        } else {
-          // User is NOT logged in - go to Onboarding
+        if (mounted) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-                builder: (context) =>
-                    OnboardingScreen(isFirstLaunch: isFirstLaunch)),
+                builder: (context) => HomeScreen()), // Remove const
+          );
+        }
+      } else {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+                builder: (context) => LoginScreen()), // Remove const
           );
         }
       }
@@ -83,12 +88,17 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Remove debugShowCheckedModeBanner - it's not needed here
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF667eea), Color(0xFF764ba2), Color(0xFFf093fb)],
+            colors: const [
+              Color(0xFF667eea),
+              Color(0xFF764ba2),
+              Color(0xFFf093fb)
+            ],
             stops: [0.0, 0.5, 1.0],
           ),
         ),
@@ -122,15 +132,15 @@ class _SplashScreenState extends State<SplashScreen>
                             ),
                           ],
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.security,
                           size: 60,
                           color: Color(0xFF667eea),
                         ),
                       ),
                     ),
-                    SizedBox(height: 40),
-                    Text(
+                    const SizedBox(height: 40),
+                    const Text(
                       'BeatzLock Authenticator',
                       style: TextStyle(
                         fontSize: 32,
@@ -139,15 +149,15 @@ class _SplashScreenState extends State<SplashScreen>
                         letterSpacing: 2,
                         shadows: [
                           Shadow(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.black26,
                             blurRadius: 10,
                             offset: Offset(2, 2),
                           ),
                         ],
                       ),
                     ),
-                    SizedBox(height: 10),
-                    Text(
+                    const SizedBox(height: 10),
+                    const Text(
                       'Secure Two-Factor Authentication',
                       style: TextStyle(
                         fontSize: 16,
@@ -155,13 +165,13 @@ class _SplashScreenState extends State<SplashScreen>
                         letterSpacing: 1,
                       ),
                     ),
-                    SizedBox(height: 60),
-                    CircularProgressIndicator(
+                    const SizedBox(height: 60),
+                    const CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       strokeWidth: 3,
                     ),
-                    SizedBox(height: 20),
-                    Text(
+                    const SizedBox(height: 20),
+                    const Text(
                       'Loading secure vault...',
                       style: TextStyle(
                         color: Colors.white70,
@@ -177,7 +187,7 @@ class _SplashScreenState extends State<SplashScreen>
               left: 0,
               right: 0,
               child: Center(
-                child: Text(
+                child: const Text(
                   'Version 1.0.0 | End-to-End Encrypted',
                   style: TextStyle(
                     color: Colors.white54,
@@ -199,7 +209,7 @@ class _SplashScreenState extends State<SplashScreen>
         right: -50,
         child: TweenAnimationBuilder(
           tween: Tween<double>(begin: 0, end: 1),
-          duration: Duration(milliseconds: 1500),
+          duration: const Duration(milliseconds: 1500),
           builder: (context, value, child) {
             return Transform.scale(
               scale: value,
@@ -220,7 +230,7 @@ class _SplashScreenState extends State<SplashScreen>
         left: -80,
         child: TweenAnimationBuilder(
           tween: Tween<double>(begin: 0, end: 1),
-          duration: Duration(milliseconds: 1800),
+          duration: const Duration(milliseconds: 1800),
           builder: (context, value, child) {
             return Transform.scale(
               scale: value,
@@ -241,7 +251,7 @@ class _SplashScreenState extends State<SplashScreen>
         left: -30,
         child: TweenAnimationBuilder(
           tween: Tween<double>(begin: 0, end: 1),
-          duration: Duration(milliseconds: 2000),
+          duration: const Duration(milliseconds: 2000),
           builder: (context, value, child) {
             return Transform.scale(
               scale: value,

@@ -9,40 +9,29 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # UI & State Management
   provider: ^6.1.1
-  
-  # OTP & Security  
   crypto: ^3.0.3
-  
-  # QR & Camera
   mobile_scanner: ^5.0.0
-  
-  # Storage & Sync
   hive_flutter: ^1.1.0
+  hive: ^2.2.3
   dio: ^5.4.0
   shared_preferences: ^2.2.2
-  
-  # Utilities
   intl: ^0.19.0
-  
   qr_flutter: ^4.1.0
   bitsdojo_window: ^0.1.6
   totp: ^0.1.0
   otp: ^3.2.0
-
   image_picker: ^1.0.7
   path_provider: ^2.1.2
   http_parser: ^4.0.2
   file_selector_windows: ^0.9.3+5
-  
-  
+  local_auth: ^2.1.6
+  # flutter_secure_storage is REMOVED - DO NOT INCLUDE
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   build_runner: ^2.4.8
   hive_generator: ^2.0.1
-
 flutter:
   uses-material-design: true

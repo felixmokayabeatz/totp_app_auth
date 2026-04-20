@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/sync_service.dart';
+import '../services/biometric_service.dart';
+import '../services/app_lock_service.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'dart:async';
@@ -16,14 +18,21 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
+  final BiometricService _biometricService = BiometricService();
+  final AppLockService _appLockService = AppLockService();
+
   bool _isSyncing = false;
   bool _syncEnabled = true;
-  Timer? _syncPrefTimer; // ← add this
+  bool _biometricEnabled = false;
+  bool _appLockEnabled = false;
+  String _biometricName = 'Biometric';
+  Timer? _syncPrefTimer;
 
   @override
   void initState() {
     super.initState();
     _loadSyncPreference();
+    _loadBiometricSettings();
     // Poll every 30 seconds for changes from other devices
     _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       await _syncService.refreshSyncPreferenceFromServer();
@@ -36,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _syncPrefTimer?.cancel(); // ← cancel timer on dispose
+    _syncPrefTimer?.cancel();
     super.dispose();
   }
 
@@ -45,13 +54,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() => _syncEnabled = enabled);
   }
 
+  Future<void> _loadBiometricSettings() async {
+    final enabled = await _biometricService.isBiometricEnabled();
+    final appLockEnabled = await _appLockService.isAppLockEnabled();
+    final name = await _biometricService.getBiometricName();
+    if (mounted) {
+      setState(() {
+        _biometricEnabled = enabled;
+        _appLockEnabled = appLockEnabled;
+        _biometricName = name;
+      });
+    }
+  }
+
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => const Color(0xFF4F46E5);
-  Color get _bgColor => _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
+  Color get _bgColor =>
+      _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white38 : Colors.grey.shade500;
-  Color get _dividerColor => _isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100;
+  Color get _dividerColor =>
+      _isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100;
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +86,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: _bgColor,
       appBar: AppBar(
         title: const Text('Settings',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Colors.white)),
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                color: Colors.white)),
         backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -76,7 +103,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _profileCard(authProvider),
           const SizedBox(height: 24),
-
           _sectionLabel('Appearance'),
           _settingsCard([
             _switchTile(
@@ -96,7 +122,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
           const SizedBox(height: 20),
-
           _sectionLabel('Security & Backup'),
           _settingsCard([
             _tappableTile(
@@ -113,19 +138,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => _soon('Import'),
             ),
             _dividerLine(),
+
+            // App Lock Toggle
+            _switchTile(
+              icon: Icons.lock_outline_rounded,
+              label: 'App Lock',
+              sub: _appLockEnabled
+                  ? 'Lock app when backgrounded'
+                  : 'Require authentication to reopen app',
+              value: _appLockEnabled,
+              onChanged: _toggleAppLock,
+            ),
+            _dividerLine(),
+
+            // Biometric Toggle (only show if available)
+            FutureBuilder<bool>(
+              future: _biometricService.isBiometricAvailable(),
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data == true) {
+                  return Column(
+                    children: [
+                      _switchTile(
+                        icon: Icons.fingerprint,
+                        label: _biometricName,
+                        sub: _biometricEnabled
+                            ? 'Use $_biometricName to unlock'
+                            : 'Enable $_biometricName for quick access',
+                        value: _biometricEnabled,
+                        onChanged: _toggleBiometric,
+                      ),
+                      _dividerLine(),
+                    ],
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+
             _tappableTile(
               icon: Icons.sync_rounded,
               label: 'Sync Now',
-              sub: _syncEnabled ? 'Manually sync with cloud' : 'Cloud sync is disabled',
+              sub: _syncEnabled
+                  ? 'Manually sync with cloud'
+                  : 'Cloud sync is disabled',
               trailing: _isSyncing
                   ? SizedBox(
-                      width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: _accent))
-                  : (_syncEnabled ? null : const Icon(Icons.lock_outline, size: 16, color: Colors.grey)),
-              onTap: _syncEnabled ? _syncNow : null,  // Disable when sync is off
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: _accent))
+                  : (_syncEnabled
+                      ? null
+                      : const Icon(Icons.lock_outline,
+                          size: 16, color: Colors.grey)),
+              onTap: _syncEnabled ? _syncNow : null,
             ),
             _dividerLine(),
-            // ── Sync toggle ──────────────────────────────────────────────
+
+            // Sync toggle
             _switchTile(
               icon: Icons.cloud_sync_rounded,
               label: 'Sync to Cloud',
@@ -134,29 +204,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : 'Sync disabled – local only',
               value: _syncEnabled,
               onChanged: (val) async {
-                // Update locally and push to server immediately
                 await _syncService.setSyncEnabled(val);
                 setState(() => _syncEnabled = val);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(val
                       ? 'Cloud sync enabled on all devices'
                       : 'Cloud sync disabled on all devices'),
-                  backgroundColor: val ? const Color(0xFF10B981) : Colors.orange,
+                  backgroundColor:
+                      val ? const Color(0xFF10B981) : Colors.orange,
                   behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
                 ));
               },
             ),
           ]),
           const SizedBox(height: 20),
-
           _sectionLabel('Account'),
           _settingsCard([
             _tappableTile(
               icon: Icons.person_outline_rounded,
               label: 'Profile',
               sub: 'Edit profile information',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen())),
+              onTap: () => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => ProfileScreen())),
             ),
             _dividerLine(),
             _tappableTile(
@@ -174,7 +245,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
           const SizedBox(height: 20),
-
           _sectionLabel('About'),
           _settingsCard([
             _tappableTile(
@@ -202,12 +272,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.star_outline_rounded,
               label: 'Rate the App',
               sub: 'Love it? Leave a review',
-              trailing: const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
+              trailing:
+                  const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
               onTap: () => _soon('Rate Us'),
             ),
           ]),
           const SizedBox(height: 20),
-
           _sectionLabel('Danger Zone'),
           _settingsCard([
             _tappableTile(
@@ -219,17 +289,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
           const SizedBox(height: 20),
-
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(
               onPressed: _logout,
               icon: const Icon(Icons.logout_rounded),
-              label: const Text('Logout', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              label: const Text('Logout',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red.shade600,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
                 elevation: 0,
               ),
             ),
@@ -239,6 +310,144 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+
+  // ========== BIOMETRIC & APP LOCK METHODS ==========
+
+  Future<void> _toggleAppLock(bool value) async {
+    if (value) {
+      // Test authentication first
+      final authenticated = await _appLockService.authenticateToUnlock(context);
+      if (authenticated) {
+        await _appLockService.setAppLockEnabled(true);
+        await _appLockService.recordAppActivity();
+        setState(() => _appLockEnabled = true);
+
+        // If biometric available, ask to enable it too
+        final biometricAvailable =
+            await _biometricService.isBiometricAvailable();
+        if (biometricAvailable && !_biometricEnabled) {
+          final enableBiometric = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              backgroundColor: _cardColor,
+              title: Text('Enable $_biometricName?',
+                  style: TextStyle(color: _textPrimary)),
+              content: Text(
+                'Would you like to use $_biometricName to quickly unlock the app?',
+                style: TextStyle(color: _textSecondary),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text('No', style: TextStyle(color: _textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accent,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text('Yes'),
+                ),
+              ],
+            ),
+          );
+          if (enableBiometric == true) {
+            await _biometricService.setBiometricEnabled(true);
+            setState(() => _biometricEnabled = true);
+          }
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('App lock enabled'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Authentication failed. App lock not enabled.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        setState(() => _appLockEnabled = false);
+      }
+    } else {
+      await _appLockService.setAppLockEnabled(false);
+      setState(() => _appLockEnabled = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('App lock disabled'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleBiometric(bool value) async {
+    if (value) {
+      final authenticated = await _biometricService.authenticateWithBiometrics(
+        reason: 'Enable $_biometricName for BeatzLock',
+      );
+      if (authenticated) {
+        await _biometricService.setBiometricEnabled(true);
+        setState(() => _biometricEnabled = true);
+
+        // Also enable app lock if not already
+        if (!_appLockEnabled) {
+          await _appLockService.setAppLockEnabled(true);
+          setState(() => _appLockEnabled = true);
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$_biometricName enabled'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Biometric verification failed'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        setState(() => _biometricEnabled = false);
+      }
+    } else {
+      await _biometricService.setBiometricEnabled(false);
+      setState(() => _biometricEnabled = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$_biometricName disabled'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  // ========== EXISTING METHODS (unchanged from your original) ==========
 
   // ─── Clear all data (with local/everywhere choice) ────────────────────────
   void _clearAllData() async {
@@ -251,7 +460,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Row(children: [
           const Icon(Icons.warning_rounded, color: Colors.red, size: 24),
           const SizedBox(width: 10),
-          Text('Clear All Data', style: TextStyle(color: _textPrimary, fontSize: 17)),
+          Text('Clear All Data',
+              style: TextStyle(color: _textPrimary, fontSize: 17)),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -263,7 +473,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _deleteOptionTile(
               icon: Icons.phone_android_rounded,
               title: 'This device only',
-              subtitle: 'Other devices keep their copies. You can re-sync from cloud later.',
+              subtitle:
+                  'Other devices keep their copies. You can re-sync from cloud later.',
               color: Colors.orange,
               onTap: () => Navigator.pop(context, 'local'),
             ),
@@ -289,22 +500,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (choice == null || choice == 'cancel') return;
 
     if (choice == 'local') {
-      // No extra confirmation needed – just delete locally
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: _cardColor,
-          title: Text('Delete local copy?', style: TextStyle(color: _textPrimary)),
+          title:
+              Text('Delete local copy?', style: TextStyle(color: _textPrimary)),
           content: Text(
             'All accounts will be removed from this device. You can re-sync from cloud later.',
             style: TextStyle(color: _textSecondary, fontSize: 13),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white),
               child: const Text('Delete Local'),
             ),
           ],
@@ -314,7 +530,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       await _syncService.deleteAllLocalOnly();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('All accounts removed from this device. Sync to restore.'),
+        content: const Text(
+            'All accounts removed from this device. Sync to restore.'),
         backgroundColor: Colors.orange,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -327,17 +544,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final username = prefs.getString('current_user') ?? '';
 
-    // Send OTP
     final otpSent = await _syncService.sendDeleteOtp(username);
     if (!otpSent) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Failed to send verification code. Check your connection.'),
+        content:
+            Text('Failed to send verification code. Check your connection.'),
         backgroundColor: Colors.red,
       ));
       return;
     }
 
-    // Ask user to enter OTP
     final otpController = TextEditingController();
     final verified = await showDialog<bool>(
       context: context,
@@ -366,7 +582,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: TextField(
                 controller: otpController,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontSize: 24,
+                    letterSpacing: 4,
+                    fontWeight: FontWeight.bold),
                 keyboardType: TextInputType.number,
                 maxLength: 6,
                 decoration: const InputDecoration(
@@ -382,11 +601,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () { otpController.dispose(); Navigator.pop(context, false); },
+            onPressed: () {
+              otpController.dispose();
+              Navigator.pop(context, false);
+            },
             child: Text('Cancel', style: TextStyle(color: _textSecondary)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () async {
               final code = otpController.text.trim();
               if (code.length != 6) {
@@ -450,8 +673,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Row(
           children: [
             Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10)),
               child: Icon(icon, color: color, size: 18),
             ),
             const SizedBox(width: 12),
@@ -459,13 +685,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: color)),
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: color)),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(fontSize: 11, color: color.withOpacity(0.7))),
+                  Text(subtitle,
+                      style: TextStyle(
+                          fontSize: 11, color: color.withOpacity(0.7))),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: color.withOpacity(0.5), size: 18),
+            Icon(Icons.chevron_right_rounded,
+                color: color.withOpacity(0.5), size: 18),
           ],
         ),
       ),
@@ -489,17 +722,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     void checkStrength(StateSetter setState) {
       final pw = newPasswordController.text;
-      if (pw.isEmpty) { setState(() { _passwordStrength = 0; _passwordStrengthText = ''; }); return; }
+      if (pw.isEmpty) {
+        setState(() {
+          _passwordStrength = 0;
+          _passwordStrengthText = '';
+        });
+        return;
+      }
       int score = 0;
-      if (pw.length >= 12) score += 25; else if (pw.length >= 8) score += 15;
+      if (pw.length >= 12)
+        score += 25;
+      else if (pw.length >= 8) score += 15;
       if (pw.contains(RegExp(r'[0-9]'))) score += 25;
       if (pw.contains(RegExp(r'[A-Z]'))) score += 25;
-      if (pw.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) score += 25;
+      if (pw.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]')))
+        score += 25;
       setState(() {
         _passwordStrength = score / 100;
-        if (score < 50) { _passwordStrengthText = 'Weak'; _passwordStrengthColor = Colors.red; }
-        else if (score < 75) { _passwordStrengthText = 'Medium'; _passwordStrengthColor = Colors.orange; }
-        else { _passwordStrengthText = 'Strong'; _passwordStrengthColor = Colors.green; }
+        if (score < 50) {
+          _passwordStrengthText = 'Weak';
+          _passwordStrengthColor = Colors.red;
+        } else if (score < 75) {
+          _passwordStrengthText = 'Medium';
+          _passwordStrengthColor = Colors.orange;
+        } else {
+          _passwordStrengthText = 'Strong';
+          _passwordStrengthColor = Colors.green;
+        }
       });
     }
 
@@ -509,14 +758,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const nu = '23456789';
       const sy = r'!@#$%^&*()_+-=[]{}|;:,.<>?';
       final random = DateTime.now().millisecondsSinceEpoch;
-      String pw = up[random % up.length] + lo[(random + 1) % lo.length] +
-          nu[(random + 2) % nu.length] + sy[(random + 3) % sy.length];
+      String pw = up[random % up.length] +
+          lo[(random + 1) % lo.length] +
+          nu[(random + 2) % nu.length] +
+          sy[(random + 3) % sy.length];
       final all = up + lo + nu + sy;
-      for (int i = pw.length; i < length; i++) pw += all[(random + i) % all.length];
+      for (int i = pw.length; i < length; i++)
+        pw += all[(random + i) % all.length];
       final chars = pw.split('');
       for (int i = chars.length - 1; i > 0; i--) {
         final j = (random + i) % (i + 1);
-        final t = chars[i]; chars[i] = chars[j]; chars[j] = t;
+        final t = chars[i];
+        chars[i] = chars[j];
+        chars[j] = t;
       }
       return chars.join();
     }
@@ -526,7 +780,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(_show2FA ? 'Verify 2FA Code' : 'Change Password'),
           content: SizedBox(
             width: 350,
@@ -547,7 +802,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: TextField(
                         controller: otpCodeController,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 24, letterSpacing: 4, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            fontSize: 24,
+                            letterSpacing: 4,
+                            fontWeight: FontWeight.bold),
                         keyboardType: TextInputType.number,
                         maxLength: 6,
                         decoration: const InputDecoration(
@@ -561,8 +819,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ])
                 : Column(mainAxisSize: MainAxisSize.min, children: [
-                    _pwField(currentPasswordController, 'Current Password', _obscureCurrent,
-                        () => setState(() => _obscureCurrent = !_obscureCurrent)),
+                    _pwField(
+                        currentPasswordController,
+                        'Current Password',
+                        _obscureCurrent,
+                        () =>
+                            setState(() => _obscureCurrent = !_obscureCurrent)),
                     const SizedBox(height: 16),
                     _pwField(newPasswordController, 'New Password', _obscureNew,
                         () => setState(() => _obscureNew = !_obscureNew),
@@ -570,16 +832,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     if (newPasswordController.text.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Row(children: [
-                        Expanded(child: LinearProgressIndicator(
-                            value: _passwordStrength,
-                            backgroundColor: Colors.grey.shade300,
-                            valueColor: AlwaysStoppedAnimation<Color>(_passwordStrengthColor),
-                            minHeight: 4,
-                            borderRadius: BorderRadius.circular(2))),
+                        Expanded(
+                            child: LinearProgressIndicator(
+                                value: _passwordStrength,
+                                backgroundColor: Colors.grey.shade300,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    _passwordStrengthColor),
+                                minHeight: 4,
+                                borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 8),
                         Text(_passwordStrengthText,
-                            style: TextStyle(color: _passwordStrengthColor,
-                                fontWeight: FontWeight.bold, fontSize: 12)),
+                            style: TextStyle(
+                                color: _passwordStrengthColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12)),
                       ]),
                     ],
                     const SizedBox(height: 8),
@@ -587,10 +853,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icon(Icons.format_size, size: 18, color: _accent),
                       const SizedBox(width: 8),
                       Text('Length: ${_passwordLength.toInt()}',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: _accent)),
-                      Expanded(child: Slider(
-                        value: _passwordLength, min: 8, max: 20, divisions: 12,
-                        activeColor: _accent, inactiveColor: Colors.grey.shade300,
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: _accent)),
+                      Expanded(
+                          child: Slider(
+                        value: _passwordLength,
+                        min: 8,
+                        max: 20,
+                        divisions: 12,
+                        activeColor: _accent,
+                        inactiveColor: Colors.grey.shade300,
                         onChanged: (v) => setState(() => _passwordLength = v),
                       )),
                     ]),
@@ -605,14 +879,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             checkStrength(setState);
                           });
                         },
-                        icon: Icon(Icons.auto_awesome, size: 16, color: _accent),
+                        icon:
+                            Icon(Icons.auto_awesome, size: 16, color: _accent),
                         label: Text('Suggest strong password',
                             style: TextStyle(fontSize: 12, color: _accent)),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _pwField(confirmPasswordController, 'Confirm New Password', _obscureConfirm,
-                        () => setState(() => _obscureConfirm = !_obscureConfirm)),
+                    _pwField(
+                        confirmPasswordController,
+                        'Confirm New Password',
+                        _obscureConfirm,
+                        () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm)),
                   ]),
           ),
           actions: [
@@ -627,72 +906,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10))),
               onPressed: _show2FA
                   ? () async {
                       if (otpCodeController.text.length != 6) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Enter 6-digit code'), backgroundColor: Colors.red));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Enter 6-digit code'),
+                                backgroundColor: Colors.red));
                         return;
                       }
                       final prefs = await SharedPreferences.getInstance();
                       final username = prefs.getString('current_user') ?? '';
-                      final valid = await _syncService.verify2FACode(username, otpCodeController.text);
+                      final valid = await _syncService.verify2FACode(
+                          username, otpCodeController.text);
                       if (valid) {
                         final changed = await _syncService.changePassword(
-                            currentPasswordController.text, newPasswordController.text);
+                            currentPasswordController.text,
+                            newPasswordController.text);
                         currentPasswordController.dispose();
                         newPasswordController.dispose();
                         confirmPasswordController.dispose();
                         otpCodeController.dispose();
                         Navigator.pop(context);
                         if (changed) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Password changed! Please login again.'),
-                              backgroundColor: Colors.green));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      'Password changed! Please login again.'),
+                                  backgroundColor: Colors.green));
                           Future.delayed(const Duration(seconds: 2), _logout);
                         } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Failed to change password'), backgroundColor: Colors.red));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Failed to change password'),
+                                  backgroundColor: Colors.red));
                         }
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Invalid code'), backgroundColor: Colors.red));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Invalid code'),
+                                backgroundColor: Colors.red));
                       }
                     }
                   : () async {
                       if (currentPasswordController.text.isEmpty ||
                           newPasswordController.text.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Fill all fields'), backgroundColor: Colors.red));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Fill all fields'),
+                                backgroundColor: Colors.red));
                         return;
                       }
                       if (newPasswordController.text.length < 8) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Min 8 characters'), backgroundColor: Colors.red));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Min 8 characters'),
+                                backgroundColor: Colors.red));
                         return;
                       }
-                      if (newPasswordController.text != confirmPasswordController.text) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Passwords don\'t match'), backgroundColor: Colors.red));
+                      if (newPasswordController.text !=
+                          confirmPasswordController.text) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Passwords don\'t match'),
+                                backgroundColor: Colors.red));
                         return;
                       }
                       if (_passwordStrength < 0.5) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Use a stronger password'), backgroundColor: Colors.red));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Use a stronger password'),
+                                backgroundColor: Colors.red));
                         return;
                       }
                       final prefs = await SharedPreferences.getInstance();
                       final username = prefs.getString('current_user') ?? '';
-                      final sent = await _syncService.send2FACode(username, currentPasswordController.text);
+                      final sent = await _syncService.send2FACode(
+                          username, currentPasswordController.text);
                       if (sent) {
                         setState(() => _show2FA = true);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Code sent to your email'), backgroundColor: Colors.green));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Code sent to your email'),
+                                backgroundColor: Colors.green));
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Invalid current password'), backgroundColor: Colors.red));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Invalid current password'),
+                                backgroundColor: Colors.red));
                       }
                     },
               child: Text(_show2FA ? 'Verify & Change' : 'Send Code'),
@@ -703,7 +1009,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _pwField(TextEditingController ctrl, String label, bool obscure, VoidCallback toggleObscure,
+  Widget _pwField(TextEditingController ctrl, String label, bool obscure,
+      VoidCallback toggleObscure,
       {VoidCallback? onChange}) {
     return Container(
       decoration: BoxDecoration(
@@ -720,11 +1027,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           labelStyle: TextStyle(color: _textSecondary),
           prefixIcon: Icon(Icons.lock_outline, color: _accent),
           suffixIcon: IconButton(
-            icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: _textSecondary),
+            icon: Icon(obscure ? Icons.visibility_off : Icons.visibility,
+                color: _textSecondary),
             onPressed: toggleObscure,
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );
@@ -737,14 +1046,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(_isDark ? 0.2 : 0.06),
-            blurRadius: 12, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(_isDark ? 0.2 : 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3))
+        ],
       ),
       child: Row(
         children: [
           Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(color: _accent.withOpacity(0.12), borderRadius: BorderRadius.circular(16)),
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+                color: _accent.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(16)),
             child: Icon(Icons.person_rounded, color: _accent, size: 28),
           ),
           const SizedBox(width: 14),
@@ -753,10 +1069,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(authProvider.userEmail ?? 'User',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _textPrimary),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: _textPrimary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
-                Text('Premium Account', style: TextStyle(fontSize: 12, color: _textSecondary)),
+                Text('Premium Account',
+                    style: TextStyle(fontSize: 12, color: _textSecondary)),
               ],
             ),
           ),
@@ -765,15 +1086,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF10B981).withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+              border:
+                  Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(width: 6, height: 6,
-                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981))),
+                Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                        shape: BoxShape.circle, color: Color(0xFF10B981))),
                 const SizedBox(width: 5),
-                const Text('Active', style: TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.w600)),
+                const Text('Active',
+                    style: TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -786,7 +1115,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 10),
       child: Text(text.toUpperCase(),
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _textSecondary, letterSpacing: 1.0)),
+          style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: _textSecondary,
+              letterSpacing: 1.0)),
     );
   }
 
@@ -795,8 +1128,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(_isDark ? 0.2 : 0.05),
-            blurRadius: 12, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(_isDark ? 0.2 : 0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 3))
+        ],
       ),
       child: Column(children: children),
     );
@@ -822,15 +1159,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _textPrimary)),
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: _textPrimary)),
                 const SizedBox(height: 2),
-                Text(sub, style: TextStyle(fontSize: 12, color: _textSecondary)),
+                Text(sub,
+                    style: TextStyle(fontSize: 12, color: _textSecondary)),
               ],
             ),
           ),
           Switch(
-            value: value, onChanged: onChanged,
-            activeColor: Colors.white, activeTrackColor: _accent,
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.white,
+            activeTrackColor: _accent,
             inactiveThumbColor: Colors.grey.shade400,
             inactiveTrackColor: _isDark ? Colors.white12 : Colors.grey.shade200,
           ),
@@ -862,16 +1206,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color)),
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: color)),
                   const SizedBox(height: 2),
                   Text(sub, style: TextStyle(fontSize: 12, color: subColor)),
                 ],
               ),
             ),
-            trailing ?? (onTap != null
-                ? Icon(Icons.chevron_right_rounded,
-                    color: _isDark ? Colors.white24 : Colors.grey.shade300, size: 20)
-                : const SizedBox.shrink()),
+            trailing ??
+                (onTap != null
+                    ? Icon(Icons.chevron_right_rounded,
+                        color: _isDark ? Colors.white24 : Colors.grey.shade300,
+                        size: 20)
+                    : const SizedBox.shrink()),
           ],
         ),
       ),
@@ -880,9 +1230,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _iconBox(IconData icon, {bool destructive = false}) {
     return Container(
-      width: 38, height: 38,
+      width: 38,
+      height: 38,
       decoration: BoxDecoration(
-        color: destructive ? Colors.red.withOpacity(0.08) : _accent.withOpacity(0.08),
+        color: destructive
+            ? Colors.red.withOpacity(0.08)
+            : _accent.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Icon(icon, size: 18, color: destructive ? Colors.red : _accent),
@@ -891,10 +1244,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _colorDot(Color color) {
     return Container(
-      width: 24, height: 24,
+      width: 24,
+      height: 24,
       decoration: BoxDecoration(
-        color: color, shape: BoxShape.circle,
-        border: Border.all(color: _isDark ? Colors.white24 : Colors.grey.shade200, width: 2),
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(
+            color: _isDark ? Colors.white24 : Colors.grey.shade200, width: 2),
       ),
     );
   }
@@ -908,7 +1264,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
       ),
       child: Text(version,
-          style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w600)),
+          style: const TextStyle(
+              color: Color(0xFF10B981),
+              fontSize: 12,
+              fontWeight: FontWeight.w600)),
     );
   }
 
@@ -918,34 +1277,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
         decoration: BoxDecoration(
-            color: _cardColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+            color: _cardColor,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20))),
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 36, height: 4,
-                decoration: BoxDecoration(
-                    color: _isDark ? Colors.white24 : Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2)))),
+            Center(
+                child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: _isDark ? Colors.white24 : Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 20),
-            Text('Accent Color', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: _textPrimary)),
+            Text('Accent Color',
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary)),
             const SizedBox(height: 16),
             Wrap(
-              spacing: 14, runSpacing: 14,
+              spacing: 14,
+              runSpacing: 14,
               children: themeProvider.accentColors.asMap().entries.map((entry) {
                 final selected = themeProvider.accentColorIndex == entry.key;
                 return GestureDetector(
-                  onTap: () { themeProvider.setAccentColor(entry.key); Navigator.pop(context); },
+                  onTap: () {
+                    themeProvider.setAccentColor(entry.key);
+                    Navigator.pop(context);
+                  },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    width: 48, height: 48,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
-                      color: entry.value, shape: BoxShape.circle,
-                      border: selected ? Border.all(color: _textPrimary, width: 3) : null,
-                      boxShadow: [BoxShadow(color: entry.value.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 3))],
+                      color: entry.value,
+                      shape: BoxShape.circle,
+                      border: selected
+                          ? Border.all(color: _textPrimary, width: 3)
+                          : null,
+                      boxShadow: [
+                        BoxShadow(
+                            color: entry.value.withOpacity(0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3))
+                      ],
                     ),
-                    child: selected ? const Icon(Icons.check_rounded, color: Colors.white, size: 20) : null,
+                    child: selected
+                        ? const Icon(Icons.check_rounded,
+                            color: Colors.white, size: 20)
+                        : null,
                   ),
                 );
               }).toList(),
@@ -968,7 +1352,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _syncNow() async {
-    // Check if sync is enabled
     if (!_syncEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text('Sync is disabled. Enable "Sync to Cloud" first.'),
@@ -978,13 +1361,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ));
       return;
     }
-    
+
     setState(() => _isSyncing = true);
     final success = await _syncService.syncAccounts();
     setState(() => _isSyncing = false);
-    
+
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(success ? 'Sync complete' : 'Sync failed – check connection'),
+      content:
+          Text(success ? 'Sync complete' : 'Sync failed – check connection'),
       backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1001,10 +1385,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text('Your codes will remain saved on this device.',
             style: TextStyle(color: _textSecondary, fontSize: 13)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: _accent, foregroundColor: Colors.white),
             child: const Text('Logout'),
           ),
         ],
@@ -1013,8 +1400,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed == true) {
       await Provider.of<AuthProvider>(context, listen: false).logout();
       await _syncService.logout();
-      Navigator.pushAndRemoveUntil(
-          context, MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
+      Navigator.pushAndRemoveUntil(context,
+          MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
     }
   }
 }
