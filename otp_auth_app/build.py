@@ -1,9 +1,5 @@
-#!/usr/bin/env python3
-"""
-Flutter Build Automation Script
-Supports: Linux (.deb), Windows (.exe + Inno Setup), Android (.apk)
-Features: Build, Run, and Create installers
-"""
+
+from __future__ import annotations
 
 import os
 import shutil
@@ -11,7 +7,6 @@ import subprocess
 import platform
 import sys
 import json
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -29,10 +24,10 @@ ANDROID_DIR = str(Path(INSTALLER_DIR) / "android")
 
 # App metadata (customize these)
 APP_NAME = "BeatzLock"
-APP_BINARY_NAME = "otp_auth_app"
+APP_BINARY_NAME = "Beatzlock"
 DEB_PACKAGE_NAME = "beatzlock"
 APP_VERSION = "1.0.0"
-APP_MAINTAINER = "Your Name <your.email@example.com>"
+APP_MAINTAINER = "Felix Mokaya <felixmokayabeatz@proton.me>"
 APP_DESCRIPTION = "BeatzLock OTP Authentication App"
 
 # Color codes for terminal output (Windows & Linux compatible)
