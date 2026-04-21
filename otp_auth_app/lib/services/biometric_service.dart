@@ -1,87 +1,53 @@
+import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'dart:io';
 
 class BiometricService {
   final LocalAuthentication _localAuth = LocalAuthentication();
-  static const String _biometricEnabledKey = 'biometric_enabled';
   static const String _appPinKey = 'app_pin_hash';
+  static const String _appPinEnabledKey = 'app_pin_enabled';
 
   Future<void> init() async {}
 
-  Future<bool> isBiometricAvailable() async {
+  // Check if device has system authentication (for mobile)
+  Future<bool> isDeviceAuthenticationAvailable() async {
     try {
-      // On Windows, authentication is ALWAYS possible via PIN/Password
-      if (Platform.isWindows) {
-        return true;
-      }
-
-      final isAvailable = await _localAuth.canCheckBiometrics;
-      final isDeviceSupported = await _localAuth.isDeviceSupported();
-      return isAvailable && isDeviceSupported;
+      return await _localAuth.isDeviceSupported();
     } catch (e) {
-      // If error, assume Windows can still use PIN/Password
-      return Platform.isWindows;
-    }
-  }
-
-  Future<String> getBiometricName() async {
-    if (Platform.isWindows) {
-      return 'Windows Security';
-    }
-
-    final types = await _localAuth.getAvailableBiometrics();
-    if (types.contains(BiometricType.face)) {
-      return 'Face ID';
-    } else if (types.contains(BiometricType.fingerprint)) {
-      return 'Fingerprint';
-    }
-    return 'Biometric';
-  }
-
-  // Try Windows Hello (biometric) - may not be available on all PCs
-  Future<bool> authenticateWithBiometrics({required String reason}) async {
-    try {
-      if (Platform.isWindows) {
-        // Try Windows Hello without biometricOnly
-        return await _localAuth.authenticate(
-          localizedReason: reason,
-          options: const AuthenticationOptions(
-            stickyAuth: true,
-          ),
-        );
-      } else {
-        return await _localAuth.authenticate(
-          localizedReason: reason,
-          options: const AuthenticationOptions(
-            stickyAuth: true,
-            biometricOnly: true,
-          ),
-        );
-      }
-    } catch (e) {
-      print('Biometric auth error: $e');
       return false;
     }
   }
 
-  // Windows PIN/Password - THIS ALWAYS WORKS on Windows
-  Future<bool> authenticateWithWindowsPIN({required String reason}) async {
+  // For mobile - use system PIN/Pattern/Fingerprint
+  Future<bool> authenticateWithDeviceSystem(BuildContext context) async {
     try {
       return await _localAuth.authenticate(
-        localizedReason: reason,
+        localizedReason: 'Unlock BeatzLock',
         options: const AuthenticationOptions(
           stickyAuth: true,
-          // No biometricOnly - this shows PIN/Password dialog
+          biometricOnly: false, // Allow PIN/Pattern/Password
         ),
       );
     } catch (e) {
-      print('Windows PIN auth error: $e');
+      print('Device auth error: $e');
       return false;
     }
   }
 
-  // App PIN storage (local fallback)
+  // ========== APP PIN (for Desktop) ==========
+
+  Future<bool> isAppPinEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_appPinEnabledKey) ?? false;
+  }
+
+  Future<void> setAppPinEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_appPinEnabledKey, enabled);
+  }
+
   Future<bool> hasAppPin() async {
     final prefs = await SharedPreferences.getInstance();
     final pin = prefs.getString(_appPinKey);
@@ -91,6 +57,7 @@ class BiometricService {
   Future<void> setAppPin(String pin) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_appPinKey, pin);
+    await prefs.setBool(_appPinEnabledKey, true);
   }
 
   Future<bool> verifyAppPin(String pin) async {
@@ -102,15 +69,71 @@ class BiometricService {
   Future<void> deleteAppPin() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_appPinKey);
+    await prefs.setBool(_appPinEnabledKey, false);
   }
 
-  Future<void> setBiometricEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_biometricEnabledKey, enabled);
+  // For Desktop - authenticate with App PIN
+  // For Desktop - authenticate with App PIN
+  Future<bool> authenticateWithAppPin(BuildContext context) async {
+    if (!context.mounted) return false;
+
+    final completer = Completer<bool>();
+    final pinController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Enter PIN'),
+        content: TextField(
+          controller: pinController,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Enter your 4-6 digit PIN',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              completer.complete(false);
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final isValid = await verifyAppPin(pinController.text);
+              completer.complete(isValid);
+              Navigator.pop(dialogContext);
+              if (!isValid && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Invalid PIN'),
+                      backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Unlock'),
+          ),
+        ],
+      ),
+    );
+
+    return completer.future;
   }
 
-  Future<bool> isBiometricEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_biometricEnabledKey) ?? false;
+  // Check if we're on desktop
+  bool isDesktop() {
+    return Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  }
+
+  // Check if we're on mobile
+  bool isMobile() {
+    return Platform.isAndroid || Platform.isIOS;
   }
 }

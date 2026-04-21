@@ -6,8 +6,6 @@ import '../models/otp_account.dart';
 import '../services/otp_service.dart';
 import '../services/sync_service.dart';
 import '../services/profile_service.dart';
-import '../services/biometric_service.dart';
-import '../services/app_lock_service.dart';
 import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
@@ -27,8 +25,6 @@ class _HomeScreenState extends State<HomeScreen>
   final OTPService _otpService = OTPService();
   final SyncService _syncService = SyncService();
   final ProfileService _profileService = ProfileService();
-  final BiometricService _biometricService = BiometricService();
-  final AppLockService _appLockService = AppLockService();
 
   Map<String, String> currentOTPs = {};
   Map<String, int> timers = {};
@@ -54,110 +50,6 @@ class _HomeScreenState extends State<HomeScreen>
     _animationController.forward();
     _loadData();
     _loadSyncStatus();
-    _checkAndPromptBiometric();
-  }
-
-  Future<void> _checkAndPromptBiometric() async {
-    final prefs = await SharedPreferences.getInstance();
-    final hasBeenPrompted = prefs.getBool('biometric_prompted') ?? false;
-
-    if (!hasBeenPrompted) {
-      final biometricAvailable = await _biometricService.isBiometricAvailable();
-      if (biometricAvailable) {
-        final biometricName = await _biometricService.getBiometricName();
-
-        await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            backgroundColor: Colors.white,
-            title: Row(
-              children: [
-                Icon(Icons.fingerprint,
-                    color: const Color(0xFF667eea), size: 28),
-                const SizedBox(width: 10),
-                const Text('Enable Biometric Login',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Would you like to use $biometricName to quickly unlock BeatzLock?',
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.security, color: Colors.blue),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Your biometric data never leaves your device',
-                          style: TextStyle(
-                              fontSize: 12, color: Colors.blue.shade700),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-                child: const Text('Not Now', style: TextStyle(fontSize: 14)),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context, true);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF667eea),
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text('Enable', style: TextStyle(fontSize: 14)),
-              ),
-            ],
-          ),
-        );
-
-        // Only try to enable if user clicked Enable
-        final authenticated =
-            await _biometricService.authenticateWithBiometrics(
-          reason: 'Enable biometric login for BeatzLock',
-        );
-        if (authenticated) {
-          await _biometricService.setBiometricEnabled(true);
-          await _appLockService.setAppLockEnabled(true);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Biometric login enabled!'),
-                backgroundColor: Colors.green),
-          );
-        }
-
-        await prefs.setBool('biometric_prompted', true);
-      }
-    }
   }
 
   Future<void> _loadSyncStatus() async {

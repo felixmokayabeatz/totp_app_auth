@@ -1,7 +1,7 @@
-// lib/screens/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/sync_service.dart';
@@ -23,17 +23,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _isSyncing = false;
   bool _syncEnabled = true;
-  bool _biometricEnabled = false;
   bool _appLockEnabled = false;
-  String _biometricName = 'Biometric';
   Timer? _syncPrefTimer;
 
   @override
   void initState() {
     super.initState();
     _loadSyncPreference();
-    _loadBiometricSettings();
-    // Poll every 30 seconds for changes from other devices
+    _loadAppLockSettings();
     _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       await _syncService.refreshSyncPreferenceFromServer();
       final enabled = await _syncService.isSyncEnabled();
@@ -54,15 +51,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() => _syncEnabled = enabled);
   }
 
-  Future<void> _loadBiometricSettings() async {
-    final enabled = await _biometricService.isBiometricEnabled();
+  Future<void> _loadAppLockSettings() async {
     final appLockEnabled = await _appLockService.isAppLockEnabled();
-    final name = await _biometricService.getBiometricName();
     if (mounted) {
       setState(() {
-        _biometricEnabled = enabled;
         _appLockEnabled = appLockEnabled;
-        _biometricName = name;
       });
     }
   }
@@ -149,31 +142,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _appLockEnabled,
               onChanged: _toggleAppLock,
             ),
-            _dividerLine(),
 
-            // Biometric Toggle (only show if available)
-            FutureBuilder<bool>(
-              future: _biometricService.isBiometricAvailable(),
-              builder: (context, snapshot) {
-                if (snapshot.hasData && snapshot.data == true) {
-                  return Column(
-                    children: [
-                      _switchTile(
-                        icon: Icons.fingerprint,
-                        label: _biometricName,
-                        sub: _biometricEnabled
-                            ? 'Use $_biometricName to unlock'
-                            : 'Enable $_biometricName for quick access',
-                        value: _biometricEnabled,
-                        onChanged: _toggleBiometric,
-                      ),
-                      _dividerLine(),
-                    ],
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
+            // For Desktop: Show PIN management (only when app lock is enabled)
+            if ((Platform.isWindows || Platform.isLinux || Platform.isMacOS) &&
+                _appLockEnabled) ...[
+              _dividerLine(),
+              _tappableTile(
+                icon: Icons.pin,
+                label: 'Change App PIN',
+                sub: 'Update your lock PIN',
+                onTap: _changeAppPin,
+              ),
+            ],
 
             _tappableTile(
               icon: Icons.sync_rounded,
@@ -311,7 +291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ========== BIOMETRIC & APP LOCK METHODS ==========
+  // ========== APP LOCK METHOD ==========
 
   Future<void> _toggleAppLock(bool value) async {
     if (value) {
@@ -322,41 +302,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await _appLockService.recordAppActivity();
         setState(() => _appLockEnabled = true);
 
-        // If biometric available, ask to enable it too
-        final biometricAvailable =
-            await _biometricService.isBiometricAvailable();
-        if (biometricAvailable && !_biometricEnabled) {
-          final enableBiometric = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-              backgroundColor: _cardColor,
-              title: Text('Enable $_biometricName?',
-                  style: TextStyle(color: _textPrimary)),
-              content: Text(
-                'Would you like to use $_biometricName to quickly unlock the app?',
-                style: TextStyle(color: _textSecondary),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: Text('No', style: TextStyle(color: _textSecondary)),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _accent,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text('Yes'),
-                ),
-              ],
-            ),
-          );
-          if (enableBiometric == true) {
-            await _biometricService.setBiometricEnabled(true);
-            setState(() => _biometricEnabled = true);
+        // For desktop, ensure PIN is set up
+        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+          final hasPin = await _biometricService.hasAppPin();
+          if (!hasPin) {
+            await _appLockService.setupAppPinFromSettings(context);
           }
         }
 
@@ -396,53 +346,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _toggleBiometric(bool value) async {
-    if (value) {
-      final authenticated = await _biometricService.authenticateWithBiometrics(
-        reason: 'Enable $_biometricName for BeatzLock',
-      );
-      if (authenticated) {
-        await _biometricService.setBiometricEnabled(true);
-        setState(() => _biometricEnabled = true);
-
-        // Also enable app lock if not already
-        if (!_appLockEnabled) {
-          await _appLockService.setAppLockEnabled(true);
-          setState(() => _appLockEnabled = true);
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$_biometricName enabled'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Biometric verification failed'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-        setState(() => _biometricEnabled = false);
-      }
-    } else {
-      await _biometricService.setBiometricEnabled(false);
-      setState(() => _biometricEnabled = false);
+  Future<void> _changeAppPin() async {
+    final success = await _appLockService.setupAppPinFromSettings(context);
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$_biometricName disabled'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
+        const SnackBar(
+            content: Text('PIN changed successfully'),
+            backgroundColor: Colors.green),
       );
     }
   }

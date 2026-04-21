@@ -9,7 +9,8 @@ class AppLockService {
   static const String _lastActiveTimeKey = 'last_active_time';
   static const String _lockTimeoutKey = 'lock_timeout_minutes';
 
-  static const int _defaultTimeout = 5;
+  // Change default timeout from 5 seconds to 5 minutes
+  static const int _defaultTimeout = 5; // 5 minutes
 
   Future<bool> isAppLockEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -52,94 +53,113 @@ class AppLockService {
     final lastActiveTime = DateTime.fromMillisecondsSinceEpoch(lastActive);
     final difference = DateTime.now().difference(lastActiveTime);
 
-    return difference.inMinutes >= timeoutMinutes;
+    print('DEBUG: Last active: $lastActiveTime');
+    print('DEBUG: Now: ${DateTime.now()}');
+    print('DEBUG: Difference: ${difference.inMinutes} minutes');
+    print('DEBUG: Timeout: $timeoutMinutes minutes');
+    print('DEBUG: Should lock: ${difference.inMinutes >= timeoutMinutes}');
+
+    // Only lock after the timeout period (in MINUTES)
+    // Add a small buffer (1 second) to prevent immediate locking
+    return difference.inMinutes >= timeoutMinutes && difference.inSeconds > 1;
   }
 
-  // Main authentication method with multiple fallbacks
+  // Main authentication method - platform specific
   Future<bool> authenticateToUnlock(BuildContext context) async {
-    final biometricEnabled = await _biometricService.isBiometricEnabled();
-    final hasAppPin = await _biometricService.hasAppPin();
+    if (_biometricService.isDesktop()) {
+      // DESKTOP: Use App PIN only
+      final hasPin = await _biometricService.hasAppPin();
 
-    // Try 1: Windows Hello/Biometric (if enabled)
-    if (biometricEnabled) {
-      final name = await _biometricService.getBiometricName();
-      final authenticated = await _biometricService.authenticateWithBiometrics(
-        reason: 'Unlock BeatzLock with $name',
-      );
-      if (authenticated) return true;
-    }
-
-    // Try 2: Windows PIN/Password (ALWAYS available on Windows)
-    final pinAuthenticated = await _biometricService.authenticateWithWindowsPIN(
-      reason: 'Enter your Windows PIN or password to unlock BeatzLock',
-    );
-    if (pinAuthenticated) return true;
-
-    // Try 3: App PIN (if user set one)
-    if (hasAppPin) {
-      final appPinAuthenticated = await _showAppPinDialog(context);
-      if (appPinAuthenticated) return true;
-    }
-
-    // If all fail, offer to set up App PIN
-    if (context.mounted) {
-      final shouldSetupPin = await _showSetupPinDialog(context);
-      if (shouldSetupPin) {
-        final pinSet = await _showSetAppPinDialog(context);
-        if (pinSet) {
-          // Try again with the new PIN
-          return await authenticateToUnlock(context);
+      if (!hasPin) {
+        // First time - force user to set up PIN
+        final pinSet = await _showForceSetAppPinDialog(context);
+        if (!pinSet) {
+          // User must set PIN to continue
+          return false;
         }
       }
-    }
 
-    return false;
+      // Authenticate with App PIN
+      return await _biometricService.authenticateWithAppPin(context);
+    } else {
+      // MOBILE: Use device system authentication (PIN/Pattern/Fingerprint)
+      return await _biometricService.authenticateWithDeviceSystem(context);
+    }
   }
 
-  Future<bool> _showAppPinDialog(BuildContext context) async {
+  // Force user to set up PIN on first use (Desktop only)
+  Future<bool> _showForceSetAppPinDialog(BuildContext context) async {
     final pinController = TextEditingController();
+    final confirmController = TextEditingController();
     final completer = Completer<bool>();
 
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Enter App PIN'),
-        content: TextField(
-          controller: pinController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          decoration: const InputDecoration(
-            hintText: 'Enter your 4-6 digit PIN',
-            border: OutlineInputBorder(),
-          ),
+        title: const Text('Set Up App PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'For security, please set up a PIN to lock BeatzLock.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Enter 4-6 digit PIN',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                hintText: 'Confirm PIN',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              completer.complete(false);
-              Navigator.pop(context);
-            },
-            child: const Text('Cancel'),
-          ),
           ElevatedButton(
             onPressed: () async {
-              final isValid =
-                  await _biometricService.verifyAppPin(pinController.text);
-              if (isValid) {
-                completer.complete(true);
-                Navigator.pop(context);
-              } else {
+              final pin = pinController.text;
+              final confirm = confirmController.text;
+
+              if (pin.length < 4) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                      content: Text('Invalid PIN'),
+                      content: Text('PIN must be at least 4 digits'),
                       backgroundColor: Colors.red),
                 );
+                return;
               }
+
+              if (pin != confirm) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('PINs do not match'),
+                      backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              await _biometricService.setAppPin(pin);
+              completer.complete(true);
+              Navigator.pop(context);
             },
-            child: const Text('Unlock'),
+            child: const Text('Save PIN'),
           ),
         ],
       ),
@@ -148,53 +168,31 @@ class AppLockService {
     return completer.future;
   }
 
-  Future<bool> _showSetupPinDialog(BuildContext context) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Set Up App PIN'),
-            content: const Text(
-              'Windows authentication failed. Would you like to set up an App PIN as a backup?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF4F46E5),
-                ),
-                child: const Text('Set Up PIN'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
-  Future<bool> _showSetAppPinDialog(BuildContext context) async {
+  // Setup PIN from Settings (Desktop only)
+  // Add this method to AppLockService class
+  Future<bool> setupAppPinFromSettings(BuildContext context) async {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
     final completer = Completer<bool>();
 
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Create App PIN'),
+        title: const Text('Set App PIN'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const Text('Create a PIN to lock BeatzLock',
+                style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 16),
             TextField(
               controller: pinController,
               obscureText: true,
               keyboardType: TextInputType.number,
               maxLength: 6,
+              autofocus: true,
               decoration: const InputDecoration(
                 hintText: 'Enter 4-6 digit PIN',
                 border: OutlineInputBorder(),
@@ -219,7 +217,7 @@ class AppLockService {
               completer.complete(false);
               Navigator.pop(context);
             },
-            child: const Text('Skip'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -247,12 +245,6 @@ class AppLockService {
               await _biometricService.setAppPin(pin);
               completer.complete(true);
               Navigator.pop(context);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('App PIN set successfully!'),
-                    backgroundColor: Colors.green),
-              );
             },
             child: const Text('Save PIN'),
           ),
