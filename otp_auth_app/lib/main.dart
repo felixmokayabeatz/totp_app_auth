@@ -1,3 +1,5 @@
+// main.dart
+
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
@@ -14,9 +16,22 @@ void main() async {
 
   await Hive.initFlutter();
 
-  // The adapters are auto-registered by the generated .g.dart files
-  // You don't need to manually register them here
+  // REGISTER ADAPTERS MANUALLY
+  Hive.registerAdapter(OTPAccountAdapter());
+  Hive.registerAdapter(PasswordEntryAdapter());
 
+  // DELETE CORRUPTED BOXES - RUN ONCE
+  try {
+    await Hive.deleteBoxFromDisk('otp_accounts');
+    await Hive.deleteBoxFromDisk('passwords');
+    await Hive.deleteBoxFromDisk('settings');
+    await Hive.deleteBoxFromDisk('secure_data');
+    print('All boxes deleted successfully');
+  } catch (e) {
+    print('Error deleting: $e');
+  }
+
+  // Open fresh boxes
   await Hive.openBox<OTPAccount>('otp_accounts');
   await Hive.openBox<PasswordEntry>('passwords');
   await Hive.openBox('settings');
