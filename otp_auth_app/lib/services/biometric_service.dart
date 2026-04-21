@@ -5,30 +5,29 @@ import 'dart:io';
 class BiometricService {
   final LocalAuthentication _localAuth = LocalAuthentication();
   static const String _biometricEnabledKey = 'biometric_enabled';
+  static const String _appPinKey = 'app_pin_hash';
 
   Future<void> init() async {}
 
   Future<bool> isBiometricAvailable() async {
     try {
-      // Windows always returns true for isDeviceSupported, but may not have biometrics
-      final isDeviceSupported = await _localAuth.isDeviceSupported();
-
+      // On Windows, authentication is ALWAYS possible via PIN/Password
       if (Platform.isWindows) {
-        // On Windows, we can always use PIN/Password even without biometrics
         return true;
       }
 
       final isAvailable = await _localAuth.canCheckBiometrics;
+      final isDeviceSupported = await _localAuth.isDeviceSupported();
       return isAvailable && isDeviceSupported;
     } catch (e) {
-      print('Biometric check error: $e');
-      return Platform.isWindows; // Windows can always use PIN/Password
+      // If error, assume Windows can still use PIN/Password
+      return Platform.isWindows;
     }
   }
 
   Future<String> getBiometricName() async {
     if (Platform.isWindows) {
-      return 'Windows Hello';
+      return 'Windows Security';
     }
 
     final types = await _localAuth.getAvailableBiometrics();
@@ -40,20 +39,18 @@ class BiometricService {
     return 'Biometric';
   }
 
-  // For Windows - authenticate without biometricOnly parameter
+  // Try Windows Hello (biometric) - may not be available on all PCs
   Future<bool> authenticateWithBiometrics({required String reason}) async {
     try {
       if (Platform.isWindows) {
-        // Windows: Don't use biometricOnly parameter
+        // Try Windows Hello without biometricOnly
         return await _localAuth.authenticate(
           localizedReason: reason,
           options: const AuthenticationOptions(
             stickyAuth: true,
-            // biometricOnly is NOT supported on Windows - remove it
           ),
         );
       } else {
-        // Android/iOS: Use biometricOnly
         return await _localAuth.authenticate(
           localizedReason: reason,
           options: const AuthenticationOptions(
@@ -68,21 +65,43 @@ class BiometricService {
     }
   }
 
-  // This method allows PIN/Password fallback (works on all platforms)
-  Future<bool> authenticateWithDevicePIN({required String reason}) async {
+  // Windows PIN/Password - THIS ALWAYS WORKS on Windows
+  Future<bool> authenticateWithWindowsPIN({required String reason}) async {
     try {
-      // For all platforms, authenticate without biometricOnly
       return await _localAuth.authenticate(
         localizedReason: reason,
         options: const AuthenticationOptions(
           stickyAuth: true,
-          // biometricOnly: false - not needed, just omit the parameter
+          // No biometricOnly - this shows PIN/Password dialog
         ),
       );
     } catch (e) {
-      print('Device PIN auth error: $e');
+      print('Windows PIN auth error: $e');
       return false;
     }
+  }
+
+  // App PIN storage (local fallback)
+  Future<bool> hasAppPin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pin = prefs.getString(_appPinKey);
+    return pin != null && pin.isNotEmpty;
+  }
+
+  Future<void> setAppPin(String pin) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_appPinKey, pin);
+  }
+
+  Future<bool> verifyAppPin(String pin) async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedPin = prefs.getString(_appPinKey);
+    return storedPin == pin;
+  }
+
+  Future<void> deleteAppPin() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_appPinKey);
   }
 
   Future<void> setBiometricEnabled(bool enabled) async {

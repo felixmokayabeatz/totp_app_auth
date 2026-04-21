@@ -8,7 +8,6 @@ class AppLockService {
   static const String _appLockEnabledKey = 'app_lock_enabled';
   static const String _lastActiveTimeKey = 'last_active_time';
   static const String _lockTimeoutKey = 'lock_timeout_minutes';
-  static const String _appPinKey = 'app_pin_hash';
 
   static const int _defaultTimeout = 5;
 
@@ -56,12 +55,13 @@ class AppLockService {
     return difference.inMinutes >= timeoutMinutes;
   }
 
+  // Main authentication method with multiple fallbacks
   Future<bool> authenticateToUnlock(BuildContext context) async {
-    final biometricAvailable = await _biometricService.isBiometricAvailable();
     final biometricEnabled = await _biometricService.isBiometricEnabled();
+    final hasAppPin = await _biometricService.hasAppPin();
 
-    // Try biometric first if available and enabled
-    if (biometricAvailable && biometricEnabled) {
+    // Try 1: Windows Hello/Biometric (if enabled)
+    if (biometricEnabled) {
       final name = await _biometricService.getBiometricName();
       final authenticated = await _biometricService.authenticateWithBiometrics(
         reason: 'Unlock BeatzLock with $name',
@@ -69,50 +69,31 @@ class AppLockService {
       if (authenticated) return true;
     }
 
-    // Fallback to Windows PIN/Password (this works even without biometric hardware)
-    // This will show Windows Security dialog with PIN/Password option
-    final pinAuthenticated = await _biometricService.authenticateWithDevicePIN(
+    // Try 2: Windows PIN/Password (ALWAYS available on Windows)
+    final pinAuthenticated = await _biometricService.authenticateWithWindowsPIN(
       reason: 'Enter your Windows PIN or password to unlock BeatzLock',
     );
     if (pinAuthenticated) return true;
 
-    // Last resort: App PIN (if user set one)
-    final hasPin = await hasAppPin();
-    if (hasPin) {
-      return await _showAppPinDialog(context);
+    // Try 3: App PIN (if user set one)
+    if (hasAppPin) {
+      final appPinAuthenticated = await _showAppPinDialog(context);
+      if (appPinAuthenticated) return true;
     }
 
-    // If nothing works, show a message and return false
+    // If all fail, offer to set up App PIN
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'No authentication method available. Please set up Windows Hello or enable App PIN.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 3),
-        ),
-      );
+      final shouldSetupPin = await _showSetupPinDialog(context);
+      if (shouldSetupPin) {
+        final pinSet = await _showSetAppPinDialog(context);
+        if (pinSet) {
+          // Try again with the new PIN
+          return await authenticateToUnlock(context);
+        }
+      }
     }
+
     return false;
-  }
-
-  Future<bool> hasAppPin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final pin = prefs.getString(_appPinKey);
-    return pin != null && pin.isNotEmpty;
-  }
-
-  Future<void> setAppPin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    final hashedPin = pin.hashCode.toString();
-    await prefs.setString(_appPinKey, hashedPin);
-  }
-
-  Future<bool> verifyAppPin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    final storedPin = prefs.getString(_appPinKey);
-    if (storedPin == null) return false;
-    return storedPin == pin.hashCode.toString();
   }
 
   Future<bool> _showAppPinDialog(BuildContext context) async {
@@ -124,14 +105,14 @@ class AppLockService {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Enter PIN'),
+        title: const Text('Enter App PIN'),
         content: TextField(
           controller: pinController,
           obscureText: true,
           keyboardType: TextInputType.number,
           maxLength: 6,
           decoration: const InputDecoration(
-            hintText: 'Enter your app PIN',
+            hintText: 'Enter your 4-6 digit PIN',
             border: OutlineInputBorder(),
           ),
         ),
@@ -145,11 +126,135 @@ class AppLockService {
           ),
           ElevatedButton(
             onPressed: () async {
-              final isValid = await verifyAppPin(pinController.text);
-              completer.complete(isValid);
-              Navigator.pop(context);
+              final isValid =
+                  await _biometricService.verifyAppPin(pinController.text);
+              if (isValid) {
+                completer.complete(true);
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Invalid PIN'),
+                      backgroundColor: Colors.red),
+                );
+              }
             },
             child: const Text('Unlock'),
+          ),
+        ],
+      ),
+    );
+
+    return completer.future;
+  }
+
+  Future<bool> _showSetupPinDialog(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Set Up App PIN'),
+            content: const Text(
+              'Windows authentication failed. Would you like to set up an App PIN as a backup?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF4F46E5),
+                ),
+                child: const Text('Set Up PIN'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<bool> _showSetAppPinDialog(BuildContext context) async {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    final completer = Completer<bool>();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Create App PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                hintText: 'Enter 4-6 digit PIN',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                hintText: 'Confirm PIN',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              completer.complete(false);
+              Navigator.pop(context);
+            },
+            child: const Text('Skip'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final pin = pinController.text;
+              final confirm = confirmController.text;
+
+              if (pin.length < 4) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('PIN must be at least 4 digits'),
+                      backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              if (pin != confirm) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('PINs do not match'),
+                      backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              await _biometricService.setAppPin(pin);
+              completer.complete(true);
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('App PIN set successfully!'),
+                    backgroundColor: Colors.green),
+              );
+            },
+            child: const Text('Save PIN'),
           ),
         ],
       ),

@@ -53,6 +53,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "C:\Programming\totp_app\final_builds\windows\app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\totp_app\final_builds\windows\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
 Source: "C:\Programming\totp_app\final_builds\windows\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\app\local_auth_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\totp_app\final_builds\windows\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; VC++ runtime
