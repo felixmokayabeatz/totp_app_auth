@@ -106,7 +106,7 @@ class BiometricService {
         actions: [
           TextButton(
             onPressed: () {
-              resolved = true;
+              resolved = false;
               Navigator.pop(dialogContext);
             },
             child: const Text('Cancel'),
@@ -114,9 +114,13 @@ class BiometricService {
           ElevatedButton(
             onPressed: () async {
               final isValid = await verifyAppPin(pinController.text);
-              resolved = isValid;
-              Navigator.pop(dialogContext);
-              if (!isValid && context.mounted) {
+              if (isValid) {
+                resolved = true;
+                Navigator.pop(dialogContext);
+                return;
+              }
+
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                       content: Text('Invalid PIN'),

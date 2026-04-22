@@ -110,8 +110,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
+    if (_unlockInProgress || !_initialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _didEnterBackground = true;
       _appLockService.recordAppActivity();
