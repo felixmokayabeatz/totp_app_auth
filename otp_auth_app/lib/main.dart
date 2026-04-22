@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/otp_account.dart';
 import 'models/password_entry.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
-import 'screens/splash_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 import 'services/app_lock_service.dart';
 import 'services/biometric_service.dart';
 import 'services/secure_storage_service.dart';
+import 'services/sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,18 +54,20 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppLockService _appLockService = AppLockService();
+  final SyncService _syncService = SyncService();
 
   bool _initialized = false;
   bool _isLocked = true;
   bool _unlockInProgress = false;
   bool _didEnterBackground = false;
+  bool _sessionReady = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeSecurity();
+      _initializeApp();
     });
   }
 
@@ -72,14 +77,59 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  Future<void> _initializeSecurity() async {
+  Future<void> _initializeApp() async {
     await _appLockService.ensureMandatoryLock(context);
+    await _restoreSession();
     if (!mounted) return;
 
     setState(() {
       _initialized = true;
       _isLocked = true;
     });
+  }
+
+  Future<void> _restoreSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    if (token == null || token.isEmpty) {
+      await authProvider.logout();
+      if (mounted) {
+        setState(() {
+          _sessionReady = true;
+        });
+      }
+      return;
+    }
+
+    final restoredKey = await _syncService.restoreEncryptionKey();
+    if (!restoredKey) {
+      await _syncService.logout();
+      await authProvider.logout();
+      if (mounted) {
+        setState(() {
+          _sessionReady = true;
+        });
+      }
+      return;
+    }
+
+    final email = prefs.getString('user_email') ?? '';
+    final username = prefs.getString('current_user') ?? '';
+    final userId = prefs.getString('user_id') ?? '';
+
+    await authProvider.setUserData(username, email, userId);
+
+    if (await _syncService.isSyncEnabled()) {
+      await _syncService.downloadAndMergeAccounts();
+    }
+
+    if (mounted) {
+      setState(() {
+        _sessionReady = true;
+      });
+    }
   }
 
   Future<void> _unlockApp() async {
@@ -96,6 +146,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       await _appLockService.recordAppActivity();
       setState(() {
         _isLocked = false;
+        _didEnterBackground = false;
       });
     }
 
@@ -119,9 +170,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       return;
     }
 
-    if (state == AppLifecycleState.resumed &&
-        _initialized &&
-        _didEnterBackground) {
+    if (state == AppLifecycleState.resumed && _didEnterBackground) {
       _didEnterBackground = false;
       if (mounted) {
         setState(() {
@@ -133,22 +182,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, _) {
+    return Consumer2<ThemeProvider, AuthProvider>(
+      builder: (context, themeProvider, authProvider, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'BeatzLock Authenticator',
           theme: themeProvider.lightTheme,
           darkTheme: themeProvider.darkTheme,
           themeMode: themeProvider.themeMode,
-          home: !_initialized
+          home: !_initialized || !_sessionReady
               ? const _LaunchLoadingScreen()
               : _isLocked
                   ? _AppLockScreen(
                       isBusy: _unlockInProgress,
                       onUnlock: _unlockApp,
                     )
-                  : const SplashScreen(),
+                  : authProvider.isAuthenticated
+                      ? HomeScreen()
+                      : LoginScreen(),
         );
       },
     );

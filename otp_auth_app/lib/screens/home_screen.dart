@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import '../models/otp_account.dart';
+import '../providers/auth_provider.dart';
 import '../services/otp_service.dart';
 import '../services/sync_service.dart';
 import '../services/profile_service.dart';
@@ -1231,6 +1232,7 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
     if (confirmed == true) {
+      await Provider.of<AuthProvider>(context, listen: false).logout();
       await _syncService.logout();
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => LoginScreen()));
