@@ -279,27 +279,40 @@ class SyncService {
         await prefs.setString('access_token', response.data['access']);
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
-        await prefs.setString('user_email', response.data['user']['email'] ?? '');
+        await prefs.setString(
+            'user_email', response.data['user']['email'] ?? '');
         await prefs.setString('user_id', response.data['user']['id'].toString());
         await _updateAuthHeader();
-        
-        // Generate and STORE encryption key in Hive
+
+        // Treat successful token issuance as a successful login.
         final encryptionKey = EncryptionService.generateKey(
-          username + password, 
-          'beatzLockKenya2099'
-        );
-        
+            username + password, 'beatzLockKenya2099');
+
         await _storeEncryptionKey(encryptionKey);
         _encryptionKey = encryptionKey;
 
-        await migrateLegacyLocalAccounts();
-        
-        final userBox = await _getUserBox();
-        print('User box ${await _getUserBoxName()} has ${userBox.length} accounts');
-        
-        if (await isSyncEnabled()) {
-          await downloadAndMergeAccounts();
+        try {
+          await migrateLegacyLocalAccounts();
+        } catch (e) {
+          print('Legacy account migration error after login: $e');
         }
+
+        try {
+          final userBox = await _getUserBox();
+          print(
+              'User box ${await _getUserBoxName()} has ${userBox.length} accounts');
+        } catch (e) {
+          print('User box load error after login: $e');
+        }
+
+        try {
+          if (await isSyncEnabled()) {
+            await downloadAndMergeAccounts();
+          }
+        } catch (e) {
+          print('Cloud restore error after login: $e');
+        }
+
         return true;
       }
       return false;
