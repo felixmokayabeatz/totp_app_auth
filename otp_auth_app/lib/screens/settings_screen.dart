@@ -103,9 +103,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _switchTile(
               icon: Icons.dark_mode_rounded,
               label: 'Dark Mode',
-              sub: 'Switch between light and dark',
-              value: themeProvider.isDarkMode,
-              onChanged: (_) => themeProvider.toggleTheme(),
+              sub: 'Turn dark mode on or off',
+              value: themeProvider.themeMode == ThemeMode.dark,
+              onChanged: (enabled) => themeProvider
+                  .setThemeMode(enabled ? ThemeMode.dark : ThemeMode.light),
             ),
             _dividerLine(),
             _tappableTile(

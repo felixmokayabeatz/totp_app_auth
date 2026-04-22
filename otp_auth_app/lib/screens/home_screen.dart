@@ -300,9 +300,6 @@ class _HomeScreenState extends State<HomeScreen>
                                     listen: false)
                                 .toggleTheme(),
                             tooltip: 'Theme'),
-                        const SizedBox(width: 2),
-                        _headerAction(Icons.logout_rounded, _logout,
-                            tooltip: 'Logout'),
                       ],
                     ),
                   ),
@@ -337,9 +334,6 @@ class _HomeScreenState extends State<HomeScreen>
                         () => Provider.of<ThemeProvider>(context, listen: false)
                             .toggleTheme(),
                         tooltip: 'Theme'),
-                    const SizedBox(width: 4),
-                    _headerAction(Icons.logout_rounded, _logout,
-                        tooltip: 'Logout'),
                   ],
                 ),
             ],
