@@ -101,6 +101,78 @@ class SyncService {
   Future<Box<OTPAccount>> getUserBox() async => await _getUserBox();
   Future<String> getCurrentUserBoxName() async => await _getUserBoxName();
 
+  String _decodeLegacySecretForMigration(
+      String storedSecret, String currentUserId) {
+    final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
+    final isRawBase32 = RegExp(r'^[A-Z2-7a-z]+$').hasMatch(strippedSpaces);
+    if (isRawBase32) {
+      return storedSecret;
+    }
+
+    final candidateUserIds = <String>[
+      currentUserId,
+      'default_user',
+    ];
+
+    for (final userId in candidateUserIds) {
+      try {
+        final plainSecret = EncryptionService.decryptSecret(storedSecret, userId);
+        final cleanPlainSecret =
+            plainSecret.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+        if (RegExp(r'^[A-Z2-7]+$').hasMatch(cleanPlainSecret)) {
+          return plainSecret;
+        }
+      } catch (_) {}
+    }
+
+    return storedSecret;
+  }
+
+  Future<void> migrateLegacyLocalAccounts() async {
+    final targetBoxName = await _getUserBoxName();
+    final targetBox = await _getUserBox();
+    final currentUserId = await _getCurrentUserId();
+    final legacyBoxNames = <String>{
+      'otp_accounts',
+      'otp_accounts_default',
+    };
+
+    int migratedCount = 0;
+
+    for (final boxName in legacyBoxNames) {
+      if (boxName == targetBoxName) continue;
+
+      Box<OTPAccount> sourceBox;
+      try {
+        sourceBox = Hive.isBoxOpen(boxName)
+            ? Hive.box<OTPAccount>(boxName)
+            : await Hive.openBox<OTPAccount>(boxName);
+      } catch (_) {
+        continue;
+      }
+
+      for (final account in sourceBox.values) {
+        if (targetBox.containsKey(account.id)) continue;
+        final plainSecret =
+            _decodeLegacySecretForMigration(account.secret, currentUserId);
+        final migratedAccount = OTPAccount(
+          id: account.id,
+          service: account.service,
+          secret: plainSecret,
+          issuer: account.issuer,
+          createdAt: account.createdAt,
+          userId: currentUserId,
+        );
+        await targetBox.put(account.id, migratedAccount);
+        migratedCount++;
+      }
+    }
+
+    if (migratedCount > 0) {
+      print('Migrated $migratedCount local accounts into $targetBoxName');
+    }
+  }
+
   // ─── Auth helpers ─────────────────────────────────────────────────────────
   Future<void> _updateAuthHeader() async {
     final prefs = await SharedPreferences.getInstance();
@@ -219,6 +291,8 @@ class SyncService {
         
         await _storeEncryptionKey(encryptionKey);
         _encryptionKey = encryptionKey;
+
+        await migrateLegacyLocalAccounts();
         
         final userBox = await _getUserBox();
         print('User box ${await _getUserBoxName()} has ${userBox.length} accounts');

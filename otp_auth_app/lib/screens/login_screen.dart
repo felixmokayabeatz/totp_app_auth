@@ -1170,15 +1170,16 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = false;
     });
     if (success) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString('user_email') ?? '';
-      final username = prefs.getString('current_user') ?? '';
+      final currentUsername = prefs.getString('current_user') ?? '';
       final userId = prefs.getString('user_id') ?? '';
-      await Provider.of<AuthProvider>(context, listen: false)
-          .setUserData(username, email, userId);
-      Navigator.pushReplacement(
-        context,
+      await authProvider.setUserData(currentUsername, email, userId);
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => HomeScreen()),
+        (route) => false,
       );
     } else {
       _showError(_syncService.lastErrorMessage ?? 'Login failed');

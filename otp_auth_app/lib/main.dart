@@ -120,6 +120,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final userId = prefs.getString('user_id') ?? '';
 
     await authProvider.setUserData(username, email, userId);
+    await _syncService.migrateLegacyLocalAccounts();
 
     if (await _syncService.isSyncEnabled()) {
       await _syncService.downloadAndMergeAccounts();
@@ -248,6 +249,8 @@ class _AppLockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = Theme.of(context).platform == TargetPlatform.android ||
+        Theme.of(context).platform == TargetPlatform.iOS;
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -296,7 +299,9 @@ class _AppLockScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Unlock the app with your phone security or your BeatzLock PIN.',
+                        isMobile
+                            ? 'Unlock the app with your device security or your BeatzLock PIN.'
+                            : 'Unlock the app with your computer security or your BeatzLock PIN.',
                         style: textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
