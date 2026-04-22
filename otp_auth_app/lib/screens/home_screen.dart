@@ -36,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen>
   String? _profilePhotoUrl;
   String? _username;
   Box<OTPAccount>? _userBox;
+  bool _isLoadingVault = true;
+  String? _loadError;
 
   // Track sync status for warning messages
   bool _isSyncEnabled = true;
@@ -58,16 +60,38 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadData() async {
-    await _initUserBox();
-    _startTimer();
-    _loadProfileData();
+    try {
+      await _initUserBox();
+      await _loadProfileData();
+      if (await _syncService.isSyncEnabled()) {
+        await _syncService.downloadAndMergeAccounts();
+        await _initUserBox();
+      }
+      _startTimer();
+      _updateAllOTPs();
+      if (mounted) {
+        setState(() {
+          _isLoadingVault = false;
+          _loadError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingVault = false;
+          _loadError = 'Failed to load your saved codes.';
+        });
+      }
+    }
   }
 
   Future<void> _initUserBox() async {
     _userBox = await _syncService.getUserBox();
     print(
         'User box: ${await _syncService.getCurrentUserBoxName()} has ${_userBox?.length ?? 0} accounts');
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadProfileData() async {
@@ -439,10 +463,62 @@ class _HomeScreenState extends State<HomeScreen>
 
   // ─── Accounts list with creation date ─────────────────────────────────────
   Widget _buildAccountsList(bool isDark) {
-    if (_userBox == null) {
+    if (_isLoadingVault) {
       return const Center(
-          child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5))));
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+        ),
+      );
+    }
+
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                size: 44,
+                color: isDark ? Colors.white70 : const Color(0xFF4F46E5),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _loadError!,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Try reloading your vault.',
+                style: TextStyle(
+                  color: isDark ? Colors.white54 : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _isLoadingVault = true;
+                    _loadError = null;
+                  });
+                  _loadData();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_userBox == null) {
+      return const SizedBox.shrink();
     }
 
     var accounts = _userBox!.values.toList();
@@ -1098,6 +1174,7 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() => _isSyncing = true);
     try {
       final success = await _syncService.syncAccounts();
+      if (!mounted) return;
       setState(() => _isSyncing = false);
       if (success) {
         await _initUserBox();
@@ -1107,6 +1184,7 @@ class _HomeScreenState extends State<HomeScreen>
         _showSnackBar('No internet or server unavailable', Colors.orange);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isSyncing = false);
       _showSnackBar('Sync failed', Colors.red);
     }

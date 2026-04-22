@@ -22,6 +22,9 @@ class SyncService {
   late Dio _dio;
   bool _isRefreshing = false;
   String? _encryptionKey;
+  String? _lastErrorMessage;
+
+  String? get lastErrorMessage => _lastErrorMessage;
 
   // ─── Sync-enabled preference key ─────────────────────────────────────────
   static const _syncEnabledKey = 'sync_to_cloud_enabled';
@@ -194,6 +197,7 @@ class SyncService {
   // ─── Login ────────────────────────────────────────────────────────────────
   Future<bool> login(String username, String password) async {
     try {
+      _lastErrorMessage = null;
       final response = await _dio.post('auth/login/', data: {
         'username': username.trim(),
         'password': password,
@@ -225,7 +229,13 @@ class SyncService {
         return true;
       }
       return false;
+    } on DioException catch (e) {
+      _lastErrorMessage = e.response?.data?['error']?.toString() ??
+          'Login failed. Please try again.';
+      print('Login error: $e');
+      return false;
     } catch (e) {
+      _lastErrorMessage = 'Login failed. Please try again.';
       print('Login error: $e');
       return false;
     }
@@ -532,10 +542,17 @@ class SyncService {
   // ─── 2FA / password helpers ───────────────────────────────────────────────
   Future<bool> send2FACode(String username, String password) async {
     try {
+      _lastErrorMessage = null;
       final r = await _dio.post('send-2fa/',
           data: {'username': username.trim(), 'password': password});
       return r.data['success'] == true;
+    } on DioException catch (e) {
+      _lastErrorMessage = e.response?.data?['error']?.toString() ??
+          'Unable to send the verification code.';
+      print('send2FA error: $e');
+      return false;
     } catch (e) {
+      _lastErrorMessage = 'Unable to send the verification code.';
       print('send2FA error: $e');
       return false;
     }
@@ -543,10 +560,17 @@ class SyncService {
 
   Future<bool> verify2FACode(String username, String code) async {
     try {
+      _lastErrorMessage = null;
       final r = await _dio.post('verify-2fa/',
           data: {'username': username.trim(), 'code': code.trim()});
       return r.data['success'] == true;
+    } on DioException catch (e) {
+      _lastErrorMessage = e.response?.data?['error']?.toString() ??
+          'Verification failed.';
+      print('verify2FA error: $e');
+      return false;
     } catch (e) {
+      _lastErrorMessage = 'Verification failed.';
       print('verify2FA error: $e');
       return false;
     }
@@ -671,23 +695,35 @@ class SyncService {
 
   Future<bool> sendPasswordResetCode(String email) async {
     try {
+      _lastErrorMessage = null;
       final r =
           await _dio.post('send-reset-code/', data: {'email': email.trim()});
       return r.data['success'] == true;
+    } on DioException catch (e) {
+      _lastErrorMessage = e.response?.data?['error']?.toString() ??
+          'Unable to send reset code.';
+      return false;
     } catch (e) {
+      _lastErrorMessage = 'Unable to send reset code.';
       return false;
     }
   }
 
   Future<bool> resetPassword(String email, String code, String newPassword) async {
     try {
+      _lastErrorMessage = null;
       final r = await _dio.post('reset-password/', data: {
         'email': email.trim(),
         'code': code.trim(),
         'new_password': newPassword,
       });
       return r.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          e.response?.data?['error']?.toString() ?? 'Password reset failed.';
+      return false;
     } catch (e) {
+      _lastErrorMessage = 'Password reset failed.';
       return false;
     }
   }

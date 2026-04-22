@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async';
 import 'dart:io';
 
 class BiometricService {
@@ -84,10 +83,10 @@ class BiometricService {
   Future<bool> authenticateWithAppPin(BuildContext context) async {
     if (!context.mounted) return false;
 
-    final completer = Completer<bool>();
     final pinController = TextEditingController();
+    bool resolved = false;
 
-    showDialog(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
@@ -107,7 +106,7 @@ class BiometricService {
         actions: [
           TextButton(
             onPressed: () {
-              completer.complete(false);
+              resolved = true;
               Navigator.pop(dialogContext);
             },
             child: const Text('Cancel'),
@@ -115,7 +114,7 @@ class BiometricService {
           ElevatedButton(
             onPressed: () async {
               final isValid = await verifyAppPin(pinController.text);
-              completer.complete(isValid);
+              resolved = isValid;
               Navigator.pop(dialogContext);
               if (!isValid && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -131,7 +130,8 @@ class BiometricService {
       ),
     );
 
-    return completer.future;
+    pinController.dispose();
+    return resolved;
   }
 
   // Check if we're on desktop

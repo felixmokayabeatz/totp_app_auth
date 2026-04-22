@@ -983,11 +983,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _submitLogin() async {
-    if (_usernameController.text.isEmpty) {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    if (username.isEmpty) {
       _showError('Please enter username');
       return;
     }
-    if (_passwordController.text.isEmpty) {
+    if (password.isEmpty) {
       _showError('Please enter password');
       return;
     }
@@ -1015,28 +1018,30 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     if (_isLogin) {
       final sent = await _syncService.send2FACode(
-        _usernameController.text,
-        _passwordController.text,
+        username,
+        password,
       );
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
       if (sent) {
-        _tempUsername = _usernameController.text;
+        _tempUsername = username;
         _startResendTimer();
         setState(() {
           _show2FA = true;
         });
         _showSuccess('2FA code sent to your email!');
       } else {
-        _showError('Invalid username or password');
+        _showError(_syncService.lastErrorMessage ?? 'Invalid username or password');
       }
     } else {
       bool success = await _syncService.register(
-        _usernameController.text.trim(),
+        username,
         _emailController.text.trim(),
-        _passwordController.text,
+        password,
       );
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
@@ -1063,6 +1068,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     final sent =
         await _syncService.sendPasswordResetCode(_resetEmailController.text);
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
@@ -1111,6 +1117,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _resetOtpCodeController.text,
       _resetNewPasswordController.text,
     );
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
@@ -1125,16 +1132,19 @@ class _LoginScreenState extends State<LoginScreen> {
         _resetConfirmPasswordController.clear();
       });
     } else {
-      _showError('Invalid verification code');
+      _showError(_syncService.lastErrorMessage ?? 'Invalid verification code');
     }
   }
 
   void _verify2FA() async {
+    final username = (_tempUsername ?? _usernameController.text).trim();
+    final code = _otpCodeController.text.trim();
+
     if (_otpCodeController.text.isEmpty) {
       _showError('Please enter verification code');
       return;
     }
-    if (_otpCodeController.text.length != 6) {
+    if (code.length != 6) {
       _showError('Please enter a valid 6-digit code');
       return;
     }
@@ -1142,20 +1152,20 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
     final isValid = await _syncService.verify2FACode(
-      _tempUsername ?? _usernameController.text,
-      _otpCodeController.text,
+      username,
+      code,
     );
+    if (!mounted) return;
     if (!isValid) {
       setState(() {
         _isLoading = false;
       });
-      _showError('Invalid verification code');
+      _showError(_syncService.lastErrorMessage ?? 'Invalid verification code');
       return;
     }
-    bool success = await _syncService.login(
-      _tempUsername ?? _usernameController.text,
-      _passwordController.text,
-    );
+
+    final success = await _syncService.login(username, _passwordController.text);
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
@@ -1171,7 +1181,7 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => HomeScreen()),
       );
     } else {
-      _showError('Login failed');
+      _showError(_syncService.lastErrorMessage ?? 'Login failed');
     }
   }
 

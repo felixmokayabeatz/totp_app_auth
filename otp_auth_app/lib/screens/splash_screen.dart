@@ -1,11 +1,13 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'home_screen.dart';
-import 'login_screen.dart';
+
 import '../providers/auth_provider.dart';
 import '../services/sync_service.dart';
+import 'home_screen.dart';
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,9 +18,9 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
+  late final AnimationController _animationController;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _scaleAnimation;
 
   @override
   void initState() {
@@ -26,57 +28,64 @@ class _SplashScreenState extends State<SplashScreen>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1600),
+    )..forward();
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    );
+    _scaleAnimation = Tween<double>(begin: 0.92, end: 1).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
     );
 
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
-    );
+    unawaited(_bootstrap());
+  }
 
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
-    );
+  Future<void> _bootstrap() async {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
 
-    _animationController.forward();
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    final syncService = SyncService();
 
-    // Navigate after animation
-    Timer(const Duration(seconds: 2), () async {
+    if (token == null || token.isEmpty) {
       if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => LoginScreen()),
+      );
+      return;
+    }
 
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
+    final restoredKey = await syncService.restoreEncryptionKey();
+    if (!restoredKey) {
+      await syncService.logout();
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => LoginScreen()),
+      );
+      return;
+    }
 
-      if (token != null && token.isNotEmpty) {
-        // Restore encryption key
-        final syncService = SyncService();
-        await syncService.restoreEncryptionKey();
+    final email = prefs.getString('user_email') ?? '';
+    final username = prefs.getString('current_user') ?? '';
+    final userId = prefs.getString('user_id') ?? '';
 
-        // Get user data
-        final email = prefs.getString('user_email') ?? '';
-        final username = prefs.getString('current_user') ?? '';
-        final userId = prefs.getString('user_id') ?? '';
+    await Provider.of<AuthProvider>(context, listen: false)
+        .setUserData(username, email, userId);
 
-        // Update AuthProvider
-        await Provider.of<AuthProvider>(context, listen: false)
-            .setUserData(username, email, userId);
+    if (await syncService.isSyncEnabled()) {
+      await syncService.downloadAndMergeAccounts();
+    }
 
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-                builder: (context) => HomeScreen()), // Remove const
-          );
-        }
-      } else {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-                builder: (context) => LoginScreen()), // Remove const
-          );
-        }
-      }
-    });
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => HomeScreen()),
+    );
   }
 
   @override
@@ -87,111 +96,81 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
-      // Remove debugShowCheckedModeBanner - it's not needed here
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: const [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
-              Color(0xFFf093fb)
+            colors: [
+              colorScheme.primary,
+              colorScheme.primaryContainer,
+              colorScheme.secondaryContainer,
             ],
-            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: Stack(
           children: [
-            ..._buildBackgroundCircles(),
+            _backgroundOrb(top: -80, left: -40, size: 220),
+            _backgroundOrb(bottom: -60, right: -30, size: 260),
             Center(
               child: FadeTransition(
                 opacity: _fadeAnimation,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ScaleTransition(
-                      scale: _scaleAnimation,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.white.withOpacity(0.9),
-                              Colors.white.withOpacity(0.6),
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 30,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.security,
-                          size: 60,
-                          color: Color(0xFF667eea),
-                        ),
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 32,
                       ),
-                    ),
-                    const SizedBox(height: 40),
-                    const Text(
-                      'BeatzLock Authenticator',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 2,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black26,
-                            blurRadius: 10,
-                            offset: Offset(2, 2),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 92,
+                            height: 92,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.shield_rounded,
+                              size: 46,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            'BeatzLock',
+                            style: textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Secure codes. Safe sync. Fast access.',
+                            style: textTheme.bodyLarge?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 28),
+                          SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: colorScheme.primary,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Secure Two-Factor Authentication',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white70,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 60),
-                    const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      strokeWidth: 3,
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Loading secure vault...',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 30,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: const Text(
-                  'Version 1.0.0 | End-to-End Encrypted',
-                  style: TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
                   ),
                 ),
               ),
@@ -202,71 +181,28 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  List<Widget> _buildBackgroundCircles() {
-    return [
-      Positioned(
-        top: -50,
-        right: -50,
-        child: TweenAnimationBuilder(
-          tween: Tween<double>(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 1500),
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.1),
-                ),
-              ),
-            );
-          },
+  Widget _backgroundOrb({
+    double? top,
+    double? left,
+    double? right,
+    double? bottom,
+    required double size,
+  }) {
+    return Positioned(
+      top: top,
+      left: left,
+      right: right,
+      bottom: bottom,
+      child: IgnorePointer(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withOpacity(0.1),
+          ),
         ),
       ),
-      Positioned(
-        bottom: -80,
-        left: -80,
-        child: TweenAnimationBuilder(
-          tween: Tween<double>(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 1800),
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Container(
-                width: 250,
-                height: 250,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.08),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-      Positioned(
-        top: 150,
-        left: -30,
-        child: TweenAnimationBuilder(
-          tween: Tween<double>(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 2000),
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.05),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    ];
+    );
   }
 }

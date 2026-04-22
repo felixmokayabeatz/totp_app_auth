@@ -1,27 +1,32 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async';
+
 import 'biometric_service.dart';
 
 class AppLockService {
   final BiometricService _biometricService = BiometricService();
+
   static const String _appLockEnabledKey = 'app_lock_enabled';
   static const String _lastActiveTimeKey = 'last_active_time';
   static const String _lockTimeoutKey = 'lock_timeout_minutes';
 
-  static const int _defaultTimeout = 5; // 5 minutes
+  static const int _defaultTimeout = 0;
 
   Future<bool> isAppLockEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_appLockEnabledKey) ?? false;
+    final enabled = prefs.getBool(_appLockEnabledKey) ?? true;
+    if (!enabled) {
+      await prefs.setBool(_appLockEnabledKey, true);
+    }
+    return true;
   }
 
   Future<void> setAppLockEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_appLockEnabledKey, enabled);
-    if (enabled) {
-      await recordAppActivity();
-    }
+    await prefs.setBool(_appLockEnabledKey, true);
+    await recordAppActivity();
   }
 
   Future<int> getLockTimeout() async {
@@ -31,48 +36,59 @@ class AppLockService {
 
   Future<void> setLockTimeout(int minutes) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_lockTimeoutKey, minutes.clamp(1, 10));
+    await prefs.setInt(_lockTimeoutKey, minutes.clamp(0, 10));
   }
 
   Future<void> recordAppActivity() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(
-        _lastActiveTimeKey, DateTime.now().millisecondsSinceEpoch);
+      _lastActiveTimeKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   Future<bool> needsUnlock() async {
-    final isEnabled = await isAppLockEnabled();
-    if (!isEnabled) return false;
-
     final prefs = await SharedPreferences.getInstance();
     final lastActive = prefs.getInt(_lastActiveTimeKey);
-    if (lastActive == null) return true;
+    if (lastActive == null) {
+      return true;
+    }
 
     final timeoutMinutes = await getLockTimeout();
+    if (timeoutMinutes == 0) {
+      return true;
+    }
+
     final lastActiveTime = DateTime.fromMillisecondsSinceEpoch(lastActive);
     final difference = DateTime.now().difference(lastActiveTime);
-
-    print(
-        'DEBUG: Difference: ${difference.inMinutes} minutes, Timeout: $timeoutMinutes minutes');
-
     return difference.inMinutes >= timeoutMinutes;
   }
 
-  // Main authentication method - platform specific
+  Future<void> ensureMandatoryLock(BuildContext context) async {
+    await isAppLockEnabled();
+    await setLockTimeout(_defaultTimeout);
+
+    final canUseSystemAuth =
+        await _biometricService.canUseSystemAuthentication();
+    if (!canUseSystemAuth) {
+      final hasPin = await _biometricService.hasAppPin();
+      if (!hasPin && context.mounted) {
+        await _showForceSetAppPinDialog(context);
+      }
+    }
+  }
+
   Future<bool> authenticateToUnlock(BuildContext context) async {
     final canUseSystemAuth =
         await _biometricService.canUseSystemAuthentication();
 
     if (canUseSystemAuth) {
-      // MOBILE + WINDOWS: Use system authentication
-      print('DEBUG: System auth available - using device authentication');
       final authenticated =
           await _biometricService.authenticateWithDeviceSystem(context);
       if (!authenticated && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-                'Authentication failed. Use your device lock method to continue.'),
+            content: Text('Authentication failed. Try again to continue.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -80,10 +96,7 @@ class AppLockService {
       return authenticated;
     }
 
-    // Linux/macOS or desktops without system auth support fall back to app PIN.
-    print('DEBUG: System auth unavailable - using app PIN fallback');
     final hasPin = await _biometricService.hasAppPin();
-
     if (!hasPin) {
       final pinSet = await _showForceSetAppPinDialog(context);
       if (!pinSet) {
@@ -91,27 +104,25 @@ class AppLockService {
       }
     }
 
-    return await _biometricService.authenticateWithAppPin(context);
+    return _biometricService.authenticateWithAppPin(context);
   }
 
-  // Force user to set up PIN on first use (Desktop only)
   Future<bool> _showForceSetAppPinDialog(BuildContext context) async {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
     final completer = Completer<bool>();
 
-    await showDialog(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Set Up App PIN'),
+        title: const Text('Set your BeatzLock PIN'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'For security, please set up a PIN to lock BeatzLock.',
-              style: TextStyle(fontSize: 14),
+              'This device does not have usable system security for BeatzLock, so you must create an app PIN.',
             ),
             const SizedBox(height: 16),
             TextField(
@@ -122,7 +133,6 @@ class AppLockService {
               autofocus: true,
               decoration: const InputDecoration(
                 hintText: 'Enter 4-6 digit PIN',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -133,38 +143,39 @@ class AppLockService {
               maxLength: 6,
               decoration: const InputDecoration(
                 hintText: 'Confirm PIN',
-                border: OutlineInputBorder(),
               ),
             ),
           ],
         ),
         actions: [
-          ElevatedButton(
+          FilledButton(
             onPressed: () async {
-              final pin = pinController.text;
-              final confirm = confirmController.text;
+              final pin = pinController.text.trim();
+              final confirm = confirmController.text.trim();
 
               if (pin.length < 4) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
-                      content: Text('PIN must be at least 4 digits'),
-                      backgroundColor: Colors.red),
+                    content: Text('PIN must be at least 4 digits.'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
                 return;
               }
 
               if (pin != confirm) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
-                      content: Text('PINs do not match'),
-                      backgroundColor: Colors.red),
+                    content: Text('PINs do not match.'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
                 return;
               }
 
               await _biometricService.setAppPin(pin);
               completer.complete(true);
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
             },
             child: const Text('Save PIN'),
           ),
@@ -172,26 +183,27 @@ class AppLockService {
       ),
     );
 
+    pinController.dispose();
+    confirmController.dispose();
+
     return completer.future;
   }
 
-  // Setup PIN from Settings (Desktop only)
   Future<bool> setupAppPinFromSettings(BuildContext context) async {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
     final completer = Completer<bool>();
 
-    await showDialog(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Set App PIN'),
+        title: const Text('Change BeatzLock PIN'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Create a PIN to lock BeatzLock',
-                style: TextStyle(fontSize: 14)),
+            const Text('Create a 4-6 digit PIN for app access.'),
             const SizedBox(height: 16),
             TextField(
               controller: pinController,
@@ -200,8 +212,7 @@ class AppLockService {
               maxLength: 6,
               autofocus: true,
               decoration: const InputDecoration(
-                hintText: 'Enter 4-6 digit PIN',
-                border: OutlineInputBorder(),
+                hintText: 'Enter PIN',
               ),
             ),
             const SizedBox(height: 12),
@@ -212,7 +223,6 @@ class AppLockService {
               maxLength: 6,
               decoration: const InputDecoration(
                 hintText: 'Confirm PIN',
-                border: OutlineInputBorder(),
               ),
             ),
           ],
@@ -221,42 +231,47 @@ class AppLockService {
           TextButton(
             onPressed: () {
               completer.complete(false);
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
             },
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () async {
-              final pin = pinController.text;
-              final confirm = confirmController.text;
+              final pin = pinController.text.trim();
+              final confirm = confirmController.text.trim();
 
               if (pin.length < 4) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
-                      content: Text('PIN must be at least 4 digits'),
-                      backgroundColor: Colors.red),
+                    content: Text('PIN must be at least 4 digits.'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
                 return;
               }
 
               if (pin != confirm) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
-                      content: Text('PINs do not match'),
-                      backgroundColor: Colors.red),
+                    content: Text('PINs do not match.'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
                 return;
               }
 
               await _biometricService.setAppPin(pin);
               completer.complete(true);
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
             },
             child: const Text('Save PIN'),
           ),
         ],
       ),
     );
+
+    pinController.dispose();
+    confirmController.dispose();
 
     return completer.future;
   }

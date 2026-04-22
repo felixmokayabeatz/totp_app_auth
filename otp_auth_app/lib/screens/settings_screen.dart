@@ -60,6 +60,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  bool get _canChangeAppPin => Platform.isLinux || Platform.isMacOS;
+
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => const Color(0xFF4F46E5);
   Color get _bgColor =>
@@ -132,25 +134,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             _dividerLine(),
 
-            // App Lock Toggle
-            _switchTile(
+            _tappableTile(
               icon: Icons.lock_outline_rounded,
               label: 'App Lock',
-              sub: _appLockEnabled
-                  ? 'Lock app when backgrounded'
-                  : 'Require authentication to reopen app',
-              value: _appLockEnabled,
-              onChanged: _toggleAppLock,
+              sub: 'Always on. BeatzLock now requires device security or an app PIN every time you reopen it.',
+              trailing: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'Required',
+                  style: TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
 
-            // Show PIN management only on desktop platforms that use the PIN fallback.
-            if ((Platform.isLinux || Platform.isMacOS) &&
-                _appLockEnabled) ...[
+            if (_canChangeAppPin) ...[
               _dividerLine(),
               _tappableTile(
                 icon: Icons.pin,
                 label: 'Change App PIN',
-                sub: 'Update your lock PIN',
+                sub: 'Use this if your device falls back to the BeatzLock PIN',
                 onTap: _changeAppPin,
               ),
             ],
@@ -289,61 +300,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  // ========== APP LOCK METHOD ==========
-
-  Future<void> _toggleAppLock(bool value) async {
-    if (value) {
-      // Test authentication first
-      final authenticated = await _appLockService.authenticateToUnlock(context);
-      if (authenticated) {
-        await _appLockService.setAppLockEnabled(true);
-        await _appLockService.recordAppActivity();
-        setState(() => _appLockEnabled = true);
-
-        // Only fallback desktop platforms need an app PIN.
-        if (Platform.isLinux || Platform.isMacOS) {
-          final hasPin = await _biometricService.hasAppPin();
-          if (!hasPin) {
-            await _appLockService.setupAppPinFromSettings(context);
-          }
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('App lock enabled'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Authentication failed. App lock not enabled.'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-        setState(() => _appLockEnabled = false);
-      }
-    } else {
-      await _appLockService.setAppLockEnabled(false);
-      setState(() => _appLockEnabled = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('App lock disabled'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-    }
   }
 
   Future<void> _changeAppPin() async {
