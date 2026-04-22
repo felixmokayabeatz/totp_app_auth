@@ -13,6 +13,7 @@ import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/app_lock_service.dart';
 import 'services/biometric_service.dart';
+import 'services/otp_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/sync_service.dart';
 
@@ -112,24 +113,32 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         return;
       }
 
-      final restoredKey = await _syncService.restoreEncryptionKey();
-      if (!restoredKey) {
-        await _syncService.logout();
-        await authProvider.logout();
-        return;
-      }
-
       final email = prefs.getString('user_email') ?? '';
       final username = prefs.getString('current_user') ?? '';
       final userId = prefs.getString('user_id') ?? '';
 
+      OTPService().clearCachedUserId();
       await authProvider.setUserData(username, email, userId);
-      await _syncService.migrateLegacyLocalAccounts();
+      final restoredKey = await _syncService.restoreEncryptionKey();
 
-      unawaited(_restoreCloudDataInBackground());
+      try {
+        await _syncService.migrateLegacyLocalAccounts();
+      } catch (e) {
+        debugPrint('Local account migration restore error: $e');
+      }
+
+      if (restoredKey) {
+        unawaited(_restoreCloudDataInBackground());
+      } else {
+        debugPrint(
+            'Cloud encryption key missing on startup; keeping user signed in and skipping cloud restore.');
+      }
     } catch (e) {
       debugPrint('Session restore error: $e');
-      await authProvider.logout();
+      final tokenStillExists = prefs.getString('access_token');
+      if (tokenStillExists == null || tokenStillExists.isEmpty) {
+        await authProvider.logout();
+      }
     } finally {
       if (mounted) {
         setState(() {

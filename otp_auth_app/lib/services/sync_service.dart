@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/otp_account.dart';
 import 'encryption_service.dart';
+import 'otp_service.dart';
 import '../config/app_config.dart';
 import 'dart:convert';
 
@@ -40,6 +41,13 @@ class SyncService {
     return box.get('encryption_key');
   }
 
+  Future<bool> _ensureEncryptionKeyAvailable() async {
+    if (_encryptionKey != null && _encryptionKey!.isNotEmpty) {
+      return true;
+    }
+    return restoreEncryptionKey();
+  }
+
   Future<void> _clearStoredEncryptionKey() async {
     final box = await Hive.openBox('secure_data');
     await box.delete('encryption_key');
@@ -54,7 +62,7 @@ class SyncService {
   Future<void> setSyncEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_syncEnabledKey, value);
-    
+
     try {
       await _updateAuthHeader();
       await _dio.post('sync-preference/', data: {'sync_enabled': value});
@@ -116,7 +124,8 @@ class SyncService {
 
     for (final userId in candidateUserIds) {
       try {
-        final plainSecret = EncryptionService.decryptSecret(storedSecret, userId);
+        final plainSecret =
+            EncryptionService.decryptSecret(storedSecret, userId);
         final cleanPlainSecret =
             plainSecret.replaceAll(RegExp(r'\s+'), '').toUpperCase();
         if (RegExp(r'^[A-Z2-7]+$').hasMatch(cleanPlainSecret)) {
@@ -187,9 +196,13 @@ class SyncService {
     _isRefreshing = true;
     final prefs = await SharedPreferences.getInstance();
     final refreshToken = prefs.getString('refresh_token');
-    if (refreshToken == null) { _isRefreshing = false; return false; }
+    if (refreshToken == null) {
+      _isRefreshing = false;
+      return false;
+    }
     try {
-      final response = await _dio.post('token/refresh/', data: {'refresh': refreshToken});
+      final response =
+          await _dio.post('token/refresh/', data: {'refresh': refreshToken});
       if (response.statusCode == 200) {
         await prefs.setString('access_token', response.data['access']);
         await _updateAuthHeader();
@@ -201,7 +214,8 @@ class SyncService {
     return false;
   }
 
-  Future<Response> _requestWithRetry(Future<Response> Function() request) async {
+  Future<Response> _requestWithRetry(
+      Future<Response> Function() request) async {
     try {
       return await request();
     } on DioException catch (e) {
@@ -254,7 +268,9 @@ class SyncService {
         await prefs.setString('refresh_token', response.data['refresh']);
         await prefs.setString('current_user', username);
         await prefs.setString('user_email', email);
-        await prefs.setString('user_id', response.data['user']['id'].toString());
+        await prefs.setString(
+            'user_id', response.data['user']['id'].toString());
+        OTPService().clearCachedUserId();
         await _updateAuthHeader();
         _initEncryption(username, password);
         return true;
@@ -281,7 +297,9 @@ class SyncService {
         await prefs.setString('current_user', username);
         await prefs.setString(
             'user_email', response.data['user']['email'] ?? '');
-        await prefs.setString('user_id', response.data['user']['id'].toString());
+        await prefs.setString(
+            'user_id', response.data['user']['id'].toString());
+        OTPService().clearCachedUserId();
         await _updateAuthHeader();
 
         // Treat successful token issuance as a successful login.
@@ -351,9 +369,9 @@ class SyncService {
     await _updateAuthHeader();
     try {
       final response = await _requestWithRetry(() => _dio.post(
-        'sync/delete-account/',
-        data: {'account_id': accountId},
-      ));
+            'sync/delete-account/',
+            data: {'account_id': accountId},
+          ));
       if (response.statusCode == 200) {
         final userBox = await _getUserBox();
         await userBox.delete(accountId);
@@ -398,7 +416,7 @@ class SyncService {
   Future<void> downloadAndMergeAccounts() async {
     await _updateAuthHeader();
 
-    if (_encryptionKey == null) {
+    if (!await _ensureEncryptionKeyAvailable()) {
       print('Encryption key not set - user must log in first');
       return;
     }
@@ -412,11 +430,15 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(() => _dio.get(
-        'sync/get-data/',
-        queryParameters: {'data_type': 'otp_accounts', 'device_id': deviceId},
-      ));
+            'sync/get-data/',
+            queryParameters: {
+              'data_type': 'otp_accounts',
+              'device_id': deviceId
+            },
+          ));
 
-      if (response.statusCode == 200 && response.data['encrypted_content'] != null) {
+      if (response.statusCode == 200 &&
+          response.data['encrypted_content'] != null) {
         final encryptedContent = response.data['encrypted_content'];
 
         if (encryptedContent.toString().isEmpty) {
@@ -424,8 +446,8 @@ class SyncService {
           return;
         }
 
-        final decrypted = EncryptionService.simpleDecrypt(
-            encryptedContent, _encryptionKey!);
+        final decrypted =
+            EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
 
         if (decrypted.isEmpty || decrypted.trim().isEmpty) {
           print('Decrypted content is empty');
@@ -468,8 +490,8 @@ class SyncService {
 
   Future<Set<String>> _fetchTombstones() async {
     try {
-      final response = await _requestWithRetry(
-          () => _dio.get('sync/tombstones/'));
+      final response =
+          await _requestWithRetry(() => _dio.get('sync/tombstones/'));
       if (response.statusCode == 200) {
         final List ids = response.data['tombstoned_ids'] ?? [];
         return ids.cast<String>().toSet();
@@ -490,7 +512,9 @@ class SyncService {
     final token = prefs.getString('access_token');
     if (token == null || token.isEmpty) return false;
 
-    if (_encryptionKey == null) {
+    if (!await _ensureEncryptionKeyAvailable()) {
+      _lastErrorMessage =
+          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
       print('Encryption key not set - user must log in first');
       return false;
     }
@@ -510,12 +534,12 @@ class SyncService {
 
       try {
         final downloadResponse = await _requestWithRetry(() => _dio.get(
-          'sync/get-data/',
-          queryParameters: {
-            'data_type': 'otp_accounts',
-            'device_id': deviceId,
-          },
-        ));
+              'sync/get-data/',
+              queryParameters: {
+                'data_type': 'otp_accounts',
+                'device_id': deviceId,
+              },
+            ));
 
         if (downloadResponse.statusCode == 200 &&
             downloadResponse.data['encrypted_content'] != null) {
@@ -587,9 +611,7 @@ class SyncService {
       print('Added $addedFromCloud accounts from cloud');
 
       final finalData = await Future.wait(
-        userBox.values
-            .where((a) => !tombstones.contains(a.id))
-            .map((a) async {
+        userBox.values.where((a) => !tombstones.contains(a.id)).map((a) async {
           final plainSecret = await _decryptSecretForUpload(a.secret);
           return {
             'id': a.id,
@@ -652,8 +674,8 @@ class SyncService {
           data: {'username': username.trim(), 'code': code.trim()});
       return r.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage = e.response?.data?['error']?.toString() ??
-          'Verification failed.';
+      _lastErrorMessage =
+          e.response?.data?['error']?.toString() ?? 'Verification failed.';
       print('verify2FA error: $e');
       return false;
     } catch (e) {
@@ -712,7 +734,8 @@ class SyncService {
     }
   }
 
-  Future<bool> changePassword(String currentPassword, String newPassword) async {
+  Future<bool> changePassword(
+      String currentPassword, String newPassword) async {
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
@@ -725,9 +748,7 @@ class SyncService {
       final tombstones = await _fetchTombstones();
 
       final plainAccounts = await Future.wait(
-        userBox.values
-            .where((a) => !tombstones.contains(a.id))
-            .map((a) async {
+        userBox.values.where((a) => !tombstones.contains(a.id)).map((a) async {
           final plainSecret = await _decryptSecretForUpload(a.secret);
           return {
             'id': a.id,
@@ -759,7 +780,7 @@ class SyncService {
       }
 
       final encrypted = EncryptionService.simpleEncrypt(
-        jsonEncode(plainAccounts), _encryptionKey!);
+          jsonEncode(plainAccounts), _encryptionKey!);
 
       await _dio.post('sync/sync/', data: {
         'data_type': 'otp_accounts',
@@ -796,7 +817,8 @@ class SyncService {
     }
   }
 
-  Future<bool> resetPassword(String email, String code, String newPassword) async {
+  Future<bool> resetPassword(
+      String email, String code, String newPassword) async {
     try {
       _lastErrorMessage = null;
       final r = await _dio.post('reset-password/', data: {
@@ -823,10 +845,11 @@ class SyncService {
     await prefs.remove('current_user');
     await prefs.remove('user_email');
     await prefs.remove('user_id');
-    
+
     await _clearStoredEncryptionKey();
-    
+
     _encryptionKey = null;
+    OTPService().clearCachedUserId();
     _dio.options.headers.remove('Authorization');
   }
 

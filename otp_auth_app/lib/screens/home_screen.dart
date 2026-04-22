@@ -62,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadData() async {
     try {
+      await _syncService.migrateLegacyLocalAccounts();
       await _initUserBox();
       await _loadProfileData();
       if (await _syncService.isSyncEnabled()) {
@@ -1182,7 +1183,10 @@ class _HomeScreenState extends State<HomeScreen>
         _updateAllOTPs();
         _showSnackBar('Sync completed!', Colors.green);
       } else {
-        _showSnackBar('No internet or server unavailable', Colors.orange);
+        _showSnackBar(
+            _syncService.lastErrorMessage ??
+                'No internet or server unavailable',
+            Colors.orange);
       }
     } catch (e) {
       if (!mounted) return;
