@@ -3,8 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:provider/provider.dart';
-import '../providers/theme_provider.dart';
 
 class ShowQRScreen extends StatefulWidget {
   final String secret;
@@ -27,8 +25,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
   
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDark = themeProvider.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final otpUrl = 'otpauth://totp/${widget.issuer != null ? "${widget.issuer}:" : ""}${widget.service}?secret=${widget.secret}&issuer=${widget.issuer ?? widget.service}';
     
     return Scaffold(
@@ -37,7 +34,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         title: Text(
           'QR Code',
           style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+            color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
         ),

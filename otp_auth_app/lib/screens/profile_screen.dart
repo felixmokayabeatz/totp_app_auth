@@ -3,9 +3,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart';
 import '../services/profile_service.dart';
-import '../providers/theme_provider.dart';
 import '../config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -204,8 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDark = themeProvider.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF),
@@ -213,7 +210,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         title: Text(
           'Profile',
           style: TextStyle(
-            color: isDark ? Colors.white : Color(0xFF1A1A2E),
+            color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
         ),
