@@ -143,8 +143,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: _toggleAppLock,
             ),
 
-            // For Desktop: Show PIN management (only when app lock is enabled)
-            if ((Platform.isWindows || Platform.isLinux || Platform.isMacOS) &&
+            // Show PIN management only on desktop platforms that use the PIN fallback.
+            if ((Platform.isLinux || Platform.isMacOS) &&
                 _appLockEnabled) ...[
               _dividerLine(),
               _tappableTile(
@@ -302,8 +302,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         await _appLockService.recordAppActivity();
         setState(() => _appLockEnabled = true);
 
-        // For desktop, ensure PIN is set up
-        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        // Only fallback desktop platforms need an app PIN.
+        if (Platform.isLinux || Platform.isMacOS) {
           final hasPin = await _biometricService.hasAppPin();
           if (!hasPin) {
             await _appLockService.setupAppPinFromSettings(context);

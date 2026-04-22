@@ -60,35 +60,38 @@ class AppLockService {
 
   // Main authentication method - platform specific
   Future<bool> authenticateToUnlock(BuildContext context) async {
-    if (_biometricService.isMobile()) {
-      // MOBILE: Use device system authentication (PIN/Pattern/Fingerprint/Face ID)
-      print('DEBUG: Mobile device - using system authentication');
+    final canUseSystemAuth =
+        await _biometricService.canUseSystemAuthentication();
+
+    if (canUseSystemAuth) {
+      // MOBILE + WINDOWS: Use system authentication
+      print('DEBUG: System auth available - using device authentication');
       final authenticated =
           await _biometricService.authenticateWithDeviceSystem(context);
       if (!authenticated && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'Authentication failed. Use your device PIN/Pattern/Fingerprint.'),
+                'Authentication failed. Use your device lock method to continue.'),
             backgroundColor: Colors.red,
           ),
         );
       }
       return authenticated;
-    } else {
-      // DESKTOP: Use App PIN
-      print('DEBUG: Desktop - using App PIN');
-      final hasPin = await _biometricService.hasAppPin();
-
-      if (!hasPin) {
-        final pinSet = await _showForceSetAppPinDialog(context);
-        if (!pinSet) {
-          return false;
-        }
-      }
-
-      return await _biometricService.authenticateWithAppPin(context);
     }
+
+    // Linux/macOS or desktops without system auth support fall back to app PIN.
+    print('DEBUG: System auth unavailable - using app PIN fallback');
+    final hasPin = await _biometricService.hasAppPin();
+
+    if (!hasPin) {
+      final pinSet = await _showForceSetAppPinDialog(context);
+      if (!pinSet) {
+        return false;
+      }
+    }
+
+    return await _biometricService.authenticateWithAppPin(context);
   }
 
   // Force user to set up PIN on first use (Desktop only)

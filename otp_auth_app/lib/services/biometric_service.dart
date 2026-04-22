@@ -36,6 +36,13 @@ class BiometricService {
     }
   }
 
+  Future<bool> canUseSystemAuthentication() async {
+    if (isMobile() || isWindowsDesktop()) {
+      return await isDeviceAuthenticationAvailable();
+    }
+    return false;
+  }
+
   // ========== APP PIN (for Desktop) ==========
 
   Future<bool> isAppPinEnabled() async {
@@ -130,6 +137,10 @@ class BiometricService {
   // Check if we're on desktop
   bool isDesktop() {
     return Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  }
+
+  bool isWindowsDesktop() {
+    return Platform.isWindows;
   }
 
   // Check if we're on mobile
