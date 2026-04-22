@@ -9,7 +9,6 @@ class AppLockService {
   static const String _lastActiveTimeKey = 'last_active_time';
   static const String _lockTimeoutKey = 'lock_timeout_minutes';
 
-  // Change default timeout from 5 seconds to 5 minutes
   static const int _defaultTimeout = 5; // 5 minutes
 
   Future<bool> isAppLockEnabled() async {
@@ -53,37 +52,42 @@ class AppLockService {
     final lastActiveTime = DateTime.fromMillisecondsSinceEpoch(lastActive);
     final difference = DateTime.now().difference(lastActiveTime);
 
-    print('DEBUG: Last active: $lastActiveTime');
-    print('DEBUG: Now: ${DateTime.now()}');
-    print('DEBUG: Difference: ${difference.inMinutes} minutes');
-    print('DEBUG: Timeout: $timeoutMinutes minutes');
-    print('DEBUG: Should lock: ${difference.inMinutes >= timeoutMinutes}');
+    print(
+        'DEBUG: Difference: ${difference.inMinutes} minutes, Timeout: $timeoutMinutes minutes');
 
-    // Only lock after the timeout period (in MINUTES)
-    // Add a small buffer (1 second) to prevent immediate locking
-    return difference.inMinutes >= timeoutMinutes && difference.inSeconds > 1;
+    return difference.inMinutes >= timeoutMinutes;
   }
 
   // Main authentication method - platform specific
   Future<bool> authenticateToUnlock(BuildContext context) async {
-    if (_biometricService.isDesktop()) {
-      // DESKTOP: Use App PIN only
+    if (_biometricService.isMobile()) {
+      // MOBILE: Use device system authentication (PIN/Pattern/Fingerprint/Face ID)
+      print('DEBUG: Mobile device - using system authentication');
+      final authenticated =
+          await _biometricService.authenticateWithDeviceSystem(context);
+      if (!authenticated && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Authentication failed. Use your device PIN/Pattern/Fingerprint.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return authenticated;
+    } else {
+      // DESKTOP: Use App PIN
+      print('DEBUG: Desktop - using App PIN');
       final hasPin = await _biometricService.hasAppPin();
 
       if (!hasPin) {
-        // First time - force user to set up PIN
         final pinSet = await _showForceSetAppPinDialog(context);
         if (!pinSet) {
-          // User must set PIN to continue
           return false;
         }
       }
 
-      // Authenticate with App PIN
       return await _biometricService.authenticateWithAppPin(context);
-    } else {
-      // MOBILE: Use device system authentication (PIN/Pattern/Fingerprint)
-      return await _biometricService.authenticateWithDeviceSystem(context);
     }
   }
 
@@ -169,7 +173,6 @@ class AppLockService {
   }
 
   // Setup PIN from Settings (Desktop only)
-  // Add this method to AppLockService class
   Future<bool> setupAppPinFromSettings(BuildContext context) async {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
