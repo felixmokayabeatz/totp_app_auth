@@ -138,12 +138,19 @@ class SyncService {
   }
 
   Future<void> migrateLegacyLocalAccounts() async {
+    final prefs = await SharedPreferences.getInstance();
     final targetBoxName = await _getUserBoxName();
     final targetBox = await _getUserBox();
     final currentUserId = await _getCurrentUserId();
+    final storedUsername = prefs.getString('current_user') ?? '';
+    final storedUserId = prefs.getString('user_id') ?? '';
+    final storedEmail = prefs.getString('user_email') ?? '';
     final legacyBoxNames = <String>{
       'otp_accounts',
       'otp_accounts_default',
+      if (storedUsername.isNotEmpty) 'otp_accounts_$storedUsername',
+      if (storedUserId.isNotEmpty) 'otp_accounts_$storedUserId',
+      if (storedEmail.isNotEmpty) 'otp_accounts_$storedEmail',
     };
 
     int migratedCount = 0;
@@ -627,22 +634,32 @@ class SyncService {
           jsonEncode(finalData), _encryptionKey!);
       final newVersion = cloudVersion + 1;
 
-      final uploadResponse = await _dio.post('sync/sync/', data: {
-        'data_type': 'otp_accounts',
-        'encrypted_content': encrypted,
-        'version': newVersion,
-        'device_id': deviceId,
-        'deleted_accounts': jsonEncode(cloudDeletedAccounts),
-      });
+      final uploadResponse = await _requestWithRetry(() => _dio.post(
+            'sync/sync/',
+            data: {
+              'data_type': 'otp_accounts',
+              'encrypted_content': encrypted,
+              'version': newVersion,
+              'device_id': deviceId,
+              'deleted_accounts': jsonEncode(cloudDeletedAccounts),
+            },
+          ));
 
       if (uploadResponse.statusCode == 200) {
         print('Sync successful - ${finalData.length} accounts synced');
         return true;
       } else {
         print('Sync upload failed: ${uploadResponse.statusCode}');
+        _lastErrorMessage = 'Sync upload failed. Please try again.';
         return false;
       }
+    } on DioException catch (e) {
+      _lastErrorMessage = e.response?.data?['error']?.toString() ??
+          'Sync failed. Please sign in again if this device lost its session.';
+      print('syncAccounts error: $e');
+      return false;
     } catch (e) {
+      _lastErrorMessage = 'Sync failed. Please try again.';
       print('syncAccounts error: $e');
       return false;
     }
