@@ -16,12 +16,20 @@ class OTPAccountAdapter extends TypeAdapter<OTPAccount> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+    final rawCreatedAt = fields[4];
+    final createdAt = rawCreatedAt is DateTime
+        ? rawCreatedAt
+        : rawCreatedAt is int
+            ? DateTime.fromMillisecondsSinceEpoch(rawCreatedAt)
+            : rawCreatedAt is String
+                ? DateTime.tryParse(rawCreatedAt) ?? DateTime.now()
+                : DateTime.now();
     return OTPAccount(
       id: fields[0] as String,
       service: fields[1] as String,
       secret: fields[2] as String,
       issuer: fields[3] as String?,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(fields[4] as int),
+      createdAt: createdAt,
       userId: null,
     );
   }
