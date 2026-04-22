@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
@@ -53,14 +55,16 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  static const Duration _backgroundLockThreshold = Duration(seconds: 2);
+
   final AppLockService _appLockService = AppLockService();
   final SyncService _syncService = SyncService();
 
   bool _initialized = false;
   bool _isLocked = true;
   bool _unlockInProgress = false;
-  bool _didEnterBackground = false;
   bool _sessionReady = false;
+  DateTime? _backgroundedAt;
 
   @override
   void initState() {
@@ -78,14 +82,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _initializeApp() async {
-    await _appLockService.ensureMandatoryLock(context);
-    await _restoreSession();
-    if (!mounted) return;
-
-    setState(() {
-      _initialized = true;
-      _isLocked = true;
-    });
+    try {
+      await _appLockService.ensureMandatoryLock(context);
+      await _restoreSession();
+    } catch (e) {
+      debugPrint('App init error: $e');
+      if (mounted) {
+        setState(() {
+          _sessionReady = true;
+        });
+      }
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _initialized = true;
+        _isLocked = true;
+      });
+    }
   }
 
   Future<void> _restoreSession() async {
@@ -93,43 +106,46 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final token = prefs.getString('access_token');
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    if (token == null || token.isEmpty) {
+    try {
+      if (token == null || token.isEmpty) {
+        await authProvider.logout();
+        return;
+      }
+
+      final restoredKey = await _syncService.restoreEncryptionKey();
+      if (!restoredKey) {
+        await _syncService.logout();
+        await authProvider.logout();
+        return;
+      }
+
+      final email = prefs.getString('user_email') ?? '';
+      final username = prefs.getString('current_user') ?? '';
+      final userId = prefs.getString('user_id') ?? '';
+
+      await authProvider.setUserData(username, email, userId);
+      await _syncService.migrateLegacyLocalAccounts();
+
+      unawaited(_restoreCloudDataInBackground());
+    } catch (e) {
+      debugPrint('Session restore error: $e');
       await authProvider.logout();
+    } finally {
       if (mounted) {
         setState(() {
           _sessionReady = true;
         });
       }
-      return;
     }
+  }
 
-    final restoredKey = await _syncService.restoreEncryptionKey();
-    if (!restoredKey) {
-      await _syncService.logout();
-      await authProvider.logout();
-      if (mounted) {
-        setState(() {
-          _sessionReady = true;
-        });
+  Future<void> _restoreCloudDataInBackground() async {
+    try {
+      if (await _syncService.isSyncEnabled()) {
+        await _syncService.downloadAndMergeAccounts();
       }
-      return;
-    }
-
-    final email = prefs.getString('user_email') ?? '';
-    final username = prefs.getString('current_user') ?? '';
-    final userId = prefs.getString('user_id') ?? '';
-
-    await authProvider.setUserData(username, email, userId);
-    await _syncService.migrateLegacyLocalAccounts();
-
-    if (await _syncService.isSyncEnabled()) {
-      await _syncService.downloadAndMergeAccounts();
-    }
-
-    if (mounted) {
-      setState(() {
-        _sessionReady = true;
-      });
+    } catch (e) {
+      debugPrint('Background cloud restore error: $e');
     }
   }
 
@@ -140,21 +156,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _unlockInProgress = true;
     });
 
-    final authenticated = await _appLockService.authenticateToUnlock(context);
-    if (!mounted) return;
+    try {
+      final authenticated = await _appLockService.authenticateToUnlock(context);
+      if (!mounted) return;
 
-    if (authenticated) {
-      await _appLockService.recordAppActivity();
-      setState(() {
-        _isLocked = false;
-        _didEnterBackground = false;
-      });
-    }
-
-    if (mounted) {
-      setState(() {
-        _unlockInProgress = false;
-      });
+      if (authenticated) {
+        await _appLockService.recordAppActivity();
+        setState(() {
+          _isLocked = false;
+          _backgroundedAt = null;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _unlockInProgress = false;
+        });
+      }
     }
   }
 
@@ -164,16 +182,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       return;
     }
 
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      _didEnterBackground = true;
+    if ((state == AppLifecycleState.paused ||
+            state == AppLifecycleState.hidden) &&
+        !_isLocked) {
+      _backgroundedAt = DateTime.now();
       _appLockService.recordAppActivity();
       return;
     }
 
-    if (state == AppLifecycleState.resumed && _didEnterBackground) {
-      _didEnterBackground = false;
-      if (mounted) {
+    if (state == AppLifecycleState.resumed && _backgroundedAt != null) {
+      final elapsed = DateTime.now().difference(_backgroundedAt!);
+      _backgroundedAt = null;
+
+      if (elapsed >= _backgroundLockThreshold && mounted) {
         setState(() {
           _isLocked = true;
         });
