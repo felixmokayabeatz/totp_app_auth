@@ -80,8 +80,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _initialized = true;
       _isLocked = true;
     });
-
-    await _unlockApp();
   }
 
   Future<void> _unlockApp() async {
@@ -130,7 +128,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           _isLocked = true;
         });
       }
-      _unlockApp();
     }
   }
 
