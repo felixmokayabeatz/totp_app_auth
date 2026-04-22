@@ -22,7 +22,7 @@ class PasswordEntryAdapter extends TypeAdapter<PasswordEntry> {
       username: fields[2] as String,
       password: fields[3] as String,
       serverIP: fields[4] as String?,
-      createdAt: fields[5] as DateTime,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(fields[5] as int),
     );
   }
 
@@ -39,9 +39,9 @@ class PasswordEntryAdapter extends TypeAdapter<PasswordEntry> {
       ..writeByte(3)
       ..write(obj.password)
       ..writeByte(4)
-      ..write(obj.serverIP)
+      ..write(obj.serverIP ?? '')
       ..writeByte(5)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt.millisecondsSinceEpoch);
   }
 
   @override
