@@ -22,7 +22,7 @@ class PasswordEntryAdapter extends TypeAdapter<PasswordEntry> {
       username: fields[2] as String,
       password: fields[3] as String,
       serverIP: fields[4] as String?,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(fields[5] as int),
+      createdAt: fields[5] as DateTime,
     );
   }
 
@@ -39,8 +39,18 @@ class PasswordEntryAdapter extends TypeAdapter<PasswordEntry> {
       ..writeByte(3)
       ..write(obj.password)
       ..writeByte(4)
-      ..write(obj.serverIP ?? '')
+      ..write(obj.serverIP)
       ..writeByte(5)
-      ..write(obj.createdAt.millisecondsSinceEpoch);
+      ..write(obj.createdAt);
   }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PasswordEntryAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }

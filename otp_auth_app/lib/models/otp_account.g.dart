@@ -19,9 +19,10 @@ class OTPAccountAdapter extends TypeAdapter<OTPAccount> {
     return OTPAccount(
       id: fields[0] as String,
       service: fields[1] as String,
-      secret: fields[2] as String,
+      secret: fields[2] as String, // ← ADD THIS LINE - secret is required
       issuer: fields[3] as String?,
-      createdAt: fields[4] as DateTime,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+          fields[4] as int), // ← FIX: convert int to DateTime
       userId: null,
     );
   }
@@ -39,6 +40,16 @@ class OTPAccountAdapter extends TypeAdapter<OTPAccount> {
       ..writeByte(3)
       ..write(obj.issuer ?? '')
       ..writeByte(4)
-      ..write(obj.createdAt.millisecondsSinceEpoch);
+      ..write(obj.createdAt.millisecondsSinceEpoch); // ← FIX: write as int
   }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OTPAccountAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }
