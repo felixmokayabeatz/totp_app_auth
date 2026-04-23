@@ -367,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen>
                       onChanged: (v) =>
                           setState(() => _searchQuery = v.toLowerCase()),
                       decoration: InputDecoration(
-                        hintText: 'Search accountsâ€¦',
+                        hintText: 'Search accounts',
                         hintStyle: TextStyle(
                             color: isDark ? Colors.white38 : Colors.grey[400],
                             fontSize: 14),
@@ -533,203 +533,204 @@ class _HomeScreenState extends State<HomeScreen>
       child: Container(
         constraints: const BoxConstraints(maxWidth: 800),
         child: ScrollConfiguration(
-          behavior:
-              const MaterialScrollBehavior().copyWith(scrollbars: false),
+          behavior: const MaterialScrollBehavior().copyWith(scrollbars: false),
           child: ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             itemCount: accounts.length,
             itemBuilder: (context, index) {
-            final account = accounts[index];
-            final otp = currentOTPs[account.id] ?? '------';
-            final timer = timers[account.id] ?? 30;
-            final isBlurred = blurredCodes[account.id] ?? false;
-            final isExpiring = timer <= 5;
+              final account = accounts[index];
+              final otp = currentOTPs[account.id] ?? '------';
+              final timer = timers[account.id] ?? 30;
+              final isBlurred = blurredCodes[account.id] ?? false;
+              final isExpiring = timer <= 5;
 
-            // Format creation date
-            final addedDate = _formatDate(account.createdAt);
+              // Format creation date
+              final addedDate = _formatDate(account.createdAt);
 
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E32) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isExpiring
-                      ? Colors.red.withOpacity(0.4)
-                      : (isDark
-                          ? Colors.white.withOpacity(0.06)
-                          : Colors.transparent),
-                  width: 1.5,
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isExpiring
+                        ? Colors.red.withOpacity(0.4)
+                        : (isDark
+                            ? Colors.white.withOpacity(0.06)
+                            : Colors.transparent),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3))
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3))
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        AccountLogoBadge(
-                          service: account.service,
-                          issuer: account.issuer,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(account.service,
-                                  style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark
-                                          ? Colors.white
-                                          : const Color(0xFF1A1A2E)),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                              if (account.issuer != null)
-                                Text(account.issuer!,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark
-                                            ? Colors.white38
-                                            : Colors.grey[500]),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
-                              // Added date
-                              Row(
-                                children: [
-                                  Icon(Icons.calendar_today,
-                                      size: 10,
-                                      color: isDark
-                                          ? Colors.white38
-                                          : Colors.grey[400]),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Added $addedDate',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: isDark
-                                          ? Colors.white38
-                                          : Colors.grey[400],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          AccountLogoBadge(
+                            service: account.service,
+                            issuer: account.issuer,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isExpiring
-                                    ? Colors.red.withOpacity(0.1)
-                                    : const Color(0xFF4F46E5).withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  isBlurred ? '*** ***' : _formatOtp(otp),
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: isExpiring
-                                        ? Colors.red
-                                        : (isDark
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(account.service,
+                                    style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
                                             ? Colors.white
                                             : const Color(0xFF1A1A2E)),
-                                    letterSpacing: 3,
-                                    fontFamily: 'monospace',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                if (account.issuer != null)
+                                  Text(account.issuer!,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark
+                                              ? Colors.white38
+                                              : Colors.grey[500]),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                // Added date
+                                Row(
+                                  children: [
+                                    Icon(Icons.calendar_today,
+                                        size: 10,
+                                        color: isDark
+                                            ? Colors.white38
+                                            : Colors.grey[400]),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Added $addedDate',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        color: isDark
+                                            ? Colors.white38
+                                            : Colors.grey[400],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isExpiring
+                                      ? Colors.red.withOpacity(0.1)
+                                      : const Color(0xFF4F46E5)
+                                          .withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    isBlurred ? '*** ***' : _formatOtp(otp),
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w700,
+                                      color: isExpiring
+                                          ? Colors.red
+                                          : (isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1A1A2E)),
+                                      letterSpacing: 3,
+                                      fontFamily: 'monospace',
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text('${timer}s',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: isExpiring
-                                        ? Colors.red
-                                        : (isDark
-                                            ? Colors.white38
-                                            : Colors.grey[500]))),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: timer / 30,
-                        backgroundColor:
-                            isDark ? Colors.white10 : Colors.grey[100],
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                            isExpiring ? Colors.red : const Color(0xFF4F46E5)),
-                        minHeight: 4,
+                              const SizedBox(height: 4),
+                              Text('${timer}s',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: isExpiring
+                                          ? Colors.red
+                                          : (isDark
+                                              ? Colors.white38
+                                              : Colors.grey[500]))),
+                            ],
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _accountAction(Icons.copy_rounded, 'Copy',
-                            () => _copyToClipboard(otp), isDark),
-                        _accountAction(
-                          isBlurred
-                              ? Icons.visibility_rounded
-                              : Icons.visibility_off_rounded,
-                          isBlurred ? 'Show' : 'Hide',
-                          () => setState(
-                              () => blurredCodes[account.id] = !isBlurred),
-                          isDark,
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: timer / 30,
+                          backgroundColor:
+                              isDark ? Colors.white10 : Colors.grey[100],
+                          valueColor: AlwaysStoppedAnimation<Color>(isExpiring
+                              ? Colors.red
+                              : const Color(0xFF4F46E5)),
+                          minHeight: 4,
                         ),
-                        _accountAction(
-                          Icons.edit_rounded,
-                          'Edit',
-                          () => _showEditTitleDialog(account),
-                          isDark,
-                        ),
-                        _accountAction(
-                          Icons.qr_code_rounded,
-                          'QR',
-                          () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => ShowQRScreen(
-                                      secret: account.secret,
-                                      service: account.service,
-                                      issuer: account.issuer))),
-                          isDark,
-                        ),
-                        _accountAction(
-                          Icons.delete_outline_rounded,
-                          'Delete',
-                          () => _showDeleteAccountDialog(
-                              account.id, account.service),
-                          isDark,
-                          destructive: true,
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _accountAction(Icons.copy_rounded, 'Copy',
+                              () => _copyToClipboard(otp), isDark),
+                          _accountAction(
+                            isBlurred
+                                ? Icons.visibility_rounded
+                                : Icons.visibility_off_rounded,
+                            isBlurred ? 'Show' : 'Hide',
+                            () => setState(
+                                () => blurredCodes[account.id] = !isBlurred),
+                            isDark,
+                          ),
+                          _accountAction(
+                            Icons.edit_rounded,
+                            'Edit',
+                            () => _showEditTitleDialog(account),
+                            isDark,
+                          ),
+                          _accountAction(
+                            Icons.qr_code_rounded,
+                            'QR',
+                            () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => ShowQRScreen(
+                                        secret: account.secret,
+                                        service: account.service,
+                                        issuer: account.issuer))),
+                            isDark,
+                          ),
+                          _accountAction(
+                            Icons.delete_outline_rounded,
+                            'Delete',
+                            () => _showDeleteAccountDialog(
+                                account.id, account.service),
+                            isDark,
+                            destructive: true,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
+              );
             },
           ),
         ),
