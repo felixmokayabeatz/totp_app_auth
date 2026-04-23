@@ -60,6 +60,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   final AppLockService _appLockService = AppLockService();
   final SyncService _syncService = SyncService();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   bool _initialized = false;
   bool _isLocked = true;
@@ -84,7 +85,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _initializeApp() async {
     try {
-      await _appLockService.ensureMandatoryLock(context);
+      final dialogContext = _navigatorKey.currentContext;
+      if (dialogContext != null) {
+        await _appLockService.ensureMandatoryLock(dialogContext);
+      }
       await _restoreSession();
     } catch (e) {
       debugPrint('App init error: $e');
@@ -158,7 +162,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _unlockApp() async {
+  Future<void> _unlockApp(BuildContext context) async {
     if (!mounted || _unlockInProgress) return;
 
     setState(() {
@@ -167,6 +171,37 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     try {
       final authenticated = await _appLockService.authenticateToUnlock(context);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+
+      if (authenticated) {
+        await _appLockService.recordAppActivity();
+        setState(() {
+          _isLocked = false;
+          _backgroundedAt = null;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _unlockInProgress = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _unlockWithPin(BuildContext context) async {
+    if (!mounted || _unlockInProgress) return;
+
+    setState(() {
+      _unlockInProgress = true;
+    });
+
+    try {
+      final authenticated = await _appLockService.authenticateWithPinOnly(
+        context,
+      );
+      await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
 
       if (authenticated) {
@@ -218,6 +253,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'BeatzLock Authenticator',
+          navigatorKey: _navigatorKey,
           theme: themeProvider.lightTheme,
           darkTheme: themeProvider.darkTheme,
           themeMode: themeProvider.themeMode,
@@ -227,6 +263,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ? _AppLockScreen(
                       isBusy: _unlockInProgress,
                       onUnlock: _unlockApp,
+                      onUsePin: _unlockWithPin,
                     )
                   : authProvider.isAuthenticated
                       ? HomeScreen()
@@ -272,10 +309,12 @@ class _AppLockScreen extends StatelessWidget {
   const _AppLockScreen({
     required this.isBusy,
     required this.onUnlock,
+    required this.onUsePin,
   });
 
   final bool isBusy;
-  final Future<void> Function() onUnlock;
+  final Future<void> Function(BuildContext context) onUnlock;
+  final Future<void> Function(BuildContext context) onUsePin;
 
   @override
   Widget build(BuildContext context) {
@@ -341,7 +380,7 @@ class _AppLockScreen extends StatelessWidget {
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(
-                          onPressed: isBusy ? null : () => onUnlock(),
+                          onPressed: isBusy ? null : () => onUnlock(context),
                           icon: isBusy
                               ? const SizedBox(
                                   width: 18,
@@ -354,6 +393,13 @@ class _AppLockScreen extends StatelessWidget {
                           label: Text(isBusy ? 'Checking...' : 'Unlock'),
                         ),
                       ),
+                      if (!isMobile) ...[
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: isBusy ? null : () => onUsePin(context),
+                          child: const Text('Use BeatzLock PIN instead'),
+                        ),
+                      ],
                     ],
                   ),
                 ),

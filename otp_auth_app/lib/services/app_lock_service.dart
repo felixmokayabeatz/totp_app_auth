@@ -18,14 +18,14 @@ class AppLockService {
     final prefs = await SharedPreferences.getInstance();
     final enabled = prefs.getBool(_appLockEnabledKey) ?? true;
     if (!enabled) {
-      await prefs.setBool(_appLockEnabledKey, true);
+      return false;
     }
-    return true;
+    return enabled;
   }
 
   Future<void> setAppLockEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_appLockEnabledKey, true);
+    await prefs.setBool(_appLockEnabledKey, enabled);
     await recordAppActivity();
   }
 
@@ -66,7 +66,6 @@ class AppLockService {
 
   Future<void> ensureMandatoryLock(BuildContext context) async {
     await isAppLockEnabled();
-    await setLockTimeout(_defaultTimeout);
 
     final canUseSystemAuth =
         await _biometricService.canUseSystemAuthentication();
@@ -85,17 +84,17 @@ class AppLockService {
     if (canUseSystemAuth) {
       final authenticated =
           await _biometricService.authenticateWithDeviceSystem(context);
-      if (!authenticated && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Authentication failed. Try again to continue.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      if (authenticated) {
+        return true;
       }
-      return authenticated;
+
+      return authenticateWithPinOnly(context);
     }
 
+    return authenticateWithPinOnly(context);
+  }
+
+  Future<bool> authenticateWithPinOnly(BuildContext context) async {
     final hasPin = await _biometricService.hasAppPin();
     if (!hasPin) {
       final pinSet = await _showForceSetAppPinDialog(context);
@@ -110,169 +109,156 @@ class AppLockService {
   Future<bool> _showForceSetAppPinDialog(BuildContext context) async {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
-    final completer = Completer<bool>();
+    String? pinErrorText;
+    String? confirmErrorText;
 
-    await showDialog<void>(
+    final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Set your BeatzLock PIN'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'This device does not have usable system security for BeatzLock, so you must create an app PIN.',
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'Enter 4-6 digit PIN',
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Set your BeatzLock PIN'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This device does not have usable system security for BeatzLock, so you must create an app PIN.',
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              decoration: const InputDecoration(
-                hintText: 'Confirm PIN',
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Enter 4-6 digit PIN',
+                  errorText: pinErrorText,
+                ),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  hintText: 'Confirm PIN',
+                  errorText: confirmErrorText,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () async {
+                final pin = pinController.text.trim();
+                final confirm = confirmController.text.trim();
+
+                setDialogState(() {
+                  pinErrorText = pin.length < 4
+                      ? 'PIN must be at least 4 digits.'
+                      : null;
+                  confirmErrorText =
+                      pin != confirm ? 'PINs do not match.' : null;
+                });
+
+                if (pin.length < 4 || pin != confirm) {
+                  return;
+                }
+
+                await _biometricService.setAppPin(pin);
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('Save PIN'),
             ),
           ],
         ),
-        actions: [
-          FilledButton(
-            onPressed: () async {
-              final pin = pinController.text.trim();
-              final confirm = confirmController.text.trim();
-
-              if (pin.length < 4) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('PIN must be at least 4 digits.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              if (pin != confirm) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('PINs do not match.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              await _biometricService.setAppPin(pin);
-              completer.complete(true);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Save PIN'),
-          ),
-        ],
       ),
     );
-
-    pinController.dispose();
-    confirmController.dispose();
-
-    return completer.future;
+    return result ?? false;
   }
 
   Future<bool> setupAppPinFromSettings(BuildContext context) async {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
-    final completer = Completer<bool>();
+    String? pinErrorText;
+    String? confirmErrorText;
 
-    await showDialog<void>(
+    final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Change BeatzLock PIN'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Create a 4-6 digit PIN for app access.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: pinController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'Enter PIN',
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Change BeatzLock PIN'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Create a 4-6 digit PIN for app access.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Enter PIN',
+                  errorText: pinErrorText,
+                ),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  hintText: 'Confirm PIN',
+                  errorText: confirmErrorText,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmController,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              decoration: const InputDecoration(
-                hintText: 'Confirm PIN',
-              ),
+            FilledButton(
+              onPressed: () async {
+                final pin = pinController.text.trim();
+                final confirm = confirmController.text.trim();
+
+                setDialogState(() {
+                  pinErrorText = pin.length < 4
+                      ? 'PIN must be at least 4 digits.'
+                      : null;
+                  confirmErrorText =
+                      pin != confirm ? 'PINs do not match.' : null;
+                });
+
+                if (pin.length < 4 || pin != confirm) {
+                  return;
+                }
+
+                await _biometricService.setAppPin(pin);
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext, true);
+                }
+              },
+              child: const Text('Save PIN'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              completer.complete(false);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final pin = pinController.text.trim();
-              final confirm = confirmController.text.trim();
-
-              if (pin.length < 4) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('PIN must be at least 4 digits.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              if (pin != confirm) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('PINs do not match.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              await _biometricService.setAppPin(pin);
-              completer.complete(true);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Save PIN'),
-          ),
-        ],
       ),
     );
-
-    pinController.dispose();
-    confirmController.dispose();
-
-    return completer.future;
+    return result ?? false;
   }
 }

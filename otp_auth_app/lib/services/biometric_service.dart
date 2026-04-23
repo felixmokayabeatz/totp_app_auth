@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
@@ -29,8 +30,11 @@ class BiometricService {
           biometricOnly: false, // Allow PIN/Pattern/Password
         ),
       );
+    } on PlatformException catch (e) {
+      debugPrint('Device auth platform error: ${e.code} ${e.message}');
+      return false;
     } catch (e) {
-      print('Device auth error: $e');
+      debugPrint('Device auth error: $e');
       return false;
     }
   }
@@ -84,58 +88,59 @@ class BiometricService {
     if (!context.mounted) return false;
 
     final pinController = TextEditingController();
-    bool resolved = false;
+    String? errorText;
 
-    await showDialog<void>(
+    final resolved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Enter PIN'),
-        content: TextField(
-          controller: pinController,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Enter your 4-6 digit PIN',
-            border: OutlineInputBorder(),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Enter PIN'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: pinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Enter your 4-6 digit PIN',
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                ),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              resolved = false;
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final isValid = await verifyAppPin(pinController.text);
-              if (isValid) {
-                resolved = true;
-                Navigator.pop(dialogContext);
-                return;
-              }
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final isValid = await verifyAppPin(pinController.text.trim());
+                if (isValid) {
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext, true);
+                  }
+                  return;
+                }
 
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Invalid PIN'),
-                      backgroundColor: Colors.red),
-                );
-              }
-            },
-            child: const Text('Unlock'),
-          ),
-        ],
+                setDialogState(() {
+                  errorText = 'Invalid PIN';
+                });
+              },
+              child: const Text('Unlock'),
+            ),
+          ],
+        ),
       ),
     );
-
-    pinController.dispose();
-    return resolved;
+    return resolved ?? false;
   }
 
   // Check if we're on desktop
