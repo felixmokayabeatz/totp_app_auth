@@ -7,13 +7,13 @@ import '../providers/auth_provider.dart';
 import '../services/otp_service.dart';
 import '../services/sync_service.dart';
 import '../services/profile_service.dart';
+import '../services/secure_storage_service.dart';
 import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'show_qr_screen.dart';
 import 'profile_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../widgets/account_logo_badge.dart';
 
@@ -98,9 +98,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadProfileData() async {
-    final prefs = await SharedPreferences.getInstance();
+    final username =
+        await SecureStorageService().read(SecureStorageService.currentUserKey);
     if (mounted)
-      setState(() => _username = prefs.getString('current_user') ?? 'User');
+      setState(() => _username = username ?? 'User');
     final profile = await _profileService.getProfile();
     if (profile != null && mounted) {
       setState(() => _profilePhotoUrl = profile['profile']?['profile_photo']);

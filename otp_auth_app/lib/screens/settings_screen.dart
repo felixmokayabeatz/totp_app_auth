@@ -7,6 +7,7 @@ import '../providers/theme_provider.dart';
 import '../services/sync_service.dart';
 import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
+import '../services/secure_storage_service.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'dart:async';
@@ -408,8 +409,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     // ── "Everywhere" path: require OTP ──────────────────────────────────────
-    final prefs = await SharedPreferences.getInstance();
-    final username = prefs.getString('current_user') ?? '';
+    final username =
+        await SecureStorageService().read(SecureStorageService.currentUserKey) ??
+            '';
 
     final otpSent = await _syncService.sendDeleteOtp(username);
     if (!otpSent) {
@@ -787,8 +789,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 backgroundColor: Colors.red));
                         return;
                       }
-                      final prefs = await SharedPreferences.getInstance();
-                      final username = prefs.getString('current_user') ?? '';
+                      final username = await SecureStorageService()
+                              .read(SecureStorageService.currentUserKey) ??
+                          '';
                       final valid = await _syncService.verify2FACode(
                           username, otpCodeController.text);
                       if (valid) {
@@ -851,8 +854,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 backgroundColor: Colors.red));
                         return;
                       }
-                      final prefs = await SharedPreferences.getInstance();
-                      final username = prefs.getString('current_user') ?? '';
+                      final username = await SecureStorageService()
+                              .read(SecureStorageService.currentUserKey) ??
+                          '';
                       final sent = await _syncService.send2FACode(
                           username, currentPasswordController.text);
                       if (sent) {

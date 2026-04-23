@@ -2,8 +2,8 @@
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'encryption_service.dart';
+import 'secure_storage_service.dart';
 
 class OTPService {
   // Singleton so all callers share the same cached userId
@@ -12,11 +12,13 @@ class OTPService {
   OTPService._internal();
 
   String? _cachedUserId;
+  final SecureStorageService _secureStorage = SecureStorageService();
 
   Future<String> getCurrentUserId() async {
     if (_cachedUserId != null) return _cachedUserId!;
-    final prefs = await SharedPreferences.getInstance();
-    _cachedUserId = prefs.getString('current_user') ?? 'default_user';
+    _cachedUserId =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ??
+            'default_user';
     return _cachedUserId!;
   }
 

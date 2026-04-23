@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/otp_account.dart';
 import 'models/password_entry.dart';
@@ -20,7 +21,12 @@ import 'services/sync_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Hive.initFlutter();
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    final appSupportDir = await getApplicationSupportDirectory();
+    await Hive.initFlutter(appSupportDir.path);
+  } else {
+    await Hive.initFlutter();
+  }
 
   if (!Hive.isAdapterRegistered(0)) {
     Hive.registerAdapter(OTPAccountAdapter());
@@ -32,7 +38,6 @@ void main() async {
   await Hive.openBox<OTPAccount>('otp_accounts');
   await Hive.openBox<PasswordEntry>('passwords');
   await Hive.openBox('settings');
-  await Hive.openBox('secure_data');
 
   await SecureStorageService().init();
   await BiometricService().init();
@@ -107,8 +112,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final secureStorage = SecureStorageService();
+    final token = await secureStorage.read(SecureStorageService.accessTokenKey);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
@@ -117,9 +122,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         return;
       }
 
-      final email = prefs.getString('user_email') ?? '';
-      final username = prefs.getString('current_user') ?? '';
-      final userId = prefs.getString('user_id') ?? '';
+      final email =
+          await secureStorage.read(SecureStorageService.userEmailKey) ?? '';
+      final username =
+          await secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+      final userId =
+          await secureStorage.read(SecureStorageService.userIdKey) ?? '';
 
       OTPService().clearCachedUserId();
       await authProvider.setUserData(username, email, userId);
@@ -139,7 +147,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
     } catch (e) {
       debugPrint('Session restore error: $e');
-      final tokenStillExists = prefs.getString('access_token');
+      final tokenStillExists =
+          await secureStorage.read(SecureStorageService.accessTokenKey);
       if (tokenStillExists == null || tokenStillExists.isEmpty) {
         await authProvider.logout();
       }

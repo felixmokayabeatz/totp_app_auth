@@ -2,13 +2,14 @@
 
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http_parser/http_parser.dart';
 import '../config/app_config.dart';
+import 'secure_storage_service.dart';
 
 class ProfileService {
   late Dio _dio;
   bool _isRefreshing = false;
+  final SecureStorageService _secureStorage = SecureStorageService();
   
   ProfileService() {
     _dio = Dio(BaseOptions(
@@ -22,8 +23,8 @@ class ProfileService {
     if (_isRefreshing) return false;
     
     _isRefreshing = true;
-    final prefs = await SharedPreferences.getInstance();
-    final refreshToken = prefs.getString('refresh_token');
+    final refreshToken =
+        await _secureStorage.read(SecureStorageService.refreshTokenKey);
     
     if (refreshToken == null) {
       _isRefreshing = false;
@@ -38,7 +39,8 @@ class ProfileService {
       
       if (response.statusCode == 200) {
         final newAccessToken = response.data['access'];
-        await prefs.setString('access_token', newAccessToken);
+        await _secureStorage.write(
+            SecureStorageService.accessTokenKey, newAccessToken);
         print('Token refreshed successfully for profile service');
         _isRefreshing = false;
         return true;
@@ -69,9 +71,7 @@ class ProfileService {
   }
   
   Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
-    return token;
+    return _secureStorage.read(SecureStorageService.accessTokenKey);
   }
   
   Future<Map<String, dynamic>?> getProfile() async {

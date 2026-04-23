@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/auth_provider.dart';
+import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
@@ -46,8 +46,8 @@ class _SplashScreenState extends State<SplashScreen>
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final secureStorage = SecureStorageService();
+    final token = await secureStorage.read(SecureStorageService.accessTokenKey);
     final syncService = SyncService();
 
     if (token == null || token.isEmpty) {
@@ -70,9 +70,12 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    final email = prefs.getString('user_email') ?? '';
-    final username = prefs.getString('current_user') ?? '';
-    final userId = prefs.getString('user_id') ?? '';
+    final email =
+        await secureStorage.read(SecureStorageService.userEmailKey) ?? '';
+    final username =
+        await secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    final userId =
+        await secureStorage.read(SecureStorageService.userIdKey) ?? '';
 
     await Provider.of<AuthProvider>(context, listen: false)
         .setUserData(username, email, userId);

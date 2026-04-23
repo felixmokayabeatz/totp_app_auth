@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.otp_auth_app"
+    namespace = "com.beatzlock.otp"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,8 +20,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.otp_auth_app"
+        applicationId = "com.beatzlock.otp"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

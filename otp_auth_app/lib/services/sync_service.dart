@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/otp_account.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
+import 'secure_storage_service.dart';
 import '../config/app_config.dart';
 import 'dart:convert';
 
@@ -24,6 +25,7 @@ class SyncService {
   bool _isRefreshing = false;
   String? _encryptionKey;
   String? _lastErrorMessage;
+  final SecureStorageService _secureStorage = SecureStorageService();
 
   String? get lastErrorMessage => _lastErrorMessage;
 
@@ -81,13 +83,11 @@ class SyncService {
 
   // ─── Encryption key storage in Hive ──────────────────────────────────────
   Future<void> _storeEncryptionKey(String key) async {
-    final box = await Hive.openBox('secure_data');
-    await box.put('encryption_key', key);
+    await _secureStorage.write(SecureStorageService.encryptionKey, key);
   }
 
   Future<String?> _getStoredEncryptionKey() async {
-    final box = await Hive.openBox('secure_data');
-    return box.get('encryption_key');
+    return _secureStorage.read(SecureStorageService.encryptionKey);
   }
 
   Future<bool> _ensureEncryptionKeyAvailable() async {
@@ -98,8 +98,7 @@ class SyncService {
   }
 
   Future<void> _clearStoredEncryptionKey() async {
-    final box = await Hive.openBox('secure_data');
-    await box.delete('encryption_key');
+    await _secureStorage.delete(SecureStorageService.encryptionKey);
   }
 
   // ─── Sync preference ──────────────────────────────────────────────────────
@@ -141,8 +140,8 @@ class SyncService {
 
   // ─── Box helpers ──────────────────────────────────────────────────────────
   Future<String> _getUserBoxName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final username = prefs.getString('current_user');
+    final username =
+        await _secureStorage.read(SecureStorageService.currentUserKey);
     if (username == null || username.isEmpty) return 'otp_accounts_default';
     return 'otp_accounts_$username';
   }
@@ -187,13 +186,15 @@ class SyncService {
   }
 
   Future<void> migrateLegacyLocalAccounts() async {
-    final prefs = await SharedPreferences.getInstance();
     final targetBoxName = await _getUserBoxName();
     final targetBox = await _getUserBox();
     final currentUserId = await _getCurrentUserId();
-    final storedUsername = prefs.getString('current_user') ?? '';
-    final storedUserId = prefs.getString('user_id') ?? '';
-    final storedEmail = prefs.getString('user_email') ?? '';
+    final storedUsername =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    final storedUserId =
+        await _secureStorage.read(SecureStorageService.userIdKey) ?? '';
+    final storedEmail =
+        await _secureStorage.read(SecureStorageService.userEmailKey) ?? '';
     final legacyBoxNames = <String>{
       'otp_accounts',
       'otp_accounts_default',
@@ -240,8 +241,7 @@ class SyncService {
 
   // ─── Auth helpers ─────────────────────────────────────────────────────────
   Future<void> _updateAuthHeader() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
     }
@@ -250,8 +250,8 @@ class SyncService {
   Future<bool> _refreshToken() async {
     if (_isRefreshing) return false;
     _isRefreshing = true;
-    final prefs = await SharedPreferences.getInstance();
-    final refreshToken = prefs.getString('refresh_token');
+    final refreshToken =
+        await _secureStorage.read(SecureStorageService.refreshTokenKey);
     if (refreshToken == null) {
       _isRefreshing = false;
       return false;
@@ -260,7 +260,8 @@ class SyncService {
       final response =
           await _dio.post('token/refresh/', data: {'refresh': refreshToken});
       if (response.statusCode == 200) {
-        await prefs.setString('access_token', response.data['access']);
+        await _secureStorage.write(
+            SecureStorageService.accessTokenKey, response.data['access']);
         await _updateAuthHeader();
         _isRefreshing = false;
         return true;
@@ -293,8 +294,8 @@ class SyncService {
   }
 
   Future<String> _getCurrentUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('current_user') ?? 'default_user';
+    return await _secureStorage.read(SecureStorageService.currentUserKey) ??
+        'default_user';
   }
 
   // ─── Decrypt local secret back to plain for uploading ────────────────────
@@ -322,13 +323,15 @@ class SyncService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final canonicalUsername =
             response.data['user']?['username']?.toString() ?? username.trim();
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', response.data['access']);
-        await prefs.setString('refresh_token', response.data['refresh']);
-        await prefs.setString('current_user', canonicalUsername);
-        await prefs.setString('user_email', email);
-        await prefs.setString(
-            'user_id', response.data['user']['id'].toString());
+        await _secureStorage.write(
+            SecureStorageService.accessTokenKey, response.data['access']);
+        await _secureStorage.write(
+            SecureStorageService.refreshTokenKey, response.data['refresh']);
+        await _secureStorage.write(
+            SecureStorageService.currentUserKey, canonicalUsername);
+        await _secureStorage.write(SecureStorageService.userEmailKey, email);
+        await _secureStorage.write(SecureStorageService.userIdKey,
+            response.data['user']['id'].toString());
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
         _initEncryption(canonicalUsername, password);
@@ -359,14 +362,16 @@ class SyncService {
       if (response.statusCode == 200) {
         final canonicalUsername =
             response.data['user']?['username']?.toString() ?? username.trim();
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('access_token', response.data['access']);
-        await prefs.setString('refresh_token', response.data['refresh']);
-        await prefs.setString('current_user', canonicalUsername);
-        await prefs.setString(
-            'user_email', response.data['user']['email'] ?? '');
-        await prefs.setString(
-            'user_id', response.data['user']['id'].toString());
+        await _secureStorage.write(
+            SecureStorageService.accessTokenKey, response.data['access']);
+        await _secureStorage.write(
+            SecureStorageService.refreshTokenKey, response.data['refresh']);
+        await _secureStorage.write(
+            SecureStorageService.currentUserKey, canonicalUsername);
+        await _secureStorage.write(SecureStorageService.userEmailKey,
+            response.data['user']['email'] ?? '');
+        await _secureStorage.write(SecureStorageService.userIdKey,
+            response.data['user']['id'].toString());
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
 
@@ -590,7 +595,7 @@ class SyncService {
 
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) return false;
 
     if (!await _ensureEncryptionKeyAvailable()) {
@@ -795,8 +800,7 @@ class SyncService {
 
   Future<bool> sendDeleteOtp(String username) async {
     await _updateAuthHeader();
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null) {
       print('No token available for delete OTP');
       return false;
@@ -823,8 +827,7 @@ class SyncService {
 
   Future<bool> verifyDeleteOtp(String username, String code) async {
     await _updateAuthHeader();
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null) return false;
     try {
       final response = await _dio.post(
@@ -846,7 +849,7 @@ class SyncService {
       String currentPassword, String newPassword) async {
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null) return false;
 
     final username = await _getCurrentUserId();
@@ -947,12 +950,7 @@ class SyncService {
 
   // ─── Logout ───────────────────────────────────────────────────────────────
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('access_token');
-    await prefs.remove('refresh_token');
-    await prefs.remove('current_user');
-    await prefs.remove('user_email');
-    await prefs.remove('user_id');
+    await _secureStorage.deleteAll();
 
     await _clearStoredEncryptionKey();
 
@@ -962,13 +960,11 @@ class SyncService {
   }
 
   Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('access_token');
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
     return token != null && token.isNotEmpty;
   }
 
   Future<String?> getCurrentUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('current_user');
+    return _secureStorage.read(SecureStorageService.currentUserKey);
   }
 }

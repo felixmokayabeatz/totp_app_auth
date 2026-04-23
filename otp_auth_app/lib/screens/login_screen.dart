@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/sync_service.dart';
+import '../services/secure_storage_service.dart';
 import '../providers/auth_provider.dart';
 import 'home_screen.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
@@ -1172,10 +1172,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     if (success) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final prefs = await SharedPreferences.getInstance();
-      final email = prefs.getString('user_email') ?? '';
-      final currentUsername = prefs.getString('current_user') ?? '';
-      final userId = prefs.getString('user_id') ?? '';
+      final secureStorage = SecureStorageService();
+      final email =
+          await secureStorage.read(SecureStorageService.userEmailKey) ?? '';
+      final currentUsername =
+          await secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+      final userId =
+          await secureStorage.read(SecureStorageService.userIdKey) ?? '';
       await authProvider.setUserData(currentUsername, email, userId);
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

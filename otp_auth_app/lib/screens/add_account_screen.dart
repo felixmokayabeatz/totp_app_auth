@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/otp_account.dart';
+import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 
 class AddAccountScreen extends StatefulWidget {
@@ -429,8 +429,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   void _saveAccount() async {
     if (_formKey.currentState!.validate()) {
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('current_user') ?? 'default_user';
+      final userId =
+          await SecureStorageService().read(SecureStorageService.currentUserKey) ??
+              'default_user';
       final syncService = SyncService();
 
       // Get the USER-SPECIFIC box, not the generic one

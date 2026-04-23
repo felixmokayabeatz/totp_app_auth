@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/profile_service.dart';
+import '../services/secure_storage_service.dart';
 import '../config/app_config.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -39,10 +39,19 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
+    final secureStorage = SecureStorageService();
     setState(() {
-      _userEmail = prefs.getString('user_email') ?? 'No email';
-      _username = prefs.getString('current_user') ?? 'User';
+      _userEmail = 'No email';
+      _username = 'User';
+    });
+    final email =
+        await secureStorage.read(SecureStorageService.userEmailKey) ?? 'No email';
+    final username =
+        await secureStorage.read(SecureStorageService.currentUserKey) ?? 'User';
+    if (!mounted) return;
+    setState(() {
+      _userEmail = email;
+      _username = username;
     });
   }
 
