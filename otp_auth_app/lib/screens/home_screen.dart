@@ -168,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─── Header with account count - FIXED for desktop right alignment ──────────────────
+  // â”€â”€â”€ Header with account count - FIXED for desktop right alignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildHeader(bool isDark, int accountCount, bool isWideScreen) {
     return Container(
       decoration: BoxDecoration(
@@ -369,7 +369,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─── Search bar with responsive width ───────────────────────────────────────────
+  // â”€â”€â”€ Search bar with responsive width â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildSearchBar(bool isDark, bool isWideScreen) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -401,7 +401,7 @@ class _HomeScreenState extends State<HomeScreen>
                       onChanged: (v) =>
                           setState(() => _searchQuery = v.toLowerCase()),
                       decoration: InputDecoration(
-                        hintText: 'Search accounts…',
+                        hintText: 'Search accountsâ€¦',
                         hintStyle: TextStyle(
                             color: isDark ? Colors.white38 : Colors.grey[400],
                             fontSize: 14),
@@ -456,7 +456,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─── Accounts list with creation date ─────────────────────────────────────
+  // â”€â”€â”€ Accounts list with creation date â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAccountsList(bool isDark) {
     if (_isLoadingVault) {
       return const Center(
@@ -675,18 +675,21 @@ class _HomeScreenState extends State<HomeScreen>
                                     : const Color(0xFF4F46E5).withOpacity(0.08),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: Text(
-                                isBlurred ? '●●● ●●●' : _formatOtp(otp),
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: isExpiring
-                                      ? Colors.red
-                                      : (isDark
-                                          ? Colors.white
-                                          : const Color(0xFF1A1A2E)),
-                                  letterSpacing: 3,
-                                  fontFamily: 'monospace',
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  isBlurred ? '*** ***' : _formatOtp(otp),
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: isExpiring
+                                        ? Colors.red
+                                        : (isDark
+                                            ? Colors.white
+                                            : const Color(0xFF1A1A2E)),
+                                    letterSpacing: 3,
+                                    fontFamily: 'monospace',
+                                  ),
                                 ),
                               ),
                             ),
@@ -717,11 +720,12 @@ class _HomeScreenState extends State<HomeScreen>
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         _accountAction(Icons.copy_rounded, 'Copy',
                             () => _copyToClipboard(otp), isDark),
-                        const SizedBox(width: 8),
                         _accountAction(
                           isBlurred
                               ? Icons.visibility_rounded
@@ -731,7 +735,6 @@ class _HomeScreenState extends State<HomeScreen>
                               () => blurredCodes[account.id] = !isBlurred),
                           isDark,
                         ),
-                        const SizedBox(width: 8),
                         _accountAction(
                           Icons.qr_code_rounded,
                           'QR',
@@ -744,7 +747,6 @@ class _HomeScreenState extends State<HomeScreen>
                                       issuer: account.issuer))),
                           isDark,
                         ),
-                        const Spacer(),
                         _accountAction(
                           Icons.delete_outline_rounded,
                           'Delete',
@@ -783,7 +785,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // ─── Delete account dialog with enhanced warnings ─────────────────────────
+  // â”€â”€â”€ Delete account dialog with enhanced warnings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showDeleteAccountDialog(String accountId, String serviceName) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
@@ -816,7 +818,7 @@ class _HomeScreenState extends State<HomeScreen>
               icon: Icons.phone_android_rounded,
               title: 'This device only',
               subtitle: _isSyncEnabled
-                  ? '⚠️ Cloud sync is ON. This account may come back when you sync!'
+                  ? 'âš ï¸ Cloud sync is ON. This account may come back when you sync!'
                   : 'Local only. Other devices keep the account.',
               color: Colors.orange,
               onTap: () => Navigator.pop(context, 'local'),
@@ -859,7 +861,7 @@ class _HomeScreenState extends State<HomeScreen>
                   style: TextStyle(color: textPrimary, fontSize: 17)),
             ]),
             content: Text(
-              '⚠️ Cloud sync is currently ENABLED.\n\n'
+              'âš ï¸ Cloud sync is currently ENABLED.\n\n'
               'If you delete this account locally only, it may be restored from the cloud when you sync.\n\n'
               'To permanently delete this account, choose "Everywhere" instead.\n\n'
               'Are you sure you want to delete locally only?',
@@ -896,7 +898,7 @@ class _HomeScreenState extends State<HomeScreen>
           context, serviceName, cardColor, textPrimary, textSecondary);
       if (!confirmed) return;
 
-      _showSnackBar('Deleting everywhere…', Colors.grey);
+      _showSnackBar('Deleting everywhereâ€¦', Colors.grey);
       final ok = await _syncService.deleteAccountEverywhere(accountId);
       if (ok) {
         setState(() {
@@ -906,7 +908,7 @@ class _HomeScreenState extends State<HomeScreen>
         });
         _showSnackBar('Account deleted from all devices', Colors.red);
       } else {
-        _showSnackBar('Failed to delete from cloud – try again', Colors.red);
+        _showSnackBar('Failed to delete from cloud â€“ try again', Colors.red);
       }
     }
   }
@@ -1087,7 +1089,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   String _formatOtp(String otp) {
     if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
     return otp;
@@ -1161,7 +1163,7 @@ class _HomeScreenState extends State<HomeScreen>
     final syncEnabled = await _syncService.isSyncEnabled();
 
     if (!syncEnabled) {
-      _showSnackBar('Sync is disabled. Enable it in Settings → Sync to Cloud',
+      _showSnackBar('Sync is disabled. Enable it in Settings â†’ Sync to Cloud',
           Colors.orange);
       return;
     }

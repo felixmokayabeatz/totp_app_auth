@@ -1,5 +1,3 @@
-// lib/screens/show_qr_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -8,37 +6,44 @@ class ShowQRScreen extends StatefulWidget {
   final String secret;
   final String service;
   final String? issuer;
-  
+
   const ShowQRScreen({
     Key? key,
     required this.secret,
     required this.service,
     this.issuer,
   }) : super(key: key);
-  
+
   @override
   _ShowQRScreenState createState() => _ShowQRScreenState();
 }
 
 class _ShowQRScreenState extends State<ShowQRScreen> {
   bool _isSecretRevealed = false;
-  
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final otpUrl = 'otpauth://totp/${widget.issuer != null ? "${widget.issuer}:" : ""}${widget.service}?secret=${widget.secret}&issuer=${widget.issuer ?? widget.service}';
-    
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
+    final mutedText =
+        isDark ? Colors.white60 : colorScheme.onSurfaceVariant;
+    final otpUrl =
+        'otpauth://totp/${widget.issuer != null ? "${widget.issuer}:" : ""}${widget.service}?secret=${widget.secret}&issuer=${widget.issuer ?? widget.service}';
+
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
+      backgroundColor:
+          isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           'QR Code',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
+        backgroundColor:
+            isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -46,320 +51,414 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.help_outline, color: Colors.white),
+            icon: const Icon(Icons.help_outline, color: Colors.white),
             onPressed: () => _showHelpDialog(context, isDark),
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [const Color(0xFF1a1a2e), const Color(0xFF16213e)]
-                : [const Color(0xFF667eea), const Color(0xFF764ba2)],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Service Card - matching home screen card style
-                Container(
-                  margin: const EdgeInsets.all(20),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E32) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
+      body: SafeArea(
+        top: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 900;
+            final outerPadding = constraints.maxWidth >= 1200
+                ? 32.0
+                : constraints.maxWidth >= 700
+                    ? 24.0
+                    : 16.0;
+
+            final serviceCard = _buildPanel(
+              context,
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      _getServiceIcon(widget.service),
+                      color: colorScheme.primary,
+                      size: 24,
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4F46E5).withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(12),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.service,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        child: Icon(
-                          _getServiceIcon(widget.service),
-                          color: const Color(0xFF4F46E5),
-                          size: 24,
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.issuer ?? 'Authenticator setup',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: mutedText,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.06)
+                          : colorScheme.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      'TOTP',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.primary,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            final qrPanel = _buildPanel(
+              context,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Scan to add this account',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Use any authenticator app that supports time-based one-time passwords.',
+                    style: TextStyle(fontSize: 13, color: mutedText),
+                  ),
+                  const SizedBox(height: 18),
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: colorScheme.outlineVariant.withOpacity(0.35),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      child: QrImageView(
+                        data: otpUrl,
+                        version: QrVersions.auto,
+                        size: isWide ? 220 : 200,
+                        backgroundColor: Colors.white,
+                        eyeStyle: const QrEyeStyle(
+                          color: Colors.black,
+                          eyeShape: QrEyeShape.square,
+                        ),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          color: Colors.black,
+                          dataModuleShape: QrDataModuleShape.square,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : colorScheme.surfaceContainerHighest
+                              .withOpacity(0.45),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.qr_code_scanner_rounded,
+                            size: 18, color: colorScheme.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'If scanning fails, reveal and copy the secret key manually.',
+                            style: TextStyle(fontSize: 12, color: mutedText),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            final secretPanel = _buildPanel(
+              context,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.service,
+                              'Secret key',
                               style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: colorScheme.onSurface,
                               ),
                             ),
-                            if (widget.issuer != null)
-                              Text(
-                                widget.issuer!,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark ? Colors.white38 : Colors.grey[500],
-                                ),
-                              ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Reveal this only if you need to type it in manually.',
+                              style:
+                                  TextStyle(fontSize: 13, color: mutedText),
+                            ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                
-                // QR Code Card - matching home screen card style
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E32) : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      QrImageView(
-                        data: otpUrl,
-                        version: QrVersions.auto,
-                        size: 220.0,
-                        eyeStyle: QrEyeStyle(
-                          color: const Color(0xFF4F46E5),
-                          eyeShape: QrEyeShape.circle,
+                      IconButton(
+                        icon: Icon(
+                          _isSecretRevealed
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded,
+                          color: mutedText,
                         ),
-                        dataModuleStyle: QrDataModuleStyle(
-                          color: const Color(0xFF4F46E5),
-                          dataModuleShape: QrDataModuleShape.circle,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Scan this QR code',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'with your authenticator app',
-                        style: TextStyle(
-                          color: isDark ? Colors.white38 : Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Secret Key Section - matching home screen card style
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E32) : Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Secret Key',
-                            style: TextStyle(
-                              color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          // Hide/Reveal toggle button
-                          IconButton(
-                            icon: Icon(
-                              _isSecretRevealed ? Icons.visibility_off : Icons.visibility,
-                              color: isDark ? Colors.white70 : Colors.grey[600],
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _isSecretRevealed = !_isSecretRevealed;
-                              });
-                            },
-                            tooltip: _isSecretRevealed ? 'Hide secret' : 'Reveal secret',
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Secret Display
-                      GestureDetector(
-                        onTap: () {
+                        onPressed: () {
                           setState(() {
-                            _isSecretRevealed = true;
+                            _isSecretRevealed = !_isSecretRevealed;
                           });
                         },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: _isSecretRevealed
-                                ? (isDark ? Colors.white12 : Colors.grey[50])
-                                : (isDark ? Colors.white.withOpacity(0.05) : Colors.grey[50]),
-                            borderRadius: BorderRadius.circular(15),
-                            border: Border.all(
-                              color: _isSecretRevealed
-                                  ? Colors.green.withOpacity(0.5)
-                                  : (isDark ? Colors.white24 : Colors.grey[200]!),
-                            ),
-                          ),
-                          child: Center(
-                            child: _isSecretRevealed
-                                ? SelectableText(
-                                    widget.secret,
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                                      fontSize: 15,
-                                      fontFamily: 'monospace',
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  )
-                                : Column(
-                                    children: [
-                                      Icon(
-                                        Icons.lock_outline,
-                                        color: isDark ? Colors.white54 : Colors.grey[500],
-                                        size: 28,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Tap to reveal',
-                                        style: TextStyle(
-                                          color: isDark ? Colors.white54 : Colors.grey[500],
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        '●●●●●●●●●●●●●●●●',
-                                        style: TextStyle(
-                                          color: isDark ? Colors.white24 : Colors.grey[400],
-                                          fontSize: 14,
-                                          letterSpacing: 2,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Copy button (only when revealed)
-                      if (_isSecretRevealed)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: widget.secret));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: const Text('Secret copied to clipboard!'),
-                                  backgroundColor: Colors.green,
-                                  duration: const Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4F46E5),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text('Copy Secret Key'),
-                          ),
-                        ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Warning
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.red.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Keep this secret safe!',
-                                style: TextStyle(
-                                  color: isDark ? Colors.white70 : Colors.grey[700],
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        tooltip:
+                            _isSecretRevealed ? 'Hide secret' : 'Reveal secret',
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: () {
+                      if (!_isSecretRevealed) {
+                        setState(() {
+                          _isSecretRevealed = true;
+                        });
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withOpacity(0.05)
+                            : colorScheme.surfaceContainerHighest
+                                .withOpacity(0.35),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withOpacity(0.08)
+                              : colorScheme.outlineVariant.withOpacity(0.4),
+                        ),
+                      ),
+                      child: _isSecretRevealed
+                          ? SelectableText(
+                              widget.secret,
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                                fontSize: 16,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.1,
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.lock_outline_rounded,
+                                    color: mutedText, size: 22),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Tap to reveal',
+                                  style: TextStyle(
+                                    color: colorScheme.onSurface,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _maskedSecret(),
+                                  style: TextStyle(
+                                    color: mutedText,
+                                    fontSize: 14,
+                                    letterSpacing: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _isSecretRevealed ? _copySecret : null,
+                      icon: const Icon(Icons.copy_rounded),
+                      label: const Text('Copy secret key'),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withOpacity(
+                        isDark ? 0.14 : 0.10,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFFF59E0B).withOpacity(0.22),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded,
+                            color: Color(0xFFF59E0B), size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Keep this secret private. Anyone with it can generate your verification codes.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.4,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: isDark
+                      ? [
+                          const Color(0xFF141629),
+                          const Color(0xFF0F0F1A),
+                        ]
+                      : [
+                          const Color(0xFFE8ECFF),
+                          const Color(0xFFF5F7FF),
+                        ],
                 ),
-                
-                const SizedBox(height: 30),
-              ],
-            ),
-          ),
+              ),
+              child: SingleChildScrollView(
+                padding:
+                    EdgeInsets.fromLTRB(outerPadding, 20, outerPadding, 28),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: Column(
+                      children: [
+                        serviceCard,
+                        const SizedBox(height: 18),
+                        if (isWide)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: qrPanel),
+                              const SizedBox(width: 18),
+                              Expanded(child: secretPanel),
+                            ],
+                          )
+                        else
+                          Column(
+                            children: [
+                              qrPanel,
+                              const SizedBox(height: 16),
+                              secretPanel,
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
-  
+
+  Widget _buildPanel(BuildContext context, {required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withOpacity(0.06)
+              : colorScheme.outlineVariant.withOpacity(0.35),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.18 : 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  String _maskedSecret() {
+    if (widget.secret.isEmpty) return '**** ****';
+    final groupCount = (widget.secret.length / 4).ceil().clamp(2, 4);
+    return List.generate(groupCount, (_) => '****').join(' ');
+  }
+
+  void _copySecret() {
+    Clipboard.setData(ClipboardData(text: widget.secret));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Secret copied to clipboard'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   IconData _getServiceIcon(String service) {
     final lower = service.toLowerCase();
     if (lower.contains('google')) return Icons.g_mobiledata_rounded;
@@ -373,7 +472,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     if (lower.contains('slack')) return Icons.message_rounded;
     return Icons.lock_rounded;
   }
-  
+
   void _showHelpDialog(BuildContext context, bool isDark) {
     showDialog(
       context: context,
@@ -382,7 +481,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         backgroundColor: isDark ? const Color(0xFF1E1E32) : Colors.white,
         title: Row(
           children: [
-            Icon(Icons.help_outline, color: const Color(0xFF4F46E5), size: 24),
+            const Icon(Icons.help_outline,
+                color: Color(0xFF4F46E5), size: 24),
             const SizedBox(width: 10),
             const Text('About Secret Key'),
           ],
@@ -410,9 +510,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '• Never share your secret key\n'
-              '• Store it in a secure place\n'
-              '• Keep it hidden from others',
+              '- Never share your secret key\n'
+              '- Store it in a secure place\n'
+              '- Keep it hidden from others',
               style: TextStyle(
                 fontSize: 13,
                 color: isDark ? Colors.white70 : Colors.grey[700],

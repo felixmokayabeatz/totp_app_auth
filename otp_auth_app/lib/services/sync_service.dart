@@ -27,6 +27,55 @@ class SyncService {
 
   String? get lastErrorMessage => _lastErrorMessage;
 
+  String _friendlyRequestError(DioException error, String fallback) {
+    final serverError = error.response?.data is Map<String, dynamic>
+        ? error.response?.data['error']?.toString()
+        : null;
+    if (serverError != null && serverError.isNotEmpty) {
+      return serverError;
+    }
+
+    final rawError = error.error?.toString() ?? '';
+
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'Connection timed out. Check internet, firewall, or proxy on this laptop.';
+      case DioExceptionType.connectionError:
+        if (rawError.contains('Failed host lookup')) {
+          return 'Could not reach the server. This laptop may have a DNS or internet issue.';
+        }
+        if (rawError.contains('HandshakeException') ||
+            rawError.toLowerCase().contains('certificate')) {
+          return 'Secure connection failed. Check the laptop date/time, antivirus HTTPS filtering, or certificate trust.';
+        }
+        return 'Could not reach the server. Check internet, firewall, or proxy on this laptop.';
+      case DioExceptionType.badCertificate:
+        return 'Secure connection failed. This laptop may not trust the server certificate.';
+      case DioExceptionType.badResponse:
+        final status = error.response?.statusCode;
+        if (status == 401) {
+          return 'Invalid username or password.';
+        }
+        if (status == 500) {
+          return 'Server error while processing the request. Please try again.';
+        }
+        return fallback;
+      case DioExceptionType.cancel:
+        return 'Request was cancelled.';
+      case DioExceptionType.unknown:
+        if (rawError.contains('HandshakeException') ||
+            rawError.toLowerCase().contains('certificate')) {
+          return 'Secure connection failed. Check the laptop date/time, antivirus HTTPS filtering, or certificate trust.';
+        }
+        if (rawError.contains('Failed host lookup')) {
+          return 'Could not reach the server. This laptop may have a DNS or internet issue.';
+        }
+        return fallback;
+    }
+  }
+
   // ─── Sync-enabled preference key ─────────────────────────────────────────
   static const _syncEnabledKey = 'sync_to_cloud_enabled';
 
@@ -264,26 +313,36 @@ class SyncService {
   // ─── Register ─────────────────────────────────────────────────────────────
   Future<bool> register(String username, String email, String password) async {
     try {
+      _lastErrorMessage = null;
       final response = await _dio.post('auth/register/', data: {
         'username': username,
         'email': email,
         'password': password,
       });
       if (response.statusCode == 200 || response.statusCode == 201) {
+        final canonicalUsername =
+            response.data['user']?['username']?.toString() ?? username.trim();
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('access_token', response.data['access']);
         await prefs.setString('refresh_token', response.data['refresh']);
-        await prefs.setString('current_user', username);
+        await prefs.setString('current_user', canonicalUsername);
         await prefs.setString('user_email', email);
         await prefs.setString(
             'user_id', response.data['user']['id'].toString());
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
-        _initEncryption(username, password);
+        _initEncryption(canonicalUsername, password);
         return true;
       }
+      _lastErrorMessage = 'Registration failed. Please try again.';
+      return false;
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _friendlyRequestError(e, 'Registration failed. Please try again.');
+      print('Register error: $e');
       return false;
     } catch (e) {
+      _lastErrorMessage = 'Registration failed. Please try again.';
       print('Register error: $e');
       return false;
     }
@@ -298,10 +357,12 @@ class SyncService {
         'password': password,
       });
       if (response.statusCode == 200) {
+        final canonicalUsername =
+            response.data['user']?['username']?.toString() ?? username.trim();
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('access_token', response.data['access']);
         await prefs.setString('refresh_token', response.data['refresh']);
-        await prefs.setString('current_user', username);
+        await prefs.setString('current_user', canonicalUsername);
         await prefs.setString(
             'user_email', response.data['user']['email'] ?? '');
         await prefs.setString(
@@ -311,7 +372,7 @@ class SyncService {
 
         // Treat successful token issuance as a successful login.
         final encryptionKey = EncryptionService.generateKey(
-            username + password, 'beatzLockKenya2099');
+            canonicalUsername + password, 'beatzLockKenya2099');
 
         await _storeEncryptionKey(encryptionKey);
         _encryptionKey = encryptionKey;
@@ -342,8 +403,8 @@ class SyncService {
       }
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage = e.response?.data?['error']?.toString() ??
-          'Login failed. Please try again.';
+      _lastErrorMessage =
+          _friendlyRequestError(e, 'Login failed. Please try again.');
       print('Login error: $e');
       return false;
     } catch (e) {
@@ -673,8 +734,10 @@ class SyncService {
           data: {'username': username.trim(), 'password': password});
       return r.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage = e.response?.data?['error']?.toString() ??
-          'Unable to send the verification code.';
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Unable to send the verification code.',
+      );
       print('send2FA error: $e');
       return false;
     } catch (e) {
@@ -692,7 +755,7 @@ class SyncService {
       return r.data['success'] == true;
     } on DioException catch (e) {
       _lastErrorMessage =
-          e.response?.data?['error']?.toString() ?? 'Verification failed.';
+          _friendlyRequestError(e, 'Verification failed.');
       print('verify2FA error: $e');
       return false;
     } catch (e) {
