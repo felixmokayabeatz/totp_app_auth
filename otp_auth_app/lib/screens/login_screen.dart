@@ -1034,7 +1034,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _showSuccess('2FA code sent to your email!');
       } else {
         _showError(_syncService.lastErrorMessage ??
-            'Could not send the verification code. Check your credentials or this laptop connection.');
+            'Unable to send the verification code. Check your username, password, or internet connection.');
       }
     } else {
       bool success = await _syncService.register(

@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+
+import 'secure_storage_service.dart';
 
 class BiometricService {
   final LocalAuthentication _localAuth = LocalAuthentication();
   static const String _appPinKey = 'app_pin_hash';
   static const String _appPinEnabledKey = 'app_pin_enabled';
+  static const String _hashedPinVersion = 'pinv1';
+  final SecureStorageService _secureStorage = SecureStorageService();
 
   Future<void> init() async {}
 
@@ -59,27 +66,63 @@ class BiometricService {
   }
 
   Future<bool> hasAppPin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final pin = prefs.getString(_appPinKey);
+    final pin = await _secureStorage.read(_appPinKey);
     return pin != null && pin.isNotEmpty;
   }
 
   Future<void> setAppPin(String pin) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_appPinKey, pin);
+    await _secureStorage.write(_appPinKey, _hashPin(pin));
     await prefs.setBool(_appPinEnabledKey, true);
   }
 
   Future<bool> verifyAppPin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    final storedPin = prefs.getString(_appPinKey);
-    return storedPin == pin;
+    final storedPin = await _secureStorage.read(_appPinKey);
+    if (storedPin == null || storedPin.isEmpty) return false;
+
+    if (storedPin.startsWith('$_hashedPinVersion:')) {
+      return _verifyHashedPin(pin, storedPin);
+    }
+
+    final isLegacyMatch = storedPin == pin;
+    if (isLegacyMatch) {
+      await setAppPin(pin);
+    }
+    return isLegacyMatch;
   }
 
   Future<void> deleteAppPin() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_appPinKey);
+    await _secureStorage.delete(_appPinKey);
     await prefs.setBool(_appPinEnabledKey, false);
+  }
+
+  String _hashPin(String pin) {
+    final salt = List<int>.generate(16, (_) => Random.secure().nextInt(256));
+    final digest = sha256.convert([...salt, ...utf8.encode(pin)]).bytes;
+    return '$_hashedPinVersion:${base64Encode(salt)}:${base64Encode(digest)}';
+  }
+
+  bool _verifyHashedPin(String pin, String storedValue) {
+    final parts = storedValue.split(':');
+    if (parts.length != 3 || parts[0] != _hashedPinVersion) {
+      return false;
+    }
+
+    final salt = base64Decode(parts[1]);
+    final expectedDigest = base64Decode(parts[2]);
+    final actualDigest = sha256.convert([...salt, ...utf8.encode(pin)]).bytes;
+
+    return _constantTimeEquals(expectedDigest, actualDigest);
+  }
+
+  bool _constantTimeEquals(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    var diff = 0;
+    for (var i = 0; i < a.length; i++) {
+      diff |= a[i] ^ b[i];
+    }
+    return diff == 0;
   }
 
   // For Desktop - authenticate with App PIN

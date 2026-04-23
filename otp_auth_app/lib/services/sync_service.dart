@@ -29,12 +29,51 @@ class SyncService {
 
   String? get lastErrorMessage => _lastErrorMessage;
 
+  String? _extractServerError(dynamic data) {
+    if (data is String && data.trim().isNotEmpty) {
+      return data.trim();
+    }
+
+    if (data is Map<String, dynamic>) {
+      for (final key in const ['error', 'detail', 'message']) {
+        final value = data[key];
+        if (value is String && value.trim().isNotEmpty) {
+          return value.trim();
+        }
+      }
+
+      for (final value in data.values) {
+        if (value is List && value.isNotEmpty && value.first is String) {
+          final first = (value.first as String).trim();
+          if (first.isNotEmpty) return first;
+        }
+        if (value is String && value.trim().isNotEmpty) {
+          return value.trim();
+        }
+      }
+    }
+
+    return null;
+  }
+
+  String _normalizeAuthError(String message, {int? statusCode}) {
+    final normalized = message.toLowerCase();
+
+    if (statusCode == 401 ||
+        normalized.contains('invalid credential') ||
+        normalized.contains('invalid username or password') ||
+        normalized.contains('no active account found')) {
+      return 'Invalid username or password.';
+    }
+
+    return message;
+  }
+
   String _friendlyRequestError(DioException error, String fallback) {
-    final serverError = error.response?.data is Map<String, dynamic>
-        ? error.response?.data['error']?.toString()
-        : null;
+    final statusCode = error.response?.statusCode;
+    final serverError = _extractServerError(error.response?.data);
     if (serverError != null && serverError.isNotEmpty) {
-      return serverError;
+      return _normalizeAuthError(serverError, statusCode: statusCode);
     }
 
     final rawError = error.error?.toString() ?? '';
@@ -43,22 +82,25 @@ class SyncService {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return 'Connection timed out. Check internet, firewall, or proxy on this laptop.';
+        return 'Connection timed out. Check your internet connection, firewall, or proxy on this device.';
       case DioExceptionType.connectionError:
         if (rawError.contains('Failed host lookup')) {
-          return 'Could not reach the server. This laptop may have a DNS or internet issue.';
+          return 'Could not reach the server. This device may have a DNS or internet issue.';
         }
         if (rawError.contains('HandshakeException') ||
             rawError.toLowerCase().contains('certificate')) {
-          return 'Secure connection failed. Check the laptop date/time, antivirus HTTPS filtering, or certificate trust.';
+          return 'Secure connection failed. Check this device date/time, antivirus HTTPS filtering, or certificate trust.';
         }
-        return 'Could not reach the server. Check internet, firewall, or proxy on this laptop.';
+        return 'Could not reach the server. Check your internet connection, firewall, or proxy on this device.';
       case DioExceptionType.badCertificate:
-        return 'Secure connection failed. This laptop may not trust the server certificate.';
+        return 'Secure connection failed. This device may not trust the server certificate.';
       case DioExceptionType.badResponse:
-        final status = error.response?.statusCode;
+        final status = statusCode;
         if (status == 401) {
           return 'Invalid username or password.';
+        }
+        if (status == 403) {
+          return 'You are not authorized to perform this action.';
         }
         if (status == 500) {
           return 'Server error while processing the request. Please try again.';
@@ -69,10 +111,10 @@ class SyncService {
       case DioExceptionType.unknown:
         if (rawError.contains('HandshakeException') ||
             rawError.toLowerCase().contains('certificate')) {
-          return 'Secure connection failed. Check the laptop date/time, antivirus HTTPS filtering, or certificate trust.';
+          return 'Secure connection failed. Check this device date/time, antivirus HTTPS filtering, or certificate trust.';
         }
         if (rawError.contains('Failed host lookup')) {
-          return 'Could not reach the server. This laptop may have a DNS or internet issue.';
+          return 'Could not reach the server. This device may have a DNS or internet issue.';
         }
         return fallback;
     }

@@ -12,6 +12,7 @@ class SecureStorageService {
   static const userEmailKey = 'user_email';
   static const userIdKey = 'user_id';
   static const encryptionKey = 'encryption_key';
+  static const appPinHashKey = 'app_pin_hash';
 
   static const List<String> _knownKeys = [
     accessTokenKey,
@@ -20,6 +21,7 @@ class SecureStorageService {
     userEmailKey,
     userIdKey,
     encryptionKey,
+    appPinHashKey,
   ];
 
   static final SecureStorageService _instance =
