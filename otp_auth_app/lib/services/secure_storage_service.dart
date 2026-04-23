@@ -1,4 +1,8 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SecureStorageService {
@@ -23,7 +27,7 @@ class SecureStorageService {
   factory SecureStorageService() => _instance;
   SecureStorageService._internal();
 
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  static const _prefix = 'bls1:';
 
   Future<void> init() async {
     for (final key in _knownKeys) {
@@ -32,33 +36,20 @@ class SecureStorageService {
   }
 
   Future<void> write(String key, String value) async {
-    await _storage.write(key: key, value: value);
-
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey(key)) {
-      await prefs.remove(key);
-    }
+    await prefs.setString(key, _encrypt(value));
   }
 
   Future<String?> read(String key) async {
-    final value = await _storage.read(key: key);
-    if (value != null) {
-      return value;
-    }
-
     return _migrateLegacyPreference(key);
   }
 
   Future<void> delete(String key) async {
-    await _storage.delete(key: key);
-
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(key);
   }
 
   Future<void> deleteAll() async {
-    await _storage.deleteAll();
-
     final prefs = await SharedPreferences.getInstance();
     for (final key in _knownKeys) {
       await prefs.remove(key);
@@ -67,13 +58,73 @@ class SecureStorageService {
 
   Future<String?> _migrateLegacyPreference(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    final legacyValue = prefs.getString(key);
+    final storedValue = prefs.getString(key);
 
-    if (legacyValue != null) {
-      await _storage.write(key: key, value: legacyValue);
-      await prefs.remove(key);
+    if (storedValue == null) {
+      return null;
     }
 
-    return legacyValue;
+    if (storedValue.startsWith(_prefix)) {
+      try {
+        return _decrypt(storedValue);
+      } catch (_) {
+        await prefs.remove(key);
+        return null;
+      }
+    }
+
+    await prefs.setString(key, _encrypt(storedValue));
+    return storedValue;
+  }
+
+  String _encrypt(String plainText) {
+    final plainBytes = utf8.encode(plainText);
+    final nonce = List<int>.generate(16, (_) => Random.secure().nextInt(256));
+    final keyBytes = utf8.encode(_deriveStorageKey());
+    final encrypted = _xorWithKeystream(plainBytes, keyBytes, nonce);
+    return '$_prefix${base64Encode([...nonce, ...encrypted])}';
+  }
+
+  String _decrypt(String cipherText) {
+    final payload = cipherText.substring(_prefix.length);
+    final bytes = base64Decode(payload);
+    if (bytes.length < 17) {
+      throw FormatException('Invalid secure storage payload');
+    }
+
+    final nonce = bytes.sublist(0, 16);
+    final encrypted = bytes.sublist(16);
+    final keyBytes = utf8.encode(_deriveStorageKey());
+    final plainBytes = _xorWithKeystream(encrypted, keyBytes, nonce);
+    return utf8.decode(plainBytes);
+  }
+
+  List<int> _xorWithKeystream(
+      List<int> input, List<int> keyBytes, List<int> nonce) {
+    final output = <int>[];
+    var blockIndex = 0;
+
+    while (output.length < input.length) {
+      final keystreamBlock = sha256
+          .convert([...keyBytes, ...nonce, ...utf8.encode(':$blockIndex')])
+          .bytes;
+      for (final byte in keystreamBlock) {
+        if (output.length >= input.length) break;
+        output.add(input[output.length] ^ byte);
+      }
+      blockIndex++;
+    }
+
+    return output;
+  }
+
+  String _deriveStorageKey() {
+    final username =
+        Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
+    final homeDir =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '';
+    final seed =
+        'beatzlock_secure_storage_v1|${Platform.operatingSystem}|${Platform.localHostname}|$username|$homeDir';
+    return sha256.convert(utf8.encode(seed)).toString();
   }
 }

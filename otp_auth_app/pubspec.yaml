@@ -26,7 +26,6 @@ dependencies:
   http_parser: ^4.0.2
   file_selector_windows: ^0.9.3+5
   local_auth: ^2.1.6
-  flutter_secure_storage: ^9.2.2
 
 dev_dependencies:
   flutter_test:
