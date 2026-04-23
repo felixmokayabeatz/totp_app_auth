@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../widgets/account_logo_badge.dart';
 
 class ShowQRScreen extends StatefulWidget {
   final String secret;
@@ -60,7 +61,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         top: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isWide = constraints.maxWidth >= 900;
+            final isWide = constraints.maxWidth >= 720;
             final outerPadding = constraints.maxWidth >= 1200
                 ? 32.0
                 : constraints.maxWidth >= 700
@@ -71,18 +72,10 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
               context,
               child: Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      _getServiceIcon(widget.service),
-                      color: colorScheme.primary,
-                      size: 24,
-                    ),
+                  AccountLogoBadge(
+                    service: widget.service,
+                    size: 48,
+                    iconSize: 24,
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -118,7 +111,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     decoration: BoxDecoration(
                       color: isDark
                           ? Colors.white.withOpacity(0.06)
-                          : colorScheme.primary.withOpacity(0.08),
+                          : const Color(0xFFF1F3F7),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -126,7 +119,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: colorScheme.primary,
+                        color: isDark
+                            ? colorScheme.primary
+                            : const Color(0xFF475569),
                         letterSpacing: 0.4,
                       ),
                     ),
@@ -188,8 +183,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     decoration: BoxDecoration(
                       color: isDark
                           ? Colors.white.withOpacity(0.05)
-                          : colorScheme.surfaceContainerHighest
-                              .withOpacity(0.45),
+                          : const Color(0xFFF4F5F7),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Row(
@@ -267,12 +261,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withOpacity(0.05)
-                            : colorScheme.surfaceContainerHighest
-                                .withOpacity(0.35),
-                        borderRadius: BorderRadius.circular(16),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : const Color(0xFFF4F5F7),
+                      borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: isDark
                               ? Colors.white.withOpacity(0.08)
@@ -330,13 +323,14 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B).withOpacity(
-                        isDark ? 0.14 : 0.10,
-                      ),
+                  decoration: BoxDecoration(
+                      color:
+                          isDark ? const Color(0xFF2B2435) : const Color(0xFFFFF6E9),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: const Color(0xFFF59E0B).withOpacity(0.22),
+                        color: isDark
+                            ? const Color(0xFF4B3D20)
+                            : const Color(0xFFF3DFC1),
                       ),
                     ),
                     child: Row(
@@ -373,8 +367,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                           const Color(0xFF0F0F1A),
                         ]
                       : [
-                          const Color(0xFFE8ECFF),
-                          const Color(0xFFF5F7FF),
+                          const Color(0xFFF7F8FA),
+                          const Color(0xFFEDEFF3),
                         ],
                 ),
               ),
@@ -457,20 +451,6 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         duration: Duration(seconds: 2),
       ),
     );
-  }
-
-  IconData _getServiceIcon(String service) {
-    final lower = service.toLowerCase();
-    if (lower.contains('google')) return Icons.g_mobiledata_rounded;
-    if (lower.contains('github')) return Icons.code_rounded;
-    if (lower.contains('facebook')) return Icons.facebook_rounded;
-    if (lower.contains('twitter')) return Icons.alternate_email_rounded;
-    if (lower.contains('microsoft')) return Icons.window_rounded;
-    if (lower.contains('amazon')) return Icons.cloud_rounded;
-    if (lower.contains('apple')) return Icons.apple_rounded;
-    if (lower.contains('discord')) return Icons.headset_rounded;
-    if (lower.contains('slack')) return Icons.message_rounded;
-    return Icons.lock_rounded;
   }
 
   void _showHelpDialog(BuildContext context, bool isDark) {

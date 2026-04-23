@@ -15,6 +15,7 @@ import 'show_qr_screen.dart';
 import 'profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
+import '../widgets/account_logo_badge.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -170,6 +171,31 @@ class _HomeScreenState extends State<HomeScreen>
 
   // â”€â”€â”€ Header with account count - FIXED for desktop right alignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildHeader(bool isDark, int accountCount, bool isWideScreen) {
+    final actionButtons = Wrap(
+      spacing: isWideScreen ? 4 : 6,
+      runSpacing: 6,
+      children: [
+        _headerAction(
+            _allBlurred
+                ? Icons.visibility_rounded
+                : Icons.visibility_off_rounded,
+            _toggleBlurAll,
+            tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
+        _headerAction(Icons.sync_rounded, _syncData,
+            tooltip: 'Sync', loading: _isSyncing),
+        _headerAction(
+            Icons.settings_rounded,
+            () => Navigator.push(
+                context, MaterialPageRoute(builder: (_) => SettingsScreen())),
+            tooltip: 'Settings'),
+        _headerAction(
+            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            () => Provider.of<ThemeProvider>(context, listen: false)
+                .toggleTheme(),
+            tooltip: 'Theme'),
+      ],
+    );
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
@@ -184,26 +210,27 @@ class _HomeScreenState extends State<HomeScreen>
         bottom: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Row(
+          child: Column(
             children: [
-              // Left side - Profile picture and app info
-              GestureDetector(
-                onTap: () async {
-                  final result = await Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => ProfileScreen()));
-                  if (result == true) _loadProfileData();
-                },
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: Colors.white.withOpacity(0.3), width: 2),
-                  ),
-                  child: ClipOval(
-                    child:
-                        _profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      final result = await Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => ProfileScreen()));
+                      if (result == true) _loadProfileData();
+                    },
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.3), width: 2),
+                      ),
+                      child: ClipOval(
+                        child: _profilePhotoUrl != null &&
+                                _profilePhotoUrl!.isNotEmpty
                             ? Image.network(
                                 '${AppConfig.mediaUrl}${_profilePhotoUrl!.replaceFirst('/media/', '')}',
                                 fit: BoxFit.cover,
@@ -220,122 +247,61 @@ class _HomeScreenState extends State<HomeScreen>
                                 child: const Icon(Icons.person,
                                     color: Colors.white, size: 20),
                               ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('BeatzLock',
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: 0.3)),
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(_username ?? 'Two-Factor Security',
-                              style: const TextStyle(
-                                  fontSize: 10, color: Colors.white60),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '$accountCount',
-                            style: const TextStyle(
-                                fontSize: 9,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ],
-                ),
-              ),
-              // Right side - Action buttons (properly aligned to the right)
-              if (!isWideScreen)
-                // Phone layout: scrollable buttons
-                Flexible(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _headerAction(
-                            _allBlurred
-                                ? Icons.visibility_rounded
-                                : Icons.visibility_off_rounded,
-                            _toggleBlurAll,
-                            tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
-                        const SizedBox(width: 2),
-                        _headerAction(Icons.sync_rounded, _syncData,
-                            tooltip: 'Sync', loading: _isSyncing),
-                        const SizedBox(width: 2),
-                        _headerAction(
-                            Icons.settings_rounded,
-                            () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => SettingsScreen())),
-                            tooltip: 'Settings'),
-                        const SizedBox(width: 2),
-                        _headerAction(
-                            isDark
-                                ? Icons.light_mode_rounded
-                                : Icons.dark_mode_rounded,
-                            () => Provider.of<ThemeProvider>(context,
-                                    listen: false)
-                                .toggleTheme(),
-                            tooltip: 'Theme'),
+                        const Text('BeatzLock',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: 0.3)),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(_username ?? 'Two-Factor Security',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: Colors.white60),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '$accountCount',
+                                style: const TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                )
-              else
-                // Desktop layout: buttons fixed to the right
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _headerAction(
-                        _allBlurred
-                            ? Icons.visibility_rounded
-                            : Icons.visibility_off_rounded,
-                        _toggleBlurAll,
-                        tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
-                    const SizedBox(width: 4),
-                    _headerAction(Icons.sync_rounded, _syncData,
-                        tooltip: 'Sync', loading: _isSyncing),
-                    const SizedBox(width: 4),
-                    _headerAction(
-                        Icons.settings_rounded,
-                        () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => SettingsScreen())),
-                        tooltip: 'Settings'),
-                    const SizedBox(width: 4),
-                    _headerAction(
-                        isDark
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                        () => Provider.of<ThemeProvider>(context, listen: false)
-                            .toggleTheme(),
-                        tooltip: 'Theme'),
-                  ],
+                  if (isWideScreen) actionButtons,
+                ],
+              ),
+              if (!isWideScreen) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: actionButtons,
                 ),
+              ],
             ],
           ),
         ),
@@ -606,16 +572,7 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     Row(
                       children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF4F46E5).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(_getServiceIcon(account.service),
-                              color: const Color(0xFF4F46E5), size: 22),
-                        ),
+                        AccountLogoBadge(service: account.service),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -733,6 +690,12 @@ class _HomeScreenState extends State<HomeScreen>
                           isBlurred ? 'Show' : 'Hide',
                           () => setState(
                               () => blurredCodes[account.id] = !isBlurred),
+                          isDark,
+                        ),
+                        _accountAction(
+                          Icons.edit_rounded,
+                          'Edit',
+                          () => _showEditTitleDialog(account),
                           isDark,
                         ),
                         _accountAction(
@@ -1136,22 +1099,69 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  IconData _getServiceIcon(String service) {
-    final lower = service.toLowerCase();
-    if (lower.contains('google')) return Icons.g_mobiledata_rounded;
-    if (lower.contains('github')) return Icons.code_rounded;
-    if (lower.contains('facebook')) return Icons.facebook_rounded;
-    if (lower.contains('twitter') || lower.contains('x.com'))
-      return Icons.alternate_email_rounded;
-    if (lower.contains('microsoft')) return Icons.window_rounded;
-    if (lower.contains('amazon') || lower.contains('aws'))
-      return Icons.cloud_rounded;
-    if (lower.contains('apple')) return Icons.apple_rounded;
-    if (lower.contains('discord')) return Icons.headset_rounded;
-    if (lower.contains('slack')) return Icons.message_rounded;
-    if (lower.contains('dropbox')) return Icons.folder_rounded;
-    if (lower.contains('instagram')) return Icons.camera_alt_rounded;
-    return Icons.lock_rounded;
+  Future<void> _showEditTitleDialog(OTPAccount account) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final controller = TextEditingController(text: account.service);
+
+    final updatedTitle = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: isDark ? const Color(0xFF1E1E32) : Colors.white,
+        title: const Text('Edit Account Title'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Title',
+            hintText: 'Enter account title',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (updatedTitle == null || updatedTitle.isEmpty) return;
+    if (updatedTitle == account.service) return;
+
+    await _saveAccountTitle(account, updatedTitle);
+  }
+
+  Future<void> _saveAccountTitle(OTPAccount account, String title) async {
+    if (_userBox == null) return;
+
+    account.service = title;
+    await _userBox!.put(account.id, account);
+
+    if (!mounted) return;
+    setState(() {});
+
+    final syncEnabled = await _syncService.isSyncEnabled();
+    if (syncEnabled) {
+      final synced = await _syncService.syncAccounts();
+      if (!mounted) return;
+      _showSnackBar(
+        synced
+            ? 'Account title updated'
+            : 'Title updated locally. Cloud sync pending.',
+        synced ? const Color(0xFF10B981) : Colors.orange,
+      );
+      return;
+    }
+
+    _showSnackBar('Account title updated', const Color(0xFF10B981));
   }
 
   void _copyToClipboard(String otp) async {
