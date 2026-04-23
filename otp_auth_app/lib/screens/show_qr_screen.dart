@@ -74,6 +74,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                 children: [
                   AccountLogoBadge(
                     service: widget.service,
+                    issuer: widget.issuer,
                     size: 48,
                     iconSize: 24,
                   ),

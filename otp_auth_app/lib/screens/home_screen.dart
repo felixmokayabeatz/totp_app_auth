@@ -532,10 +532,13 @@ class _HomeScreenState extends State<HomeScreen>
     return Center(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 800),
-        child: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          itemCount: accounts.length,
-          itemBuilder: (context, index) {
+        child: ScrollConfiguration(
+          behavior:
+              const MaterialScrollBehavior().copyWith(scrollbars: false),
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            itemCount: accounts.length,
+            itemBuilder: (context, index) {
             final account = accounts[index];
             final otp = currentOTPs[account.id] ?? '------';
             final timer = timers[account.id] ?? 30;
@@ -572,7 +575,10 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     Row(
                       children: [
-                        AccountLogoBadge(service: account.service),
+                        AccountLogoBadge(
+                          service: account.service,
+                          issuer: account.issuer,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -724,7 +730,8 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             );
-          },
+            },
+          ),
         ),
       ),
     );

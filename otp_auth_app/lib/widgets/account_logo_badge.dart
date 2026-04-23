@@ -4,17 +4,20 @@ class AccountLogoBadge extends StatelessWidget {
   const AccountLogoBadge({
     super.key,
     required this.service,
+    this.issuer,
     this.size = 44,
     this.iconSize = 22,
   });
 
   final String service;
+  final String? issuer;
   final double size;
   final double iconSize;
 
   @override
   Widget build(BuildContext context) {
     final brand = _AccountBrandSpec.fromService(service);
+    final domain = _resolveLogoDomain(service, issuer);
 
     return Container(
       width: size,
@@ -24,23 +27,108 @@ class AccountLogoBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * 0.28),
       ),
       alignment: Alignment.center,
-      child: brand.text != null
-          ? Text(
-              brand.text!,
-              style: TextStyle(
-                color: brand.foregroundColor,
-                fontSize: iconSize * 0.84,
-                fontWeight: FontWeight.w800,
-                letterSpacing: brand.text!.length > 1 ? -0.6 : 0,
+      child: domain != null
+          ? Padding(
+              padding: EdgeInsets.all(size * 0.16),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(size * 0.18),
+                child: Image.network(
+                  _faviconUrl(domain),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _fallbackContent(brand),
+                ),
               ),
             )
-          : Icon(
-              brand.icon,
-              color: brand.foregroundColor,
-              size: iconSize,
-            ),
+          : _fallbackContent(brand),
     );
   }
+
+  Widget _fallbackContent(_AccountBrandSpec brand) {
+    if (brand.text != null) {
+      return Text(
+        brand.text!,
+        style: TextStyle(
+          color: brand.foregroundColor,
+          fontSize: iconSize * 0.84,
+          fontWeight: FontWeight.w800,
+          letterSpacing: brand.text!.length > 1 ? -0.6 : 0,
+        ),
+      );
+    }
+
+    return Icon(
+      brand.icon,
+      color: brand.foregroundColor,
+      size: iconSize,
+    );
+  }
+
+  String? _resolveLogoDomain(String service, String? issuer) {
+    final values = [service, if (issuer != null) issuer];
+    for (final value in values) {
+      final cleaned = value.trim().toLowerCase();
+      if (cleaned.isEmpty) continue;
+
+      final mapped = _knownDomains[cleaned];
+      if (mapped != null) return mapped;
+
+      if (cleaned.contains('@')) {
+        final emailDomain = cleaned.split('@').last;
+        if (emailDomain.contains('.')) return emailDomain;
+      }
+
+      final withoutProtocol = cleaned
+          .replaceFirst('https://', '')
+          .replaceFirst('http://', '')
+          .replaceFirst('www.', '');
+      final firstSegment = withoutProtocol.split('/').first;
+      if (firstSegment.contains('.')) return firstSegment;
+
+      for (final entry in _knownDomains.entries) {
+        if (cleaned.contains(entry.key)) return entry.value;
+      }
+    }
+    return null;
+  }
+
+  String _faviconUrl(String domain) {
+    return 'https://www.google.com/s2/favicons?sz=128&domain_url=$domain';
+  }
+
+  static const Map<String, String> _knownDomains = {
+    'google': 'google.com',
+    'gmail': 'google.com',
+    'github': 'github.com',
+    'facebook': 'facebook.com',
+    'x': 'x.com',
+    'twitter': 'x.com',
+    'x.com': 'x.com',
+    'microsoft': 'microsoft.com',
+    'outlook': 'outlook.com',
+    'office': 'office.com',
+    'apple': 'apple.com',
+    'amazon': 'amazon.com',
+    'aws': 'aws.amazon.com',
+    'discord': 'discord.com',
+    'slack': 'slack.com',
+    'instagram': 'instagram.com',
+    'linkedin': 'linkedin.com',
+    'dropbox': 'dropbox.com',
+    'tiktok': 'tiktok.com',
+    'paypal': 'paypal.com',
+    'reddit': 'reddit.com',
+    'notion': 'notion.so',
+    'cloudflare': 'cloudflare.com',
+    'spotify': 'spotify.com',
+    'netflix': 'netflix.com',
+    'airbnb': 'airbnb.com',
+    'uber': 'uber.com',
+    'yahoo': 'yahoo.com',
+    'proton': 'proton.me',
+    'binance': 'binance.com',
+    'coinbase': 'coinbase.com',
+    'telegram': 'telegram.org',
+  };
 }
 
 class _AccountBrandSpec {
