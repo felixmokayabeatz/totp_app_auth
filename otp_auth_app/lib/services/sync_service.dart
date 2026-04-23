@@ -529,6 +529,7 @@ class SyncService {
           final userId = await _getCurrentUserId();
 
           int added = 0;
+          int updatedTitles = 0;
           for (var ca in cloudAccounts) {
             final id = ca['id'] as String;
             if (tombstones.contains(id)) continue;
@@ -543,9 +544,21 @@ class SyncService {
               );
               await userBox.put(newAccount.id, newAccount);
               added++;
+              continue;
+            }
+
+            final existingAccount = userBox.get(id);
+            final cloudService = ca['service'] as String?;
+            if (existingAccount != null &&
+                cloudService != null &&
+                existingAccount.service != cloudService) {
+              existingAccount.service = cloudService;
+              await userBox.put(id, existingAccount);
+              updatedTitles++;
             }
           }
-          print('Merged $added accounts from cloud');
+          print(
+              'Merged $added accounts from cloud and updated $updatedTitles titles');
           await syncAccounts();
         } catch (jsonError) {
           print('Failed to parse cloud JSON: $jsonError');
@@ -569,7 +582,7 @@ class SyncService {
   }
 
   // ─── Main sync ────────────────────────────────────────────────────────────
-  Future<bool> syncAccounts() async {
+  Future<bool> syncAccounts({bool preferLocalTitleChanges = false}) async {
     if (!(await isSyncEnabled())) {
       print('Sync disabled by user preference');
       return true;
@@ -659,6 +672,7 @@ class SyncService {
       print('Local has ${localAccountsMap.length} accounts');
 
       int addedFromCloud = 0;
+      int updatedTitlesFromCloud = 0;
       for (var entry in cloudAccountsMap.entries) {
         final id = entry.key;
         if (tombstones.contains(id)) continue;
@@ -674,9 +688,23 @@ class SyncService {
           );
           await userBox.put(id, newAcc);
           addedFromCloud++;
+          continue;
+        }
+
+        if (!preferLocalTitleChanges) {
+          final existingAccount = userBox.get(id);
+          final cloudService = entry.value['service'] as String?;
+          if (existingAccount != null &&
+              cloudService != null &&
+              existingAccount.service != cloudService) {
+            existingAccount.service = cloudService;
+            await userBox.put(id, existingAccount);
+            updatedTitlesFromCloud++;
+          }
         }
       }
-      print('Added $addedFromCloud accounts from cloud');
+      print(
+          'Added $addedFromCloud accounts from cloud and updated $updatedTitlesFromCloud titles');
 
       final finalData = await Future.wait(
         userBox.values.where((a) => !tombstones.contains(a.id)).map((a) async {

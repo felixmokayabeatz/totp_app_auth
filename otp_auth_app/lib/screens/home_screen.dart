@@ -789,7 +789,7 @@ class _HomeScreenState extends State<HomeScreen>
               icon: Icons.phone_android_rounded,
               title: 'This device only',
               subtitle: _isSyncEnabled
-                  ? 'âš ï¸ Cloud sync is ON. This account may come back when you sync!'
+                  ? 'Cloud sync is ON. This account may come back when you sync!'
                   : 'Local only. Other devices keep the account.',
               color: Colors.orange,
               onTap: () => Navigator.pop(context, 'local'),
@@ -1158,7 +1158,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     final syncEnabled = await _syncService.isSyncEnabled();
     if (syncEnabled) {
-      final synced = await _syncService.syncAccounts();
+      final synced =
+          await _syncService.syncAccounts(preferLocalTitleChanges: true);
       if (!mounted) return;
       _showSnackBar(
         synced
