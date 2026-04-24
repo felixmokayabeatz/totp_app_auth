@@ -8,7 +8,7 @@ from .serializers import UserProfileSerializer
 import logging
 import traceback
 from django.conf import settings as django_settings
-
+from django.shortcuts import render
 
 logger = logging.getLogger(__name__)
 
@@ -79,3 +79,8 @@ class ProfileViewSet(viewsets.GenericViewSet):
             debug_print(f"[PROFILE] Traceback:\n{error_details}")
             logger.error("Profile update failed.\n%s", error_details)
             return Response({'error': str(e)}, status=500)
+        
+    
+
+def custom_404_view(request, exception):
+    return render(request, '404.html', status=404)

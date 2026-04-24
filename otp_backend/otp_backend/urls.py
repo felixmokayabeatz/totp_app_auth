@@ -13,6 +13,11 @@ from accounts.views import ProfileViewSet
 
 from django.views.generic import RedirectView
 
+from django.conf.urls import handler404
+from accounts.views import custom_404_view
+
+handler404 = custom_404_view
+
 router = DefaultRouter()
 router.register(r'auth', AuthViewSet, basename='auth')
 router.register(r'sync', SyncViewSet, basename='sync')
