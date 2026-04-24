@@ -165,41 +165,49 @@ def get_logging_config(debug_mode):
                 "formatter": "redacted_detailed",
                 "level": "ERROR",
             },
+            "console": {
+                "class": "logging.StreamHandler",
+            },
         },
         "loggers": {
             "django": {
-                "handlers": ["error_file"],
+                "handlers": ["error_file", "console"],
                 "level": "ERROR",
                 "propagate": False,
             },
             "django.request": {
-                "handlers": ["error_file"],
+                "handlers": ["error_file", "console"],
                 "level": "ERROR",
                 "propagate": False,
             },
+            "django.server": {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            },
             "api": {
-                "handlers": ["error_file"],
+                "handlers": ["error_file", "console"],
                 "level": "ERROR",
                 "propagate": False,
             },
             "twofa": {
-                "handlers": ["error_file"],
+                "handlers": ["error_file", "console"],
                 "level": "ERROR",
                 "propagate": False,
             },
             "accounts": {
-                "handlers": ["error_file"],
+                "handlers": ["error_file", "console"],
                 "level": "ERROR",
                 "propagate": False,
             },
             "beatzlocklogs": {
-                "handlers": ["error_file"],
+                "handlers": ["error_file", "console"],
                 "level": "ERROR",
                 "propagate": False,
             },
         },
         "root": {
-            "handlers": ["error_file"],
+            "handlers": ["error_file", "console"],
             "level": "ERROR",
         },
     }
