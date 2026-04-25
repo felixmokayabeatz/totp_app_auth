@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "BeatzLock Authenticator" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "BeatzLock Authenticator" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 BeatzLock" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 BeatzLock Authenticator" "\0"
             VALUE "OriginalFilename", "BeatzLock Authenticator" "\0"
             VALUE "ProductName", "BeatzLock Authenticator" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
