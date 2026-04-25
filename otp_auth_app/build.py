@@ -25,6 +25,7 @@ ANDROID_DIR = str(Path(INSTALLER_DIR) / "android")
 # App metadata (customize these)
 APP_NAME = "BeatzLock"
 DEB_PACKAGE_NAME = "beatzlock"
+LINUX_APPLICATION_ID = "com.beatzlock.auth"
 APP_VERSION = "1.0.0"
 APP_MAINTAINER = "Felix Mokaya <felixmokayabeatz@proton.me>"
 APP_DESCRIPTION = "BeatzLock OTP Authentication App"
@@ -298,6 +299,12 @@ def build_linux_deb(skip_installer=False):
     
     # Copy app files
     shutil.copytree(bundle_path, deb_dir / "usr/local" / APP_NAME, dirs_exist_ok=True)
+    linux_icon_source = SCRIPT_DIR / "linux/runner/resources/app_icon.png"
+    if linux_icon_source.exists():
+        shutil.copy2(
+            linux_icon_source,
+            deb_dir / "usr/share/icons/hicolor/256x256/apps" / f"{LINUX_APPLICATION_ID}.png",
+        )
 
     # Create .desktop file
     desktop_content = f"""[Desktop Entry]
@@ -305,12 +312,13 @@ Version={APP_VERSION}
 Name={APP_NAME}
 Comment={APP_DESCRIPTION}
 Exec=/usr/local/{APP_NAME}/{linux_binary_name}
-Icon=/usr/local/{APP_NAME}/resources/app_icon.png
+Icon={LINUX_APPLICATION_ID}
 Terminal=false
 Type=Application
 Categories=Utility;
+StartupWMClass={LINUX_APPLICATION_ID}
 """
-    with open(deb_dir / "usr/share/applications" / f"{APP_NAME}.desktop", "w") as f:
+    with open(deb_dir / "usr/share/applications" / f"{LINUX_APPLICATION_ID}.desktop", "w") as f:
         f.write(desktop_content)
     
     # Create control file

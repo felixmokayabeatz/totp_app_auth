@@ -70,10 +70,7 @@ db.sqlite3
 # OS
 .DS_Store
 Thumbs.db
-/windows/
-/linux/
-/android/
-/macos/
+
 
 android-ndk-r28c-linux.zip
 android-ndk-r28c/
