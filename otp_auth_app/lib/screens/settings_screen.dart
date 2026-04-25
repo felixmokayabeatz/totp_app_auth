@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
@@ -25,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isSyncing = false;
   bool _syncEnabled = true;
   bool _appLockEnabled = false;
+  String _appVersionLabel = '...';
   Timer? _syncPrefTimer;
 
   @override
@@ -32,6 +34,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadSyncPreference();
     _loadAppLockSettings();
+    _loadAppVersion();
     _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       await _syncService.refreshSyncPreferenceFromServer();
       final enabled = await _syncService.isSyncEnabled();
@@ -57,6 +60,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       setState(() {
         _appLockEnabled = appLockEnabled;
+      });
+    }
+  }
+
+  Future<void> _loadAppVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    final version = packageInfo.version;
+    final buildNumber = packageInfo.buildNumber;
+    final label = buildNumber.isEmpty ? version : '$version ($buildNumber)';
+    if (mounted) {
+      setState(() {
+        _appVersionLabel = label;
       });
     }
   }
@@ -244,7 +259,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.info_outline_rounded,
               label: 'Version',
               sub: 'Current app version',
-              trailing: _versionBadge('1.0.0'),
+              trailing: _versionBadge(_appVersionLabel),
             ),
             _dividerLine(),
             _tappableTile(
