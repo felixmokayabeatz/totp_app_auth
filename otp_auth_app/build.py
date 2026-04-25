@@ -16,6 +16,7 @@ WORKSPACE_DIR = SCRIPT_DIR.parent
 PROJECT_DIR = str(SCRIPT_DIR)
 INSTALLER_DIR = str(WORKSPACE_DIR / "final_builds")
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
+PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
 
 # Platform-specific build dirs
 LINUX_DIR = str(Path(INSTALLER_DIR) / "linux")
@@ -26,7 +27,6 @@ ANDROID_DIR = str(Path(INSTALLER_DIR) / "android")
 APP_NAME = "BeatzLock"
 DEB_PACKAGE_NAME = "beatzlock"
 LINUX_APPLICATION_ID = "com.beatzlock.auth"
-APP_VERSION = "1.0.0"
 APP_MAINTAINER = "Felix Mokaya <felixmokayabeatz@proton.me>"
 APP_DESCRIPTION = "BeatzLock OTP Authentication App"
 
@@ -54,6 +54,27 @@ def print_color(text, color=Colors.WHITE):
         print(f"{color}{text}{Colors.END}")
     else:
         print(text)
+
+def load_flutter_version():
+    """Read version and build number from pubspec.yaml."""
+    version_line_prefix = "version:"
+    try:
+        for line in PUBSPEC_FILE.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith(version_line_prefix):
+                raw_version = stripped.split(":", 1)[1].strip()
+                if "+" in raw_version:
+                    semver, build_number = raw_version.split("+", 1)
+                else:
+                    semver, build_number = raw_version, "1"
+                return raw_version, semver, build_number
+    except FileNotFoundError:
+        pass
+
+    raise FileNotFoundError(f"Unable to read Flutter version from {PUBSPEC_FILE}")
+
+APP_FULL_VERSION, APP_VERSION, APP_BUILD_NUMBER = load_flutter_version()
+APP_ARTIFACT_VERSION = f"{APP_VERSION}_{APP_BUILD_NUMBER}"
 
 def get_linux_bundle_binary_name(bundle_path: Path) -> str:
     """Return the main executable name produced by the Flutter Linux bundle."""
@@ -161,7 +182,8 @@ def save_build_metadata(platform_name, file_path):
         "file": os.path.basename(file_path),
         "path": file_path,
         "timestamp": datetime.now().isoformat(),
-        "version": APP_VERSION
+        "version": APP_FULL_VERSION,
+        "build_number": APP_BUILD_NUMBER,
     })
     
     with open(log_file, 'w') as f:
@@ -317,7 +339,7 @@ def build_linux_deb(skip_installer=False):
     
     # Create control file
     control_content = f"""Package: {DEB_PACKAGE_NAME}
-Version: {APP_VERSION}
+Version: {APP_FULL_VERSION}
 Section: utils
 Priority: optional
 Architecture: amd64
@@ -341,7 +363,7 @@ exit 0
     os.chmod(deb_dir / "DEBIAN" / "postinst", 0o755)
     
     # Build .deb
-    deb_file = f"{DEB_PACKAGE_NAME}_{APP_VERSION}_amd64.deb"
+    deb_file = f"{DEB_PACKAGE_NAME}_{APP_ARTIFACT_VERSION}_amd64.deb"
     deb_output = WORKSPACE_DIR / deb_file
     if not run(f'dpkg-deb --build "{deb_dir}" "{deb_output}"', cwd=str(WORKSPACE_DIR)):
         return False
@@ -409,7 +431,7 @@ def build_android():
         else:
             apk_path = os.path.join(PROJECT_DIR, "build/app/outputs/flutter-apk/app-release.apk")
             if os.path.exists(apk_path):
-                apk_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_v{APP_VERSION}.apk")
+                apk_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_{APP_ARTIFACT_VERSION}.apk")
                 shutil.copy(apk_path, apk_dest)
                 save_build_metadata("android_apk", apk_dest)
                 print_color(f"✅ APK created: {apk_dest}", Colors.GREEN)
@@ -421,7 +443,7 @@ def build_android():
         else:
             aab_path = os.path.join(PROJECT_DIR, "build/app/outputs/bundle/release/app-release.aab")
             if os.path.exists(aab_path):
-                aab_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_v{APP_VERSION}.aab")
+                aab_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_{APP_ARTIFACT_VERSION}.aab")
                 shutil.copy(aab_path, aab_dest)
                 save_build_metadata("android_aab", aab_dest)
                 print_color(f"✅ App Bundle created: {aab_dest}", Colors.GREEN)
