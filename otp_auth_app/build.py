@@ -24,7 +24,6 @@ ANDROID_DIR = str(Path(INSTALLER_DIR) / "android")
 
 # App metadata (customize these)
 APP_NAME = "BeatzLock"
-APP_BINARY_NAME = "Beatzlock"
 DEB_PACKAGE_NAME = "beatzlock"
 APP_VERSION = "1.0.0"
 APP_MAINTAINER = "Felix Mokaya <felixmokayabeatz@proton.me>"
@@ -54,6 +53,13 @@ def print_color(text, color=Colors.WHITE):
         print(f"{color}{text}{Colors.END}")
     else:
         print(text)
+
+def get_linux_bundle_binary_name(bundle_path: Path) -> str:
+    """Return the main executable name produced by the Flutter Linux bundle."""
+    for entry in bundle_path.iterdir():
+        if entry.is_file() and os.access(entry, os.X_OK):
+            return entry.name
+    raise FileNotFoundError(f"No executable found in Linux bundle: {bundle_path}")
 
 def run(cmd, cwd=None, shell=True, capture_output=False):
     """Run shell command with error handling"""
@@ -92,6 +98,43 @@ def check_flutter():
     
     # Quick check - don't run full doctor unless needed
     return True
+
+def check_linux_desktop_requirements():
+    """Verify Linux desktop build tools are installed before running Flutter."""
+    if platform.system() != "Linux":
+        return True
+
+    missing_tools = []
+    for tool in ["cmake", "ninja", "pkg-config"]:
+        if shutil.which(tool) is None:
+            missing_tools.append(tool)
+
+    gtk_ready = subprocess.run(
+        ["pkg-config", "--exists", "gtk+-3.0"],
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        text=True,
+    ).returncode == 0 if shutil.which("pkg-config") else False
+
+    if not missing_tools and gtk_ready:
+        return True
+
+    print_color("\n❌ Linux desktop prerequisites are missing.", Colors.RED)
+
+    if missing_tools:
+        print_color(
+            f"Missing tools: {', '.join(missing_tools)}",
+            Colors.YELLOW,
+        )
+
+    if not gtk_ready:
+        print_color("Missing GTK 3 development files (gtk+-3.0).", Colors.YELLOW)
+
+    print_color("\nInstall them with:", Colors.BLUE)
+    print("  sudo apt update")
+    print("  sudo apt install cmake ninja-build pkg-config libgtk-3-dev")
+    print_color("\nThen try the Linux run/build again.", Colors.BLUE)
+    return False
 
 def check_device_connected():
     """Check if an Android device/emulator is connected"""
@@ -160,6 +203,9 @@ def run_linux():
     if platform.system() != "Linux":
         print_color("⚠️  Linux app can only be run on Linux!", Colors.YELLOW)
         return False
+
+    if not check_linux_desktop_requirements():
+        return False
     
     print_color("Starting Linux app (press Ctrl+C to stop)...", Colors.GREEN)
     run("flutter run -d linux", cwd=PROJECT_DIR)
@@ -223,6 +269,9 @@ def hot_reload():
 def build_linux_deb(skip_installer=False):
     """Build Debian .deb package"""
     print_color("\n🐧 Building Linux .deb package...", Colors.CYAN)
+
+    if not check_linux_desktop_requirements():
+        return False
     
     # Build Flutter Linux app
     if not run("flutter build linux --release", cwd=PROJECT_DIR):
@@ -232,7 +281,8 @@ def build_linux_deb(skip_installer=False):
     if not bundle_path.exists():
         print_color("❌ Linux build failed - bundle not found", Colors.RED)
         return False
-    
+
+    linux_binary_name = get_linux_bundle_binary_name(bundle_path)
     if skip_installer:
         return True
     
@@ -248,14 +298,14 @@ def build_linux_deb(skip_installer=False):
     
     # Copy app files
     shutil.copytree(bundle_path, deb_dir / "usr/local" / APP_NAME, dirs_exist_ok=True)
-    
+
     # Create .desktop file
     desktop_content = f"""[Desktop Entry]
 Version={APP_VERSION}
 Name={APP_NAME}
 Comment={APP_DESCRIPTION}
-Exec=/usr/local/{APP_NAME}/{APP_BINARY_NAME}
-Icon=/usr/local/{APP_NAME}/data/flutter_assets/assets/icon.png
+Exec=/usr/local/{APP_NAME}/{linux_binary_name}
+Icon=/usr/local/{APP_NAME}/resources/app_icon.png
 Terminal=false
 Type=Application
 Categories=Utility;
@@ -282,7 +332,7 @@ set -e
 chmod +x /usr/local/{APP_NAME}/{APP_BINARY_NAME}
 echo "✓ {APP_NAME} installed successfully"
 exit 0
-""".replace("{APP_NAME}", APP_NAME).replace("{APP_BINARY_NAME}", APP_BINARY_NAME)
+""".replace("{APP_NAME}", APP_NAME).replace("{APP_BINARY_NAME}", linux_binary_name)
     
     with open(deb_dir / "DEBIAN" / "postinst", "w") as f:
         f.write(postinst_content)
