@@ -306,20 +306,14 @@ def build_linux_deb(skip_installer=False):
             deb_dir / "usr/share/icons/hicolor/256x256/apps" / f"{LINUX_APPLICATION_ID}.png",
         )
 
-    # Create .desktop file
-    desktop_content = f"""[Desktop Entry]
-Version={APP_VERSION}
-Name={APP_NAME}
-Comment={APP_DESCRIPTION}
-Exec=/usr/local/{APP_NAME}/{linux_binary_name}
-Icon={LINUX_APPLICATION_ID}
-Terminal=false
-Type=Application
-Categories=Utility;
-StartupWMClass={LINUX_APPLICATION_ID}
-"""
-    with open(deb_dir / "usr/share/applications" / f"{LINUX_APPLICATION_ID}.desktop", "w") as f:
-        f.write(desktop_content)
+    desktop_file_source = SCRIPT_DIR / "linux/runner/resources" / f"{LINUX_APPLICATION_ID}.desktop"
+    if not desktop_file_source.exists():
+        print_color(f"❌ Linux desktop file not found: {desktop_file_source}", Colors.RED)
+        return False
+    shutil.copy2(
+        desktop_file_source,
+        deb_dir / "usr/share/applications" / f"{LINUX_APPLICATION_ID}.desktop",
+    )
     
     # Create control file
     control_content = f"""Package: {DEB_PACKAGE_NAME}

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0.0
+Name=BeatzLock Authenticator
+Comment=BeatzLock OTP Authentication App
+Exec=/usr/local/BeatzLock/otp_auth_app
+Icon=com.beatzlock.auth
+Terminal=false
+Type=Application
+Categories=Utility;
+StartupWMClass=com.beatzlock.auth
