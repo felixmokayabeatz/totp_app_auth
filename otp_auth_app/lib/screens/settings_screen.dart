@@ -68,7 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final packageInfo = await PackageInfo.fromPlatform();
     final version = packageInfo.version;
     final buildNumber = packageInfo.buildNumber;
-    final label = buildNumber.isEmpty ? version : '$version ($buildNumber)';
+    final label =
+        buildNumber.isEmpty ? version : '$version (Build $buildNumber)';
     if (mounted) {
       setState(() {
         _appVersionLabel = label;
@@ -154,7 +155,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.lock_outline_rounded,
               label: 'App Lock',
-              sub: 'Always on. BeatzLock now requires device security or an app PIN every time you reopen it.',
+              sub:
+                  'Always on. BeatzLock now requires device security or an app PIN every time you reopen it.',
               trailing: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -424,9 +426,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     // ── "Everywhere" path: require OTP ──────────────────────────────────────
-    final username =
-        await SecureStorageService().read(SecureStorageService.currentUserKey) ??
-            '';
+    final username = await SecureStorageService()
+            .read(SecureStorageService.currentUserKey) ??
+        '';
 
     final otpSent = await _syncService.sendDeleteOtp(username);
     if (!otpSent) {
