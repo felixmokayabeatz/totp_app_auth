@@ -1,0 +1,6 @@
+v1.0.1 (Build 2)
+- Fixed QR scanning timeout
+- Fixed keyboard hiding inputs
+- Fixed time sync errors
+- Faster TOTP generation
+- Improved the encryption

@@ -2,8 +2,8 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 ; Non-commercial use only
 
-#define MyAppName "BeatzLock Installer"
-#define MyAppVersion "1.0.0"
+#define MyAppName "beatzLock"
+#define MyAppVersion "1.0.1_2" ;This always changes
 #define MyAppPublisher "felixmokayabeatz Inc."
 #define MyAppURL "https://www.felixmokayabeatz.online/"
 #define MyAppExeName "otp_auth_app.exe"
@@ -38,7 +38,7 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputDir=C:\Programming\totp_app\final_builds\Installers
-OutputBaseFilename=BeatzLock Auntenticator
+OutputBaseFilename=beatzlock_{#MyAppVersion}_x64
 SetupIconFile=C:\Programming\totp_app\otp_backend\static\favicon.ico
 SolidCompression=yes
 WizardStyle=modern dynamic
