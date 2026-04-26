@@ -17,7 +17,10 @@ PROJECT_DIR = str(SCRIPT_DIR)
 INSTALLER_DIR = str(WORKSPACE_DIR / "final_builds")
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
 PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
-INNO_VERSION_FILE = WORKSPACE_DIR / "beatzlock_inno_version.iss"
+INNO_SCRIPT_SEEDS = [
+    WORKSPACE_DIR / "BeatzLock v1.iss",
+    WORKSPACE_DIR / "BeatzLock.iss",
+]
 
 # Platform-specific build dirs
 LINUX_DIR = str(Path(INSTALLER_DIR) / "linux")
@@ -78,24 +81,109 @@ APP_FULL_VERSION, APP_VERSION, APP_BUILD_NUMBER = load_flutter_version()
 APP_ARTIFACT_VERSION = f"{APP_VERSION}_{APP_BUILD_NUMBER}"
 
 
-def write_inno_version_file():
-    """Generate an Inno Setup include file from pubspec.yaml version info."""
-    content = "\n".join(
-        [
-            "; Auto-generated from otp_auth_app/pubspec.yaml",
-            "; Do not edit manually.",
-            f'#define MyAppYamlVersion "{APP_FULL_VERSION}"',
-            f'#define MyAppSemVersion "{APP_VERSION}"',
-            f'#define MyAppBuildNumber "{APP_BUILD_NUMBER}"',
-            f'#define MyAppArtifactVersion "{APP_ARTIFACT_VERSION}"',
-            f'#define MyOutputBaseFilename "beatzlock_{APP_ARTIFACT_VERSION}_x64"',
-            "",
-        ]
-    )
-    INNO_VERSION_FILE.write_text(content, encoding="utf-8")
+def get_versioned_inno_script_path() -> Path:
+    return WORKSPACE_DIR / f"beatzlock_{APP_ARTIFACT_VERSION}.iss"
 
 
-write_inno_version_file()
+def find_inno_setup_script() -> Path | None:
+    candidates = []
+    candidates.extend(INNO_SCRIPT_SEEDS)
+    candidates.extend(sorted(WORKSPACE_DIR.glob("beatzlock_*.iss")))
+
+    seen = set()
+    for candidate in candidates:
+        normalized = str(candidate).lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
+def sync_inno_setup_script(script_path: Path):
+    """Update an Inno Setup script in-place from pubspec.yaml version info."""
+    if not script_path.exists():
+        return False
+
+    content = script_path.read_text(encoding="utf-8")
+    content = content.replace('#include "beatzlock_inno_version.iss"\r\n\r\n', '')
+    content = content.replace('#include "beatzlock_inno_version.iss"\n\n', '')
+
+    replacements = {
+        '#define MyAppVersion "': f'#define MyAppVersion "{APP_FULL_VERSION}"',
+        '#define MyAppArtifactVersion "': f'#define MyAppArtifactVersion "{APP_ARTIFACT_VERSION}"',
+        'AppVersion=': 'AppVersion={#MyAppVersion}',
+        'AppVerName=': 'AppVerName={#MyAppName} {#MyAppVersion}',
+        'OutputBaseFilename=': 'OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64',
+    }
+
+    lines = content.splitlines()
+    updated_lines = []
+    saw_app_version_define = False
+    saw_artifact_define = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.startswith('#define MyAppVersion "'):
+            updated_lines.append(replacements['#define MyAppVersion "'])
+            saw_app_version_define = True
+            continue
+
+        if stripped.startswith('#define MyAppArtifactVersion "'):
+            updated_lines.append(replacements['#define MyAppArtifactVersion "'])
+            saw_artifact_define = True
+            continue
+
+        if stripped.startswith('AppVersion='):
+            updated_lines.append(replacements['AppVersion='])
+            continue
+
+        if stripped.startswith('AppVerName='):
+            updated_lines.append(replacements['AppVerName='])
+            continue
+
+        if stripped.startswith('OutputBaseFilename='):
+            updated_lines.append(replacements['OutputBaseFilename='])
+            continue
+
+        updated_lines.append(line)
+
+    if not saw_app_version_define:
+        for index, line in enumerate(updated_lines):
+            if line.strip() == '#define MyAppName "beatzLock"':
+                updated_lines.insert(index + 1, replacements['#define MyAppVersion "'])
+                break
+
+    if not saw_artifact_define:
+        for index, line in enumerate(updated_lines):
+            if line.strip().startswith('#define MyAppVersion "'):
+                updated_lines.insert(index + 1, replacements['#define MyAppArtifactVersion "'])
+                break
+
+    script_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+    return True
+
+
+inno_script_file = find_inno_setup_script()
+if inno_script_file is not None:
+    sync_inno_setup_script(inno_script_file)
+    target_inno_script = get_versioned_inno_script_path()
+    if inno_script_file.resolve() != target_inno_script.resolve():
+        if target_inno_script.exists():
+            target_inno_script.unlink()
+        inno_script_file.replace(target_inno_script)
+        print_color(
+            f"Updated Inno Setup script: {target_inno_script.name}",
+            Colors.GREEN,
+        )
+    else:
+        print_color(
+            f"Updated Inno Setup script: {inno_script_file.name}",
+            Colors.GREEN,
+        )
 
 def get_linux_bundle_binary_name(bundle_path: Path) -> str:
     """Return the main executable name produced by the Flutter Linux bundle."""
