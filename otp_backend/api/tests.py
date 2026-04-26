@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from .models import DeviceSession
+from .notifications import create_notification
 
 
 class DeviceSessionPrimaryChangeTests(APITestCase):
@@ -91,3 +92,50 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
         self.primary_session.refresh_from_db()
         self.assertTrue(self.primary_session.is_active)
         self.assertTrue(self.primary_session.is_primary)
+
+
+class AppNotificationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='notify-user',
+            email='notify@example.com',
+            password='testpass123',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+        create_notification(
+            self.user,
+            'sign_in',
+            title='Signed in on a device',
+            message='Unread notification 1',
+        )
+        create_notification(
+            self.user,
+            'account_added',
+            title='Account added',
+            message='Unread notification 2',
+        )
+        self.already_read = create_notification(
+            self.user,
+            'password_changed',
+            title='Password changed',
+            message='Already read notification',
+        )
+        self.already_read.is_read = True
+        self.already_read.read_at = self.already_read.created_at
+        self.already_read.save(update_fields=['is_read', 'read_at', 'updated_at'])
+
+    def test_mark_all_notifications_read_marks_only_unread_items(self):
+        response = self.client.post(
+            reverse('notifications-mark-all-read'),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['success'], True)
+        self.assertEqual(response.data['marked_count'], 2)
+
+        unread_count = self.user.app_notifications.filter(is_read=False).count()
+        self.assertEqual(unread_count, 0)
+        self.assertEqual(self.user.app_notifications.filter(read_at__isnull=True).count(), 0)

@@ -14,6 +14,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   final SyncService _syncService = SyncService();
 
   bool _isLoading = true;
+  bool _isMarkingAllRead = false;
   String? _errorMessage;
   List<AppNotificationItem> _notifications = const [];
 
@@ -24,6 +25,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
+  int get _unreadCount => _notifications.where((item) => !item.isRead).length;
 
   @override
   void initState() {
@@ -97,6 +99,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await _loadNotifications();
   }
 
+  Future<void> _markAllRead() async {
+    if (_isMarkingAllRead || _unreadCount == 0) return;
+
+    setState(() => _isMarkingAllRead = true);
+    final markedCount = await _syncService.markAllNotificationsRead();
+    if (!mounted) return;
+
+    setState(() => _isMarkingAllRead = false);
+
+    final success = markedCount != null;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Marked $markedCount notification${markedCount == 1 ? '' : 's'} as read.'
+              : (_syncService.lastErrorMessage ??
+                  'Could not mark notifications as read.'),
+        ),
+        backgroundColor: success ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    if (success) {
+      await _loadNotifications();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,6 +143,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          if (_unreadCount > 0)
+            TextButton(
+              onPressed: _isMarkingAllRead ? null : _markAllRead,
+              child: _isMarkingAllRead
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Mark all read',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+        ],
       ),
       body: RefreshIndicator(
         color: _accent,

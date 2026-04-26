@@ -1415,6 +1415,44 @@ class SyncService {
     }
   }
 
+  Future<int?> markAllNotificationsRead() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to manage notifications.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.post(
+          'notifications/mark-all-read/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        return int.tryParse(response.data['marked_count'].toString()) ?? 0;
+      }
+
+      _lastErrorMessage = 'Could not mark all notifications as read.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not mark all notifications as read.',
+      );
+      return null;
+    } catch (e) {
+      _lastErrorMessage = 'Could not mark all notifications as read.';
+      return null;
+    }
+  }
+
   Future<bool> logAccountAddedNotification({
     required String serviceName,
     String? accountLabel,

@@ -635,6 +635,19 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             notification.save(update_fields=['is_read', 'read_at', 'updated_at'])
         return Response({'success': True})
 
+    @action(detail=False, methods=['post'], url_path='mark-all-read')
+    def mark_all_read(self, request):
+        now = timezone.now()
+        marked_count = AppNotification.objects.filter(
+            user=request.user,
+            is_read=False,
+        ).update(
+            is_read=True,
+            read_at=now,
+            updated_at=now,
+        )
+        return Response({'success': True, 'marked_count': marked_count})
+
     @action(detail=False, methods=['post'], url_path='log-event')
     def log_event(self, request):
         event_type = (request.data.get('event_type') or '').strip()
