@@ -2,7 +2,8 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import EncryptedData
+from .models import AppNotification, EncryptedData
+from .notifications import decrypt_notification_payload
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -24,3 +25,48 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         return user
+
+
+class AppNotificationSerializer(serializers.ModelSerializer):
+    title = serializers.SerializerMethodField()
+    message = serializers.SerializerMethodField()
+    details = serializers.SerializerMethodField()
+    preview = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AppNotification
+        fields = [
+            'id',
+            'notification_type',
+            'title',
+            'message',
+            'details',
+            'preview',
+            'is_read',
+            'read_at',
+            'created_at',
+        ]
+
+    def _payload(self, obj):
+        try:
+            return decrypt_notification_payload(obj.encrypted_payload)
+        except Exception:
+            return {
+                'title': 'Notification unavailable',
+                'message': 'This notification could not be decrypted.',
+                'details': 'This notification could not be decrypted.',
+            }
+
+    def get_title(self, obj):
+        return self._payload(obj).get('title', 'Notification')
+
+    def get_message(self, obj):
+        return self._payload(obj).get('message', '')
+
+    def get_details(self, obj):
+        payload = self._payload(obj)
+        return payload.get('details') or payload.get('message', '')
+
+    def get_preview(self, obj):
+        message = self._payload(obj).get('message', '')
+        return message[:120]

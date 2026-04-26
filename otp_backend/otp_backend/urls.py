@@ -8,6 +8,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 
 from api.views import (
+    AppNotificationViewSet,
     AuthViewSet,
     SyncViewSet,
     send_delete_otp,
@@ -38,6 +39,7 @@ handler404 = custom_404_view
 router = DefaultRouter()
 router.register(r'auth', AuthViewSet, basename='auth')
 router.register(r'sync', SyncViewSet, basename='sync')
+router.register(r'notifications', AppNotificationViewSet, basename='notifications')
 router.register(r'profile', ProfileViewSet, basename='profile')
 
 urlpatterns = [

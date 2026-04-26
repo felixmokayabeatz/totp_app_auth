@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/app_notification_item.dart';
 import '../models/otp_account.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
@@ -343,6 +344,36 @@ class SyncService {
         'default_user';
   }
 
+  Future<String> _buildDeviceLabel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedDeviceId = prefs.getString('device_id');
+    String? hostname;
+
+    try {
+      hostname = Platform.localHostname.trim();
+    } catch (_) {
+      hostname = null;
+    }
+
+    final operatingSystem = Platform.operatingSystem;
+    final prettyOs = operatingSystem.isEmpty
+        ? 'Device'
+        : '${operatingSystem[0].toUpperCase()}${operatingSystem.substring(1)}';
+
+    if (hostname != null && hostname.isNotEmpty) {
+      return '$prettyOs - $hostname';
+    }
+
+    if (savedDeviceId != null && savedDeviceId.isNotEmpty) {
+      final shortenedId = savedDeviceId.length > 8
+          ? savedDeviceId.substring(savedDeviceId.length - 8)
+          : savedDeviceId;
+      return '$prettyOs - $shortenedId';
+    }
+
+    return prettyOs;
+  }
+
   // ─── Decrypt local secret back to plain for uploading ────────────────────
   Future<String> _decryptSecretForUpload(String storedSecret) async {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
@@ -400,9 +431,11 @@ class SyncService {
   Future<bool> login(String username, String password) async {
     try {
       _lastErrorMessage = null;
+      final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/login/', data: {
         'username': username.trim(),
         'password': password,
+        'device_label': deviceLabel,
       });
       if (response.statusCode == 200) {
         final canonicalUsername =
@@ -929,6 +962,7 @@ class SyncService {
     if (token == null) return false;
 
     final username = await _getCurrentUserId();
+    final deviceLabel = await _buildDeviceLabel();
 
     try {
       final userBox = await _getUserBox();
@@ -951,6 +985,7 @@ class SyncService {
       final r = await _dio.post('auth/change_password/', data: {
         'current_password': currentPassword,
         'new_password': newPassword,
+        'device_label': deviceLabel,
       });
 
       if (r.statusCode != 200) return false;
@@ -1030,10 +1065,12 @@ class SyncService {
       String username, String password, String recoveryCode) async {
     try {
       _lastErrorMessage = null;
+      final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('recovery-code/login/', data: {
         'username': username.trim(),
         'password': password,
         'recovery_code': recoveryCode.trim(),
+        'device_label': deviceLabel,
       });
       return response.data['success'] == true;
     } on DioException catch (e) {
@@ -1069,10 +1106,12 @@ class SyncService {
       String email, String recoveryCode, String newPassword) async {
     try {
       _lastErrorMessage = null;
+      final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('recovery-code/reset-password/', data: {
         'email': email.trim(),
         'recovery_code': recoveryCode.trim(),
         'new_password': newPassword,
+        'device_label': deviceLabel,
       });
       if (response.data['success'] == true) {
         final canonicalUsername =
@@ -1219,6 +1258,121 @@ class SyncService {
     } catch (e) {
       _lastErrorMessage = 'Unable to save backup codes on this device.';
       return null;
+    }
+  }
+
+  Future<List<AppNotificationItem>> getNotifications() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to view notifications.';
+      return [];
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.get(
+          'notifications/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List)
+            .whereType<Map>()
+            .map((item) => AppNotificationItem.fromJson(
+                  Map<String, dynamic>.from(item),
+                ))
+            .toList();
+      }
+
+      _lastErrorMessage = 'Could not load notifications.';
+      return [];
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not load notifications.',
+      );
+      return [];
+    } catch (e) {
+      _lastErrorMessage = 'Could not load notifications.';
+      return [];
+    }
+  }
+
+  Future<AppNotificationItem?> getNotificationDetail(String notificationId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to view notifications.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.get(
+          'notifications/$notificationId/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        return AppNotificationItem.fromJson(
+          Map<String, dynamic>.from(response.data as Map),
+        );
+      }
+
+      _lastErrorMessage = 'Could not load this notification.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not load this notification.',
+      );
+      return null;
+    } catch (e) {
+      _lastErrorMessage = 'Could not load this notification.';
+      return null;
+    }
+  }
+
+  Future<bool> logAccountAddedNotification({
+    required String serviceName,
+    String? accountLabel,
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.post(
+          'notifications/log-event/',
+          data: {
+            'event_type': 'account_added',
+            'service_name': serviceName,
+            'account_label': accountLabel,
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
     }
   }
 

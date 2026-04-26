@@ -12,6 +12,7 @@ import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/secure_storage_service.dart';
 import 'login_screen.dart';
+import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'dart:async';
 
@@ -425,8 +426,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.notifications_none_rounded,
               label: 'Notifications',
-              sub: 'Manage notification preferences',
-              onTap: () => _soon('Notifications'),
+              sub: 'View recent security activity',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationsScreen(),
+                ),
+              ),
             ),
           ]),
           const SizedBox(height: 20),

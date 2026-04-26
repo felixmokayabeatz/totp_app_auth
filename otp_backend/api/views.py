@@ -26,13 +26,26 @@ from .backup_codes import (
     remaining_backup_codes,
 )
 from .models import (
+    AppNotification,
     EncryptedData,
     SyncLog,
     AccountTombstone,
     DeleteOTPCode,
     BackupCodeSet,
 )
-from .serializers import UserSerializer, EncryptedDataSerializer, RegisterSerializer
+from .notifications import (
+    build_device_label,
+    create_account_added_notification,
+    create_password_changed_notification,
+    create_recovery_codes_generated_notification,
+    create_sign_in_notification,
+)
+from .serializers import (
+    AppNotificationSerializer,
+    UserSerializer,
+    EncryptedDataSerializer,
+    RegisterSerializer,
+)
 from twofa.email_templates import get_delete_otp_email_template
 
 # ===================
@@ -105,6 +118,10 @@ class AuthViewSet(viewsets.GenericViewSet):
         start_time = __import__('time').time()
         username = (request.data.get('username') or '').strip()
         password = request.data.get('password')
+        device_label = build_device_label(
+            request.data.get('device_label'),
+            request.META.get('HTTP_USER_AGENT'),
+        )
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[AUTH] Login called")
@@ -139,6 +156,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 debug_print(f"[AUTH] Authentication SUCCESS - User ID: {user.id}, Username: {user.username}")
                 
                 refresh = RefreshToken.for_user(user)
+                create_sign_in_notification(user, device_label)
                 
                 elapsed_time = __import__('time').time() - start_time
                 debug_print(f"[AUTH] Login completed in {elapsed_time:.2f} seconds")
@@ -168,6 +186,10 @@ class AuthViewSet(viewsets.GenericViewSet):
         user = request.user
         current_password = request.data.get('current_password')
         new_password = request.data.get('new_password')
+        device_label = build_device_label(
+            request.data.get('device_label'),
+            request.META.get('HTTP_USER_AGENT'),
+        )
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[AUTH] change_password called")
@@ -196,6 +218,11 @@ class AuthViewSet(viewsets.GenericViewSet):
         try:
             user.set_password(new_password)
             user.save()
+            create_password_changed_notification(
+                user,
+                source='account settings',
+                device_label=device_label,
+            )
             
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[AUTH] Password changed successfully in {elapsed_time:.2f} seconds")
@@ -561,6 +588,56 @@ class SyncViewSet(viewsets.GenericViewSet):
             return Response({'error': 'Failed to delete accounts'}, status=500)
 
 
+class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = AppNotificationSerializer
+
+    def get_queryset(self):
+        return AppNotification.objects.filter(user=self.request.user).order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()[:100]
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        notification = self.get_object()
+        if not notification.is_read:
+            notification.is_read = True
+            notification.read_at = timezone.now()
+            notification.save(update_fields=['is_read', 'read_at', 'updated_at'])
+        serializer = self.get_serializer(notification)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='mark-read')
+    def mark_read(self, request, pk=None):
+        notification = self.get_object()
+        if not notification.is_read:
+            notification.is_read = True
+            notification.read_at = timezone.now()
+            notification.save(update_fields=['is_read', 'read_at', 'updated_at'])
+        return Response({'success': True})
+
+    @action(detail=False, methods=['post'], url_path='log-event')
+    def log_event(self, request):
+        event_type = (request.data.get('event_type') or '').strip()
+
+        if event_type == 'account_added':
+            service_name = (request.data.get('service_name') or '').strip()
+            account_label = (request.data.get('account_label') or '').strip()
+            if not service_name:
+                return Response({'error': 'service_name is required'}, status=400)
+
+            create_account_added_notification(
+                request.user,
+                service_name=service_name,
+                account_label=account_label or None,
+            )
+            return Response({'success': True}, status=201)
+
+        return Response({'error': 'Unsupported notification event'}, status=400)
+
+
 # ===================
 # DELETE OTP VIEWS
 # ===================
@@ -847,6 +924,8 @@ def download_backup_codes(request):
                 recipient_list=[user.email],
                 fail_silently=True,
             )
+
+        create_recovery_codes_generated_notification(user)
 
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[BACKUP CODES] PDF ready in {elapsed_time:.2f} seconds")

@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    AppNotification,
     EncryptedData,
     SyncLog,
     AccountTombstone,
@@ -128,6 +129,40 @@ class BackupCodeSetAdmin(admin.ModelAdmin):
     )
     search_fields = ("user__username", "user__email")
     readonly_fields = ("user", "encrypted_codes", "created_at", "updated_at", "last_used_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_list_display_links(self, request, list_display):
+        return ()
+
+
+@admin.register(AppNotification)
+class AppNotificationAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "notification_type",
+        "is_read",
+        "created_at",
+        "read_at",
+    )
+    list_filter = ("notification_type", "is_read", "created_at")
+    search_fields = ("user__username", "user__email", "notification_type")
+    readonly_fields = (
+        "user",
+        "notification_type",
+        "encrypted_payload",
+        "is_read",
+        "read_at",
+        "created_at",
+        "updated_at",
+    )
 
     def has_add_permission(self, request):
         return False

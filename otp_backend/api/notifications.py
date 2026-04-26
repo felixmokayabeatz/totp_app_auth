@@ -1,0 +1,169 @@
+import base64
+import hashlib
+import json
+from typing import Any
+
+from cryptography.fernet import Fernet
+from django.conf import settings
+from django.contrib.auth.models import User
+
+from .models import AppNotification
+
+
+def _get_cipher() -> Fernet:
+    digest = hashlib.sha256(
+        f"beatzlock-notifications|{settings.SECRET_KEY}".encode("utf-8")
+    ).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def encrypt_notification_payload(payload: dict[str, Any]) -> str:
+    return _get_cipher().encrypt(
+        json.dumps(payload).encode("utf-8")
+    ).decode("utf-8")
+
+
+def decrypt_notification_payload(payload: str) -> dict[str, Any]:
+    return json.loads(
+        _get_cipher().decrypt(payload.encode("utf-8")).decode("utf-8")
+    )
+
+
+def build_device_label(device_label: str | None, user_agent: str | None) -> str:
+    if device_label and device_label.strip():
+        return device_label.strip()
+    if user_agent and user_agent.strip():
+        return user_agent.strip()[:120]
+    return "Unknown device"
+
+
+def create_notification(
+    user: User,
+    notification_type: str,
+    *,
+    title: str,
+    message: str,
+    details: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> AppNotification:
+    payload = {
+        "title": title,
+        "message": message,
+        "details": details or message,
+        "metadata": metadata or {},
+    }
+    notification = AppNotification.objects.create(
+        user=user,
+        notification_type=notification_type,
+        encrypted_payload=encrypt_notification_payload(payload),
+    )
+
+    excess_ids = list(
+        AppNotification.objects.filter(user=user)
+        .order_by("-created_at")
+        .values_list("id", flat=True)[100:]
+    )
+    if excess_ids:
+        AppNotification.objects.filter(id__in=excess_ids).delete()
+
+    return notification
+
+
+def create_sign_in_notification(user: User, device_label: str) -> AppNotification:
+    return create_notification(
+        user,
+        "sign_in",
+        title="Signed in on a device",
+        message=f"You signed in on {device_label}.",
+        details=(
+            f"A successful BeatzLock sign-in happened on {device_label}. "
+            "If this was not you, change your password immediately."
+        ),
+        metadata={"device_label": device_label},
+    )
+
+
+def create_password_changed_notification(
+    user: User,
+    *,
+    source: str,
+    device_label: str | None = None,
+) -> AppNotification:
+    details = f"Your BeatzLock password was changed via {source}."
+    if device_label:
+        details = f"{details} Device: {device_label}."
+
+    return create_notification(
+        user,
+        "password_changed",
+        title="Password changed",
+        message="Your account password was updated successfully.",
+        details=details,
+        metadata={
+            "source": source,
+            "device_label": device_label,
+        },
+    )
+
+
+def create_recovery_code_used_notification(
+    user: User,
+    *,
+    purpose: str,
+    device_label: str | None = None,
+) -> AppNotification:
+    details = f"A recovery code was used to {purpose}."
+    if device_label:
+        details = f"{details} Device: {device_label}."
+
+    return create_notification(
+        user,
+        "recovery_code_used",
+        title="Recovery code used",
+        message=f"A recovery code was used to {purpose}.",
+        details=details,
+        metadata={
+            "purpose": purpose,
+            "device_label": device_label,
+        },
+    )
+
+
+def create_recovery_codes_generated_notification(user: User) -> AppNotification:
+    return create_notification(
+        user,
+        "recovery_codes_generated",
+        title="New recovery codes generated",
+        message="A new PDF with fresh recovery codes was generated.",
+        details=(
+            "A new set of BeatzLock recovery codes was generated for your account. "
+            "All older recovery codes were invalidated immediately."
+        ),
+    )
+
+
+def create_account_added_notification(
+    user: User,
+    *,
+    service_name: str,
+    account_label: str | None = None,
+) -> AppNotification:
+    label = account_label.strip() if account_label else ""
+    message = f"You added {service_name} to BeatzLock."
+    details = (
+        f"A new OTP account for {service_name} was added to your vault."
+        if not label
+        else f"A new OTP account for {service_name} ({label}) was added to your vault."
+    )
+
+    return create_notification(
+        user,
+        "account_added",
+        title="Account added",
+        message=message,
+        details=details,
+        metadata={
+            "service_name": service_name,
+            "account_label": label or None,
+        },
+    )

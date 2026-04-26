@@ -14,6 +14,11 @@ from api.backup_codes import (
     normalize_backup_code_entries,
     remaining_backup_codes,
 )
+from api.notifications import (
+    build_device_label,
+    create_password_changed_notification,
+    create_recovery_code_used_notification,
+)
 from api.models import BackupCodeSet
 from .models import EmailVerification
 from .email_templates import get_2fa_email_template, get_password_changed_email_template, get_password_reset_email_template
@@ -387,6 +392,10 @@ def reset_password(request):
         user.set_password(new_password)
         user.save()
         debug_print(f"[PASSWORD RESET] Password changed successfully")
+        create_password_changed_notification(
+            user,
+            source='email reset code',
+        )
         
         # Mark code as used
         verification.is_used = True
@@ -440,6 +449,10 @@ def verify_recovery_code_login(request):
     username = (request.data.get('username') or '').strip()
     password = request.data.get('password')
     recovery_code = (request.data.get('recovery_code') or '').strip()
+    device_label = build_device_label(
+        request.data.get('device_label'),
+        request.META.get('HTTP_USER_AGENT'),
+    )
 
     if not username or not password or not recovery_code:
         return Response(
@@ -456,6 +469,12 @@ def verify_recovery_code_login(request):
         consumed, result = _consume_recovery_code(user, recovery_code)
         if not consumed:
             return Response({'success': False, 'error': result}, status=400)
+
+        create_recovery_code_used_notification(
+            user,
+            purpose='approve a sign-in',
+            device_label=device_label,
+        )
 
         return Response({
             'success': True,
@@ -491,6 +510,10 @@ def reset_password_with_recovery_code(request):
     email = (request.data.get('email') or '').strip()
     recovery_code = (request.data.get('recovery_code') or '').strip()
     new_password = request.data.get('new_password')
+    device_label = build_device_label(
+        request.data.get('device_label'),
+        request.META.get('HTTP_USER_AGENT'),
+    )
 
     if not email or not recovery_code or not new_password:
         return Response(
@@ -514,6 +537,11 @@ def reset_password_with_recovery_code(request):
         user.save()
         EmailVerification.objects.filter(user=user, is_used=False).delete()
         refresh = RefreshToken.for_user(user)
+        create_recovery_code_used_notification(
+            user,
+            purpose='change your password and sign in',
+            device_label=device_label,
+        )
 
         if user.email:
             html_content = get_password_changed_email_template(user.username)

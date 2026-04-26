@@ -503,6 +503,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         debugPrint('Sync error: $e');
       }
 
+      try {
+        await syncService.logAccountAddedNotification(
+          serviceName: serviceName,
+          accountLabel: newAccount.accountLabel,
+        );
+      } catch (e) {
+        debugPrint('Notification log error: $e');
+      }
+
       if (mounted) {
         Navigator.pop(context, true);
       }
