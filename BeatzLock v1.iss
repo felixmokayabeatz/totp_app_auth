@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "beatzLock"
-#define MyAppVersion "1.0.1_2" ;This always changes
+#define MyAppVersion "1.0.2_3" ;This always changes
 #define MyAppPublisher "felixmokayabeatz Inc."
 #define MyAppURL "https://www.felixmokayabeatz.online/"
 #define MyAppExeName "otp_auth_app.exe"
@@ -54,6 +54,7 @@ Source: "C:\Programming\totp_app\final_builds\windows\app\{#MyAppExeName}"; Dest
 Source: "C:\Programming\totp_app\final_builds\windows\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
 Source: "C:\Programming\totp_app\final_builds\windows\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\totp_app\final_builds\windows\app\local_auth_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\app\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\totp_app\final_builds\windows\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; VC++ runtime
