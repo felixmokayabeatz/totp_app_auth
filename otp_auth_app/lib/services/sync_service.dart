@@ -1047,6 +1047,24 @@ class SyncService {
     }
   }
 
+  Future<bool> checkRecoveryEmailExists(String email) async {
+    try {
+      _lastErrorMessage = null;
+      final response = await _dio.post('recovery-code/check-email/', data: {
+        'email': email.trim(),
+      });
+      return response.data['success'] == true;
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
+              'No account found with this email.';
+      return false;
+    } catch (e) {
+      _lastErrorMessage = 'No account found with this email.';
+      return false;
+    }
+  }
+
   Future<bool> resetPasswordWithRecoveryCode(
       String email, String recoveryCode, String newPassword) async {
     try {
@@ -1056,7 +1074,31 @@ class SyncService {
         'recovery_code': recoveryCode.trim(),
         'new_password': newPassword,
       });
-      return response.data['success'] == true;
+      if (response.data['success'] == true) {
+        final canonicalUsername =
+            response.data['user']?['username']?.toString() ?? '';
+        await _secureStorage.write(
+            SecureStorageService.accessTokenKey, response.data['access']);
+        await _secureStorage.write(
+            SecureStorageService.refreshTokenKey, response.data['refresh']);
+        await _secureStorage.write(
+            SecureStorageService.currentUserKey, canonicalUsername);
+        await _secureStorage.write(
+            SecureStorageService.userEmailKey,
+            response.data['user']?['email']?.toString() ?? email.trim());
+        await _secureStorage.write(
+            SecureStorageService.userIdKey,
+            response.data['user']?['id']?.toString() ?? '');
+        OTPService().clearCachedUserId();
+        await _updateAuthHeader();
+
+        final encryptionKey = EncryptionService.generateKey(
+            canonicalUsername + newPassword, 'beatzLockKenya2099');
+        await _storeEncryptionKey(encryptionKey);
+        _encryptionKey = encryptionKey;
+        return true;
+      }
+      return false;
     } on DioException catch (e) {
       _lastErrorMessage =
           _extractServerError(e.response?.data) ??

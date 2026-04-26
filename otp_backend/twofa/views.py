@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
+from rest_framework_simplejwt.tokens import RefreshToken
 from api.backup_codes import (
     decrypt_backup_codes,
     encrypt_backup_codes,
@@ -471,6 +472,21 @@ def verify_recovery_code_login(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+def check_recovery_email(request):
+    email = (request.data.get('email') or '').strip()
+
+    if not email:
+        return Response({'success': False, 'error': 'Email required'}, status=400)
+
+    exists = User.objects.filter(email__iexact=email).exists()
+    if not exists:
+        return Response({'success': False, 'error': 'No account found with this email'}, status=404)
+
+    return Response({'success': True})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def reset_password_with_recovery_code(request):
     email = (request.data.get('email') or '').strip()
     recovery_code = (request.data.get('recovery_code') or '').strip()
@@ -497,15 +513,16 @@ def reset_password_with_recovery_code(request):
         user.set_password(new_password)
         user.save()
         EmailVerification.objects.filter(user=user, is_used=False).delete()
+        refresh = RefreshToken.for_user(user)
 
         if user.email:
             html_content = get_password_changed_email_template(user.username)
             text_content = (
-                "Your password has been changed successfully. "
-                "If you didn't make this change, please contact support immediately."
+                "Your BeatzLock recovery code was used to change your password and sign in to your account. "
+                "If you didn't make this change, please reset your password immediately."
             )
             email_msg = EmailMultiAlternatives(
-                subject='Your password has been changed - BeatzLock Authenticator',
+                subject='Recovery code used to change your password - BeatzLock Authenticator',
                 body=text_content,
                 from_email=settings.EMAIL_HOST_USER,
                 to=[user.email],
@@ -517,6 +534,13 @@ def reset_password_with_recovery_code(request):
             'success': True,
             'message': 'Password reset successfully.',
             'remaining_codes': result['remaining_codes'],
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+            },
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
         })
     except User.DoesNotExist:
         return Response({'success': False, 'error': 'No account found with this email'}, status=404)

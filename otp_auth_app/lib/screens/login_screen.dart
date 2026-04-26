@@ -334,6 +334,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inputCardColor =
+        isDark ? const Color(0xFF1E1E32) : Colors.grey.shade50;
+    final inputBorderColor = isDark
+        ? Colors.white.withOpacity(0.12)
+        : const Color(0xFF667eea).withOpacity(0.3);
+    final inputLabelColor = isDark ? Colors.white70 : Colors.grey.shade700;
+    final inputTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -418,9 +427,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () {
+                        onPressed: () async {
                           if (_resetEmailController.text.trim().isEmpty) {
                             _showError('Please enter your email address');
+                            return;
+                          }
+                          setState(() {
+                            _isLoading = true;
+                          });
+                          final exists = await _syncService.checkRecoveryEmailExists(
+                            _resetEmailController.text.trim(),
+                          );
+                          if (!mounted) return;
+                          setState(() {
+                            _isLoading = false;
+                          });
+                          if (!exists) {
+                            _showError(
+                              _syncService.lastErrorMessage ??
+                                  'No account found with this email address',
+                            );
                             return;
                           }
                           setState(() {
@@ -453,7 +479,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _resetOtpCodeController,
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 24, letterSpacing: 4),
+                        style: TextStyle(
+                          fontSize: 24,
+                          letterSpacing: 4,
+                          color: inputTextColor,
+                        ),
                         keyboardType: _useRecoveryCodeForReset
                             ? TextInputType.text
                             : TextInputType.number,
@@ -462,8 +492,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           labelText: _useRecoveryCodeForReset
                               ? 'Enter 10-character recovery code'
                               : 'Enter 6-digit code',
+                          labelStyle: TextStyle(color: inputLabelColor),
+                          filled: true,
+                          fillColor: inputCardColor,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: inputBorderColor),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: inputBorderColor),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF667eea),
+                              width: 1.4,
+                            ),
                           ),
                           counterText: '',
                         ),
@@ -498,18 +543,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 16),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
+                          color: inputCardColor,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: Color(0xFF667eea).withOpacity(0.3)),
+                          border: Border.all(color: inputBorderColor),
                         ),
                         child: TextField(
                           controller: _resetNewPasswordController,
                           obscureText: _obscureResetPassword,
                           onChanged: (_) => _checkResetPasswordStrength(),
+                          style: TextStyle(color: inputTextColor),
                           decoration: InputDecoration(
                             labelText: 'New Password',
-                            labelStyle: TextStyle(color: Colors.grey.shade700),
+                            labelStyle: TextStyle(color: inputLabelColor),
                             prefixIcon: Icon(Icons.lock_outline,
                                 color: Color(0xFF667eea)),
                             suffixIcon: IconButton(
@@ -600,17 +645,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
+                          color: inputCardColor,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: Color(0xFF667eea).withOpacity(0.3)),
+                          border: Border.all(color: inputBorderColor),
                         ),
                         child: TextField(
                           controller: _resetConfirmPasswordController,
                           obscureText: _obscureResetConfirmPassword,
+                          style: TextStyle(color: inputTextColor),
                           decoration: InputDecoration(
                             labelText: 'Confirm New Password',
-                            labelStyle: TextStyle(color: Colors.grey.shade700),
+                            labelStyle: TextStyle(color: inputLabelColor),
                             prefixIcon: Icon(Icons.lock_outline,
                                 color: Color(0xFF667eea)),
                             suffixIcon: IconButton(
@@ -968,7 +1013,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _otpCodeController,
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 24, letterSpacing: 4),
+                        style: TextStyle(
+                          fontSize: 24,
+                          letterSpacing: 4,
+                          color: inputTextColor,
+                        ),
                         keyboardType: _useRecoveryCodeFor2FA
                             ? TextInputType.text
                             : TextInputType.number,
@@ -977,8 +1026,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           labelText: _useRecoveryCodeFor2FA
                               ? 'Enter 10-character recovery code'
                               : 'Enter 6-digit code',
+                          labelStyle: TextStyle(color: inputLabelColor),
+                          filled: true,
+                          fillColor: inputCardColor,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: inputBorderColor),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: inputBorderColor),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF667eea),
+                              width: 1.4,
+                            ),
                           ),
                           counterText: '',
                         ),
@@ -1178,6 +1242,25 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _completeAuthenticatedSession() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final secureStorage = SecureStorageService();
+    final email =
+        await secureStorage.read(SecureStorageService.userEmailKey) ?? '';
+    final currentUsername =
+        await secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    final userId =
+        await secureStorage.read(SecureStorageService.userIdKey) ?? '';
+
+    await authProvider.setUserData(currentUsername, email, userId);
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => HomeScreen()),
+      (route) => false,
+    );
+  }
+
   void _resetPassword() async {
     if (_resetOtpCodeController.text.isEmpty) {
       _showError(_useRecoveryCodeForReset
@@ -1231,6 +1314,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = false;
     });
     if (success) {
+      if (_useRecoveryCodeForReset) {
+        _showSuccess(
+            'Recovery code accepted. Your password was changed and you are now signed in.');
+        await _completeAuthenticatedSession();
+        return;
+      }
+
       _showSuccess(
           'Password reset successfully! Please login with your new password.');
       setState(() {
@@ -1292,20 +1382,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = false;
     });
     if (success) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final secureStorage = SecureStorageService();
-      final email =
-          await secureStorage.read(SecureStorageService.userEmailKey) ?? '';
-      final currentUsername =
-          await secureStorage.read(SecureStorageService.currentUserKey) ?? '';
-      final userId =
-          await secureStorage.read(SecureStorageService.userIdKey) ?? '';
-      await authProvider.setUserData(currentUsername, email, userId);
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => HomeScreen()),
-        (route) => false,
-      );
+      await _completeAuthenticatedSession();
     } else {
       _showError(_syncService.lastErrorMessage ?? 'Login failed');
     }

@@ -22,6 +22,7 @@ from twofa.views import (
     verify_2fa_code,
     send_password_reset_code,
     reset_password,
+    check_recovery_email,
     verify_recovery_code_login,
     reset_password_with_recovery_code,
 )
@@ -55,6 +56,7 @@ urlpatterns = [
     path('api/verify-2fa/', verify_2fa_code, name='verify_2fa'),
     path('api/send-reset-code/', send_password_reset_code, name='send_reset_code'),
     path('api/reset-password/', reset_password, name='reset_password'),
+    path('api/recovery-code/check-email/', check_recovery_email, name='check_recovery_email'),
     path('api/recovery-code/login/', verify_recovery_code_login, name='verify_recovery_code_login'),
     path('api/recovery-code/reset-password/', reset_password_with_recovery_code, name='reset_password_with_recovery_code'),
     path('api/send-delete-otp/', send_delete_otp, name='send_delete_otp'),
