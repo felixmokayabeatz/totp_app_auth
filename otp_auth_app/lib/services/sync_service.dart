@@ -1,12 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/otp_account.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
 import 'secure_storage_service.dart';
 import '../config/app_config.dart';
 import 'dart:convert';
+import 'dart:io';
 
 class SyncService {
   // ─── Singleton ────────────────────────────────────────────────────────────
@@ -268,6 +270,7 @@ class SyncService {
           service: account.service,
           secret: plainSecret,
           issuer: account.issuer,
+          accountLabel: account.accountLabel,
           createdAt: account.createdAt,
           userId: currentUserId,
         );
@@ -586,6 +589,7 @@ class SyncService {
                 service: ca['service'],
                 secret: ca['secret'],
                 issuer: ca['issuer'],
+                accountLabel: ca['account_label'],
                 createdAt: DateTime.parse(ca['createdAt']),
                 userId: userId,
               );
@@ -596,10 +600,24 @@ class SyncService {
 
             final existingAccount = userBox.get(id);
             final cloudService = ca['service'] as String?;
-            if (existingAccount != null &&
-                cloudService != null &&
-                existingAccount.service != cloudService) {
-              existingAccount.service = cloudService;
+            final cloudIssuer = ca['issuer'] as String?;
+            final cloudAccountLabel = ca['account_label'] as String?;
+            if (existingAccount != null) {
+              var changed = false;
+              if (cloudService != null &&
+                  existingAccount.service != cloudService) {
+                existingAccount.service = cloudService;
+                changed = true;
+              }
+              if (existingAccount.issuer != cloudIssuer) {
+                existingAccount.issuer = cloudIssuer;
+                changed = true;
+              }
+              if (existingAccount.accountLabel != cloudAccountLabel) {
+                existingAccount.accountLabel = cloudAccountLabel;
+                changed = true;
+              }
+              if (!changed) continue;
               await userBox.put(id, existingAccount);
               updatedTitles++;
             }
@@ -730,6 +748,7 @@ class SyncService {
             service: a['service'],
             secret: a['secret'],
             issuer: a['issuer'],
+            accountLabel: a['account_label'],
             createdAt: DateTime.parse(a['createdAt']),
             userId: userId,
           );
@@ -741,10 +760,24 @@ class SyncService {
         if (!preferLocalTitleChanges) {
           final existingAccount = userBox.get(id);
           final cloudService = entry.value['service'] as String?;
-          if (existingAccount != null &&
-              cloudService != null &&
-              existingAccount.service != cloudService) {
-            existingAccount.service = cloudService;
+          final cloudIssuer = entry.value['issuer'] as String?;
+          final cloudAccountLabel = entry.value['account_label'] as String?;
+          if (existingAccount != null) {
+            var changed = false;
+            if (cloudService != null &&
+                existingAccount.service != cloudService) {
+              existingAccount.service = cloudService;
+              changed = true;
+            }
+            if (existingAccount.issuer != cloudIssuer) {
+              existingAccount.issuer = cloudIssuer;
+              changed = true;
+            }
+            if (existingAccount.accountLabel != cloudAccountLabel) {
+              existingAccount.accountLabel = cloudAccountLabel;
+              changed = true;
+            }
+            if (!changed) continue;
             await userBox.put(id, existingAccount);
             updatedTitlesFromCloud++;
           }
@@ -761,6 +794,7 @@ class SyncService {
             'service': a.service,
             'secret': plainSecret,
             'issuer': a.issuer,
+            'account_label': a.accountLabel,
             'createdAt': a.createdAt.toIso8601String(),
           };
         }).toList(),
@@ -908,6 +942,7 @@ class SyncService {
             'service': a.service,
             'secret': plainSecret,
             'issuer': a.issuer,
+            'account_label': a.accountLabel,
             'createdAt': a.createdAt.toIso8601String(),
           };
         }).toList(),
@@ -991,6 +1026,79 @@ class SyncService {
   }
 
   // ─── Logout ───────────────────────────────────────────────────────────────
+  Future<Directory> _resolveBackupCodesDirectory() async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      return await getDownloadsDirectory() ??
+          await getApplicationDocumentsDirectory();
+    }
+
+    if (Platform.isAndroid) {
+      return await getExternalStorageDirectory() ??
+          await getApplicationDocumentsDirectory();
+    }
+
+    return await getApplicationDocumentsDirectory();
+  }
+
+  Future<String?> downloadBackupCodesPdf() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to download backup codes.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.get<List<int>>(
+          'backup-codes/download/',
+          options: Options(
+            responseType: ResponseType.bytes,
+            headers: {
+              'Authorization': 'Bearer $token',
+            },
+          ),
+        ),
+      );
+
+      final bytes = response.data;
+      if (response.statusCode != 200 || bytes == null || bytes.isEmpty) {
+        _lastErrorMessage = 'Backup code PDF download failed.';
+        return null;
+      }
+
+      final directory = await _resolveBackupCodesDirectory();
+      await directory.create(recursive: true);
+
+      final username =
+          await _secureStorage.read(SecureStorageService.currentUserKey) ??
+              'user';
+      final safeUsername = username.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+      final timestamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '-')
+          .split('.')
+          .first;
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}beatzlock_backup_codes_${safeUsername}_$timestamp.pdf',
+      );
+
+      await file.writeAsBytes(bytes, flush: true);
+      return file.path;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Unable to download backup codes right now.',
+      );
+      return null;
+    } catch (e) {
+      _lastErrorMessage = 'Unable to save backup codes on this device.';
+      return null;
+    }
+  }
+
   Future<void> logout() async {
     await _secureStorage.deleteAll();
 

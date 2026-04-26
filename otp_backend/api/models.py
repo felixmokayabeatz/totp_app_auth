@@ -62,3 +62,17 @@ class DeleteOTPCode(models.Model):
         from datetime import timedelta
         # Code expires after 10 minutes
         return not self.used and (timezone.now() - self.created_at) < timedelta(minutes=10)
+
+
+class BackupCodeSet(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='backup_code_set',
+    )
+    encrypted_codes = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} - backup codes"

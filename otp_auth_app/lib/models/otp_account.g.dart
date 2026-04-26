@@ -24,12 +24,21 @@ class OTPAccountAdapter extends TypeAdapter<OTPAccount> {
             : rawCreatedAt is String
                 ? DateTime.tryParse(rawCreatedAt) ?? DateTime.now()
                 : DateTime.now();
+    final rawIssuer = fields[3];
+    final issuer = rawIssuer is String && rawIssuer.isEmpty
+        ? null
+        : rawIssuer as String?;
+    final rawAccountLabel = fields[5];
+    final accountLabel = rawAccountLabel is String && rawAccountLabel.isEmpty
+        ? null
+        : rawAccountLabel as String?;
     return OTPAccount(
       id: fields[0] as String,
       service: fields[1] as String,
       secret: fields[2] as String,
-      issuer: fields[3] as String?,
+      issuer: issuer,
       createdAt: createdAt,
+      accountLabel: accountLabel,
       userId: null,
     );
   }
@@ -37,7 +46,7 @@ class OTPAccountAdapter extends TypeAdapter<OTPAccount> {
   @override
   void write(BinaryWriter writer, OTPAccount obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -47,7 +56,9 @@ class OTPAccountAdapter extends TypeAdapter<OTPAccount> {
       ..writeByte(3)
       ..write(obj.issuer ?? '')
       ..writeByte(4)
-      ..write(obj.createdAt.millisecondsSinceEpoch);
+      ..write(obj.createdAt.millisecondsSinceEpoch)
+      ..writeByte(5)
+      ..write(obj.accountLabel);
   }
 
   @override

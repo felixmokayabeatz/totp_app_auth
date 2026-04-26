@@ -28,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _isSyncing = false;
   bool _isCheckingForUpdates = false;
+  bool _isDownloadingBackupCodes = false;
   bool _syncEnabled = true;
   bool _appLockEnabled = false;
   String _appVersionLabel = '...';
@@ -229,10 +230,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _sectionLabel('Security & Backup'),
           _settingsCard([
             _tappableTile(
-              icon: Icons.upload_rounded,
-              label: 'Export Accounts',
-              sub: 'Back up your 2FA codes',
-              onTap: () => _soon('Export'),
+              icon: Icons.picture_as_pdf_rounded,
+              label: 'Download Backup Codes',
+              sub: 'Save a PDF with your recovery codes',
+              trailing: _isDownloadingBackupCodes
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: _accent))
+                  : null,
+              onTap: _isDownloadingBackupCodes ? null : _downloadBackupCodes,
             ),
             _dividerLine(),
             _tappableTile(
@@ -431,6 +439,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
             backgroundColor: Colors.green),
       );
     }
+  }
+
+  Future<void> _downloadBackupCodes() async {
+    setState(() => _isDownloadingBackupCodes = true);
+    final savedPath = await _syncService.downloadBackupCodesPdf();
+    if (!mounted) return;
+    setState(() => _isDownloadingBackupCodes = false);
+
+    if (savedPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _syncService.lastErrorMessage ??
+                'Could not download backup codes right now.',
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.picture_as_pdf_rounded, color: _accent),
+            const SizedBox(width: 10),
+            Text('Backup Codes Saved', style: TextStyle(color: _textPrimary)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your BeatzLock backup codes PDF was downloaded successfully.',
+              style: TextStyle(color: _textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              savedPath,
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: TextStyle(color: _accent)),
+          ),
+        ],
+      ),
+    );
   }
 
   // ========== EXISTING METHODS (unchanged from your original) ==========

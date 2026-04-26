@@ -491,6 +491,7 @@ class _HomeScreenState extends State<HomeScreen>
       accounts = accounts
           .where((a) =>
               a.service.toLowerCase().contains(_searchQuery) ||
+              (a.accountLabel?.toLowerCase().contains(_searchQuery) ?? false) ||
               (a.issuer?.toLowerCase().contains(_searchQuery) ?? false))
           .toList();
     }
@@ -544,6 +545,7 @@ class _HomeScreenState extends State<HomeScreen>
               final timer = timers[account.id] ?? 30;
               final isBlurred = blurredCodes[account.id] ?? false;
               final isExpiring = timer <= 5;
+              final accountSubtitle = _accountSubtitle(account);
 
               // Format creation date
               final addedDate = _formatDate(account.createdAt);
@@ -593,8 +595,8 @@ class _HomeScreenState extends State<HomeScreen>
                                             : const Color(0xFF1A1A2E)),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis),
-                                if (account.issuer != null)
-                                  Text(account.issuer!,
+                                if (accountSubtitle != null)
+                                  Text(accountSubtitle,
                                       style: TextStyle(
                                           fontSize: 12,
                                           color: isDark
@@ -755,6 +757,20 @@ class _HomeScreenState extends State<HomeScreen>
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
+  }
+
+  String? _accountSubtitle(OTPAccount account) {
+    final label = account.accountLabel?.trim();
+    if (label != null && label.isNotEmpty) {
+      return label;
+    }
+
+    final issuer = account.issuer?.trim();
+    if (issuer != null && issuer.isNotEmpty) {
+      return issuer;
+    }
+
+    return null;
   }
 
   // â”€â”€â”€ Delete account dialog with enhanced warnings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

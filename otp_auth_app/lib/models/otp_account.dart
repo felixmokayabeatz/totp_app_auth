@@ -22,6 +22,9 @@ class OTPAccount {
   @HiveField(4)
   DateTime createdAt;
 
+  @HiveField(5)
+  String? accountLabel;
+
   String? _plainSecret;
 
   OTPAccount({
@@ -30,6 +33,7 @@ class OTPAccount {
     required String secret,
     this.issuer,
     required this.createdAt,
+    this.accountLabel,
     String? userId,
   }) : encryptedSecret = '' {
     if (userId != null && userId.isNotEmpty) {

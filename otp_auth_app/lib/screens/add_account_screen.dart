@@ -13,6 +13,7 @@ class AddAccountScreen extends StatefulWidget {
 class _AddAccountScreenState extends State<AddAccountScreen> {
   final _formKey = GlobalKey<FormState>();
   final _serviceController = TextEditingController();
+  final _accountLabelController = TextEditingController();
   final _secretController = TextEditingController();
   final _issuerController = TextEditingController();
   bool _isScanning = false;
@@ -185,10 +186,17 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         // Strip spaces immediately on parse
         final cleanSecret = secret.replaceAll(RegExp(r'\s+'), '');
         final issuer = uri.queryParameters['issuer'];
-        final accountName =
-            uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
+        final label = Uri.decodeComponent(uri.path.replaceFirst('/', ''));
+        final labelParts = label.split(':');
+        final parsedService = issuer?.trim().isNotEmpty == true
+            ? issuer!.trim()
+            : (labelParts.isNotEmpty ? labelParts.first.trim() : '');
+        final parsedAccountLabel = labelParts.length > 1
+            ? labelParts.sublist(1).join(':').trim()
+            : label.trim();
 
-        _serviceController.text = issuer ?? accountName.split(':').last;
+        _serviceController.text = parsedService;
+        _accountLabelController.text = parsedAccountLabel;
         _secretController.text = cleanSecret;
         _issuerController.text = issuer ?? '';
 
@@ -275,6 +283,13 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               hint: 'Google, GitHub, Dropbox…',
               icon: Icons.apps_rounded,
               validator: (v) => v!.isEmpty ? 'Required' : null,
+            ),
+            SizedBox(height: 12),
+            _inputField(
+              controller: _accountLabelController,
+              label: 'Account Email / Label',
+              hint: 'you@example.com',
+              icon: Icons.alternate_email_rounded,
             ),
             SizedBox(height: 12),
             _inputField(
@@ -472,6 +487,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         issuer: _issuerController.text.trim().isEmpty
             ? null
             : _issuerController.text.trim(),
+        accountLabel: _accountLabelController.text.trim().isEmpty
+            ? null
+            : _accountLabelController.text.trim(),
         createdAt: DateTime.now(),
         userId: userId,
       );
@@ -495,6 +513,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   void dispose() {
     _scannerController?.dispose();
     _serviceController.dispose();
+    _accountLabelController.dispose();
     _secretController.dispose();
     _issuerController.dispose();
     super.dispose();

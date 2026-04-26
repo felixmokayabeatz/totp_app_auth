@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import EncryptedData, SyncLog, AccountTombstone, DeleteOTPCode
+from .models import (
+    EncryptedData,
+    SyncLog,
+    AccountTombstone,
+    DeleteOTPCode,
+    BackupCodeSet,
+)
 
 
 @admin.register(EncryptedData)
@@ -108,5 +114,28 @@ class DeleteOTPCodeAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
     
+    def get_list_display_links(self, request, list_display):
+        return ()
+
+
+@admin.register(BackupCodeSet)
+class BackupCodeSetAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "created_at",
+        "updated_at",
+    )
+    search_fields = ("user__username", "user__email")
+    readonly_fields = ("user", "encrypted_codes", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     def get_list_display_links(self, request, list_display):
         return ()

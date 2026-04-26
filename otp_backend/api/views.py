@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
+from django.http import HttpResponse
 import json
 import random
 import string
@@ -15,7 +16,19 @@ import logging
 import traceback
 from django.conf import settings as django_settings
 
-from .models import EncryptedData, SyncLog, AccountTombstone, DeleteOTPCode
+from .backup_codes import (
+    build_backup_codes_pdf,
+    decrypt_backup_codes,
+    encrypt_backup_codes,
+    generate_backup_codes,
+)
+from .models import (
+    EncryptedData,
+    SyncLog,
+    AccountTombstone,
+    DeleteOTPCode,
+    BackupCodeSet,
+)
 from .serializers import UserSerializer, EncryptedDataSerializer, RegisterSerializer
 from twofa.email_templates import get_delete_otp_email_template
 
@@ -771,3 +784,62 @@ def get_sync_preference(request):
         
         logger.error("Reading sync preference failed.\n%s", error_details)
         return Response({'sync_enabled': True})  # Return default on error
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_backup_codes(request):
+    start_time = __import__('time').time()
+    user = request.user
+
+    debug_print(f"\n{'='*60}")
+    debug_print("[BACKUP CODES] Download requested")
+    debug_print(f"[BACKUP CODES] User: {user.username} (ID: {user.id})")
+    debug_print(f"{'='*60}\n")
+
+    logger.info("Backup code PDF download - User: %s", user.username)
+
+    try:
+        code_set = BackupCodeSet.objects.filter(user=user).first()
+
+        if code_set and code_set.encrypted_codes:
+            codes = decrypt_backup_codes(code_set.encrypted_codes)
+            debug_print("[BACKUP CODES] Reusing existing backup codes")
+        else:
+            codes = generate_backup_codes()
+            encrypted_codes = encrypt_backup_codes(codes)
+            if code_set is None:
+                code_set = BackupCodeSet.objects.create(
+                    user=user,
+                    encrypted_codes=encrypted_codes,
+                )
+            else:
+                code_set.encrypted_codes = encrypted_codes
+                code_set.save(update_fields=['encrypted_codes', 'updated_at'])
+            debug_print("[BACKUP CODES] Generated fresh backup codes")
+
+        pdf_bytes = build_backup_codes_pdf(
+            email=user.email or user.username,
+            account_name='BeatzLock Auth',
+            codes=codes,
+        )
+
+        safe_username = ''.join(
+            char for char in user.username if char.isalnum() or char in ('-', '_')
+        ) or 'user'
+        filename = f"beatzlock_backup_codes_{safe_username}.pdf"
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Length'] = str(len(pdf_bytes))
+
+        elapsed_time = __import__('time').time() - start_time
+        debug_print(f"[BACKUP CODES] PDF ready in {elapsed_time:.2f} seconds")
+        logger.info("Backup code PDF ready - User: %s", user.username)
+        return response
+
+    except Exception as e:
+        error_details = traceback.format_exc()
+        debug_print(f"[BACKUP CODES] ERROR: {str(e)}")
+        debug_print(f"[BACKUP CODES] Traceback:\n{error_details}")
+        logger.error("Backup code PDF generation failed.\n%s", error_details)
+        return Response({'error': 'Failed to generate backup codes PDF'}, status=500)
