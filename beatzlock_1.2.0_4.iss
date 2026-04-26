@@ -38,7 +38,7 @@ ChangesAssociations=yes
 DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
-OutputDir=C:\Programming\totp_app\final_builds\Installers
+OutputDir=C:\Programming\totp_app\final_builds\Installers\1.2.0_4
 OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64
 SetupIconFile=C:\Programming\totp_app\otp_backend\static\favicon.ico
 SolidCompression=yes
@@ -51,6 +51,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
+; Main application files (from Flutter build)
 Source: "C:\Programming\totp_app\final_builds\windows\app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\totp_app\final_builds\windows\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
 Source: "C:\Programming\totp_app\final_builds\windows\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -58,9 +59,9 @@ Source: "C:\Programming\totp_app\final_builds\windows\app\local_auth_windows_plu
 Source: "C:\Programming\totp_app\final_builds\windows\app\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\totp_app\final_builds\windows\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
 
-; VC++ runtime
-Source: "C:\Programming\totp_app\final_builds\windows\app\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
-; NOTE: Don't use "Flags: ignoreversion" on any shared system files
+; VC++ runtime - from EXTERNAL permanent folder (NOT in Flutter build)
+Source: "C:\Programming\totp_app\final_builds\vc_redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue

@@ -85,6 +85,10 @@ def get_versioned_inno_script_path() -> Path:
     return WORKSPACE_DIR / f"beatzlock_{APP_ARTIFACT_VERSION}.iss"
 
 
+def get_versioned_installers_dir() -> Path:
+    return WORKSPACE_DIR / "final_builds" / "Installers" / APP_ARTIFACT_VERSION
+
+
 def find_inno_setup_script() -> Path | None:
     candidates = []
     candidates.extend(INNO_SCRIPT_SEEDS)
@@ -116,6 +120,7 @@ def sync_inno_setup_script(script_path: Path):
         '#define MyAppArtifactVersion "': f'#define MyAppArtifactVersion "{APP_ARTIFACT_VERSION}"',
         'AppVersion=': 'AppVersion={#MyAppVersion}',
         'AppVerName=': 'AppVerName={#MyAppName} {#MyAppVersion}',
+        'OutputDir=': f'OutputDir={get_versioned_installers_dir()}',
         'OutputBaseFilename=': 'OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64',
     }
 
@@ -143,6 +148,10 @@ def sync_inno_setup_script(script_path: Path):
 
         if stripped.startswith('AppVerName='):
             updated_lines.append(replacements['AppVerName='])
+            continue
+
+        if stripped.startswith('OutputDir='):
+            updated_lines.append(replacements['OutputDir='])
             continue
 
         if stripped.startswith('OutputBaseFilename='):
@@ -191,6 +200,67 @@ def get_linux_bundle_binary_name(bundle_path: Path) -> str:
         if entry.is_file() and os.access(entry, os.X_OK):
             return entry.name
     raise FileNotFoundError(f"No executable found in Linux bundle: {bundle_path}")
+
+
+def copy_to_versioned_installers(file_path: Path) -> Path:
+    """Copy an artifact into final_builds/Installers/<version>/."""
+    destination_dir = get_versioned_installers_dir()
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination_path = destination_dir / file_path.name
+    shutil.copy2(file_path, destination_path)
+    return destination_path
+
+
+def find_inno_compiler() -> str | None:
+    """Locate ISCC.exe for compiling Inno Setup scripts."""
+    compiler = shutil.which("iscc")
+    if compiler:
+        return compiler
+
+    common_paths = [
+        r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        r"C:\Program Files\Inno Setup 6\ISCC.exe",
+    ]
+    for path in common_paths:
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
+def build_windows_installer() -> bool:
+    """Compile the current versioned Inno Setup script."""
+    script_path = find_inno_setup_script()
+    if script_path is None:
+        print_color("No Inno Setup script found to compile.", Colors.RED)
+        return False
+
+    sync_inno_setup_script(script_path)
+    target_script_path = get_versioned_inno_script_path()
+    if script_path.resolve() != target_script_path.resolve():
+        if target_script_path.exists():
+            target_script_path.unlink()
+        script_path.replace(target_script_path)
+        script_path = target_script_path
+
+    compiler_path = find_inno_compiler()
+    if not compiler_path:
+        print_color("Inno Setup compiler (ISCC.exe) not found.", Colors.RED)
+        print_color("Install Inno Setup 6 or add ISCC.exe to PATH.", Colors.YELLOW)
+        return False
+
+    get_versioned_installers_dir().mkdir(parents=True, exist_ok=True)
+    if not run(f'"{compiler_path}" "{script_path}"', cwd=str(WORKSPACE_DIR)):
+        return False
+
+    expected_output = get_versioned_installers_dir() / f"beatzlock_{APP_ARTIFACT_VERSION}_x64.exe"
+    if expected_output.exists():
+        save_build_metadata("windows_installer", str(expected_output))
+        print_color(f"Windows installer created: {expected_output}", Colors.GREEN)
+        return True
+
+    print_color("Inno Setup finished, but the expected installer was not found.", Colors.YELLOW)
+    return False
 
 def run(cmd, cwd=None, shell=True, capture_output=False):
     """Run shell command with error handling"""
@@ -517,19 +587,20 @@ def build_windows():
     save_build_metadata("windows_exe", final_build_dir)
     
     print_color(f"Windows build copied to {final_build_dir}", Colors.GREEN)
-    return True
+    return build_windows_installer()
 
-def build_android():
+def build_android(choice: str | None = None):
     """Build Android APK and App Bundle"""
     print_color("\n📱 Building Android app...", Colors.CYAN)
     
-    print_color("\nAndroid Build Options:", Colors.BOLD)
-    print("1. APK (Universal)")
-    print("2. App Bundle (.aab - for Play Store)")
-    print("3. Split APKs (per ABI)")
-    print("4. Both APK and App Bundle")
-    
-    choice = input("Choose (1/2/3/4): ").strip()
+    if choice is None:
+        print_color("\nAndroid Build Options:", Colors.BOLD)
+        print("1. APK (Universal)")
+        print("2. App Bundle (.aab - for Play Store)")
+        print("3. Split APKs (per ABI)")
+        print("4. Both APK and App Bundle")
+        
+        choice = input("Choose (1/2/3/4): ").strip()
     
     success = True
     
@@ -540,9 +611,10 @@ def build_android():
         else:
             apk_path = os.path.join(PROJECT_DIR, "build/app/outputs/flutter-apk/app-release.apk")
             if os.path.exists(apk_path):
-                apk_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_{APP_ARTIFACT_VERSION}.apk")
+                apk_dest = os.path.join(ANDROID_DIR, f"beatzlock_{APP_ARTIFACT_VERSION}.apk")
                 shutil.copy(apk_path, apk_dest)
                 save_build_metadata("android_apk", apk_dest)
+                copy_to_versioned_installers(Path(apk_dest))
                 print_color(f"✅ APK created: {apk_dest}", Colors.GREEN)
     
     if choice == "2" or choice == "4":
@@ -552,9 +624,10 @@ def build_android():
         else:
             aab_path = os.path.join(PROJECT_DIR, "build/app/outputs/bundle/release/app-release.aab")
             if os.path.exists(aab_path):
-                aab_dest = os.path.join(ANDROID_DIR, f"{APP_NAME}_{APP_ARTIFACT_VERSION}.aab")
+                aab_dest = os.path.join(ANDROID_DIR, f"beatzlock_{APP_ARTIFACT_VERSION}.aab")
                 shutil.copy(aab_path, aab_dest)
                 save_build_metadata("android_aab", aab_dest)
+                copy_to_versioned_installers(Path(aab_dest))
                 print_color(f"✅ App Bundle created: {aab_dest}", Colors.GREEN)
     
     if choice == "3":
@@ -566,11 +639,20 @@ def build_android():
             for apk in ["app-armeabi-v7a-release.apk", "app-arm64-v8a-release.apk", "app-x86_64-release.apk"]:
                 src = os.path.join(apk_dir, apk)
                 if os.path.exists(src):
-                    dst = os.path.join(ANDROID_DIR, apk.replace("app-", f"{APP_NAME}_"))
+                    dst = os.path.join(ANDROID_DIR, apk.replace("app-", "beatzlock_"))
                     shutil.copy(src, dst)
+                    copy_to_versioned_installers(Path(dst))
                     print_color(f"✅ {dst}", Colors.GREEN)
     
     return success
+
+
+def build_windows_and_android():
+    """Build Windows artifacts and Android release artifacts in one run."""
+    print_color("\nBuilding Windows and Android artifacts...", Colors.CYAN)
+    windows_ok = build_windows()
+    android_ok = build_android("4")
+    return windows_ok and android_ok
 
 # ==================== UTILITIES ====================
 def clean_all():
@@ -619,13 +701,17 @@ def list_builds():
 
 def open_installer_dir():
     """Open final builds directory in file manager"""
-    if os.path.exists(INSTALLER_DIR):
+    installer_path = get_versioned_installers_dir()
+    if not installer_path.exists():
+        installer_path = Path(INSTALLER_DIR)
+
+    if installer_path.exists():
         if platform.system() == "Linux":
-            run(f'xdg-open "{INSTALLER_DIR}"')
+            run(f'xdg-open "{installer_path}"')
         elif platform.system() == "Windows":
-            os.startfile(INSTALLER_DIR)
+            os.startfile(installer_path)
         else:
-            print_color(f"Final builds directory: {INSTALLER_DIR}", Colors.BLUE)
+            print_color(f"Final builds directory: {installer_path}", Colors.BLUE)
 
 def fix_windows_build():
     """Specifically fix Windows build issues"""
@@ -676,63 +762,64 @@ def main_menu():
         print_color(f"""
 {'BUILD OPTIONS:':^50}
   1. Linux (.deb final build)
-  2. Windows (.exe final build)
+  2. Windows (.exe + installer bundle)
   3. Android (.apk + .aab)
+  4. Build All (Windows + Android)
 
 {'RUN OPTIONS:':^50}
-  4. Run Linux (debug mode)
-  5. Run Windows (debug mode)
-  6. Run Android (debug mode)
-  7. Run Web (Chrome)
-  8. Run with Hot Reload (development)
+  5. Run Linux (debug mode)
+  6. Run Windows (debug mode)
+  7. Run Android (debug mode)
+  8. Run Web (Chrome)
+  9. Run with Hot Reload (development)
 
 {'UTILITIES:':^50}
-  9. Clean all build files
-  10. Fix Windows build (clear CMake cache)
-  11. List previous builds
-  12. Open final builds directory
-  13. List available devices
-  14. Run tests
-  15. Analyze code
-  16. Exit
+  10. Clean all build files
+  11. Fix Windows build (clear CMake cache)
+  12. List previous builds
+  13. Open final builds directory
+  14. List available devices
+  15. Run tests
+  16. Analyze code
+  17. Exit
 
 Current platform: {system}
 """)
         
-        choice = input("Enter your choice (1-16): ").strip()
+        choice = input("Enter your choice (1-17): ").strip()
 
-        if choice == "16":
+        if choice == "17":
             print_color("\nGoodbye!", Colors.GREEN)
             break
         
-        if choice == "9":
+        if choice == "10":
             clean_all()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "10":
+        elif choice == "11":
             if system == "Windows":
                 fix_windows_build()
             else:
                 print_color("This option is only for Windows!", Colors.YELLOW)
             input("\nPress Enter to continue...")
             continue
-        elif choice == "11":
+        elif choice == "12":
             list_builds()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "12":
+        elif choice == "13":
             open_installer_dir()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "13":
+        elif choice == "14":
             list_devices()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "14":
+        elif choice == "15":
             run_tests()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "15":
+        elif choice == "16":
             analyze_code()
             input("\nPress Enter to continue...")
             continue
@@ -759,20 +846,26 @@ Current platform: {system}
         elif choice == "3":
             build_android()
         elif choice == "4":
+            if system != "Windows":
+                print_color("Build All currently requires Windows for the installer step!", Colors.YELLOW)
+                print_color("   Run this script on Windows to build Windows + Android together", Colors.YELLOW)
+            else:
+                build_windows_and_android()
+        elif choice == "5":
             if system != "Linux":
                 print_color("Linux run requires Linux OS!", Colors.YELLOW)
             else:
                 run_linux()
-        elif choice == "5":
+        elif choice == "6":
             if system != "Windows":
                 print_color("Windows run requires Windows OS!", Colors.YELLOW)
             else:
                 run_windows()
-        elif choice == "6":
-            run_android()
         elif choice == "7":
-            run_web()
+            run_android()
         elif choice == "8":
+            run_web()
+        elif choice == "9":
             hot_reload()
         else:
             print_color("Invalid choice", Colors.RED)
