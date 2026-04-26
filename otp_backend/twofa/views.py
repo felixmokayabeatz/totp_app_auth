@@ -141,7 +141,7 @@ def send_2fa_code(request):
         email = EmailMultiAlternatives(
             subject='Your 2FA Verification Code - OTP Authenticator',
             body=text_content,
-            from_email=settings.EMAIL_HOST_USER,
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
         )
         email.attach_alternative(html_content, "text/html")
@@ -294,7 +294,7 @@ def send_password_reset_code(request):
         email_msg = EmailMultiAlternatives(
             subject='Password Reset Code - BeatzLock Authenticator',
             body=text_content,
-            from_email=settings.EMAIL_HOST_USER,
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
         )
         email_msg.attach_alternative(html_content, "text/html")
@@ -414,7 +414,7 @@ def reset_password(request):
         email_msg = EmailMultiAlternatives(
             subject='Password Changed Successfully - BeatzLock Authenticator',
             body=text_content,
-            from_email=settings.EMAIL_HOST_USER,
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
         )
         email_msg.attach_alternative(html_content, "text/html")
@@ -552,7 +552,7 @@ def reset_password_with_recovery_code(request):
             email_msg = EmailMultiAlternatives(
                 subject='Recovery code used to change your password - BeatzLock Authenticator',
                 body=text_content,
-                from_email=settings.EMAIL_HOST_USER,
+                from_email=settings.DEFAULT_FROM_EMAIL,
                 to=[user.email],
             )
             email_msg.attach_alternative(html_content, "text/html")

@@ -889,3 +889,176 @@ def get_delete_otp_email_template(username, code):
 </body>
 </html>
     """
+
+
+def get_recovery_codes_generated_email_template(username):
+    return f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Recovery Codes Generated</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 40px 20px;
+        }}
+        .container {{
+            max-width: 520px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+            padding: 40px 30px;
+            text-align: center;
+        }}
+        .icon-wrap {{
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }}
+        .header h1 {{
+            color: #ffffff;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }}
+        .header p {{
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            font-weight: 500;
+        }}
+        .content {{
+            padding: 40px 30px;
+        }}
+        .greeting {{
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a2e;
+            margin-bottom: 12px;
+        }}
+        .message {{
+            font-size: 15px;
+            line-height: 1.6;
+            color: #4a5568;
+            margin-bottom: 24px;
+        }}
+        .alert-box {{
+            background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(20, 184, 166, 0.2);
+            margin: 24px 0;
+        }}
+        .alert-title {{
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f766e;
+            margin-bottom: 10px;
+        }}
+        .alert-text {{
+            font-size: 14px;
+            color: #115e59;
+            line-height: 1.6;
+        }}
+        .warning {{
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            padding: 16px;
+            border-radius: 12px;
+            margin: 25px 0;
+        }}
+        .warning-text {{
+            font-size: 13px;
+            color: #92400e;
+            line-height: 1.5;
+        }}
+        .footer {{
+            background: #f7fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+        }}
+        .footer-text {{
+            font-size: 12px;
+            color: #a0aec0;
+            line-height: 1.5;
+        }}
+        @media (max-width: 600px) {{
+            .container {{
+                border-radius: 16px;
+            }}
+            .header {{
+                padding: 30px 20px;
+            }}
+            .content {{
+                padding: 30px 20px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="icon-wrap">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 3L4 7V12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12V7L12 3Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M9 12L11 14L15 10" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <h1>Recovery Codes Updated</h1>
+            <p>Your account recovery kit was refreshed successfully</p>
+        </div>
+
+        <div class="content">
+            <div class="greeting">Hello, {username}!</div>
+
+            <div class="message">
+                A brand new set of BeatzLock recovery codes was generated for your account and included in the downloaded PDF.
+            </div>
+
+            <div class="alert-box">
+                <div class="alert-title">What changed?</div>
+                <div class="alert-text">
+                    Your older recovery codes are now invalid. Only the newest PDF and the three codes inside it can be used from now on.
+                </div>
+            </div>
+
+            <div class="warning">
+                <div class="warning-text">
+                    <strong>Security tip:</strong> Store the new PDF somewhere safe and private. If you did not generate these recovery codes, change your password immediately.
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="footer-text">
+                <strong>BeatzLock Authenticator</strong><br>
+                Secure Two-Factor Authentication<br><br>
+                This is an automated message, please do not reply.<br>
+                &copy; 2026 BeatzLock. All rights reserved.
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+    """

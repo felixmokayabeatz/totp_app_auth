@@ -12,6 +12,7 @@ import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
+import 'notifications_screen.dart';
 import 'show_qr_screen.dart';
 import 'profile_screen.dart';
 import '../config/app_config.dart';
@@ -40,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen>
   Box<OTPAccount>? _userBox;
   bool _isLoadingVault = true;
   String? _loadError;
+  int _unreadNotificationCount = 0;
 
   // Track sync status for warning messages
   bool _isSyncEnabled = true;
@@ -54,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen>
     _animationController.forward();
     _loadData();
     _loadSyncStatus();
+    _loadUnreadNotificationCount();
   }
 
   Future<void> _loadSyncStatus() async {
@@ -72,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
       _startTimer();
       _updateAllOTPs();
+      await _loadUnreadNotificationCount();
       if (mounted) {
         setState(() {
           _isLoadingVault = false;
@@ -86,6 +90,16 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
     }
+  }
+
+  Future<void> _loadUnreadNotificationCount() async {
+    final notifications = await _syncService.getNotifications();
+    if (!mounted) return;
+
+    setState(() {
+      _unreadNotificationCount =
+          notifications.where((item) => !item.isRead).length;
+    });
   }
 
   Future<void> _initUserBox() async {
@@ -185,9 +199,28 @@ class _HomeScreenState extends State<HomeScreen>
         _headerAction(Icons.sync_rounded, _syncData,
             tooltip: 'Sync', loading: _isSyncing),
         _headerAction(
+          Icons.notifications_none_rounded,
+          () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const NotificationsScreen(),
+              ),
+            );
+            await _loadUnreadNotificationCount();
+          },
+          tooltip: 'Notifications',
+          badgeCount: _unreadNotificationCount,
+        ),
+        _headerAction(
             Icons.settings_rounded,
-            () => Navigator.push(
-                context, MaterialPageRoute(builder: (_) => SettingsScreen())),
+            () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => SettingsScreen()),
+              );
+              await _loadUnreadNotificationCount();
+            },
             tooltip: 'Settings'),
         _headerAction(
             isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
@@ -311,7 +344,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _headerAction(IconData icon, VoidCallback onTap,
-      {String? tooltip, bool loading = false}) {
+      {String? tooltip, bool loading = false, int badgeCount = 0}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Tooltip(
       message: tooltip ?? '',
       child: InkWell(
@@ -325,12 +360,49 @@ class _HomeScreenState extends State<HomeScreen>
             color: Colors.white.withOpacity(0.12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: loading
-              ? const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-              : Icon(icon, color: Colors.white, size: 18),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: loading
+                    ? const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : Icon(icon, color: Colors.white, size: 18),
+              ),
+              if (!loading && badgeCount > 0)
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: isDark
+                            ? const Color(0xFF1A1A2E)
+                            : const Color(0xFF4F46E5),
+                        width: 1.5,
+                      ),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 18),
+                    child: Text(
+                      badgeCount > 99 ? '99+' : '$badgeCount',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -390,6 +462,7 @@ class _HomeScreenState extends State<HomeScreen>
                       if (result == true) {
                         await _initUserBox();
                         _updateAllOTPs();
+                        await _loadUnreadNotificationCount();
                       }
                     },
                     child: Container(
@@ -1212,6 +1285,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (success) {
         await _initUserBox();
         _updateAllOTPs();
+        await _loadUnreadNotificationCount();
         _showSnackBar('Sync completed!', Colors.green);
       } else {
         _showSnackBar(

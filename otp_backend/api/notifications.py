@@ -33,6 +33,9 @@ def build_device_label(device_label: str | None, user_agent: str | None) -> str:
     if device_label and device_label.strip():
         return device_label.strip()
     if user_agent and user_agent.strip():
+        lowered = user_agent.strip().lower()
+        if lowered.startswith("dart/"):
+            return "BeatzLock App"
         return user_agent.strip()[:120]
     return "Unknown device"
 

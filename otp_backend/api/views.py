@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.mail import EmailMultiAlternatives
 from django.core.mail import send_mail
 from django.conf import settings
 from django.http import HttpResponse
@@ -46,7 +47,10 @@ from .serializers import (
     EncryptedDataSerializer,
     RegisterSerializer,
 )
-from twofa.email_templates import get_delete_otp_email_template
+from twofa.email_templates import (
+    get_delete_otp_email_template,
+    get_recovery_codes_generated_email_template,
+)
 
 # ===================
 # LOGGING SETUP
@@ -682,7 +686,7 @@ def send_delete_otp(request):
         send_mail(
             subject='BeatzLock – Confirm Delete All Accounts',
             message=f'Your delete verification code is: {code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, please ignore this email.',
-            from_email=settings.EMAIL_HOST_USER,
+            from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user.email],
             html_message=html_message,
             fail_silently=False,
@@ -912,18 +916,21 @@ def download_backup_codes(request):
         response['Content-Length'] = str(len(pdf_bytes))
 
         if user.email:
-            send_mail(
-                subject='BeatzLock recovery codes generated',
-                message=(
-                    f'Hello {user.username},\n\n'
-                    'A new set of BeatzLock recovery codes was just generated for your account. '
-                    'All older recovery codes are now invalid.\n\n'
-                    'If this was not you, please change your password immediately.'
-                ),
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=[user.email],
-                fail_silently=True,
+            html_content = get_recovery_codes_generated_email_template(user.username)
+            text_content = (
+                f'Hello {user.username},\n\n'
+                'A new set of BeatzLock recovery codes was just generated for your account. '
+                'All older recovery codes are now invalid.\n\n'
+                'If this was not you, please change your password immediately.'
             )
+            email_msg = EmailMultiAlternatives(
+                subject='New recovery codes generated - BeatzLock Authenticator',
+                body=text_content,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[user.email],
+            )
+            email_msg.attach_alternative(html_content, "text/html")
+            email_msg.send(fail_silently=True)
 
         create_recovery_codes_generated_notification(user)
 
