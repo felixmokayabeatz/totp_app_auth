@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
@@ -360,10 +361,40 @@ class SyncService {
     return deviceId;
   }
 
+  Future<String?> _friendlyMobileDeviceName() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final info = await deviceInfo.androidInfo;
+        final brand = info.brand.trim();
+        final model = info.model.trim();
+        if (brand.isNotEmpty && model.isNotEmpty) {
+          return '$brand $model';
+        }
+        if (model.isNotEmpty) return model;
+      }
+
+      if (Platform.isIOS) {
+        final info = await deviceInfo.iosInfo;
+        final ownerName = info.name.trim();
+        if (ownerName.isNotEmpty &&
+            ownerName.toLowerCase() != 'iphone' &&
+            ownerName.toLowerCase() != 'ipad') {
+          return ownerName;
+        }
+        final model = info.model.trim();
+        if (model.isNotEmpty) return model;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   Future<String> _buildDeviceLabel() async {
     final prefs = await SharedPreferences.getInstance();
     final savedDeviceId = prefs.getString('device_id');
     String? hostname;
+    final mobileName = await _friendlyMobileDeviceName();
 
     try {
       hostname = Platform.localHostname.trim();
@@ -375,8 +406,18 @@ class SyncService {
     final prettyOs = operatingSystem.isEmpty
         ? 'Device'
         : '${operatingSystem[0].toUpperCase()}${operatingSystem.substring(1)}';
+    final normalizedHostname = hostname?.toLowerCase();
+    final hasUsefulHostname = hostname != null &&
+        hostname.isNotEmpty &&
+        normalizedHostname != 'localhost' &&
+        normalizedHostname != 'localhost.localdomain' &&
+        normalizedHostname != 'android';
 
-    if (hostname != null && hostname.isNotEmpty) {
+    if (mobileName != null && mobileName.isNotEmpty) {
+      return mobileName;
+    }
+
+    if (hasUsefulHostname) {
       return '$prettyOs - $hostname';
     }
 
@@ -1519,6 +1560,44 @@ class SyncService {
     }
   }
 
+  Future<bool> heartbeatSession() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
+      final response = await _dio.post(
+        'device-sessions/heartbeat/',
+        data: {
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+        },
+        options: Options(headers: {
+          'Authorization': 'Bearer $token',
+        }),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        _lastErrorMessage = _friendlyRequestError(
+          e,
+          'This device session is no longer active.',
+        );
+        await logout(notifyServer: false);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
   Future<bool> validateCurrentSession() async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -1529,37 +1608,32 @@ class SyncService {
       return false;
     }
 
-    try {
-      final deviceId = await getOrCreateDeviceId();
-      final deviceLabel = await _buildDeviceLabel();
-      final response = await _requestWithRetry(
-        () => _dio.get(
-          'device-sessions/',
-          queryParameters: {
-            'device_id': deviceId,
-            'device_label': deviceLabel,
-          },
-          options: Options(headers: {
-            'Authorization': 'Bearer $token',
-          }),
-        ),
-      );
-      return response.statusCode == 200;
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
-        _lastErrorMessage = _friendlyRequestError(
-          e,
-          'This device session is no longer active.',
-        );
-        return false;
-      }
-      return true;
-    } catch (e) {
-      return true;
-    }
+    return heartbeatSession();
   }
 
-  Future<void> logout() async {
+  Future<void> logout({bool notifyServer = true}) async {
+    if (notifyServer) {
+      try {
+        await _updateAuthHeader();
+        final token =
+            await _secureStorage.read(SecureStorageService.accessTokenKey);
+        if (token != null && token.isNotEmpty) {
+          final deviceId = await getOrCreateDeviceId();
+          final deviceLabel = await _buildDeviceLabel();
+          await _dio.post(
+            'device-sessions/logout-current/',
+            data: {
+              'device_id': deviceId,
+              'device_label': deviceLabel,
+            },
+            options: Options(headers: {
+              'Authorization': 'Bearer $token',
+            }),
+          );
+        }
+      } catch (_) {}
+    }
+
     await _secureStorage.deleteAll();
 
     await _clearStoredEncryptionKey();

@@ -64,6 +64,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
+  static const Duration _sessionHeartbeatInterval = Duration(seconds: 5);
 
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
@@ -78,6 +79,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _sessionReady = false;
   DateTime? _backgroundedAt;
   Timer? _updateTimer;
+  Timer? _sessionHeartbeatTimer;
   AppUpdateInfo? _requiredUpdateInfo;
 
   @override
@@ -88,6 +90,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       const Duration(minutes: 5),
       (_) => _refreshUpdateStatus(),
     );
+    _sessionHeartbeatTimer = Timer.periodic(
+      _sessionHeartbeatInterval,
+      (_) => unawaited(_runSessionHeartbeat()),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
     });
@@ -97,6 +103,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _updateTimer?.cancel();
+    _sessionHeartbeatTimer?.cancel();
     super.dispose();
   }
 
@@ -121,6 +128,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _initialized = true;
         _isLocked = true;
       });
+      unawaited(_runSessionHeartbeat());
     }
   }
 
@@ -189,7 +197,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       final sessionStillValid = await _syncService.validateCurrentSession();
       if (!sessionStillValid) {
-        await _syncService.logout();
+        await _syncService.logout(notifyServer: false);
         await authProvider.logout();
         return;
       }
@@ -234,6 +242,30 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('Background cloud restore error: $e');
     }
+  }
+
+  Future<void> _runSessionHeartbeat() async {
+    if (!mounted || !_initialized || !_sessionReady) {
+      return;
+    }
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (!authProvider.isAuthenticated) {
+      return;
+    }
+
+    final sessionStillValid = await _syncService.heartbeatSession();
+    if (!mounted || sessionStillValid) {
+      return;
+    }
+
+    await authProvider.logout();
+    if (!mounted) return;
+
+    setState(() {
+      _isLocked = false;
+      _backgroundedAt = null;
+    });
   }
 
   Future<void> _unlockApp(BuildContext context) async {
@@ -319,8 +351,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
 
       unawaited(_refreshUpdateStatus());
+      unawaited(_runSessionHeartbeat());
     } else if (state == AppLifecycleState.resumed) {
       unawaited(_refreshUpdateStatus());
+      unawaited(_runSessionHeartbeat());
     }
   }
 
@@ -344,14 +378,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       onUpdateNow: _openRequiredUpdate,
                       onRefreshStatus: _refreshUpdateStatus,
                     )
-              : _isLocked
-                  ? _AppLockScreen(
-                      isBusy: _unlockInProgress,
-                      onUnlock: _unlockApp,
-                      onUsePin: _unlockWithPin,
-                    )
                   : authProvider.isAuthenticated
-                      ? HomeScreen()
+                      ? (_isLocked
+                          ? _AppLockScreen(
+                              isBusy: _unlockInProgress,
+                              onUnlock: _unlockApp,
+                              onUsePin: _unlockWithPin,
+                            )
+                          : HomeScreen())
                       : LoginScreen(),
         );
       },

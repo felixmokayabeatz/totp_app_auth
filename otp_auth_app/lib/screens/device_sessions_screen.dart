@@ -57,6 +57,12 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
     return '${local.year}-$month-$day $hour:$minute';
   }
 
+  String _deviceReference(String deviceId) {
+    if (deviceId.isEmpty) return 'Unavailable';
+    if (deviceId.length <= 8) return deviceId.toUpperCase();
+    return deviceId.substring(deviceId.length - 8).toUpperCase();
+  }
+
   Future<void> _revokeSession(DeviceSessionInfo session) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -250,6 +256,11 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
             'Review where your account is currently active and remove any device you do not trust.',
             style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.45),
           ),
+          const SizedBox(height: 10),
+          Text(
+            'Devices on the same Wi-Fi can share one public IP, so BeatzLock uses the device name and device reference instead.',
+            style: TextStyle(color: _textSecondary, fontSize: 12, height: 1.4),
+          ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -395,13 +406,11 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
             'Last seen: ${_formatDate(session.lastSeenAt)}',
             style: TextStyle(color: _textSecondary, fontSize: 12.5),
           ),
-          if (session.ipAddress.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'IP: ${session.ipAddress}',
-              style: TextStyle(color: _textSecondary, fontSize: 12.5),
-            ),
-          ],
+          const SizedBox(height: 6),
+          Text(
+            'Device ref: ${_deviceReference(session.deviceId)}',
+            style: TextStyle(color: _textSecondary, fontSize: 12.5),
+          ),
           if (!session.isCurrent) ...[
             const SizedBox(height: 14),
             Align(

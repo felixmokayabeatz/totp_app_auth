@@ -38,6 +38,7 @@ from .models import (
 from .notifications import (
     build_device_label,
     create_account_added_notification,
+    create_daily_active_devices_notification,
     create_password_changed_notification,
     create_recovery_codes_generated_notification,
     create_sign_in_notification,
@@ -679,8 +680,13 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request, *args, **kwargs):
         current_session = self._ensure_current_session()
+        queryset = self.get_queryset()[:25]
+        create_daily_active_devices_notification(
+            request.user,
+            active_count=queryset.count(),
+        )
         serializer = self.get_serializer(
-            self.get_queryset()[:25],
+            queryset,
             many=True,
             context={
                 **self.get_serializer_context(),
@@ -729,6 +735,39 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
             updated_at=now,
         )
         return Response({'success': True, 'revoked_count': revoked_count})
+
+    @action(detail=False, methods=['post'], url_path='heartbeat')
+    def heartbeat(self, request):
+        current_session = self._ensure_current_session()
+        active_count = self.get_queryset().count()
+        create_daily_active_devices_notification(
+            request.user,
+            active_count=active_count,
+        )
+        return Response({
+            'success': True,
+            'active_count': active_count,
+            'current_session_id': str(current_session.id) if current_session else request.auth.get('session_id'),
+        })
+
+    @action(detail=False, methods=['post'], url_path='logout-current')
+    def logout_current(self, request):
+        current_session = self._ensure_current_session()
+        if current_session is None:
+            session_id = request.auth.get('session_id')
+            current_session = DeviceSession.objects.filter(
+                id=session_id,
+                user=request.user,
+                is_active=True,
+                revoked_at__isnull=True,
+            ).first()
+
+        if current_session is not None:
+            current_session.is_active = False
+            current_session.revoked_at = timezone.now()
+            current_session.save(update_fields=['is_active', 'revoked_at', 'updated_at'])
+
+        return Response({'success': True})
 
 
 # ===================

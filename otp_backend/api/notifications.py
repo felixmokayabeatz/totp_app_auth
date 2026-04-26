@@ -1,11 +1,13 @@
 import base64
 import hashlib
 import json
+from datetime import timedelta
 from typing import Any
 
 from cryptography.fernet import Fernet
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 from .models import AppNotification
 
@@ -169,4 +171,33 @@ def create_account_added_notification(
             "service_name": service_name,
             "account_label": label or None,
         },
+    )
+
+
+def create_daily_active_devices_notification(
+    user: User,
+    *,
+    active_count: int,
+) -> AppNotification | None:
+    now = timezone.now()
+    recent_exists = AppNotification.objects.filter(
+        user=user,
+        notification_type='active_devices_daily',
+        created_at__gte=now - timedelta(hours=24),
+    ).exists()
+
+    if recent_exists:
+        return None
+
+    device_word = 'device' if active_count == 1 else 'devices'
+    return create_notification(
+        user,
+        'active_devices_daily',
+        title='Daily device activity',
+        message=f'{active_count} {device_word} are currently signed in to your account.',
+        details=(
+            f'BeatzLock checked your account and found {active_count} active {device_word} '
+            'signed in during the last daily security summary.'
+        ),
+        metadata={'active_count': active_count},
     )
