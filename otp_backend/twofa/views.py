@@ -19,6 +19,7 @@ from api.notifications import (
     create_password_changed_notification,
     create_recovery_code_used_notification,
 )
+from api.device_sessions import attach_session_to_refresh_token
 from api.models import BackupCodeSet
 from .models import EmailVerification
 from .email_templates import get_2fa_email_template, get_password_changed_email_template, get_password_reset_email_template
@@ -537,6 +538,7 @@ def reset_password_with_recovery_code(request):
         user.save()
         EmailVerification.objects.filter(user=user, is_used=False).delete()
         refresh = RefreshToken.for_user(user)
+        attach_session_to_refresh_token(user, request, refresh)
         create_recovery_code_used_notification(
             user,
             purpose='change your password and sign in',

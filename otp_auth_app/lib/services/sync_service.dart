@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/app_notification_item.dart';
+import '../models/device_session_info.dart';
 import '../models/otp_account.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
@@ -288,9 +289,13 @@ class SyncService {
   // ─── Auth helpers ─────────────────────────────────────────────────────────
   Future<void> _updateAuthHeader() async {
     final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final deviceId = await getOrCreateDeviceId();
+    final deviceLabel = await _buildDeviceLabel();
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
     }
+    _dio.options.headers['X-Device-ID'] = deviceId;
+    _dio.options.headers['X-Device-Label'] = deviceLabel;
   }
 
   Future<bool> _refreshToken() async {
@@ -325,6 +330,7 @@ class SyncService {
       if (e.response?.statusCode == 401) {
         final refreshed = await _refreshToken();
         if (refreshed) return await request();
+        await logout();
       }
       rethrow;
     }
@@ -342,6 +348,16 @@ class SyncService {
   Future<String> _getCurrentUserId() async {
     return await _secureStorage.read(SecureStorageService.currentUserKey) ??
         'default_user';
+  }
+
+  Future<String> getOrCreateDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    var deviceId = prefs.getString('device_id') ?? '';
+    if (deviceId.isEmpty) {
+      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('device_id', deviceId);
+    }
+    return deviceId;
   }
 
   Future<String> _buildDeviceLabel() async {
@@ -374,6 +390,10 @@ class SyncService {
     return prettyOs;
   }
 
+  Future<String> getCurrentDeviceLabel() async {
+    return _buildDeviceLabel();
+  }
+
   // ─── Decrypt local secret back to plain for uploading ────────────────────
   Future<String> _decryptSecretForUpload(String storedSecret) async {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
@@ -391,10 +411,14 @@ class SyncService {
   Future<bool> register(String username, String email, String password) async {
     try {
       _lastErrorMessage = null;
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/register/', data: {
         'username': username,
         'email': email,
         'password': password,
+        'device_id': deviceId,
+        'device_label': deviceLabel,
       });
       if (response.statusCode == 200 || response.statusCode == 201) {
         final canonicalUsername =
@@ -431,10 +455,12 @@ class SyncService {
   Future<bool> login(String username, String password) async {
     try {
       _lastErrorMessage = null;
+      final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/login/', data: {
         'username': username.trim(),
         'password': password,
+        'device_id': deviceId,
         'device_label': deviceLabel,
       });
       if (response.statusCode == 200) {
@@ -1065,11 +1091,13 @@ class SyncService {
       String username, String password, String recoveryCode) async {
     try {
       _lastErrorMessage = null;
+      final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('recovery-code/login/', data: {
         'username': username.trim(),
         'password': password,
         'recovery_code': recoveryCode.trim(),
+        'device_id': deviceId,
         'device_label': deviceLabel,
       });
       return response.data['success'] == true;
@@ -1106,11 +1134,13 @@ class SyncService {
       String email, String recoveryCode, String newPassword) async {
     try {
       _lastErrorMessage = null;
+      final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('recovery-code/reset-password/', data: {
         'email': email.trim(),
         'recovery_code': recoveryCode.trim(),
         'new_password': newPassword,
+        'device_id': deviceId,
         'device_label': deviceLabel,
       });
       if (response.data['success'] == true) {
@@ -1373,6 +1403,159 @@ class SyncService {
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<List<DeviceSessionInfo>> getActiveDeviceSessions() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to view active devices.';
+      return [];
+    }
+
+    try {
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
+      final response = await _requestWithRetry(
+        () => _dio.get(
+          'device-sessions/',
+          queryParameters: {
+            'device_id': deviceId,
+            'device_label': deviceLabel,
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List)
+            .whereType<Map>()
+            .map((item) => DeviceSessionInfo.fromJson(
+                  Map<String, dynamic>.from(item),
+                ))
+            .toList();
+      }
+
+      _lastErrorMessage = 'Could not load active devices.';
+      return [];
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _friendlyRequestError(e, 'Could not load active devices.');
+      return [];
+    } catch (e) {
+      _lastErrorMessage = 'Could not load active devices.';
+      return [];
+    }
+  }
+
+  Future<bool> revokeDeviceSession(String sessionId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to manage devices.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.post(
+          'device-sessions/$sessionId/revoke/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ?? 'Could not sign out this device.';
+      return false;
+    } catch (e) {
+      _lastErrorMessage = 'Could not sign out this device.';
+      return false;
+    }
+  }
+
+  Future<int?> revokeOtherDeviceSessions() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to manage devices.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.post(
+          'device-sessions/revoke-others/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        return int.tryParse(response.data['revoked_count'].toString()) ?? 0;
+      }
+
+      _lastErrorMessage = 'Could not sign out the other devices.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not sign out the other devices.';
+      return null;
+    } catch (e) {
+      _lastErrorMessage = 'Could not sign out the other devices.';
+      return null;
+    }
+  }
+
+  Future<bool> validateCurrentSession() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in.';
+      return false;
+    }
+
+    try {
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
+      final response = await _requestWithRetry(
+        () => _dio.get(
+          'device-sessions/',
+          queryParameters: {
+            'device_id': deviceId,
+            'device_label': deviceLabel,
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        _lastErrorMessage = _friendlyRequestError(
+          e,
+          'This device session is no longer active.',
+        );
+        return false;
+      }
+      return true;
+    } catch (e) {
+      return true;
     }
   }
 

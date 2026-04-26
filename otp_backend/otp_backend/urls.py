@@ -5,11 +5,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from api.views import (
     AppNotificationViewSet,
     AuthViewSet,
+    DeviceSessionViewSet,
     SyncViewSet,
     send_delete_otp,
     verify_delete_otp,
@@ -18,6 +19,7 @@ from api.views import (
     download_backup_codes,
     get_backup_code_status,
 )
+from api.token_views import DeviceSessionTokenRefreshView
 from twofa.views import (
     send_2fa_code,
     verify_2fa_code,
@@ -40,6 +42,7 @@ router = DefaultRouter()
 router.register(r'auth', AuthViewSet, basename='auth')
 router.register(r'sync', SyncViewSet, basename='sync')
 router.register(r'notifications', AppNotificationViewSet, basename='notifications')
+router.register(r'device-sessions', DeviceSessionViewSet, basename='device-sessions')
 router.register(r'profile', ProfileViewSet, basename='profile')
 
 urlpatterns = [
@@ -52,7 +55,7 @@ urlpatterns = [
     path('favicon.ico', RedirectView.as_view(url='/static/favicon.ico')),
     # API URLs
     path('api/', include(router.urls)),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/refresh/', DeviceSessionTokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/send-2fa/', send_2fa_code, name='send_2fa'),
     path('api/verify-2fa/', verify_2fa_code, name='verify_2fa'),

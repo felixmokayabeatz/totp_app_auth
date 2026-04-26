@@ -187,6 +187,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final userId =
           await secureStorage.read(SecureStorageService.userIdKey) ?? '';
 
+      final sessionStillValid = await _syncService.validateCurrentSession();
+      if (!sessionStillValid) {
+        await _syncService.logout();
+        await authProvider.logout();
+        return;
+      }
+
       OTPService().clearCachedUserId();
       await authProvider.setUserData(username, email, userId);
       final restoredKey = await _syncService.restoreEncryptionKey();

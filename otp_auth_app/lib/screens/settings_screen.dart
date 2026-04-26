@@ -11,6 +11,7 @@ import '../services/sync_service.dart';
 import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/secure_storage_service.dart';
+import 'device_sessions_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
@@ -421,6 +422,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Change Password',
               sub: 'Update your password',
               onTap: _showChangePasswordDialog,
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.devices_rounded,
+              label: 'Active Devices',
+              sub: 'See where your account is signed in',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DeviceSessionsScreen(),
+                ),
+              ),
             ),
             _dividerLine(),
             _tappableTile(

@@ -97,3 +97,27 @@ class AppNotification(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.notification_type}"
+
+
+class DeviceSession(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='device_sessions',
+    )
+    device_id = models.CharField(max_length=255, blank=True, default='', db_index=True)
+    device_label = models.CharField(max_length=120, blank=True, default='Unknown device')
+    user_agent = models.TextField(blank=True, default='')
+    ip_address = models.CharField(max_length=128, blank=True, default='')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_seen_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-last_seen_at', '-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.device_label}"

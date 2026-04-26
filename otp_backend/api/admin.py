@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
     AppNotification,
+    DeviceSession,
     EncryptedData,
     SyncLog,
     AccountTombstone,
@@ -162,6 +163,46 @@ class AppNotificationAdmin(admin.ModelAdmin):
         "read_at",
         "created_at",
         "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_list_display_links(self, request, list_display):
+        return ()
+
+
+@admin.register(DeviceSession)
+class DeviceSessionAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "device_label",
+        "device_id",
+        "is_active",
+        "last_seen_at",
+        "created_at",
+        "revoked_at",
+    )
+    list_filter = ("is_active", "created_at", "last_seen_at", "revoked_at")
+    search_fields = ("user__username", "user__email", "device_label", "device_id", "ip_address")
+    readonly_fields = (
+        "id",
+        "user",
+        "device_id",
+        "device_label",
+        "user_agent",
+        "ip_address",
+        "is_active",
+        "created_at",
+        "updated_at",
+        "last_seen_at",
+        "revoked_at",
     )
 
     def has_add_permission(self, request):

@@ -28,6 +28,7 @@ from .backup_codes import (
 )
 from .models import (
     AppNotification,
+    DeviceSession,
     EncryptedData,
     SyncLog,
     AccountTombstone,
@@ -41,8 +42,16 @@ from .notifications import (
     create_recovery_codes_generated_notification,
     create_sign_in_notification,
 )
+from .device_sessions import (
+    attach_session_to_refresh_token,
+    ensure_device_session,
+    extract_request_ip,
+    get_request_device_id,
+    get_request_device_label,
+)
 from .serializers import (
     AppNotificationSerializer,
+    DeviceSessionSerializer,
     UserSerializer,
     EncryptedDataSerializer,
     RegisterSerializer,
@@ -94,6 +103,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 debug_print(f"[AUTH] User created successfully - ID: {user.id}, Username: {user.username}, Email: {user.email}")
                 
                 refresh = RefreshToken.for_user(user)
+                attach_session_to_refresh_token(user, request, refresh)
                 
                 elapsed_time = __import__('time').time() - start_time
                 debug_print(f"[AUTH] Registration completed in {elapsed_time:.2f} seconds")
@@ -160,7 +170,8 @@ class AuthViewSet(viewsets.GenericViewSet):
                 debug_print(f"[AUTH] Authentication SUCCESS - User ID: {user.id}, Username: {user.username}")
                 
                 refresh = RefreshToken.for_user(user)
-                create_sign_in_notification(user, device_label)
+                session = attach_session_to_refresh_token(user, request, refresh)
+                create_sign_in_notification(user, session.device_label)
                 
                 elapsed_time = __import__('time').time() - start_time
                 debug_print(f"[AUTH] Login completed in {elapsed_time:.2f} seconds")
@@ -640,6 +651,84 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'success': True}, status=201)
 
         return Response({'error': 'Unsupported notification event'}, status=400)
+
+
+class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = DeviceSessionSerializer
+
+    def get_queryset(self):
+        return DeviceSession.objects.filter(
+            user=self.request.user,
+            is_active=True,
+            revoked_at__isnull=True,
+        ).order_by('-last_seen_at', '-created_at')
+
+    def _ensure_current_session(self):
+        current_device_id = get_request_device_id(self.request)
+        if not current_device_id:
+            return None
+
+        return ensure_device_session(
+            self.request.user,
+            device_id=current_device_id,
+            device_label=get_request_device_label(self.request),
+            user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
+            ip_address=extract_request_ip(self.request),
+        )
+
+    def list(self, request, *args, **kwargs):
+        current_session = self._ensure_current_session()
+        serializer = self.get_serializer(
+            self.get_queryset()[:25],
+            many=True,
+            context={
+                **self.get_serializer_context(),
+                'current_session_id': str(current_session.id) if current_session else request.auth.get('session_id'),
+                'current_device_id': get_request_device_id(request),
+            },
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='revoke')
+    def revoke(self, request, pk=None):
+        current_session = self._ensure_current_session()
+        session = self.get_object()
+        current_session_id = str(current_session.id) if current_session else str(request.auth.get('session_id', ''))
+
+        if current_session_id and str(session.id) == current_session_id:
+            return Response(
+                {'error': 'Use the normal logout button to sign out this current device.'},
+                status=400,
+            )
+
+        session.is_active = False
+        session.revoked_at = timezone.now()
+        session.save(update_fields=['is_active', 'revoked_at', 'updated_at'])
+        return Response({'success': True})
+
+    @action(detail=False, methods=['post'], url_path='revoke-others')
+    def revoke_others(self, request):
+        current_session = self._ensure_current_session()
+        queryset = self.get_queryset()
+
+        if current_session is not None:
+            queryset = queryset.exclude(id=current_session.id)
+        else:
+            current_session_id = request.auth.get('session_id')
+            current_device_id = get_request_device_id(request)
+            if current_session_id:
+                queryset = queryset.exclude(id=current_session_id)
+            elif current_device_id:
+                queryset = queryset.exclude(device_id=current_device_id)
+
+        now = timezone.now()
+        revoked_count = queryset.update(
+            is_active=False,
+            revoked_at=now,
+            updated_at=now,
+        )
+        return Response({'success': True, 'revoked_count': revoked_count})
 
 
 # ===================

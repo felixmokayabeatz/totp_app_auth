@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import AppNotification, EncryptedData
+from .models import AppNotification, DeviceSession, EncryptedData
 from .notifications import decrypt_notification_payload
 
 class UserSerializer(serializers.ModelSerializer):
@@ -70,3 +70,30 @@ class AppNotificationSerializer(serializers.ModelSerializer):
     def get_preview(self, obj):
         message = self._payload(obj).get('message', '')
         return message[:120]
+
+
+class DeviceSessionSerializer(serializers.ModelSerializer):
+    is_current = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DeviceSession
+        fields = [
+            'id',
+            'device_id',
+            'device_label',
+            'ip_address',
+            'is_active',
+            'is_current',
+            'created_at',
+            'last_seen_at',
+        ]
+
+    def get_is_current(self, obj):
+        current_session_id = self.context.get('current_session_id')
+        current_device_id = self.context.get('current_device_id')
+
+        if current_session_id and str(obj.id) == str(current_session_id):
+            return True
+        if current_device_id and obj.device_id == current_device_id:
+            return True
+        return False
