@@ -77,8 +77,10 @@ def load_flutter_version():
 
     raise FileNotFoundError(f"Unable to read Flutter version from {PUBSPEC_FILE}")
 
-APP_FULL_VERSION, APP_VERSION, APP_BUILD_NUMBER = load_flutter_version()
-APP_ARTIFACT_VERSION = f"{APP_VERSION}_{APP_BUILD_NUMBER}"
+APP_FULL_VERSION = ""
+APP_VERSION = ""
+APP_BUILD_NUMBER = ""
+APP_ARTIFACT_VERSION = ""
 
 
 def get_versioned_inno_script_path() -> Path:
@@ -176,23 +178,42 @@ def sync_inno_setup_script(script_path: Path):
     return True
 
 
-inno_script_file = find_inno_setup_script()
-if inno_script_file is not None:
-    sync_inno_setup_script(inno_script_file)
-    target_inno_script = get_versioned_inno_script_path()
-    if inno_script_file.resolve() != target_inno_script.resolve():
-        if target_inno_script.exists():
-            target_inno_script.unlink()
-        inno_script_file.replace(target_inno_script)
-        print_color(
-            f"Updated Inno Setup script: {target_inno_script.name}",
-            Colors.GREEN,
-        )
-    else:
-        print_color(
-            f"Updated Inno Setup script: {inno_script_file.name}",
-            Colors.GREEN,
-        )
+def refresh_version_context(announce=False):
+    """Reload version info from pubspec.yaml and resync the Inno script."""
+    global APP_FULL_VERSION, APP_VERSION, APP_BUILD_NUMBER, APP_ARTIFACT_VERSION
+
+    app_full_version, app_version, app_build_number = load_flutter_version()
+    app_artifact_version = f"{app_version}_{app_build_number}"
+
+    version_changed = (
+        APP_FULL_VERSION != app_full_version
+        or APP_VERSION != app_version
+        or APP_BUILD_NUMBER != app_build_number
+        or APP_ARTIFACT_VERSION != app_artifact_version
+    )
+
+    APP_FULL_VERSION = app_full_version
+    APP_VERSION = app_version
+    APP_BUILD_NUMBER = app_build_number
+    APP_ARTIFACT_VERSION = app_artifact_version
+
+    inno_script_file = find_inno_setup_script()
+    if inno_script_file is not None:
+        sync_inno_setup_script(inno_script_file)
+        target_inno_script = get_versioned_inno_script_path()
+        if inno_script_file.resolve() != target_inno_script.resolve():
+            if target_inno_script.exists():
+                target_inno_script.unlink()
+            inno_script_file.replace(target_inno_script)
+            inno_script_file = target_inno_script
+        if announce or version_changed:
+            print_color(
+                f"Updated Inno Setup script: {inno_script_file.name}",
+                Colors.GREEN,
+            )
+
+
+refresh_version_context()
 
 def get_linux_bundle_binary_name(bundle_path: Path) -> str:
     """Return the main executable name produced by the Flutter Linux bundle."""
@@ -647,11 +668,11 @@ def build_android(choice: str | None = None):
     return success
 
 
-def build_windows_and_android():
-    """Build Windows artifacts and Android release artifacts in one run."""
-    print_color("\nBuilding Windows and Android artifacts...", Colors.CYAN)
+def build_windows_and_apk():
+    """Build Windows artifacts and Android APK in one run."""
+    print_color("\nBuilding Windows and Android APK artifacts...", Colors.CYAN)
     windows_ok = build_windows()
-    android_ok = build_android("4")
+    android_ok = build_android("1")
     return windows_ok and android_ok
 
 # ==================== UTILITIES ====================
@@ -759,12 +780,13 @@ def main_menu():
     system = platform.system()
     
     while True:
+        refresh_version_context()
         print_color(f"""
 {'BUILD OPTIONS:':^50}
   1. Linux (.deb final build)
   2. Windows (.exe + installer bundle)
   3. Android (.apk + .aab)
-  4. Build All (Windows + Android)
+  4. Build All (Windows + APK)
 
 {'RUN OPTIONS:':^50}
   5. Run Linux (debug mode)
@@ -784,6 +806,7 @@ def main_menu():
   17. Exit
 
 Current platform: {system}
+Current app version: {APP_FULL_VERSION}
 """)
         
         choice = input("Enter your choice (1-17): ").strip()
@@ -829,6 +852,7 @@ Current platform: {system}
             input("\nPress Enter to continue...")
             continue
         
+        refresh_version_context(announce=True)
         ensure_dirs()
         
         if choice == "1":
@@ -848,9 +872,9 @@ Current platform: {system}
         elif choice == "4":
             if system != "Windows":
                 print_color("Build All currently requires Windows for the installer step!", Colors.YELLOW)
-                print_color("   Run this script on Windows to build Windows + Android together", Colors.YELLOW)
+                print_color("   Run this script on Windows to build Windows + APK together", Colors.YELLOW)
             else:
-                build_windows_and_android()
+                build_windows_and_apk()
         elif choice == "5":
             if system != "Linux":
                 print_color("Linux run requires Linux OS!", Colors.YELLOW)
