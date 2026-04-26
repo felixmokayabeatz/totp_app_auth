@@ -1,0 +1,7 @@
+v1.3.0 (Build 5)
+- Added in-app security notifications with unread tracking
+- Added a notifications page with list and detail view
+- Added a home screen unread notification badge with quick access
+- Improved recovery code alerts and backup code activity tracking
+- Styled the recovery code regeneration email to match the other security emails
+- Improved sign-in device labeling and general security activity visibility
