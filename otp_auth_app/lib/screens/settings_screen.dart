@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../models/app_update_info.dart';
+import '../services/app_update_service.dart';
 import '../services/sync_service.dart';
 import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
@@ -22,12 +24,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
   final BiometricService _biometricService = BiometricService();
   final AppLockService _appLockService = AppLockService();
+  final AppUpdateService _appUpdateService = AppUpdateService();
 
   bool _isSyncing = false;
+  bool _isCheckingForUpdates = false;
   bool _syncEnabled = true;
   bool _appLockEnabled = false;
   String _appVersionLabel = '...';
   Timer? _syncPrefTimer;
+  AppUpdateInfo? _updateInfo;
 
   @override
   void initState() {
@@ -35,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadSyncPreference();
     _loadAppLockSettings();
     _loadAppVersion();
+    _refreshUpdateInfo();
     _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       await _syncService.refreshSyncPreferenceFromServer();
       final enabled = await _syncService.isSyncEnabled();
@@ -65,16 +71,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadAppVersion() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    final version = packageInfo.version;
-    final buildNumber = packageInfo.buildNumber;
-    final label =
-        buildNumber.isEmpty ? version : '$version (Build $buildNumber)';
+    final label = await _appUpdateService.getCurrentVersionLabel();
     if (mounted) {
       setState(() {
         _appVersionLabel = label;
       });
     }
+  }
+
+  Future<void> _refreshUpdateInfo() async {
+    if (_isCheckingForUpdates || _appUpdateService.currentPlatform.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isCheckingForUpdates = true;
+    });
+
+    final info = await _appUpdateService.checkForUpdate();
+    if (!mounted) return;
+
+    setState(() {
+      _updateInfo = info;
+      _isCheckingForUpdates = false;
+    });
+  }
+
+  Future<void> _handleUpdateTap() async {
+    await _refreshUpdateInfo();
+    if (!mounted) return;
+
+    final info = _updateInfo;
+    if (info == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Updates are not configured for this platform yet.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    if (!info.updateAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('You are already on the latest version.'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    final opened = await _appUpdateService.openUpdate(info);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          opened
+              ? 'Opening download for ${info.latestLabel}'
+              : 'Could not open the update download link.',
+        ),
+        backgroundColor: opened ? _accent : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  String _updateSubtitle() {
+    if (_appUpdateService.currentPlatform.isEmpty) {
+      return 'Updates are not configured for this platform';
+    }
+
+    if (_isCheckingForUpdates) {
+      return 'Checking for updates...';
+    }
+
+    final info = _updateInfo;
+    if (info == null) {
+      return 'Check for a newer version';
+    }
+
+    if (info.updateAvailable && info.forceUpdate) {
+      return 'Required update available: ${info.latestLabel}';
+    }
+
+    if (info.updateAvailable) {
+      return 'Optional update available: ${info.latestLabel}';
+    }
+
+    return 'You are using the latest version';
   }
 
   bool get _canChangeAppPin => Platform.isLinux || Platform.isMacOS;
@@ -257,6 +348,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
           _sectionLabel('About'),
           _settingsCard([
+            if (_appUpdateService.currentPlatform.isNotEmpty) ...[
+              _tappableTile(
+                icon: Icons.system_update_alt_rounded,
+                label: 'App Updates',
+                sub: _updateSubtitle(),
+                trailing: _buildUpdateTrailing(),
+                onTap: _handleUpdateTap,
+              ),
+              _dividerLine(),
+            ],
             _tappableTile(
               icon: Icons.info_outline_rounded,
               label: 'Version',
@@ -1156,6 +1257,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: Color(0xFF10B981),
               fontSize: 12,
               fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Widget _buildUpdateTrailing() {
+    if (_isCheckingForUpdates) {
+      return SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+      );
+    }
+
+    final info = _updateInfo;
+    if (info != null && info.updateAvailable) {
+      final bgColor = info.forceUpdate
+          ? Colors.red.withOpacity(0.12)
+          : const Color(0xFF10B981).withOpacity(0.12);
+      final fgColor = info.forceUpdate ? Colors.red : const Color(0xFF10B981);
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          info.forceUpdate ? 'Required' : 'Update',
+          style: TextStyle(
+            color: fgColor,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    return Icon(
+      Icons.refresh_rounded,
+      color: _isDark ? Colors.white24 : Colors.grey.shade300,
+      size: 20,
     );
   }
 

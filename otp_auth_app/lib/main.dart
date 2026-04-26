@@ -6,12 +6,14 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
+import 'models/app_update_info.dart';
 import 'models/otp_account.dart';
 import 'models/password_entry.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/app_update_service.dart';
 import 'services/app_lock_service.dart';
 import 'services/biometric_service.dart';
 import 'services/otp_service.dart';
@@ -64,19 +66,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
 
   final AppLockService _appLockService = AppLockService();
+  final AppUpdateService _appUpdateService = AppUpdateService();
   final SyncService _syncService = SyncService();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   bool _initialized = false;
   bool _isLocked = true;
   bool _unlockInProgress = false;
+  bool _updateCheckInProgress = false;
+  bool _openingRequiredUpdate = false;
   bool _sessionReady = false;
   DateTime? _backgroundedAt;
+  Timer? _updateTimer;
+  AppUpdateInfo? _requiredUpdateInfo;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _updateTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _refreshUpdateStatus(),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
     });
@@ -85,11 +96,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _updateTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _initializeApp() async {
     try {
+      await _refreshUpdateStatus();
       final dialogContext = _navigatorKey.currentContext;
       if (dialogContext != null) {
         await _appLockService.ensureMandatoryLock(dialogContext);
@@ -108,6 +121,51 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _initialized = true;
         _isLocked = true;
       });
+    }
+  }
+
+  Future<void> _refreshUpdateStatus() async {
+    if (_updateCheckInProgress || _appUpdateService.currentPlatform.isEmpty) {
+      return;
+    }
+
+    _updateCheckInProgress = true;
+    try {
+      final info = await _appUpdateService.checkForUpdate();
+      if (!mounted) return;
+
+      setState(() {
+        _requiredUpdateInfo =
+            info != null && info.updateAvailable && info.forceUpdate
+                ? info
+                : null;
+      });
+    } catch (e) {
+      debugPrint('Update check error: $e');
+    } finally {
+      _updateCheckInProgress = false;
+    }
+  }
+
+  Future<void> _openRequiredUpdate() async {
+    final info = _requiredUpdateInfo;
+    if (info == null || _openingRequiredUpdate) return;
+
+    setState(() {
+      _openingRequiredUpdate = true;
+    });
+
+    try {
+      final opened = await _appUpdateService.openUpdate(info);
+      if (!opened) {
+        debugPrint('Failed to open update URL: ${info.preferredOpenUrl}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _openingRequiredUpdate = false;
+        });
+      }
     }
   }
 
@@ -252,6 +310,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           _isLocked = true;
         });
       }
+
+      unawaited(_refreshUpdateStatus());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshUpdateStatus());
     }
   }
 
@@ -268,6 +330,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           themeMode: themeProvider.themeMode,
           home: !_initialized || !_sessionReady
               ? const _LaunchLoadingScreen()
+              : _requiredUpdateInfo != null
+                  ? _RequiredUpdateScreen(
+                      info: _requiredUpdateInfo!,
+                      isOpeningUpdate: _openingRequiredUpdate,
+                      onUpdateNow: _openRequiredUpdate,
+                      onRefreshStatus: _refreshUpdateStatus,
+                    )
               : _isLocked
                   ? _AppLockScreen(
                       isBusy: _unlockInProgress,
@@ -279,6 +348,139 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       : LoginScreen(),
         );
       },
+    );
+  }
+}
+
+class _RequiredUpdateScreen extends StatelessWidget {
+  const _RequiredUpdateScreen({
+    required this.info,
+    required this.isOpeningUpdate,
+    required this.onUpdateNow,
+    required this.onRefreshStatus,
+  });
+
+  final AppUpdateInfo info;
+  final bool isOpeningUpdate;
+  final Future<void> Function() onUpdateNow;
+  final Future<void> Function() onRefreshStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final releaseNotes = info.releaseNotes.trim();
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.14),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Icon(
+                              Icons.system_update_alt_rounded,
+                              color: Colors.orange,
+                              size: 30,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Update required',
+                                  style:
+                                      Theme.of(context).textTheme.headlineSmall,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Install ${info.latestLabel} to continue using BeatzLock.',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        info.reason,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      if (releaseNotes.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          'What changed',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(releaseNotes),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: isOpeningUpdate ? null : onUpdateNow,
+                          icon: isOpeningUpdate
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.open_in_new_rounded),
+                          label: Text(
+                            isOpeningUpdate ? 'Opening download...' : 'Update now',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: onRefreshStatus,
+                          child: const Text('Check again'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
