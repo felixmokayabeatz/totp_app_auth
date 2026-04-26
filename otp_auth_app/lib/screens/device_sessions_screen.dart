@@ -26,6 +26,14 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
+  DeviceSessionInfo? get _currentSession {
+    for (final session in _sessions) {
+      if (session.isCurrent) return session;
+    }
+    return null;
+  }
+
+  bool get _canChangePrimaryDevice => _currentSession?.isPrimary == true;
 
   @override
   void initState() {
@@ -259,6 +267,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           (session) => session?.isPrimary == true,
           orElse: () => null,
         );
+    final canChangePrimaryDevice = _canChangePrimaryDevice;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -303,6 +312,20 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
               color: primarySession == null
                   ? _textSecondary
                   : const Color(0xFF2563EB),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            canChangePrimaryDevice
+                ? 'Only this current primary device can move primary protection to another device.'
+                : 'Primary-device changes are locked on this device. Open BeatzLock on the current primary device to change it.',
+            style: TextStyle(
+              color: canChangePrimaryDevice
+                  ? _textSecondary
+                  : const Color(0xFFB45309),
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
               height: 1.4,
@@ -369,6 +392,8 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
   }
 
   Widget _sessionCard(DeviceSessionInfo session) {
+    final canChangePrimaryDevice = _canChangePrimaryDevice;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -482,7 +507,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
             runSpacing: 10,
             alignment: WrapAlignment.end,
             children: [
-              if (!session.isPrimary)
+              if (!session.isPrimary && canChangePrimaryDevice)
                 OutlinedButton.icon(
                   onPressed: _primaryUpdateSessionId == session.id
                       ? null
@@ -505,7 +530,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                     ),
                   ),
                 ),
-              if (!session.isCurrent)
+              if (!session.isCurrent && !session.isPrimary)
                 OutlinedButton.icon(
                   onPressed: () => _revokeSession(session),
                   icon: const Icon(Icons.logout_rounded, size: 18),

@@ -710,6 +710,12 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
                 status=400,
             )
 
+        if session.is_primary:
+            return Response(
+                {'error': 'The primary device cannot be signed out remotely from another device.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         session.is_active = False
         session.is_primary = False
         session.revoked_at = timezone.now()
@@ -746,8 +752,20 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='set-primary')
     def set_primary(self, request, pk=None):
-        self._ensure_current_session()
+        current_session = self._ensure_current_session()
         session = self.get_object()
+
+        if current_session is None:
+            return Response(
+                {'error': 'This device could not be verified for primary device changes.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not current_session.is_primary:
+            return Response(
+                {'error': 'Only the device currently set as primary can change the primary device.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         DeviceSession.objects.filter(
             user=request.user,
