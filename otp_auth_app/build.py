@@ -17,6 +17,7 @@ PROJECT_DIR = str(SCRIPT_DIR)
 INSTALLER_DIR = str(WORKSPACE_DIR / "final_builds")
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
 PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
+INNO_VERSION_FILE = WORKSPACE_DIR / "beatzlock_inno_version.iss"
 
 # Platform-specific build dirs
 LINUX_DIR = str(Path(INSTALLER_DIR) / "linux")
@@ -75,6 +76,26 @@ def load_flutter_version():
 
 APP_FULL_VERSION, APP_VERSION, APP_BUILD_NUMBER = load_flutter_version()
 APP_ARTIFACT_VERSION = f"{APP_VERSION}_{APP_BUILD_NUMBER}"
+
+
+def write_inno_version_file():
+    """Generate an Inno Setup include file from pubspec.yaml version info."""
+    content = "\n".join(
+        [
+            "; Auto-generated from otp_auth_app/pubspec.yaml",
+            "; Do not edit manually.",
+            f'#define MyAppYamlVersion "{APP_FULL_VERSION}"',
+            f'#define MyAppSemVersion "{APP_VERSION}"',
+            f'#define MyAppBuildNumber "{APP_BUILD_NUMBER}"',
+            f'#define MyAppArtifactVersion "{APP_ARTIFACT_VERSION}"',
+            f'#define MyOutputBaseFilename "beatzlock_{APP_ARTIFACT_VERSION}_x64"',
+            "",
+        ]
+    )
+    INNO_VERSION_FILE.write_text(content, encoding="utf-8")
+
+
+write_inno_version_file()
 
 def get_linux_bundle_binary_name(bundle_path: Path) -> str:
     """Return the main executable name produced by the Flutter Linux bundle."""

@@ -2,8 +2,9 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 ; Non-commercial use only
 
+#include "beatzlock_inno_version.iss"
+
 #define MyAppName "beatzLock"
-#define MyAppVersion "1.0.2_3" ;This always changes
 #define MyAppPublisher "felixmokayabeatz Inc."
 #define MyAppURL "https://www.felixmokayabeatz.online/"
 #define MyAppExeName "otp_auth_app.exe"
@@ -16,8 +17,8 @@
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
 AppId={{A7072F46-1772-4795-931F-DEBA6B3C75CA}
 AppName={#MyAppName}
-AppVersion={#MyAppVersion}
-;AppVerName={#MyAppName} {#MyAppVersion}
+AppVersion={#MyAppYamlVersion}
+AppVerName={#MyAppName} {#MyAppYamlVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
@@ -38,7 +39,7 @@ DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputDir=C:\Programming\totp_app\final_builds\Installers
-OutputBaseFilename=beatzlock_{#MyAppVersion}_x64
+OutputBaseFilename={#MyOutputBaseFilename}
 SetupIconFile=C:\Programming\totp_app\otp_backend\static\favicon.ico
 SolidCompression=yes
 WizardStyle=modern dynamic
