@@ -1,0 +1,7 @@
+v1.4.0 (Build 6)
+- Added active device session management
+- Added a live signed-in devices screen in Settings
+- Added sign out for one device at a time
+- Added sign out for all other devices while keeping the current device active
+- Improved session security so revoked devices lose access automatically
+- General fixes and stability improvements
