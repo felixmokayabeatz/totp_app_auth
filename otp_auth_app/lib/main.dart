@@ -64,7 +64,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
-  static const Duration _sessionHeartbeatInterval = Duration(seconds: 5);
+  static const Duration _sessionHeartbeatInterval = Duration(seconds: 1);
 
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();

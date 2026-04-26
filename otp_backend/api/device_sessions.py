@@ -62,6 +62,12 @@ def ensure_device_session(
         )
 
     if session is None:
+        should_be_primary = not DeviceSession.objects.filter(
+            user=user,
+            is_active=True,
+            revoked_at__isnull=True,
+            is_primary=True,
+        ).exists()
         session = DeviceSession.objects.create(
             user=user,
             device_id=normalized_device_id,
@@ -69,6 +75,7 @@ def ensure_device_session(
             user_agent=user_agent or '',
             ip_address=ip_address or '',
             is_active=True,
+            is_primary=should_be_primary,
             last_seen_at=now,
         )
         return session
@@ -104,6 +111,29 @@ def ensure_device_session(
         )
 
     return session
+
+
+def ensure_primary_session(user: User) -> DeviceSession | None:
+    primary_session = DeviceSession.objects.filter(
+        user=user,
+        is_active=True,
+        revoked_at__isnull=True,
+        is_primary=True,
+    ).order_by('-last_seen_at', '-created_at').first()
+    if primary_session is not None:
+        return primary_session
+
+    fallback_session = DeviceSession.objects.filter(
+        user=user,
+        is_active=True,
+        revoked_at__isnull=True,
+    ).order_by('-last_seen_at', '-created_at').first()
+    if fallback_session is None:
+        return None
+
+    fallback_session.is_primary = True
+    fallback_session.save(update_fields=['is_primary', 'updated_at'])
+    return fallback_session
 
 
 def attach_session_to_refresh_token(user: User, request, refresh_token):

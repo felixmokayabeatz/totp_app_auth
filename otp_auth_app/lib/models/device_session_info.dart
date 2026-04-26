@@ -4,6 +4,7 @@ class DeviceSessionInfo {
   final String deviceLabel;
   final String ipAddress;
   final bool isActive;
+  final bool isPrimary;
   final bool isCurrent;
   final DateTime createdAt;
   final DateTime lastSeenAt;
@@ -14,6 +15,7 @@ class DeviceSessionInfo {
     required this.deviceLabel,
     required this.ipAddress,
     required this.isActive,
+    required this.isPrimary,
     required this.isCurrent,
     required this.createdAt,
     required this.lastSeenAt,
@@ -26,6 +28,7 @@ class DeviceSessionInfo {
       deviceLabel: json['device_label']?.toString() ?? 'Unknown device',
       ipAddress: json['ip_address']?.toString() ?? '',
       isActive: json['is_active'] == true,
+      isPrimary: json['is_primary'] == true,
       isCurrent: json['is_current'] == true,
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),

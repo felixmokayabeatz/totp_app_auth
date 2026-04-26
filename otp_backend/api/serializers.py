@@ -83,6 +83,7 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
             'device_label',
             'ip_address',
             'is_active',
+            'is_primary',
             'is_current',
             'created_at',
             'last_seen_at',

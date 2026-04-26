@@ -45,6 +45,7 @@ from .notifications import (
 )
 from .device_sessions import (
     attach_session_to_refresh_token,
+    ensure_primary_session,
     ensure_device_session,
     extract_request_ip,
     get_request_device_id,
@@ -680,6 +681,7 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request, *args, **kwargs):
         current_session = self._ensure_current_session()
+        ensure_primary_session(request.user)
         queryset = self.get_queryset()[:25]
         create_daily_active_devices_notification(
             request.user,
@@ -709,8 +711,10 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         session.is_active = False
+        session.is_primary = False
         session.revoked_at = timezone.now()
-        session.save(update_fields=['is_active', 'revoked_at', 'updated_at'])
+        session.save(update_fields=['is_active', 'is_primary', 'revoked_at', 'updated_at'])
+        ensure_primary_session(request.user)
         return Response({'success': True})
 
     @action(detail=False, methods=['post'], url_path='revoke-others')
@@ -728,17 +732,43 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
             elif current_device_id:
                 queryset = queryset.exclude(device_id=current_device_id)
 
+        queryset = queryset.exclude(is_primary=True)
+
         now = timezone.now()
         revoked_count = queryset.update(
             is_active=False,
+            is_primary=False,
             revoked_at=now,
             updated_at=now,
         )
+        ensure_primary_session(request.user)
         return Response({'success': True, 'revoked_count': revoked_count})
+
+    @action(detail=True, methods=['post'], url_path='set-primary')
+    def set_primary(self, request, pk=None):
+        self._ensure_current_session()
+        session = self.get_object()
+
+        DeviceSession.objects.filter(
+            user=request.user,
+            is_active=True,
+            revoked_at__isnull=True,
+            is_primary=True,
+        ).exclude(id=session.id).update(
+            is_primary=False,
+            updated_at=timezone.now(),
+        )
+
+        if not session.is_primary:
+            session.is_primary = True
+            session.save(update_fields=['is_primary', 'updated_at'])
+
+        return Response({'success': True})
 
     @action(detail=False, methods=['post'], url_path='heartbeat')
     def heartbeat(self, request):
         current_session = self._ensure_current_session()
+        ensure_primary_session(request.user)
         active_count = self.get_queryset().count()
         create_daily_active_devices_notification(
             request.user,
@@ -764,8 +794,10 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
 
         if current_session is not None:
             current_session.is_active = False
+            current_session.is_primary = False
             current_session.revoked_at = timezone.now()
-            current_session.save(update_fields=['is_active', 'revoked_at', 'updated_at'])
+            current_session.save(update_fields=['is_active', 'is_primary', 'revoked_at', 'updated_at'])
+            ensure_primary_session(request.user)
 
         return Response({'success': True})
 

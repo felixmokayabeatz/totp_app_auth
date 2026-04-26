@@ -15,6 +15,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
 
   bool _isLoading = true;
   bool _isRevokingAll = false;
+  String? _primaryUpdateSessionId;
   String? _errorMessage;
   List<DeviceSessionInfo> _sessions = const [];
 
@@ -115,11 +116,13 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
   }
 
   Future<void> _revokeAllOthers() async {
-    final otherCount = _sessions.where((session) => !session.isCurrent).length;
+    final otherCount = _sessions
+        .where((session) => !session.isCurrent && !session.isPrimary)
+        .length;
     if (otherCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('There are no other active devices right now.'),
+          content: Text('There are no removable other devices right now.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -134,7 +137,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
         title:
             Text('Sign Out Other Devices', style: TextStyle(color: _textPrimary)),
         content: Text(
-          'This will sign out all other devices and keep only this current device active.',
+          'This will sign out other devices but keep your current device and the primary device active.',
           style: TextStyle(color: _textSecondary),
         ),
         actions: [
@@ -169,6 +172,30 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
               ? 'Signed out $revokedCount other device${revokedCount == 1 ? '' : 's'}.'
               : (_syncService.lastErrorMessage ??
                   'Could not sign out the other devices.'),
+        ),
+        backgroundColor: success ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    if (success) {
+      await _loadSessions();
+    }
+  }
+
+  Future<void> _setPrimaryDevice(DeviceSessionInfo session) async {
+    setState(() => _primaryUpdateSessionId = session.id);
+    final success = await _syncService.setPrimaryDeviceSession(session.id);
+    if (!mounted) return;
+
+    setState(() => _primaryUpdateSessionId = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? '${session.deviceLabel} is now your primary device.'
+              : (_syncService.lastErrorMessage ??
+                  'Could not set the primary device.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -225,7 +252,13 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
   }
 
   Widget _summaryCard() {
-    final otherCount = _sessions.where((session) => !session.isCurrent).length;
+    final otherCount = _sessions
+        .where((session) => !session.isCurrent && !session.isPrimary)
+        .length;
+    final primarySession = _sessions.cast<DeviceSessionInfo?>().firstWhere(
+          (session) => session?.isPrimary == true,
+          orElse: () => null,
+        );
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -260,6 +293,20 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           Text(
             'Devices on the same Wi-Fi can share one public IP, so BeatzLock uses the device name and device reference instead.',
             style: TextStyle(color: _textSecondary, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            primarySession == null
+                ? 'Choose one primary device below. It will stay signed in when you use Sign Out All Other Devices.'
+                : 'Primary device: ${primarySession.deviceLabel}',
+            style: TextStyle(
+              color: primarySession == null
+                  ? _textSecondary
+                  : const Color(0xFF2563EB),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -377,6 +424,24 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                   ],
                 ),
               ),
+              if (session.isPrimary)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Primary',
+                    style: TextStyle(
+                      color: Color(0xFF2563EB),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              if (session.isPrimary && session.isCurrent) const SizedBox(width: 8),
               if (session.isCurrent)
                 Container(
                   padding:
@@ -411,24 +476,50 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
             'Device ref: ${_deviceReference(session.deviceId)}',
             style: TextStyle(color: _textSecondary, fontSize: 12.5),
           ),
-          if (!session.isCurrent) ...[
-            const SizedBox(height: 14),
-            Align(
-              alignment: Alignment.centerRight,
-              child: OutlinedButton.icon(
-                onPressed: () => _revokeSession(session),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text('Sign Out'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: BorderSide(color: Colors.red.withOpacity(0.3)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.end,
+            children: [
+              if (!session.isPrimary)
+                OutlinedButton.icon(
+                  onPressed: _primaryUpdateSessionId == session.id
+                      ? null
+                      : () => _setPrimaryDevice(session),
+                  icon: _primaryUpdateSessionId == session.id
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.star_rounded, size: 18),
+                  label: const Text('Make Primary'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF2563EB),
+                    side: BorderSide(
+                      color: const Color(0xFF2563EB).withOpacity(0.35),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ],
+              if (!session.isCurrent)
+                OutlinedButton.icon(
+                  onPressed: () => _revokeSession(session),
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: const Text('Sign Out'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: BorderSide(color: Colors.red.withOpacity(0.3)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );

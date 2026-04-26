@@ -111,6 +111,7 @@ class DeviceSession(models.Model):
     user_agent = models.TextField(blank=True, default='')
     ip_address = models.CharField(max_length=128, blank=True, default='')
     is_active = models.BooleanField(default=True)
+    is_primary = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_seen_at = models.DateTimeField(auto_now_add=True)

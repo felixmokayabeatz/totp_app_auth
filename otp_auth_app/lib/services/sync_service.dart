@@ -1524,6 +1524,36 @@ class SyncService {
     }
   }
 
+  Future<bool> setPrimaryDeviceSession(String sessionId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to manage devices.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.post(
+          'device-sessions/$sessionId/set-primary/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ?? 'Could not set the primary device.';
+      return false;
+    } catch (e) {
+      _lastErrorMessage = 'Could not set the primary device.';
+      return false;
+    }
+  }
+
   Future<int?> revokeOtherDeviceSessions() async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -1634,7 +1664,7 @@ class SyncService {
       } catch (_) {}
     }
 
-    await _secureStorage.deleteAll();
+      await _secureStorage.deleteSessionData();
 
     await _clearStoredEncryptionKey();
 

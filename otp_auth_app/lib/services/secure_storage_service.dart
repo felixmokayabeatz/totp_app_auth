@@ -58,6 +58,16 @@ class SecureStorageService {
     }
   }
 
+  Future<void> deleteSessionData({bool preserveAppPin = true}) async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in _knownKeys) {
+      if (preserveAppPin && key == appPinHashKey) {
+        continue;
+      }
+      await prefs.remove(key);
+    }
+  }
+
   Future<String?> _migrateLegacyPreference(String key) async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getString(key);
