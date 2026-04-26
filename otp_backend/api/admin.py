@@ -124,9 +124,10 @@ class BackupCodeSetAdmin(admin.ModelAdmin):
         "user",
         "created_at",
         "updated_at",
+        "last_used_at",
     )
     search_fields = ("user__username", "user__email")
-    readonly_fields = ("user", "encrypted_codes", "created_at", "updated_at")
+    readonly_fields = ("user", "encrypted_codes", "created_at", "updated_at", "last_used_at")
 
     def has_add_permission(self, request):
         return False

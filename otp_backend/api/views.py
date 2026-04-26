@@ -18,9 +18,12 @@ from django.conf import settings as django_settings
 
 from .backup_codes import (
     build_backup_codes_pdf,
+    build_backup_code_entries,
     decrypt_backup_codes,
     encrypt_backup_codes,
     generate_backup_codes,
+    normalize_backup_code_entries,
+    remaining_backup_codes,
 )
 from .models import (
     EncryptedData,
@@ -800,23 +803,22 @@ def download_backup_codes(request):
     logger.info("Backup code PDF download - User: %s", user.username)
 
     try:
-        code_set = BackupCodeSet.objects.filter(user=user).first()
+        codes = generate_backup_codes()
+        entries = build_backup_code_entries(codes)
+        encrypted_codes = encrypt_backup_codes(entries)
 
-        if code_set and code_set.encrypted_codes:
-            codes = decrypt_backup_codes(code_set.encrypted_codes)
-            debug_print("[BACKUP CODES] Reusing existing backup codes")
+        code_set = BackupCodeSet.objects.filter(user=user).first()
+        if code_set is None:
+            code_set = BackupCodeSet.objects.create(
+                user=user,
+                encrypted_codes=encrypted_codes,
+                last_used_at=None,
+            )
         else:
-            codes = generate_backup_codes()
-            encrypted_codes = encrypt_backup_codes(codes)
-            if code_set is None:
-                code_set = BackupCodeSet.objects.create(
-                    user=user,
-                    encrypted_codes=encrypted_codes,
-                )
-            else:
-                code_set.encrypted_codes = encrypted_codes
-                code_set.save(update_fields=['encrypted_codes', 'updated_at'])
-            debug_print("[BACKUP CODES] Generated fresh backup codes")
+            code_set.encrypted_codes = encrypted_codes
+            code_set.last_used_at = None
+            code_set.save(update_fields=['encrypted_codes', 'last_used_at', 'updated_at'])
+        debug_print("[BACKUP CODES] Generated fresh backup codes and invalidated previous ones")
 
         pdf_bytes = build_backup_codes_pdf(
             email=user.email or user.username,
@@ -832,6 +834,20 @@ def download_backup_codes(request):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         response['Content-Length'] = str(len(pdf_bytes))
 
+        if user.email:
+            send_mail(
+                subject='BeatzLock recovery codes generated',
+                message=(
+                    f'Hello {user.username},\n\n'
+                    'A new set of BeatzLock recovery codes was just generated for your account. '
+                    'All older recovery codes are now invalid.\n\n'
+                    'If this was not you, please change your password immediately.'
+                ),
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[user.email],
+                fail_silently=True,
+            )
+
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[BACKUP CODES] PDF ready in {elapsed_time:.2f} seconds")
         logger.info("Backup code PDF ready - User: %s", user.username)
@@ -843,3 +859,36 @@ def download_backup_codes(request):
         debug_print(f"[BACKUP CODES] Traceback:\n{error_details}")
         logger.error("Backup code PDF generation failed.\n%s", error_details)
         return Response({'error': 'Failed to generate backup codes PDF'}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_backup_code_status(request):
+    user = request.user
+
+    try:
+        code_set = BackupCodeSet.objects.filter(user=user).first()
+        if code_set is None or not code_set.encrypted_codes:
+            return Response({
+                'has_codes': False,
+                'remaining_codes': 0,
+                'total_codes': 3,
+                'last_used_at': None,
+            })
+
+        entries = normalize_backup_code_entries(
+            decrypt_backup_codes(code_set.encrypted_codes)
+        )
+        return Response({
+            'has_codes': True,
+            'remaining_codes': remaining_backup_codes(entries),
+            'total_codes': len(entries),
+            'last_used_at': code_set.last_used_at.isoformat()
+            if code_set.last_used_at else None,
+        })
+    except Exception as e:
+        error_details = traceback.format_exc()
+        debug_print(f"[BACKUP CODES] STATUS ERROR: {str(e)}")
+        debug_print(f"[BACKUP CODES] STATUS TRACEBACK:\n{error_details}")
+        logger.error("Backup code status failed.\n%s", error_details)
+        return Response({'error': 'Failed to read backup code status'}, status=500)

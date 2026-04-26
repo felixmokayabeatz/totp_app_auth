@@ -27,6 +27,20 @@ def generate_backup_codes() -> list[str]:
     return sorted(codes)
 
 
+def normalize_backup_code(raw_code: str) -> str:
+    return ''.join(ch for ch in raw_code.upper() if ch.isalnum())
+
+
+def build_backup_code_entries(codes: list[str]) -> list[dict[str, str | None]]:
+    return [
+        {
+            "code": normalize_backup_code(code),
+            "used_at": None,
+        }
+        for code in codes
+    ]
+
+
 def _get_cipher() -> Fernet:
     digest = hashlib.sha256(
         f"beatzlock-backup-codes|{settings.SECRET_KEY}".encode("utf-8")
@@ -34,17 +48,42 @@ def _get_cipher() -> Fernet:
     return Fernet(base64.urlsafe_b64encode(digest))
 
 
-def encrypt_backup_codes(codes: list[str]) -> str:
-    payload = json.dumps(codes).encode("utf-8")
+def encrypt_backup_codes(payload_data) -> str:
+    payload = json.dumps(payload_data).encode("utf-8")
     return _get_cipher().encrypt(payload).decode("utf-8")
 
 
-def decrypt_backup_codes(encrypted_codes: str) -> list[str]:
+def decrypt_backup_codes(encrypted_codes: str):
     payload = _get_cipher().decrypt(encrypted_codes.encode("utf-8"))
-    parsed = json.loads(payload.decode("utf-8"))
-    if not isinstance(parsed, list):
+    return json.loads(payload.decode("utf-8"))
+
+
+def normalize_backup_code_entries(payload_data) -> list[dict[str, str | None]]:
+    if not isinstance(payload_data, list):
         raise ValueError("Invalid backup code payload")
-    return [str(code) for code in parsed]
+
+    entries: list[dict[str, str | None]] = []
+    for item in payload_data:
+        if isinstance(item, str):
+            entries.append({"code": normalize_backup_code(item), "used_at": None})
+            continue
+
+        if isinstance(item, dict):
+            entries.append(
+                {
+                    "code": normalize_backup_code(str(item.get("code", ""))),
+                    "used_at": item.get("used_at"),
+                }
+            )
+            continue
+
+        raise ValueError("Invalid backup code entry")
+
+    return entries
+
+
+def remaining_backup_codes(entries: list[dict[str, str | None]]) -> int:
+    return sum(1 for entry in entries if not entry.get("used_at"))
 
 
 def build_backup_codes_pdf(

@@ -5,6 +5,15 @@ from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.utils import timezone
+from api.backup_codes import (
+    decrypt_backup_codes,
+    encrypt_backup_codes,
+    normalize_backup_code,
+    normalize_backup_code_entries,
+    remaining_backup_codes,
+)
+from api.models import BackupCodeSet
 from .models import EmailVerification
 from .email_templates import get_2fa_email_template, get_password_changed_email_template, get_password_reset_email_template
 import logging
@@ -19,6 +28,40 @@ def debug_print(*args, **kwargs):
     """Conditional print only when DEBUG=True"""
     if django_settings.DEBUG:
         print(*args, **kwargs)
+
+
+def _consume_recovery_code(user: User, raw_code: str):
+    code_set = BackupCodeSet.objects.filter(user=user).first()
+    if code_set is None or not code_set.encrypted_codes:
+        return False, 'No recovery codes available for this account.'
+
+    entries = normalize_backup_code_entries(
+        decrypt_backup_codes(code_set.encrypted_codes)
+    )
+    normalized_code = normalize_backup_code(raw_code)
+
+    matched_entry = None
+    for entry in entries:
+        if entry.get('code') == normalized_code:
+            matched_entry = entry
+            break
+
+    if matched_entry is None:
+        return False, 'Invalid recovery code.'
+
+    if matched_entry.get('used_at'):
+        return False, 'This recovery code has already been used.'
+
+    used_at = timezone.now()
+    matched_entry['used_at'] = used_at.isoformat()
+    code_set.encrypted_codes = encrypt_backup_codes(entries)
+    code_set.last_used_at = used_at
+    code_set.save(update_fields=['encrypted_codes', 'last_used_at', 'updated_at'])
+
+    return True, {
+        'remaining_codes': remaining_backup_codes(entries),
+        'last_used_at': used_at.isoformat(),
+    }
 
 
 @api_view(['POST'])
@@ -387,4 +430,97 @@ def reset_password(request):
         debug_print(f"{'='*60}\n")
         
         logger.error("Password reset execution failed.\n%s", error_details)
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_recovery_code_login(request):
+    username = (request.data.get('username') or '').strip()
+    password = request.data.get('password')
+    recovery_code = (request.data.get('recovery_code') or '').strip()
+
+    if not username or not password or not recovery_code:
+        return Response(
+            {'success': False, 'error': 'Username, password, and recovery code required'},
+            status=400,
+        )
+
+    try:
+        user_obj = User.objects.get(username__iexact=username)
+        user = authenticate(username=user_obj.username, password=password)
+        if not user:
+            return Response({'success': False, 'error': 'Invalid username or password'}, status=401)
+
+        consumed, result = _consume_recovery_code(user, recovery_code)
+        if not consumed:
+            return Response({'success': False, 'error': result}, status=400)
+
+        return Response({
+            'success': True,
+            'message': 'Recovery code verified successfully.',
+            'remaining_codes': result['remaining_codes'],
+        })
+    except User.DoesNotExist:
+        return Response({'success': False, 'error': 'User not found'}, status=400)
+    except Exception as e:
+        error_details = traceback.format_exc()
+        logger.error("Recovery code login verification failed.\n%s", error_details)
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password_with_recovery_code(request):
+    email = (request.data.get('email') or '').strip()
+    recovery_code = (request.data.get('recovery_code') or '').strip()
+    new_password = request.data.get('new_password')
+
+    if not email or not recovery_code or not new_password:
+        return Response(
+            {'success': False, 'error': 'Email, recovery code, and new password required'},
+            status=400,
+        )
+
+    if len(new_password) < 8:
+        return Response(
+            {'success': False, 'error': 'Password must be at least 8 characters'},
+            status=400,
+        )
+
+    try:
+        user = User.objects.get(email__iexact=email)
+        consumed, result = _consume_recovery_code(user, recovery_code)
+        if not consumed:
+            return Response({'success': False, 'error': result}, status=400)
+
+        user.set_password(new_password)
+        user.save()
+        EmailVerification.objects.filter(user=user, is_used=False).delete()
+
+        if user.email:
+            html_content = get_password_changed_email_template(user.username)
+            text_content = (
+                "Your password has been changed successfully. "
+                "If you didn't make this change, please contact support immediately."
+            )
+            email_msg = EmailMultiAlternatives(
+                subject='Your password has been changed - BeatzLock Authenticator',
+                body=text_content,
+                from_email=settings.EMAIL_HOST_USER,
+                to=[user.email],
+            )
+            email_msg.attach_alternative(html_content, "text/html")
+            email_msg.send()
+
+        return Response({
+            'success': True,
+            'message': 'Password reset successfully.',
+            'remaining_codes': result['remaining_codes'],
+        })
+    except User.DoesNotExist:
+        return Response({'success': False, 'error': 'No account found with this email'}, status=404)
+    except Exception as e:
+        error_details = traceback.format_exc()
+        logger.error("Password reset with recovery code failed.\n%s", error_details)
         return Response({'success': False, 'error': str(e)}, status=500)

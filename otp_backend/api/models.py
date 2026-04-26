@@ -73,6 +73,7 @@ class BackupCodeSet(models.Model):
     encrypted_codes = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.username} - backup codes"

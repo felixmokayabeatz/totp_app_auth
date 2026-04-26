@@ -15,8 +15,16 @@ from api.views import (
     set_sync_preference,
     get_sync_preference,
     download_backup_codes,
+    get_backup_code_status,
 )
-from twofa.views import send_2fa_code, verify_2fa_code, send_password_reset_code, reset_password
+from twofa.views import (
+    send_2fa_code,
+    verify_2fa_code,
+    send_password_reset_code,
+    reset_password,
+    verify_recovery_code_login,
+    reset_password_with_recovery_code,
+)
 from accounts.views import ProfileViewSet
 
 from django.views.generic import RedirectView
@@ -47,9 +55,12 @@ urlpatterns = [
     path('api/verify-2fa/', verify_2fa_code, name='verify_2fa'),
     path('api/send-reset-code/', send_password_reset_code, name='send_reset_code'),
     path('api/reset-password/', reset_password, name='reset_password'),
+    path('api/recovery-code/login/', verify_recovery_code_login, name='verify_recovery_code_login'),
+    path('api/recovery-code/reset-password/', reset_password_with_recovery_code, name='reset_password_with_recovery_code'),
     path('api/send-delete-otp/', send_delete_otp, name='send_delete_otp'),
     path('api/verify-delete-otp/', verify_delete_otp, name='verify_delete_otp'),
     path('api/sync-preference/', set_sync_preference, name='set_sync_preference'),
     path('api/sync-preference/get/', get_sync_preference, name='get_sync_preference'),
     path('api/backup-codes/download/', download_backup_codes, name='download_backup_codes'),
+    path('api/backup-codes/status/', get_backup_code_status, name='get_backup_code_status'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

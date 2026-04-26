@@ -29,11 +29,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isSyncing = false;
   bool _isCheckingForUpdates = false;
   bool _isDownloadingBackupCodes = false;
+  bool _isLoadingBackupCodeStatus = false;
   bool _syncEnabled = true;
   bool _appLockEnabled = false;
   String _appVersionLabel = '...';
   Timer? _syncPrefTimer;
   AppUpdateInfo? _updateInfo;
+  Map<String, dynamic>? _backupCodeStatus;
 
   @override
   void initState() {
@@ -42,6 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadAppLockSettings();
     _loadAppVersion();
     _refreshUpdateInfo();
+    _loadBackupCodeStatus();
     _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       await _syncService.refreshSyncPreferenceFromServer();
       final enabled = await _syncService.isSyncEnabled();
@@ -78,6 +81,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _appVersionLabel = label;
       });
     }
+  }
+
+  Future<void> _loadBackupCodeStatus() async {
+    if (_isLoadingBackupCodeStatus) return;
+
+    setState(() {
+      _isLoadingBackupCodeStatus = true;
+    });
+
+    final status = await _syncService.getBackupCodeStatus();
+    if (!mounted) return;
+
+    setState(() {
+      _backupCodeStatus = status;
+      _isLoadingBackupCodeStatus = false;
+    });
   }
 
   Future<void> _refreshUpdateInfo() async {
@@ -169,6 +188,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return 'You are using the latest version';
   }
 
+  String _backupCodeStatusSubtitle() {
+    if (_isLoadingBackupCodeStatus) {
+      return 'Checking recovery code status...';
+    }
+
+    final status = _backupCodeStatus;
+    if (status == null || status['has_codes'] != true) {
+      return 'No active recovery codes yet';
+    }
+
+    final remaining = status['remaining_codes'] ?? 0;
+    final total = status['total_codes'] ?? 3;
+    final lastUsedAt = status['last_used_at'] as String?;
+    final lastUsedLabel = lastUsedAt == null
+        ? 'Never used'
+        : 'Last used ${_formatStatusDate(lastUsedAt)}';
+
+    return '$remaining of $total codes remaining • $lastUsedLabel';
+  }
+
+  Widget? _backupCodeStatusTrailing() {
+    if (_isLoadingBackupCodeStatus) {
+      return SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+      );
+    }
+
+    final status = _backupCodeStatus;
+    if (status == null || status['has_codes'] != true) {
+      return null;
+    }
+
+    final remaining = status['remaining_codes'] ?? 0;
+    return _versionBadge('$remaining left');
+  }
+
+  String _formatStatusDate(String isoDate) {
+    final parsed = DateTime.tryParse(isoDate)?.toLocal();
+    if (parsed == null) return 'recently';
+
+    final month = parsed.month.toString().padLeft(2, '0');
+    final day = parsed.day.toString().padLeft(2, '0');
+    final hour = parsed.hour.toString().padLeft(2, '0');
+    final minute = parsed.minute.toString().padLeft(2, '0');
+    return '${parsed.year}-$month-$day $hour:$minute';
+  }
+
   bool get _canChangeAppPin => Platform.isLinux || Platform.isMacOS;
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -241,6 +309,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           strokeWidth: 2, color: _accent))
                   : null,
               onTap: _isDownloadingBackupCodes ? null : _downloadBackupCodes,
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.key_rounded,
+              label: 'Recovery Code Status',
+              sub: _backupCodeStatusSubtitle(),
+              trailing: _backupCodeStatusTrailing(),
+              onTap: _loadBackupCodeStatus,
             ),
             _dividerLine(),
             _tappableTile(
@@ -463,6 +539,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       return;
     }
+
+    await _loadBackupCodeStatus();
 
     await showDialog<void>(
       context: context,

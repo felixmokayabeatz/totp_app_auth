@@ -1026,6 +1026,87 @@ class SyncService {
   }
 
   // ─── Logout ───────────────────────────────────────────────────────────────
+  Future<bool> verifyLoginWithRecoveryCode(
+      String username, String password, String recoveryCode) async {
+    try {
+      _lastErrorMessage = null;
+      final response = await _dio.post('recovery-code/login/', data: {
+        'username': username.trim(),
+        'password': password,
+        'recovery_code': recoveryCode.trim(),
+      });
+      return response.data['success'] == true;
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
+              'Recovery code verification failed.';
+      return false;
+    } catch (e) {
+      _lastErrorMessage = 'Recovery code verification failed.';
+      return false;
+    }
+  }
+
+  Future<bool> resetPasswordWithRecoveryCode(
+      String email, String recoveryCode, String newPassword) async {
+    try {
+      _lastErrorMessage = null;
+      final response = await _dio.post('recovery-code/reset-password/', data: {
+        'email': email.trim(),
+        'recovery_code': recoveryCode.trim(),
+        'new_password': newPassword,
+      });
+      return response.data['success'] == true;
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
+              'Password reset with recovery code failed.';
+      return false;
+    } catch (e) {
+      _lastErrorMessage = 'Password reset with recovery code failed.';
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getBackupCodeStatus() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage =
+          'You need to be signed in to view recovery code status.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        () => _dio.get(
+          'backup-codes/status/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $token',
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+
+      _lastErrorMessage = 'Could not load recovery code status.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not load recovery code status.',
+      );
+      return null;
+    } catch (e) {
+      _lastErrorMessage = 'Could not load recovery code status.';
+      return null;
+    }
+  }
+
   Future<Directory> _resolveBackupCodesDirectory() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       return await getDownloadsDirectory() ??

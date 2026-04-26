@@ -30,6 +30,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _show2FA = false;
   bool _showForgotPassword = false;
   bool _showResetPassword = false;
+  bool _useRecoveryCodeFor2FA = false;
+  bool _useRecoveryCodeForReset = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _obscureResetPassword = true;
@@ -378,6 +380,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
+                      SizedBox(height: 8),
+                      Text(
+                        'No email access right now? You can use a recovery code on the next step.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
                       SizedBox(height: 20),
                       TextFormField(
                         controller: _resetEmailController,
@@ -411,6 +419,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       TextButton(
                         onPressed: () {
+                          if (_resetEmailController.text.trim().isEmpty) {
+                            _showError('Please enter your email address');
+                            return;
+                          }
+                          setState(() {
+                            _resetEmail = _resetEmailController.text.trim();
+                            _showResetPassword = true;
+                            _useRecoveryCodeForReset = true;
+                            _resetOtpCodeController.clear();
+                          });
+                        },
+                        child: Text('Use Recovery Code Instead'),
+                      ),
+                      TextButton(
+                        onPressed: () {
                           setState(() {
                             _showForgotPassword = false;
                             _resetEmailController.clear();
@@ -420,7 +443,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ] else if (_showResetPassword) ...[
                       Text(
-                        'A verification code has been sent to your email',
+                        _useRecoveryCodeForReset
+                            ? 'Use one of your 10-character recovery codes to reset your password'
+                            : 'A verification code has been sent to your email',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
@@ -429,19 +454,46 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _resetOtpCodeController,
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 24, letterSpacing: 4),
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
+                        keyboardType: _useRecoveryCodeForReset
+                            ? TextInputType.text
+                            : TextInputType.number,
+                        maxLength: _useRecoveryCodeForReset ? 10 : 6,
                         decoration: InputDecoration(
-                          labelText: 'Enter 6-digit code',
+                          labelText: _useRecoveryCodeForReset
+                              ? 'Enter 10-character recovery code'
+                              : 'Enter 6-digit code',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                           counterText: '',
                         ),
                         inputFormatters: [
-                          LengthLimitingTextInputFormatter(6),
-                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(
+                              _useRecoveryCodeForReset ? 10 : 6),
+                          if (_useRecoveryCodeForReset)
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[A-Za-z0-9]'),
+                            )
+                          else
+                            FilteringTextInputFormatter.digitsOnly,
                         ],
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _useRecoveryCodeForReset =
+                                  !_useRecoveryCodeForReset;
+                              _resetOtpCodeController.clear();
+                            });
+                          },
+                          child: Text(
+                            _useRecoveryCodeForReset
+                                ? 'Use email code instead'
+                                : 'Use recovery code instead',
+                          ),
+                        ),
                       ),
                       SizedBox(height: 16),
                       Container(
@@ -586,7 +638,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 height: 20,
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2))
-                            : Text('Reset Password',
+                            : Text(
+                                _useRecoveryCodeForReset
+                                    ? 'Reset with Recovery Code'
+                                    : 'Reset Password',
                                 style: TextStyle(fontSize: 18)),
                         style: ElevatedButton.styleFrom(
                           minimumSize: Size(double.infinity, 50),
@@ -595,31 +650,33 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          TextButton(
-                            onPressed: _resetResendCooldown == 0
-                                ? _resendResetCode
-                                : null,
-                            child: Text(
-                              _resetResendCooldown > 0
-                                  ? 'Resend code (${_resetResendCooldown}s)'
-                                  : 'Resend code',
-                              style: TextStyle(
-                                color: _resetResendCooldown > 0
-                                    ? Colors.grey
-                                    : Color(0xFF667eea),
+                      if (!_useRecoveryCodeForReset)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: _resetResendCooldown == 0
+                                  ? _resendResetCode
+                                  : null,
+                              child: Text(
+                                _resetResendCooldown > 0
+                                    ? 'Resend code (${_resetResendCooldown}s)'
+                                    : 'Resend code',
+                                style: TextStyle(
+                                  color: _resetResendCooldown > 0
+                                      ? Colors.grey
+                                      : Color(0xFF667eea),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                       TextButton(
                         onPressed: () {
                           setState(() {
                             _showResetPassword = false;
                             _showForgotPassword = false;
+                            _useRecoveryCodeForReset = false;
                             _resetOtpCodeController.clear();
                             _resetNewPasswordController.clear();
                             _resetConfirmPasswordController.clear();
@@ -901,7 +958,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ] else ...[
                       // 2FA Verification Screen
                       Text(
-                        'A verification code has been sent to your email',
+                        _useRecoveryCodeFor2FA
+                            ? 'Use one of your recovery codes if you cannot access email right now'
+                            : 'A verification code has been sent to your email',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
@@ -910,19 +969,45 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _otpCodeController,
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 24, letterSpacing: 4),
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
+                        keyboardType: _useRecoveryCodeFor2FA
+                            ? TextInputType.text
+                            : TextInputType.number,
+                        maxLength: _useRecoveryCodeFor2FA ? 10 : 6,
                         decoration: InputDecoration(
-                          labelText: 'Enter 6-digit code',
+                          labelText: _useRecoveryCodeFor2FA
+                              ? 'Enter 10-character recovery code'
+                              : 'Enter 6-digit code',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                           counterText: '',
                         ),
                         inputFormatters: [
-                          LengthLimitingTextInputFormatter(6),
-                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(
+                              _useRecoveryCodeFor2FA ? 10 : 6),
+                          if (_useRecoveryCodeFor2FA)
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[A-Za-z0-9]'),
+                            )
+                          else
+                            FilteringTextInputFormatter.digitsOnly,
                         ],
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _useRecoveryCodeFor2FA = !_useRecoveryCodeFor2FA;
+                              _otpCodeController.clear();
+                            });
+                          },
+                          child: Text(
+                            _useRecoveryCodeFor2FA
+                                ? 'Use email code instead'
+                                : 'Use recovery code instead',
+                          ),
+                        ),
                       ),
                       SizedBox(height: 24),
                       ElevatedButton(
@@ -934,7 +1019,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : Text('Verify', style: TextStyle(fontSize: 18)),
+                            : Text(
+                                _useRecoveryCodeFor2FA
+                                    ? 'Verify Recovery Code'
+                                    : 'Verify',
+                                style: TextStyle(fontSize: 18),
+                              ),
                         style: ElevatedButton.styleFrom(
                           minimumSize: Size(double.infinity, 50),
                           shape: RoundedRectangleBorder(
@@ -943,29 +1033,32 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          TextButton(
-                            onPressed:
-                                _resendCooldown == 0 ? _resend2FACode : null,
-                            child: Text(
-                              _resendCooldown > 0
-                                  ? 'Resend code (${_resendCooldown}s)'
-                                  : 'Resend code',
-                              style: TextStyle(
-                                color: _resendCooldown > 0
-                                    ? Colors.grey
-                                    : Color(0xFF667eea),
+                      if (!_useRecoveryCodeFor2FA)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            TextButton(
+                              onPressed: _resendCooldown == 0
+                                  ? _resend2FACode
+                                  : null,
+                              child: Text(
+                                _resendCooldown > 0
+                                    ? 'Resend code (${_resendCooldown}s)'
+                                    : 'Resend code',
+                                style: TextStyle(
+                                  color: _resendCooldown > 0
+                                      ? Colors.grey
+                                      : Color(0xFF667eea),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                       TextButton(
                         onPressed: () {
                           setState(() {
                             _show2FA = false;
+                            _useRecoveryCodeFor2FA = false;
                             _otpCodeController.clear();
                           });
                         },
@@ -1077,6 +1170,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _resetEmail = _resetEmailController.text;
       setState(() {
         _showResetPassword = true;
+        _useRecoveryCodeForReset = false;
       });
       _showSuccess('Reset code sent to your email!');
     } else {
@@ -1086,10 +1180,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _resetPassword() async {
     if (_resetOtpCodeController.text.isEmpty) {
-      _showError('Please enter verification code');
+      _showError(_useRecoveryCodeForReset
+          ? 'Please enter recovery code'
+          : 'Please enter verification code');
       return;
     }
-    if (_resetOtpCodeController.text.length != 6) {
+    if (_useRecoveryCodeForReset &&
+        _resetOtpCodeController.text.trim().length != 10) {
+      _showError('Please enter a valid 10-character recovery code');
+      return;
+    }
+    if (!_useRecoveryCodeForReset &&
+        _resetOtpCodeController.text.length != 6) {
       _showError('Please enter a valid 6-digit code');
       return;
     }
@@ -1113,11 +1215,17 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _isLoading = true;
     });
-    final success = await _syncService.resetPassword(
-      _resetEmail!,
-      _resetOtpCodeController.text,
-      _resetNewPasswordController.text,
-    );
+    final success = _useRecoveryCodeForReset
+        ? await _syncService.resetPasswordWithRecoveryCode(
+            _resetEmail!,
+            _resetOtpCodeController.text,
+            _resetNewPasswordController.text,
+          )
+        : await _syncService.resetPassword(
+            _resetEmail!,
+            _resetOtpCodeController.text,
+            _resetNewPasswordController.text,
+          );
     if (!mounted) return;
     setState(() {
       _isLoading = false;
@@ -1128,6 +1236,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _showResetPassword = false;
         _showForgotPassword = false;
+        _useRecoveryCodeForReset = false;
         _resetOtpCodeController.clear();
         _resetNewPasswordController.clear();
         _resetConfirmPasswordController.clear();
@@ -1142,20 +1251,32 @@ class _LoginScreenState extends State<LoginScreen> {
     final code = _otpCodeController.text.trim();
 
     if (_otpCodeController.text.isEmpty) {
-      _showError('Please enter verification code');
+      _showError(_useRecoveryCodeFor2FA
+          ? 'Please enter recovery code'
+          : 'Please enter verification code');
       return;
     }
-    if (code.length != 6) {
+    if (_useRecoveryCodeFor2FA && code.length != 10) {
+      _showError('Please enter a valid 10-character recovery code');
+      return;
+    }
+    if (!_useRecoveryCodeFor2FA && code.length != 6) {
       _showError('Please enter a valid 6-digit code');
       return;
     }
     setState(() {
       _isLoading = true;
     });
-    final isValid = await _syncService.verify2FACode(
-      username,
-      code,
-    );
+    final isValid = _useRecoveryCodeFor2FA
+        ? await _syncService.verifyLoginWithRecoveryCode(
+            username,
+            _passwordController.text,
+            code,
+          )
+        : await _syncService.verify2FACode(
+            username,
+            code,
+          );
     if (!mounted) return;
     if (!isValid) {
       setState(() {
