@@ -1,6 +1,6 @@
 # otp_auth_app
 
-A new Flutter project.
+A new Flutter project - Felix Mokaya
 
 ## Getting Started
 
