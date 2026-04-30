@@ -38,6 +38,7 @@ from .models import (
 from .notifications import (
     build_device_label,
     create_account_added_notification,
+    create_app_pin_changed_notification,
     create_daily_active_devices_notification,
     create_password_changed_notification,
     create_recovery_codes_generated_notification,
@@ -688,6 +689,17 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 request.user,
                 service_name=service_name,
                 account_label=account_label or None,
+            )
+            return Response({'success': True}, status=201)
+
+        if event_type == 'app_pin_changed':
+            device_label = build_device_label(
+                request.data.get('device_label'),
+                request.META.get('HTTP_USER_AGENT'),
+            )
+            create_app_pin_changed_notification(
+                request.user,
+                device_label=device_label,
             )
             return Response({'success': True}, status=201)
 

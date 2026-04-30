@@ -23,6 +23,9 @@ class OTPImportService {
     final jsonEntries = _parseJson(trimmed);
     if (jsonEntries.isNotEmpty) return jsonEntries;
 
+    final tableEntries = _parseDelimitedRows(trimmed);
+    if (tableEntries.isNotEmpty) return _dedupe(tableEntries);
+
     final entries = <OTPImportEntry>[];
     final uriMatches = RegExp(
       r'(otpauth(?:-migration)?://[^\s]+)',
@@ -42,6 +45,162 @@ class OTPImportService {
     }
 
     return _dedupe(entries);
+  }
+
+  List<OTPImportEntry> _parseDelimitedRows(String input) {
+    final lines = input
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return const [];
+
+    final delimiter = _detectDelimiter(input);
+    final rows = lines
+        .map((line) => _splitDelimitedLine(line, delimiter))
+        .where((row) => row.length >= 2)
+        .toList();
+    if (rows.isEmpty) return const [];
+
+    final firstRow = rows.first.map((cell) => cell.toLowerCase()).toList();
+    final hasHeader = firstRow.any((cell) => _secretHeaders.contains(cell));
+    final dataRows = hasHeader ? rows.skip(1).toList() : rows;
+
+    int? serviceIndex;
+    int? accountIndex;
+    int? secretIndex;
+
+    if (hasHeader) {
+      serviceIndex = _findHeaderIndex(firstRow, _serviceHeaders);
+      accountIndex = _findHeaderIndex(firstRow, _accountHeaders);
+      secretIndex = _findHeaderIndex(firstRow, _secretHeaders);
+    }
+
+    final entries = <OTPImportEntry>[];
+    for (final row in dataRows) {
+      final resolvedSecretIndex =
+          secretIndex ?? row.indexWhere((cell) => _isBase32Secret(_cleanSecret(cell)));
+      if (resolvedSecretIndex < 0 || resolvedSecretIndex >= row.length) {
+        continue;
+      }
+
+      final secret = _cleanSecret(row[resolvedSecretIndex]);
+      if (!_isBase32Secret(secret)) continue;
+
+      final service = _readCell(row, serviceIndex) ??
+          (resolvedSecretIndex == 0 ? null : row.first.trim());
+      if (service == null || service.trim().isEmpty) continue;
+
+      final accountLabel = _readCell(row, accountIndex) ??
+          _guessAccountLabel(row, resolvedSecretIndex, service);
+
+      entries.add(
+        OTPImportEntry(
+          service: service.trim(),
+          secret: secret,
+          issuer: service.trim(),
+          accountLabel: accountLabel?.trim().isEmpty == true
+              ? null
+              : accountLabel?.trim(),
+        ),
+      );
+    }
+
+    return entries;
+  }
+
+  static const Set<String> _serviceHeaders = {
+    'service',
+    'service name',
+    'issuer',
+    'app',
+    'site',
+    'name',
+    'account name',
+  };
+
+  static const Set<String> _accountHeaders = {
+    'account',
+    'email',
+    'username',
+    'label',
+    'account label',
+    'login',
+  };
+
+  static const Set<String> _secretHeaders = {
+    'secret',
+    'secret key',
+    'otp secret',
+    'totp secret',
+    'key',
+  };
+
+  String _detectDelimiter(String input) {
+    final tabs = '\t'.allMatches(input).length;
+    final commas = ','.allMatches(input).length;
+    final semicolons = ';'.allMatches(input).length;
+    if (tabs >= commas && tabs >= semicolons && tabs > 0) return '\t';
+    if (semicolons > commas) return ';';
+    return ',';
+  }
+
+  List<String> _splitDelimitedLine(String line, String delimiter) {
+    final cells = <String>[];
+    final current = StringBuffer();
+    var inQuotes = false;
+    var index = 0;
+
+    while (index < line.length) {
+      final char = line[index];
+      if (char == '"') {
+        final nextIsQuote = index + 1 < line.length && line[index + 1] == '"';
+        if (inQuotes && nextIsQuote) {
+          current.write('"');
+          index += 2;
+          continue;
+        }
+        inQuotes = !inQuotes;
+      } else if (char == delimiter && !inQuotes) {
+        cells.add(current.toString().trim());
+        current.clear();
+      } else {
+        current.write(char);
+      }
+      index++;
+    }
+
+    cells.add(current.toString().trim());
+    return cells;
+  }
+
+  int? _findHeaderIndex(List<String> row, Set<String> candidates) {
+    for (var index = 0; index < row.length; index++) {
+      if (candidates.contains(row[index].trim())) {
+        return index;
+      }
+    }
+    return null;
+  }
+
+  String? _readCell(List<String> row, int? index) {
+    if (index == null || index < 0 || index >= row.length) return null;
+    final value = row[index].trim();
+    return value.isEmpty ? null : value;
+  }
+
+  String? _guessAccountLabel(
+    List<String> row,
+    int secretIndex,
+    String service,
+  ) {
+    for (var index = 0; index < row.length; index++) {
+      if (index == secretIndex) continue;
+      final value = row[index].trim();
+      if (value.isEmpty || value == service) continue;
+      if (value.contains('@')) return value;
+    }
+    return null;
   }
 
   List<OTPImportEntry> _parseJson(String input) {

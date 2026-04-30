@@ -327,7 +327,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.download_rounded,
               label: 'Import Accounts',
-              sub: 'Paste setup links or scan an authenticator QR',
+              sub: 'Paste CSV or Excel rows from another authenticator',
               onTap: _showImportAccountsDialog,
             ),
             _dividerLine(),
@@ -529,6 +529,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _changeAppPin() async {
     final success = await _appLockService.setupAppPinFromSettings(context);
     if (success) {
+      final deviceLabel = await _syncService.getCurrentDeviceLabel();
+      unawaited(
+        _syncService.logAppPinChangedNotification(deviceLabel: deviceLabel),
+      );
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('PIN changed successfully'),
@@ -586,7 +591,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Paste one or more OTP setup links, a BeatzLock JSON export, or a Google Authenticator transfer payload.',
+                  'Paste CSV or Excel rows from another authenticator. Use columns such as Service, Account, Secret.',
                   style: TextStyle(color: _textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 14),
@@ -596,10 +601,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   maxLines: 8,
                   decoration: InputDecoration(
                     hintText:
-                        'otpauth://totp/GitHub:you@example.com?secret=...',
+                        'Service,Account,Secret\nGitHub,you@example.com,JBSWY3DPEHPK3PXP',
                     errorText: errorText,
                     border: const OutlineInputBorder(),
                   ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'OTP setup links and Google Authenticator transfer QR payloads are also accepted.',
+                  style: TextStyle(color: _textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(

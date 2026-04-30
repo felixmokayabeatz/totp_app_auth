@@ -201,3 +201,17 @@ class AppNotificationTests(APITestCase):
         unread_count = self.user.app_notifications.filter(is_read=False).count()
         self.assertEqual(unread_count, 0)
         self.assertEqual(self.user.app_notifications.filter(read_at__isnull=True).count(), 0)
+
+    def test_log_app_pin_changed_notification_records_device(self):
+        response = self.client.post(
+            reverse('notifications-log-event'),
+            {
+                'event_type': 'app_pin_changed',
+                'device_label': 'Windows - Studio PC',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        notification = self.user.app_notifications.latest('created_at')
+        self.assertEqual(notification.notification_type, 'app_pin_changed')

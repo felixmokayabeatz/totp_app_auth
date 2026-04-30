@@ -174,6 +174,27 @@ def create_account_added_notification(
     )
 
 
+def create_app_pin_changed_notification(
+    user: User,
+    *,
+    device_label: str | None = None,
+) -> AppNotification:
+    details = "Your BeatzLock app PIN was changed."
+    message = "Your BeatzLock app unlock PIN was changed."
+    if device_label:
+        details = f"{details} Device: {device_label}."
+        message = f"Your BeatzLock app unlock PIN was changed on {device_label}."
+
+    return create_notification(
+        user,
+        "app_pin_changed",
+        title="App PIN changed",
+        message=message,
+        details=details,
+        metadata={"device_label": device_label},
+    )
+
+
 def create_daily_active_devices_notification(
     user: User,
     *,

@@ -1567,6 +1567,34 @@ class SyncService {
     }
   }
 
+  Future<bool> logAppPinChangedNotification({required String deviceLabel}) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'notifications/log-event/',
+          data: {
+            'event_type': 'app_pin_changed',
+            'device_label': deviceLabel,
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<List<DeviceSessionInfo>> getActiveDeviceSessions() async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
