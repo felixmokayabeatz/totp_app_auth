@@ -13,3 +13,5 @@
 [ ] - Create privacy policy on the app dart that will fetch from backend that appers exacly pn the fron end of html - backend the true source we can also add a url to open external to the web version if the user wants but they always the same.
 
 [ ] - If the user installs the app and open it initailly tell them we will use their pin/biometric to unlcok tha app, also for the new user, in my original app I had a very besitiful spash screen like a presentation I hop it is there.
+
+[ ] -  Add the Privacy poilcy and Terms of use are from db from another repo in that shows the privacy terms is here aswell
