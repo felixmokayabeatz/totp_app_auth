@@ -64,7 +64,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
-  static const Duration _sessionHeartbeatInterval = Duration(seconds: 1);
+  static const Duration _sessionHeartbeatInterval = Duration(seconds: 30);
 
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
@@ -75,6 +75,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _isLocked = true;
   bool _unlockInProgress = false;
   bool _updateCheckInProgress = false;
+  bool _sessionHeartbeatInProgress = false;
   bool _openingRequiredUpdate = false;
   bool _sessionReady = false;
   DateTime? _backgroundedAt;
@@ -245,7 +246,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _runSessionHeartbeat() async {
-    if (!mounted || !_initialized || !_sessionReady) {
+    if (!mounted ||
+        !_initialized ||
+        !_sessionReady ||
+        _sessionHeartbeatInProgress) {
       return;
     }
 
@@ -254,18 +258,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       return;
     }
 
-    final sessionStillValid = await _syncService.heartbeatSession();
-    if (!mounted || sessionStillValid) {
-      return;
+    _sessionHeartbeatInProgress = true;
+    try {
+      final sessionStillValid = await _syncService.heartbeatSession();
+      if (!mounted || sessionStillValid) {
+        return;
+      }
+
+      await authProvider.logout();
+      if (!mounted) return;
+
+      setState(() {
+        _isLocked = false;
+        _backgroundedAt = null;
+      });
+    } finally {
+      _sessionHeartbeatInProgress = false;
     }
-
-    await authProvider.logout();
-    if (!mounted) return;
-
-    setState(() {
-      _isLocked = false;
-      _backgroundedAt = null;
-    });
   }
 
   Future<void> _unlockApp(BuildContext context) async {

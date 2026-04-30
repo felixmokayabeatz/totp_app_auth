@@ -27,7 +27,7 @@ class SyncService {
   }
 
   late Dio _dio;
-  bool _isRefreshing = false;
+  Future<bool>? _refreshTokenFuture;
   String? _encryptionKey;
   String? _lastErrorMessage;
   final SecureStorageService _secureStorage = SecureStorageService();
@@ -294,18 +294,17 @@ class SyncService {
     final deviceLabel = await _buildDeviceLabel();
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
+    } else {
+      _dio.options.headers.remove('Authorization');
     }
     _dio.options.headers['X-Device-ID'] = deviceId;
     _dio.options.headers['X-Device-Label'] = deviceLabel;
   }
 
-  Future<bool> _refreshToken() async {
-    if (_isRefreshing) return false;
-    _isRefreshing = true;
+  Future<bool> _performTokenRefresh() async {
     final refreshToken =
         await _secureStorage.read(SecureStorageService.refreshTokenKey);
-    if (refreshToken == null) {
-      _isRefreshing = false;
+    if (refreshToken == null || refreshToken.isEmpty) {
       return false;
     }
     try {
@@ -315,22 +314,48 @@ class SyncService {
         await _secureStorage.write(
             SecureStorageService.accessTokenKey, response.data['access']);
         await _updateAuthHeader();
-        _isRefreshing = false;
         return true;
       }
     } catch (_) {}
-    _isRefreshing = false;
     return false;
   }
 
-  Future<Response> _requestWithRetry(
-      Future<Response> Function() request) async {
+  Future<bool> _refreshToken() async {
+    final existingRefresh = _refreshTokenFuture;
+    if (existingRefresh != null) {
+      return existingRefresh;
+    }
+
+    final refreshFuture = _performTokenRefresh();
+    _refreshTokenFuture = refreshFuture;
+
     try {
-      return await request();
+      return await refreshFuture;
+    } finally {
+      if (identical(_refreshTokenFuture, refreshFuture)) {
+        _refreshTokenFuture = null;
+      }
+    }
+  }
+
+  Future<Response<T>> _requestWithRetry<T>(
+      Future<Response<T>> Function(String accessToken) request) async {
+    Future<Response<T>> runRequest() async {
+      await _updateAuthHeader();
+      final accessToken =
+          await _secureStorage.read(SecureStorageService.accessTokenKey);
+      if (accessToken == null || accessToken.isEmpty) {
+        throw StateError('Missing access token for authenticated request.');
+      }
+      return request(accessToken);
+    }
+
+    try {
+      return await runRequest();
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         final refreshed = await _refreshToken();
-        if (refreshed) return await request();
+        if (refreshed) return await runRequest();
         await logout();
       }
       rethrow;
@@ -586,7 +611,7 @@ class SyncService {
   Future<bool> deleteAccountEverywhere(String accountId) async {
     await _updateAuthHeader();
     try {
-      final response = await _requestWithRetry(() => _dio.post(
+      final response = await _requestWithRetry((_) => _dio.post(
             'sync/delete-account/',
             data: {'account_id': accountId},
           ));
@@ -615,7 +640,7 @@ class SyncService {
     await _updateAuthHeader();
     try {
       final response = await _requestWithRetry(
-        () => _dio.post('sync/delete-all-accounts/'),
+        (_) => _dio.post('sync/delete-all-accounts/'),
       );
       if (response.statusCode == 200) {
         final userBox = await _getUserBox();
@@ -647,7 +672,7 @@ class SyncService {
     }
 
     try {
-      final response = await _requestWithRetry(() => _dio.get(
+      final response = await _requestWithRetry((_) => _dio.get(
             'sync/get-data/',
             queryParameters: {
               'data_type': 'otp_accounts',
@@ -737,7 +762,7 @@ class SyncService {
   Future<Set<String>> _fetchTombstones() async {
     try {
       final response =
-          await _requestWithRetry(() => _dio.get('sync/tombstones/'));
+          await _requestWithRetry((_) => _dio.get('sync/tombstones/'));
       if (response.statusCode == 200) {
         final List ids = response.data['tombstoned_ids'] ?? [];
         return ids.cast<String>().toSet();
@@ -779,7 +804,7 @@ class SyncService {
       List<String> cloudDeletedAccounts = [];
 
       try {
-        final downloadResponse = await _requestWithRetry(() => _dio.get(
+        final downloadResponse = await _requestWithRetry((_) => _dio.get(
               'sync/get-data/',
               queryParameters: {
                 'data_type': 'otp_accounts',
@@ -904,7 +929,7 @@ class SyncService {
           jsonEncode(finalData), _encryptionKey!);
       final newVersion = cloudVersion + 1;
 
-      final uploadResponse = await _requestWithRetry(() => _dio.post(
+      final uploadResponse = await _requestWithRetry((_) => _dio.post(
             'sync/sync/',
             data: {
               'data_type': 'otp_accounts',
@@ -1233,10 +1258,10 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.get(
+        (accessToken) => _dio.get(
           'backup-codes/status/',
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1285,12 +1310,12 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.get<List<int>>(
+        (accessToken) => _dio.get<List<int>>(
           'backup-codes/download/',
           options: Options(
             responseType: ResponseType.bytes,
             headers: {
-              'Authorization': 'Bearer $token',
+              'Authorization': 'Bearer $accessToken',
             },
           ),
         ),
@@ -1344,10 +1369,10 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.get(
+        (accessToken) => _dio.get(
           'notifications/',
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1387,10 +1412,10 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.get(
+        (accessToken) => _dio.get(
           'notifications/$notificationId/',
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1427,10 +1452,10 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.post(
+        (accessToken) => _dio.post(
           'notifications/mark-all-read/',
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1467,7 +1492,7 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.post(
+        (accessToken) => _dio.post(
           'notifications/log-event/',
           data: {
             'event_type': 'account_added',
@@ -1475,7 +1500,7 @@ class SyncService {
             'account_label': accountLabel,
           },
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1499,14 +1524,14 @@ class SyncService {
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _requestWithRetry(
-        () => _dio.get(
+        (accessToken) => _dio.get(
           'device-sessions/',
           queryParameters: {
             'device_id': deviceId,
             'device_label': deviceLabel,
           },
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1544,10 +1569,10 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.post(
+        (accessToken) => _dio.post(
           'device-sessions/$sessionId/revoke/',
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1574,10 +1599,10 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.post(
+        (accessToken) => _dio.post(
           'device-sessions/$sessionId/set-primary/',
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1604,10 +1629,10 @@ class SyncService {
 
     try {
       final response = await _requestWithRetry(
-        () => _dio.post(
+        (accessToken) => _dio.post(
           'device-sessions/revoke-others/',
           options: Options(headers: {
-            'Authorization': 'Bearer $token',
+            'Authorization': 'Bearer $accessToken',
           }),
         ),
       );
@@ -1640,15 +1665,17 @@ class SyncService {
     try {
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post(
-        'device-sessions/heartbeat/',
-        data: {
-          'device_id': deviceId,
-          'device_label': deviceLabel,
-        },
-        options: Options(headers: {
-          'Authorization': 'Bearer $token',
-        }),
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'device-sessions/heartbeat/',
+          data: {
+            'device_id': deviceId,
+            'device_label': deviceLabel,
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
