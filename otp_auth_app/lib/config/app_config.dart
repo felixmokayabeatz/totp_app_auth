@@ -8,12 +8,16 @@ class AppConfig {
   static const String devMediaUrlDesktop = 'http://localhost:8000/media/';
   static const String devUpdateApiDesktop =
       'http://localhost:8002/beatzlock-apps/api/update-check/';
+  static const String devBeatzLockAppsBaseDesktop =
+      'http://localhost:8002/beatzlock-apps/';
 
   // For Android emulator - 10.0.2.2 is alias for host machine's localhost
   static const String devApiUrlAndroid = 'http://10.0.2.2:8000/api/';
   static const String devMediaUrlAndroid = 'http://10.0.2.2:8000/media/';
   static const String devUpdateApiAndroid =
       'http://10.0.2.2:8002/beatzlock-apps/api/update-check/';
+  static const String devBeatzLockAppsBaseAndroid =
+      'http://10.0.2.2:8002/beatzlock-apps/';
 
   // Production environment (your VPS)
   static const String prodApiUrl = 'https://api.felixmokayabeatz.online/api/';
@@ -21,6 +25,8 @@ class AppConfig {
       'https://api.felixmokayabeatz.online/media/';
   static const String prodUpdateApiUrl =
       'https://felixmokayabeatz.online/beatzlock-apps/api/update-check/';
+  static const String prodBeatzLockAppsBaseUrl =
+      'https://felixmokayabeatz.online/beatzlock-apps/';
 
   // Change this to false when building for production
   static const bool isDevelopment = true;
@@ -53,4 +59,23 @@ class AppConfig {
     }
     return devUpdateApiDesktop;
   }
+
+  static String get beatzLockAppsBaseUrl {
+    if (!isDevelopment) return prodBeatzLockAppsBaseUrl;
+
+    if (Platform.isAndroid) {
+      return devBeatzLockAppsBaseAndroid;
+    }
+    return devBeatzLockAppsBaseDesktop;
+  }
+
+  static String legalDocumentApiUrl(String type) =>
+      '${beatzLockAppsBaseUrl}api/legal/$type/';
+
+  static String legalDocumentWebUrl(String type) {
+    final slug = type == 'terms' ? 'terms-of-service' : 'privacy-policy';
+    return '${beatzLockAppsBaseUrl}legal/$slug/';
+  }
+
+  static String get rateAppUrl => '${beatzLockAppsBaseUrl}rate/';
 }

@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
+import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/app_update_info.dart';
+import '../models/otp_account.dart';
 import '../services/app_update_service.dart';
 import '../services/sync_service.dart';
 import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
+import '../services/otp_import_service.dart';
 import '../services/secure_storage_service.dart';
+import 'add_account_screen.dart';
 import 'device_sessions_screen.dart';
+import 'legal_document_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
@@ -239,8 +244,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${parsed.year}-$month-$day $hour:$minute';
   }
 
-  bool get _canChangeAppPin => Platform.isLinux || Platform.isMacOS;
-
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => const Color(0xFF4F46E5);
   Color get _bgColor =>
@@ -324,8 +327,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.download_rounded,
               label: 'Import Accounts',
-              sub: 'Restore from backup',
-              onTap: () => _soon('Import'),
+              sub: 'Paste setup links or scan an authenticator QR',
+              onTap: _showImportAccountsDialog,
             ),
             _dividerLine(),
 
@@ -352,15 +355,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
-            if (_canChangeAppPin) ...[
-              _dividerLine(),
-              _tappableTile(
-                icon: Icons.pin,
-                label: 'Change App PIN',
-                sub: 'Use this if your device falls back to the BeatzLock PIN',
-                onTap: _changeAppPin,
-              ),
-            ],
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.pin,
+              label: 'Change App PIN',
+              sub: 'Set or replace your BeatzLock unlock PIN',
+              onTap: _changeAppPin,
+            ),
 
             _tappableTile(
               icon: Icons.sync_rounded,
@@ -472,14 +473,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.privacy_tip_outlined,
               label: 'Privacy Policy',
               sub: 'Read our privacy policy',
-              onTap: () => _soon('Privacy Policy'),
+              onTap: () => _openLegalDocument('privacy', 'Privacy Policy'),
             ),
             _dividerLine(),
             _tappableTile(
               icon: Icons.description_outlined,
               label: 'Terms of Service',
               sub: 'Terms and conditions',
-              onTap: () => _soon('Terms of Service'),
+              onTap: () => _openLegalDocument('terms', 'Terms of Service'),
             ),
             _dividerLine(),
             _tappableTile(
@@ -488,7 +489,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: 'Love it? Leave a review',
               trailing:
                   const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
-              onTap: () => _soon('Rate Us'),
+              onTap: _openRateApp,
             ),
           ]),
           const SizedBox(height: 20),
@@ -534,6 +535,216 @@ class _SettingsScreenState extends State<SettingsScreen> {
             backgroundColor: Colors.green),
       );
     }
+  }
+
+  void _openLegalDocument(String type, String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LegalDocumentScreen(
+          type: type,
+          fallbackTitle: title,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openRateApp() async {
+    final uri = Uri.parse(AppConfig.rateAppUrl);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+
+    if (!opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not open the app rating page.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showImportAccountsDialog() async {
+    final importController = TextEditingController();
+    bool isImporting = false;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title: Text('Import Accounts', style: TextStyle(color: _textPrimary)),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Paste one or more OTP setup links, a BeatzLock JSON export, or a Google Authenticator transfer payload.',
+                  style: TextStyle(color: _textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: importController,
+                  minLines: 5,
+                  maxLines: 8,
+                  decoration: InputDecoration(
+                    hintText:
+                        'otpauth://totp/GitHub:you@example.com?secret=...',
+                    errorText: errorText,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: isImporting
+                      ? null
+                      : () async {
+                          Navigator.pop(dialogContext);
+                          final imported = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const AddAccountScreen(startScanning: true),
+                            ),
+                          );
+                          if (imported == true && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content:
+                                    const Text('Accounts imported from QR.'),
+                                backgroundColor: const Color(0xFF10B981),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: const Text('Scan Import QR'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  isImporting ? null : () => Navigator.pop(dialogContext),
+              child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: isImporting
+                  ? null
+                  : () async {
+                      final entries =
+                          OTPImportService().parse(importController.text);
+                      if (entries.isEmpty) {
+                        setDialogState(() {
+                          errorText =
+                              'Paste a valid otpauth link, transfer payload, or JSON export.';
+                        });
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isImporting = true;
+                        errorText = null;
+                      });
+
+                      final result = await _importOtpEntries(entries);
+                      if (!dialogContext.mounted) return;
+                      Navigator.pop(dialogContext);
+                      if (!mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(result.message),
+                          backgroundColor: result.importedCount > 0
+                              ? const Color(0xFF10B981)
+                              : Colors.orange,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: isImporting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Import'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<_ImportResult> _importOtpEntries(List<OTPImportEntry> entries) async {
+    final userId =
+        await SecureStorageService().read(SecureStorageService.currentUserKey) ??
+            'default_user';
+    final userBox = await _syncService.getUserBox();
+    var importedCount = 0;
+    var skippedCount = 0;
+
+    for (final entry in entries) {
+      final duplicate = userBox.values.any((account) {
+        return account.service.toLowerCase() == entry.service.toLowerCase() &&
+            (account.accountLabel ?? '').toLowerCase() ==
+                (entry.accountLabel ?? '').toLowerCase();
+      });
+      if (duplicate) {
+        skippedCount++;
+        continue;
+      }
+
+      final account = OTPAccount(
+        id: '${DateTime.now().millisecondsSinceEpoch}_$importedCount',
+        service: entry.service,
+        secret: entry.secret,
+        issuer: entry.issuer,
+        accountLabel: entry.accountLabel,
+        createdAt: DateTime.now(),
+        userId: userId,
+      );
+      await userBox.put(account.id, account);
+      importedCount++;
+
+      try {
+        await _syncService.logAccountAddedNotification(
+          serviceName: entry.service,
+          accountLabel: entry.accountLabel,
+        );
+      } catch (_) {}
+    }
+
+    if (importedCount > 0) {
+      await _syncService.syncAccounts();
+    }
+
+    final message = importedCount == 0
+        ? 'No new accounts imported.'
+        : 'Imported $importedCount account${importedCount == 1 ? '' : 's'}${skippedCount > 0 ? ', skipped $skippedCount duplicate${skippedCount == 1 ? '' : 's'}' : ''}.';
+    return _ImportResult(importedCount, skippedCount, message);
   }
 
   Future<void> _downloadBackupCodes() async {
@@ -1053,10 +1264,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                currentPasswordController.dispose();
-                newPasswordController.dispose();
-                confirmPasswordController.dispose();
-                otpCodeController.dispose();
                 Navigator.pop(context);
               },
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
@@ -1085,10 +1292,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         final changed = await _syncService.changePassword(
                             currentPasswordController.text,
                             newPasswordController.text);
-                        currentPasswordController.dispose();
-                        newPasswordController.dispose();
-                        confirmPasswordController.dispose();
-                        otpCodeController.dispose();
                         Navigator.pop(context);
                         if (changed) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -1602,4 +1805,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
     }
   }
+}
+
+class _ImportResult {
+  const _ImportResult(this.importedCount, this.skippedCount, this.message);
+
+  final int importedCount;
+  final int skippedCount;
+  final String message;
 }

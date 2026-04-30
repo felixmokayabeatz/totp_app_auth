@@ -2,10 +2,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../models/otp_account.dart';
+import '../services/otp_import_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 
 class AddAccountScreen extends StatefulWidget {
+  const AddAccountScreen({super.key, this.startScanning = false});
+
+  final bool startScanning;
+
   @override
   _AddAccountScreenState createState() => _AddAccountScreenState();
 }
@@ -29,6 +34,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   void initState() {
     super.initState();
     _scannerController = MobileScannerController();
+    _isScanning = widget.startScanning;
   }
 
   @override
@@ -180,25 +186,19 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     _isProcessingQR = true;
 
     try {
-      if (qrData.startsWith('otpauth://')) {
-        final uri = Uri.parse(qrData);
-        final secret = uri.queryParameters['secret'] ?? '';
-        // Strip spaces immediately on parse
-        final cleanSecret = secret.replaceAll(RegExp(r'\s+'), '');
-        final issuer = uri.queryParameters['issuer'];
-        final label = Uri.decodeComponent(uri.path.replaceFirst('/', ''));
-        final labelParts = label.split(':');
-        final parsedService = issuer?.trim().isNotEmpty == true
-            ? issuer!.trim()
-            : (labelParts.isNotEmpty ? labelParts.first.trim() : '');
-        final parsedAccountLabel = labelParts.length > 1
-            ? labelParts.sublist(1).join(':').trim()
-            : label.trim();
+      final importedEntries = OTPImportService().parse(qrData);
+      if (importedEntries.isNotEmpty) {
+        if (importedEntries.length > 1 ||
+            qrData.toLowerCase().startsWith('otpauth-migration://')) {
+          _saveImportedEntries(importedEntries);
+          return;
+        }
 
-        _serviceController.text = parsedService;
-        _accountLabelController.text = parsedAccountLabel;
-        _secretController.text = cleanSecret;
-        _issuerController.text = issuer ?? '';
+        final entry = importedEntries.first;
+        _serviceController.text = entry.service;
+        _accountLabelController.text = entry.accountLabel ?? '';
+        _secretController.text = entry.secret;
+        _issuerController.text = entry.issuer ?? '';
 
         if (mounted) {
           setState(() {
@@ -254,6 +254,62 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       }
       _isProcessingQR = false;
     }
+  }
+
+  Future<void> _saveImportedEntries(List<OTPImportEntry> entries) async {
+    final userId =
+        await SecureStorageService().read(SecureStorageService.currentUserKey) ??
+            'default_user';
+    final syncService = SyncService();
+    final userBox = await syncService.getUserBox();
+    var importedCount = 0;
+    var skippedCount = 0;
+
+    for (final entry in entries) {
+      final duplicate = userBox.values.any((account) {
+        return account.service.toLowerCase() == entry.service.toLowerCase() &&
+            (account.accountLabel ?? '').toLowerCase() ==
+                (entry.accountLabel ?? '').toLowerCase();
+      });
+      if (duplicate) {
+        skippedCount++;
+        continue;
+      }
+
+      final account = OTPAccount(
+        id: '${DateTime.now().millisecondsSinceEpoch}_$importedCount',
+        service: entry.service,
+        secret: entry.secret,
+        issuer: entry.issuer,
+        accountLabel: entry.accountLabel,
+        createdAt: DateTime.now(),
+        userId: userId,
+      );
+      await userBox.put(account.id, account);
+      importedCount++;
+    }
+
+    try {
+      await syncService.syncAccounts();
+    } catch (e) {
+      debugPrint('Imported account sync error: $e');
+    }
+
+    if (!mounted) return;
+
+    final message = importedCount == 0
+        ? 'No new accounts imported.'
+        : 'Imported $importedCount account${importedCount == 1 ? '' : 's'}${skippedCount > 0 ? ', skipped $skippedCount duplicate${skippedCount == 1 ? '' : 's'}' : ''}.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            importedCount == 0 ? Colors.orange : const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    Navigator.pop(context, importedCount > 0);
   }
 
   Widget _buildForm() {

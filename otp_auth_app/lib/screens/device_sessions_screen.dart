@@ -191,9 +191,102 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
     }
   }
 
+  Future<String?> _askForAccountPassword(DeviceSessionInfo session) async {
+    final passwordController = TextEditingController();
+    String? errorText;
+    bool obscurePassword = true;
+
+    final password = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: _cardColor,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Confirm Primary Device',
+            style: TextStyle(color: _textPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your account password to make ${session.deviceLabel} your primary device.',
+                style: TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: obscurePassword,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Account password',
+                  errorText: errorText,
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                    ),
+                    onPressed: () => setDialogState(
+                      () => obscurePassword = !obscurePassword,
+                    ),
+                  ),
+                ),
+                onSubmitted: (_) {
+                  final value = passwordController.text;
+                  if (value.isEmpty) {
+                    setDialogState(() {
+                      errorText = 'Password is required.';
+                    });
+                    return;
+                  }
+                  Navigator.pop(dialogContext, value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final value = passwordController.text;
+                if (value.isEmpty) {
+                  setDialogState(() {
+                    errorText = 'Password is required.';
+                  });
+                  return;
+                }
+                Navigator.pop(dialogContext, value);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    passwordController.dispose();
+    return password;
+  }
+
   Future<void> _setPrimaryDevice(DeviceSessionInfo session) async {
+    final password = await _askForAccountPassword(session);
+    if (password == null) return;
+
     setState(() => _primaryUpdateSessionId = session.id);
-    final success = await _syncService.setPrimaryDeviceSession(session.id);
+    final success =
+        await _syncService.setPrimaryDeviceSession(session.id, password);
     if (!mounted) return;
 
     setState(() => _primaryUpdateSessionId = null);

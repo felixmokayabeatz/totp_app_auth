@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +13,7 @@ import 'secure_storage_service.dart';
 import '../config/app_config.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 class SyncService {
   // ─── Singleton ────────────────────────────────────────────────────────────
@@ -27,6 +29,8 @@ class SyncService {
   }
 
   late Dio _dio;
+  static const MethodChannel _storageChannel =
+      MethodChannel('com.beatzlock.otp/storage');
   Future<bool>? _refreshTokenFuture;
   String? _encryptionKey;
   String? _lastErrorMessage;
@@ -301,6 +305,21 @@ class SyncService {
     _dio.options.headers['X-Device-Label'] = deviceLabel;
   }
 
+  bool _isSessionRevokedError(DioException error) {
+    final data = error.response?.data;
+    final message = _extractServerError(data)?.toLowerCase() ?? '';
+
+    if (data is Map) {
+      final code = data['code']?.toString().toLowerCase() ?? '';
+      if (code == 'session_revoked') {
+        return true;
+      }
+    }
+
+    return message.contains('session has been signed out') ||
+        message.contains('device session has been signed out');
+  }
+
   Future<bool> _performTokenRefresh() async {
     final refreshToken =
         await _secureStorage.read(SecureStorageService.refreshTokenKey);
@@ -308,8 +327,22 @@ class SyncService {
       return false;
     }
     try {
-      final response =
-          await _dio.post('token/refresh/', data: {'refresh': refreshToken});
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
+      final refreshDio = Dio(BaseOptions(
+        baseUrl: AppConfig.apiUrl,
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Device-ID': deviceId,
+          'X-Device-Label': deviceLabel,
+        },
+      ));
+      final response = await refreshDio.post(
+        'token/refresh/',
+        data: {'refresh': refreshToken},
+      );
       if (response.statusCode == 200) {
         await _secureStorage.write(
             SecureStorageService.accessTokenKey, response.data['access']);
@@ -339,7 +372,9 @@ class SyncService {
   }
 
   Future<Response<T>> _requestWithRetry<T>(
-      Future<Response<T>> Function(String accessToken) request) async {
+    Future<Response<T>> Function(String accessToken) request, {
+    bool clearSessionOnRefreshFailure = true,
+  }) async {
     Future<Response<T>> runRequest() async {
       await _updateAuthHeader();
       final accessToken =
@@ -356,7 +391,9 @@ class SyncService {
       if (e.response?.statusCode == 401) {
         final refreshed = await _refreshToken();
         if (refreshed) return await runRequest();
-        await logout();
+        if (clearSessionOnRefreshFailure || _isSessionRevokedError(e)) {
+          await logout(notifyServer: false);
+        }
       }
       rethrow;
     }
@@ -1290,12 +1327,42 @@ class SyncService {
           await getApplicationDocumentsDirectory();
     }
 
+    return await getApplicationDocumentsDirectory();
+  }
+
+  String _backupCodesFileName(String username) {
+    final safeUsername = username.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final timestamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .split('.')
+        .first;
+    return 'beatzlock_backup_codes_${safeUsername}_$timestamp.pdf';
+  }
+
+  Future<String> _saveBackupCodesPdf({
+    required String fileName,
+    required List<int> bytes,
+  }) async {
     if (Platform.isAndroid) {
-      return await getExternalStorageDirectory() ??
-          await getApplicationDocumentsDirectory();
+      final savedPath = await _storageChannel.invokeMethod<String>(
+        'savePdfToDownloads',
+        {
+          'fileName': fileName,
+          'bytes': Uint8List.fromList(bytes),
+        },
+      );
+      if (savedPath == null || savedPath.isEmpty) {
+        throw FileSystemException('Android Downloads save returned no path.');
+      }
+      return savedPath;
     }
 
-    return await getApplicationDocumentsDirectory();
+    final directory = await _resolveBackupCodesDirectory();
+    await directory.create(recursive: true);
+    final file = File('${directory.path}${Platform.pathSeparator}$fileName');
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
   }
 
   Future<String?> downloadBackupCodesPdf() async {
@@ -1327,24 +1394,14 @@ class SyncService {
         return null;
       }
 
-      final directory = await _resolveBackupCodesDirectory();
-      await directory.create(recursive: true);
-
       final username =
           await _secureStorage.read(SecureStorageService.currentUserKey) ??
               'user';
-      final safeUsername = username.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
-      final timestamp = DateTime.now()
-          .toIso8601String()
-          .replaceAll(':', '-')
-          .split('.')
-          .first;
-      final file = File(
-        '${directory.path}${Platform.pathSeparator}beatzlock_backup_codes_${safeUsername}_$timestamp.pdf',
+      final fileName = _backupCodesFileName(username);
+      return await _saveBackupCodesPdf(
+        fileName: fileName,
+        bytes: bytes,
       );
-
-      await file.writeAsBytes(bytes, flush: true);
-      return file.path;
     } on DioException catch (e) {
       _lastErrorMessage = _friendlyRequestError(
         e,
@@ -1587,7 +1644,10 @@ class SyncService {
     }
   }
 
-  Future<bool> setPrimaryDeviceSession(String sessionId) async {
+  Future<bool> setPrimaryDeviceSession(
+    String sessionId,
+    String password,
+  ) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
@@ -1601,6 +1661,9 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'device-sessions/$sessionId/set-primary/',
+          data: {
+            'password': password,
+          },
           options: Options(headers: {
             'Authorization': 'Bearer $accessToken',
           }),
@@ -1676,16 +1739,21 @@ class SyncService {
             'Authorization': 'Bearer $accessToken',
           }),
         ),
+        clearSessionOnRefreshFailure: false,
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) {
+      if (e.response?.statusCode == 401 && _isSessionRevokedError(e)) {
         _lastErrorMessage = _friendlyRequestError(
           e,
           'This device session is no longer active.',
         );
         await logout(notifyServer: false);
         return false;
+      }
+      if (e.response?.statusCode == 401) {
+        _lastErrorMessage =
+            'Session check could not refresh right now. Keeping you signed in.';
       }
       return true;
     } catch (e) {

@@ -75,6 +75,32 @@ def debug_print(*args, **kwargs):
         print(*args, **kwargs)
 
 
+def get_current_active_device_session(request):
+    auth = getattr(request, 'auth', None)
+    session_id = auth.get('session_id') if hasattr(auth, 'get') else None
+
+    if session_id:
+        session = DeviceSession.objects.filter(
+            id=session_id,
+            user=request.user,
+            is_active=True,
+            revoked_at__isnull=True,
+        ).first()
+        if session is not None:
+            return session
+
+    device_id = get_request_device_id(request)
+    if not device_id:
+        return None
+
+    return DeviceSession.objects.filter(
+        user=request.user,
+        device_id=device_id,
+        is_active=True,
+        revoked_at__isnull=True,
+    ).order_by('-last_seen_at', '-created_at').first()
+
+
 # ===================
 # AUTH VIEWSET
 # ===================
@@ -680,6 +706,23 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         ).order_by('-last_seen_at', '-created_at')
 
     def _ensure_current_session(self):
+        session = get_current_active_device_session(self.request)
+        if session is not None:
+            session.device_label = get_request_device_label(self.request)
+            session.user_agent = self.request.META.get('HTTP_USER_AGENT', '') or session.user_agent
+            session.ip_address = extract_request_ip(self.request) or session.ip_address
+            session.last_seen_at = timezone.now()
+            session.save(
+                update_fields=[
+                    'device_label',
+                    'user_agent',
+                    'ip_address',
+                    'last_seen_at',
+                    'updated_at',
+                ]
+            )
+            return session
+
         current_device_id = get_request_device_id(self.request)
         if not current_device_id:
             return None
@@ -777,6 +820,19 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         if not current_session.is_primary:
             return Response(
                 {'error': 'Only the device currently set as primary can change the primary device.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        password = request.data.get('password') or ''
+        if not password:
+            return Response(
+                {'error': 'Enter your account password to change the primary device.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not request.user.check_password(password):
+            return Response(
+                {'error': 'Account password is incorrect.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -1075,6 +1131,20 @@ def download_backup_codes(request):
     logger.info("Backup code PDF download - User: %s", user.username)
 
     try:
+        ensure_primary_session(user)
+        current_session = get_current_active_device_session(request)
+        if current_session is None:
+            return Response(
+                {'error': 'This device could not be verified for backup code generation.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not current_session.is_primary:
+            return Response(
+                {'error': 'Backup codes can only be generated from your primary device.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         codes = generate_backup_codes()
         entries = build_backup_code_entries(codes)
         encrypted_codes = encrypt_backup_codes(entries)

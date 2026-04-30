@@ -61,6 +61,7 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
     def test_current_primary_device_can_transfer_primary_status(self):
         response = self.client.post(
             reverse('device-sessions-set-primary', args=[self.target_session.id]),
+            {'password': 'testpass123'},
             format='json',
             HTTP_X_DEVICE_ID='primary-device',
             HTTP_X_DEVICE_LABEL='Primary Device',
@@ -74,6 +75,44 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
 
         self.assertFalse(self.primary_session.is_primary)
         self.assertTrue(self.target_session.is_primary)
+
+    def test_current_primary_device_requires_password_to_transfer_primary_status(self):
+        response = self.client.post(
+            reverse('device-sessions-set-primary', args=[self.target_session.id]),
+            format='json',
+            HTTP_X_DEVICE_ID='primary-device',
+            HTTP_X_DEVICE_LABEL='Primary Device',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data['error'],
+            'Enter your account password to change the primary device.',
+        )
+
+        self.primary_session.refresh_from_db()
+        self.target_session.refresh_from_db()
+
+        self.assertTrue(self.primary_session.is_primary)
+        self.assertFalse(self.target_session.is_primary)
+
+    def test_current_primary_device_rejects_wrong_password_for_primary_transfer(self):
+        response = self.client.post(
+            reverse('device-sessions-set-primary', args=[self.target_session.id]),
+            {'password': 'wrong-password'},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-device',
+            HTTP_X_DEVICE_LABEL='Primary Device',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data['error'], 'Account password is incorrect.')
+
+        self.primary_session.refresh_from_db()
+        self.target_session.refresh_from_db()
+
+        self.assertTrue(self.primary_session.is_primary)
+        self.assertFalse(self.target_session.is_primary)
 
     def test_primary_device_cannot_be_revoked_remotely(self):
         response = self.client.post(
@@ -92,6 +131,29 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
         self.primary_session.refresh_from_db()
         self.assertTrue(self.primary_session.is_active)
         self.assertTrue(self.primary_session.is_primary)
+
+    def test_backup_codes_can_only_be_generated_by_primary_device(self):
+        response = self.client.get(
+            reverse('download_backup_codes'),
+            HTTP_X_DEVICE_ID='current-device',
+            HTTP_X_DEVICE_LABEL='Current Device',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            response.data['error'],
+            'Backup codes can only be generated from your primary device.',
+        )
+
+    def test_primary_device_can_generate_backup_codes(self):
+        response = self.client.get(
+            reverse('download_backup_codes'),
+            HTTP_X_DEVICE_ID='primary-device',
+            HTTP_X_DEVICE_LABEL='Primary Device',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
 
 
 class AppNotificationTests(APITestCase):
