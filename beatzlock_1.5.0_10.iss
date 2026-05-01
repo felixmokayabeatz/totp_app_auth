@@ -38,7 +38,11 @@ ChangesAssociations=yes
 DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
+<<<<<<< HEAD
 OutputDir=/home/felixmokayabeatz/Programming/totp_app/final_builds/Installers/1.5.0_10
+=======
+OutputDir=C:\Programming\totp_app\final_builds\Installers\1.5.0_10
+>>>>>>> 7cf6941d3a4bf18791b6d193f51aeacc3b4e9cc4
 OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64
 SetupIconFile=C:\Programming\totp_app\otp_backend\static\favicon.ico
 SolidCompression=yes
