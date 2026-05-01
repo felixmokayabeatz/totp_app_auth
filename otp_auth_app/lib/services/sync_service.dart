@@ -293,7 +293,8 @@ class SyncService {
 
   // ─── Auth helpers ─────────────────────────────────────────────────────────
   Future<void> _updateAuthHeader() async {
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     final deviceId = await getOrCreateDeviceId();
     final deviceLabel = await _buildDeviceLabel();
     if (token != null && token.isNotEmpty) {
@@ -817,7 +818,8 @@ class SyncService {
 
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) return false;
 
     if (!await _ensureEncryptionKeyAvailable()) {
@@ -1025,8 +1027,7 @@ class SyncService {
           data: {'username': username.trim(), 'code': code.trim()});
       return r.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _friendlyRequestError(e, 'Verification failed.');
+      _lastErrorMessage = _friendlyRequestError(e, 'Verification failed.');
       print('verify2FA error: $e');
       return false;
     } catch (e) {
@@ -1038,7 +1039,8 @@ class SyncService {
 
   Future<bool> sendDeleteOtp(String username) async {
     await _updateAuthHeader();
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null) {
       print('No token available for delete OTP');
       return false;
@@ -1065,7 +1067,8 @@ class SyncService {
 
   Future<bool> verifyDeleteOtp(String username, String code) async {
     await _updateAuthHeader();
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null) return false;
     try {
       final response = await _dio.post(
@@ -1087,7 +1090,8 @@ class SyncService {
       String currentPassword, String newPassword) async {
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null) return false;
 
     final username = await _getCurrentUserId();
@@ -1205,9 +1209,8 @@ class SyncService {
       });
       return response.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
-              'Recovery code verification failed.';
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Recovery code verification failed.';
       return false;
     } catch (e) {
       _lastErrorMessage = 'Recovery code verification failed.';
@@ -1223,9 +1226,8 @@ class SyncService {
       });
       return response.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
-              'No account found with this email.';
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'No account found with this email.';
       return false;
     } catch (e) {
       _lastErrorMessage = 'No account found with this email.';
@@ -1255,11 +1257,9 @@ class SyncService {
             SecureStorageService.refreshTokenKey, response.data['refresh']);
         await _secureStorage.write(
             SecureStorageService.currentUserKey, canonicalUsername);
-        await _secureStorage.write(
-            SecureStorageService.userEmailKey,
+        await _secureStorage.write(SecureStorageService.userEmailKey,
             response.data['user']?['email']?.toString() ?? email.trim());
-        await _secureStorage.write(
-            SecureStorageService.userIdKey,
+        await _secureStorage.write(SecureStorageService.userIdKey,
             response.data['user']?['id']?.toString() ?? '');
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
@@ -1272,9 +1272,8 @@ class SyncService {
       }
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
-              'Password reset with recovery code failed.';
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Password reset with recovery code failed.';
       return false;
     } catch (e) {
       _lastErrorMessage = 'Password reset with recovery code failed.';
@@ -1286,7 +1285,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to view recovery code status.';
@@ -1332,11 +1332,8 @@ class SyncService {
 
   String _backupCodesFileName(String username) {
     final safeUsername = username.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
-    final timestamp = DateTime.now()
-        .toIso8601String()
-        .replaceAll(':', '-')
-        .split('.')
-        .first;
+    final timestamp =
+        DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
     return 'beatzlock_backup_codes_${safeUsername}_$timestamp.pdf';
   }
 
@@ -1369,7 +1366,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to download backup codes.';
       return null;
@@ -1418,7 +1416,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to view notifications.';
       return [];
@@ -1457,11 +1456,13 @@ class SyncService {
     }
   }
 
-  Future<AppNotificationItem?> getNotificationDetail(String notificationId) async {
+  Future<AppNotificationItem?> getNotificationDetail(
+      String notificationId) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to view notifications.';
       return null;
@@ -1501,7 +1502,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage notifications.';
       return null;
@@ -1542,7 +1544,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -1567,11 +1570,13 @@ class SyncService {
     }
   }
 
-  Future<bool> logAppPinChangedNotification({required String deviceLabel}) async {
+  Future<bool> logAppPinChangedNotification(
+      {required String deviceLabel}) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -1599,7 +1604,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to view active devices.';
       return [];
@@ -1646,7 +1652,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage devices.';
       return false;
@@ -1663,8 +1670,8 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ?? 'Could not sign out this device.';
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not sign out this device.';
       return false;
     } catch (e) {
       _lastErrorMessage = 'Could not sign out this device.';
@@ -1679,7 +1686,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage devices.';
       return false;
@@ -1699,8 +1707,8 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ?? 'Could not set the primary device.';
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not set the primary device.';
       return false;
     } catch (e) {
       _lastErrorMessage = 'Could not set the primary device.';
@@ -1712,7 +1720,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage devices.';
       return null;
@@ -1748,7 +1757,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -1793,7 +1803,8 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in.';
       return false;
@@ -1825,7 +1836,7 @@ class SyncService {
       } catch (_) {}
     }
 
-      await _secureStorage.deleteSessionData();
+    await _secureStorage.deleteSessionData();
 
     await _clearStoredEncryptionKey();
 
@@ -1835,7 +1846,8 @@ class SyncService {
   }
 
   Future<bool> isLoggedIn() async {
-    final token = await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
     return token != null && token.isNotEmpty;
   }
 

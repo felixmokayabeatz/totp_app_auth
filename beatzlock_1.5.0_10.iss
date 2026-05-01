@@ -3,8 +3,8 @@
 ; Non-commercial use only
 
 #define MyAppName "beatzLock"
-#define MyAppVersion "1.4.4+9"
-#define MyAppArtifactVersion "1.4.4_9"
+#define MyAppVersion "1.5.0+10"
+#define MyAppArtifactVersion "1.5.0_10"
 #define MyAppPublisher "felixmokayabeatz Inc."
 #define MyAppURL "https://www.felixmokayabeatz.online/"
 #define MyAppExeName "otp_auth_app.exe"
@@ -38,7 +38,7 @@ ChangesAssociations=yes
 DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
-OutputDir=C:\Programming\totp_app\final_builds\Installers\1.4.4_9
+OutputDir=/home/felixmokayabeatz/Programming/totp_app/final_builds/Installers/1.5.0_10
 OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64
 SetupIconFile=C:\Programming\totp_app\otp_backend\static\favicon.ico
 SolidCompression=yes
