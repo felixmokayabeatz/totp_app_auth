@@ -108,6 +108,11 @@ def find_inno_setup_script() -> Path | None:
     return None
 
 
+def can_manage_inno_setup() -> bool:
+    """Return True on platforms that should create/update Inno Setup scripts."""
+    return platform.system() == "Windows"
+
+
 def sync_inno_setup_script(script_path: Path):
     """Update an Inno Setup script in-place from pubspec.yaml version info."""
     if not script_path.exists():
@@ -197,20 +202,21 @@ def refresh_version_context(announce=False):
     APP_BUILD_NUMBER = app_build_number
     APP_ARTIFACT_VERSION = app_artifact_version
 
-    inno_script_file = find_inno_setup_script()
-    if inno_script_file is not None:
-        sync_inno_setup_script(inno_script_file)
-        target_inno_script = get_versioned_inno_script_path()
-        if inno_script_file.resolve() != target_inno_script.resolve():
-            if target_inno_script.exists():
-                target_inno_script.unlink()
-            inno_script_file.replace(target_inno_script)
-            inno_script_file = target_inno_script
-        if announce or version_changed:
-            print_color(
-                f"Updated Inno Setup script: {inno_script_file.name}",
-                Colors.GREEN,
-            )
+    if can_manage_inno_setup():
+        inno_script_file = find_inno_setup_script()
+        if inno_script_file is not None:
+            sync_inno_setup_script(inno_script_file)
+            target_inno_script = get_versioned_inno_script_path()
+            if inno_script_file.resolve() != target_inno_script.resolve():
+                if target_inno_script.exists():
+                    target_inno_script.unlink()
+                inno_script_file.replace(target_inno_script)
+                inno_script_file = target_inno_script
+            if announce or version_changed:
+                print_color(
+                    f"Updated Inno Setup script: {inno_script_file.name}",
+                    Colors.GREEN,
+                )
 
 
 refresh_version_context()
@@ -251,6 +257,10 @@ def find_inno_compiler() -> str | None:
 
 def build_windows_installer() -> bool:
     """Compile the current versioned Inno Setup script."""
+    if not can_manage_inno_setup():
+        print_color("Windows installer scripts are only generated on Windows.", Colors.YELLOW)
+        return False
+
     script_path = find_inno_setup_script()
     if script_path is None:
         print_color("No Inno Setup script found to compile.", Colors.RED)
