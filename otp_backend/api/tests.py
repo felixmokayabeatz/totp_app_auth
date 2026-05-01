@@ -142,7 +142,12 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(
             response.data['error'],
-            'Backup codes can only be generated from your primary device.',
+            'Recovery codes can only be generated from your primary device. Your primary device is Primary Device.',
+        )
+        self.assertEqual(response.data['primary_device_label'], 'Primary Device')
+        self.assertEqual(
+            response.data['primary_device']['device_label'],
+            'Primary Device',
         )
 
     def test_primary_device_can_generate_backup_codes(self):

@@ -43,6 +43,20 @@ class SyncService {
       return data.trim();
     }
 
+    if (data is List<int>) {
+      try {
+        final decoded = utf8.decode(data).trim();
+        if (decoded.isEmpty) return null;
+        try {
+          return _extractServerError(jsonDecode(decoded));
+        } catch (_) {
+          return decoded;
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+
     if (data is Map<String, dynamic>) {
       for (final key in const ['error', 'detail', 'message']) {
         final value = data[key];

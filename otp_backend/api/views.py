@@ -1143,7 +1143,7 @@ def download_backup_codes(request):
     logger.info("Backup code PDF download - User: %s", user.username)
 
     try:
-        ensure_primary_session(user)
+        primary_session = ensure_primary_session(user)
         current_session = get_current_active_device_session(request)
         if current_session is None:
             return Response(
@@ -1152,8 +1152,24 @@ def download_backup_codes(request):
             )
 
         if not current_session.is_primary:
+            primary_device_label = (
+                primary_session.device_label
+                if primary_session is not None
+                else 'your current primary device'
+            )
             return Response(
-                {'error': 'Backup codes can only be generated from your primary device.'},
+                {
+                    'error': (
+                        'Recovery codes can only be generated from your primary device. '
+                        f'Your primary device is {primary_device_label}.'
+                    ),
+                    'primary_device': {
+                        'id': str(primary_session.id) if primary_session is not None else None,
+                        'device_id': primary_session.device_id if primary_session is not None else '',
+                        'device_label': primary_device_label,
+                    },
+                    'primary_device_label': primary_device_label,
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
