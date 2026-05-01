@@ -16,6 +16,10 @@ class OTPImportEntry {
 }
 
 class OTPImportService {
+  List<OTPImportEntry> parseCsv(String input) {
+    return _dedupe(_parseDelimitedRows(input, forcedDelimiter: ','));
+  }
+
   List<OTPImportEntry> parse(String input) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return const [];
@@ -47,7 +51,10 @@ class OTPImportService {
     return _dedupe(entries);
   }
 
-  List<OTPImportEntry> _parseDelimitedRows(String input) {
+  List<OTPImportEntry> _parseDelimitedRows(
+    String input, {
+    String? forcedDelimiter,
+  }) {
     final lines = input
         .split(RegExp(r'\r?\n'))
         .map((line) => line.trim())
@@ -55,7 +62,7 @@ class OTPImportService {
         .toList();
     if (lines.isEmpty) return const [];
 
-    final delimiter = _detectDelimiter(input);
+    final delimiter = forcedDelimiter ?? _detectDelimiter(input);
     final rows = lines
         .map((line) => _splitDelimitedLine(line, delimiter))
         .where((row) => row.length >= 2)

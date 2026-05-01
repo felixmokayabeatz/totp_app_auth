@@ -31,6 +31,7 @@ class AppUpdateService {
     if (Platform.isWindows) return 'windows';
     if (Platform.isLinux) return 'linux';
     if (Platform.isMacOS) return 'macos';
+    if (Platform.isIOS) return 'ios';
     return '';
   }
 

@@ -77,5 +77,12 @@ class AppConfig {
     return '${beatzLockAppsBaseUrl}legal/$slug/';
   }
 
+  static String get ratingSubmitApiUrl =>
+      '${beatzLockAppsBaseUrl}api/ratings/submit/';
+
+  static String get ratingsApiUrl => '${beatzLockAppsBaseUrl}api/ratings/';
+
+  static String get myRatingApiUrl => '${beatzLockAppsBaseUrl}api/ratings/me/';
+
   static String get rateAppUrl => '${beatzLockAppsBaseUrl}rate/';
 }

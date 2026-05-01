@@ -1,3 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
+import 'package:file_selector_windows/file_selector_windows.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +13,7 @@ import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/app_update_info.dart';
+import '../services/app_rating_service.dart';
 import '../models/otp_account.dart';
 import '../services/app_update_service.dart';
 import '../services/sync_service.dart';
@@ -14,13 +21,11 @@ import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
 import '../services/secure_storage_service.dart';
-import 'add_account_screen.dart';
 import 'device_sessions_screen.dart';
 import 'legal_document_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
-import 'dart:async';
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -32,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final BiometricService _biometricService = BiometricService();
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
+  final AppRatingService _appRatingService = AppRatingService();
 
   bool _isSyncing = false;
   bool _isCheckingForUpdates = false;
@@ -327,7 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.download_rounded,
               label: 'Import Accounts',
-              sub: 'Paste CSV or Excel rows from another authenticator',
+              sub: 'Import a CSV export from another authenticator',
               onTap: _showImportAccountsDialog,
             ),
             _dividerLine(),
@@ -555,25 +561,336 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openRateApp() async {
-    final uri = Uri.parse(AppConfig.rateAppUrl);
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final reviewerKey = await _ratingReviewerKey();
+    AppRating? existingRating;
+    try {
+      existingRating = await _appRatingService.fetchMyRating(
+        reviewerKey: reviewerKey,
+      );
+    } catch (_) {
+      existingRating = null;
+    }
+
     if (!mounted) return;
 
-    if (!opened) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Could not open the app rating page.'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    final commentController = TextEditingController();
+    final suggestionController = TextEditingController();
+    commentController.text = existingRating?.comment ?? '';
+    suggestionController.text = existingRating?.suggestion ?? '';
+
+    var selectedStars = (existingRating?.stars ?? 5).clamp(1, 5).toInt();
+    var isSubmitting = false;
+    var isEditing = existingRating == null;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title: Text('Rate BeatzLock', style: TextStyle(color: _textPrimary)),
+          content: SizedBox(
+            width: 430,
+            child: SingleChildScrollView(
+              child: existingRating != null && !isEditing
+                  ? _buildExistingRatingPreview(existingRating!)
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          existingRating == null
+                              ? 'Rate this app and leave a comment or suggestion for the public BeatzLock ratings page.'
+                              : 'Edit your existing BeatzLock rating. The original date stays the same and the edit date updates after saving.',
+                          style:
+                              TextStyle(color: _textSecondary, fontSize: 13),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(5, (index) {
+                            final star = index + 1;
+                            final selected = star <= selectedStars;
+                            return IconButton(
+                              tooltip: '$star star${star == 1 ? '' : 's'}',
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () => setDialogState(() {
+                                        selectedStars = star;
+                                        errorText = null;
+                                      }),
+                              icon: Icon(
+                                selected
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
+                                color: Colors.amber,
+                                size: 34,
+                              ),
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: commentController,
+                          enabled: !isSubmitting,
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: const InputDecoration(
+                            labelText: 'Comment',
+                            hintText: 'What do you like or dislike?',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: suggestionController,
+                          enabled: !isSubmitting,
+                          minLines: 2,
+                          maxLines: 4,
+                          decoration: const InputDecoration(
+                            labelText: 'Suggestion',
+                            hintText: 'What should improve next?',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        if (errorText != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            errorText!,
+                            style: const TextStyle(
+                                color: Colors.red, fontSize: 12),
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final uri = Uri.parse(AppConfig.rateAppUrl);
+                      final opened = await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                      if (!opened && dialogContext.mounted) {
+                        setDialogState(() {
+                          errorText = 'Could not open the ratings page.';
+                        });
+                      }
+                    },
+              child: const Text('View Ratings'),
+            ),
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.pop(dialogContext),
+              child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+            ),
+            if (existingRating != null && !isEditing)
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () => setDialogState(() {
+                          isEditing = true;
+                          errorText = null;
+                        }),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Edit'),
+              )
+            else
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final comment = commentController.text.trim();
+                      final suggestion = suggestionController.text.trim();
+                      if (comment.isEmpty && suggestion.isEmpty) {
+                        setDialogState(() {
+                          errorText =
+                              'Add a comment or suggestion before submitting.';
+                        });
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                        errorText = null;
+                      });
+
+                      try {
+                        final packageInfo = await PackageInfo.fromPlatform();
+                        final deviceLabel =
+                            await _syncService.getCurrentDeviceLabel();
+                        await _appRatingService.submitRating(
+                          reviewerKey: reviewerKey,
+                          platform: _appUpdateService.currentPlatform.isEmpty
+                              ? 'unknown'
+                              : _appUpdateService.currentPlatform,
+                          stars: selectedStars,
+                          comment: comment,
+                          suggestion: suggestion,
+                          appVersion: packageInfo.version,
+                          buildNumber: packageInfo.buildNumber,
+                          deviceLabel: deviceLabel,
+                        );
+
+                        if (!dialogContext.mounted) return;
+                        Navigator.pop(dialogContext);
+                        if (!mounted) return;
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(existingRating == null
+                                ? 'Thanks for the review!'
+                                : 'Your review was updated.'),
+                            backgroundColor: const Color(0xFF10B981),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+                      } catch (_) {
+                        if (!dialogContext.mounted) return;
+                        setDialogState(() {
+                          isSubmitting = false;
+                          errorText =
+                              'Could not submit right now. Please try again.';
+                        });
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(existingRating == null ? 'Submit' : 'Save Edit'),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
+
+  Future<String> _ratingReviewerKey() async {
+    final storage = SecureStorageService();
+    final rawUser = (await storage.read(SecureStorageService.userIdKey)) ??
+        (await storage.read(SecureStorageService.userEmailKey)) ??
+        (await storage.read(SecureStorageService.currentUserKey)) ??
+        await _syncService.getCurrentDeviceLabel();
+    final normalized = rawUser.trim().toLowerCase();
+    final digest = sha256.convert(
+      utf8.encode('beatzlock_rating_v1|$normalized'),
+    );
+    return digest.toString();
+  }
+
+  Widget _buildExistingRatingPreview(AppRating rating) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'You already rated BeatzLock. You can edit it, but it will stay as one review on the public ratings page.',
+          style: TextStyle(color: _textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        Center(child: _starStrip(rating.stars, size: 30)),
+        const SizedBox(height: 14),
+        _ratingMetaLine('Platform', rating.platformDisplay),
+        _ratingMetaLine('Original date', _formatRatingDate(rating.createdAt)),
+        _ratingMetaLine('Last edited', _formatRatingDate(rating.updatedAt)),
+        if (rating.comment.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Comment',
+              style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(rating.comment,
+              style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5)),
+        ],
+        if (rating.suggestion.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Suggestion',
+              style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(rating.suggestion,
+              style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5)),
+        ],
+      ],
+    );
+  }
+
+  Widget _ratingMetaLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(label,
+                style: TextStyle(color: _textSecondary, fontSize: 12)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _starStrip(int stars, {double size = 20}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        return Icon(
+          index < stars ? Icons.star_rounded : Icons.star_outline_rounded,
+          color: Colors.amber,
+          size: size,
+        );
+      }),
+    );
+  }
+
+  String _formatRatingDate(DateTime? value) {
+    if (value == null) return 'Unavailable';
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day $hour:$minute';
   }
 
   Future<void> _showImportAccountsDialog() async {
-    final importController = TextEditingController();
+    List<OTPImportEntry> selectedEntries = const [];
     bool isImporting = false;
+    bool isPickingFile = false;
+    String? selectedFileName;
     String? errorText;
 
     await showDialog<void>(
@@ -591,56 +908,122 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Paste CSV or Excel rows from another authenticator. Use columns such as Service, Account, Secret.',
+                  'Choose a CSV export from another authenticator. The file should include columns such as Service, Account, Secret.',
                   style: TextStyle(color: _textSecondary, fontSize: 13),
                 ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: importController,
-                  minLines: 5,
-                  maxLines: 8,
-                  decoration: InputDecoration(
-                    hintText:
-                        'Service,Account,Secret\nGitHub,you@example.com,JBSWY3DPEHPK3PXP',
-                    errorText: errorText,
-                    border: const OutlineInputBorder(),
+                if (!Platform.isWindows) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'CSV file picking is wired for the Windows app build right now.',
+                    style:
+                        TextStyle(color: Colors.orange.shade600, fontSize: 12),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'OTP setup links and Google Authenticator transfer QR payloads are also accepted.',
-                  style: TextStyle(color: _textSecondary, fontSize: 12),
-                ),
-                const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 16),
                 OutlinedButton.icon(
-                  onPressed: isImporting
+                  onPressed: isImporting || isPickingFile || !Platform.isWindows
                       ? null
                       : () async {
-                          Navigator.pop(dialogContext);
-                          final imported = await Navigator.push<bool>(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const AddAccountScreen(startScanning: true),
-                            ),
-                          );
-                          if (imported == true && mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content:
-                                    const Text('Accounts imported from QR.'),
-                                backgroundColor: const Color(0xFF10B981),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
+                          setDialogState(() {
+                            isPickingFile = true;
+                            errorText = null;
+                          });
+
+                          try {
+                            final file = await FileSelectorWindows().openFile(
+                              confirmButtonText: 'Import CSV',
                             );
+                            if (!dialogContext.mounted) return;
+
+                            if (file == null) {
+                              setDialogState(() => isPickingFile = false);
+                              return;
+                            }
+
+                            final fileName = file.name;
+                            if (!fileName.toLowerCase().endsWith('.csv')) {
+                              setDialogState(() {
+                                selectedEntries = const [];
+                                selectedFileName = null;
+                                isPickingFile = false;
+                                errorText = 'Choose a .csv file.';
+                              });
+                              return;
+                            }
+
+                            final contents = await file.readAsString();
+                            final entries =
+                                OTPImportService().parseCsv(contents);
+                            setDialogState(() {
+                              selectedEntries = entries;
+                              selectedFileName = fileName;
+                              isPickingFile = false;
+                              errorText = entries.isEmpty
+                                  ? 'No valid TOTP accounts were found in this CSV file.'
+                                  : null;
+                            });
+                          } catch (_) {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              selectedEntries = const [];
+                              selectedFileName = null;
+                              isPickingFile = false;
+                              errorText = 'Could not read that CSV file.';
+                            });
                           }
                         },
-                  icon: const Icon(Icons.qr_code_scanner_rounded),
-                  label: const Text('Scan Import QR'),
+                  icon: isPickingFile
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _accent,
+                          ),
+                        )
+                      : const Icon(Icons.upload_file_rounded),
+                  label: Text(selectedFileName == null
+                      ? 'Choose CSV File'
+                      : 'Change CSV File'),
                 ),
+                if (selectedFileName != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _isDark ? Colors.white10 : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _dividerColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          selectedFileName!,
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${selectedEntries.length} account${selectedEntries.length == 1 ? '' : 's'} ready to import',
+                          style:
+                              TextStyle(color: _textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (errorText != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    errorText!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),
@@ -651,25 +1034,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
             ElevatedButton(
-              onPressed: isImporting
+              onPressed: isImporting || selectedEntries.isEmpty
                   ? null
                   : () async {
-                      final entries =
-                          OTPImportService().parse(importController.text);
-                      if (entries.isEmpty) {
-                        setDialogState(() {
-                          errorText =
-                              'Paste a valid otpauth link, transfer payload, or JSON export.';
-                        });
-                        return;
-                      }
-
                       setDialogState(() {
                         isImporting = true;
                         errorText = null;
                       });
 
-                      final result = await _importOtpEntries(entries);
+                      final result = await _importOtpEntries(selectedEntries);
                       if (!dialogContext.mounted) return;
                       Navigator.pop(dialogContext);
                       if (!mounted) return;
