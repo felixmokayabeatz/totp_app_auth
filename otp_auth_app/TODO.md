@@ -15,3 +15,5 @@
 [x] - If the user installs the app and open it initailly tell them we will use their pin/biometric to unlcok tha app, also for the new user, in my original app I had a very besitiful spash screen like a presentation I hop it is there.
 
 [x] -  Add the Privacy poilcy and Terms of use are from db from another repo in that shows the privacy terms is here aswell
+
+[ ] - Fix the long relese notes going out out container on log in screen

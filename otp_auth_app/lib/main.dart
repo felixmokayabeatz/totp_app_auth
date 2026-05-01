@@ -419,16 +419,23 @@ class _RequiredUpdateScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final releaseNotes = info.releaseNotes.trim();
+    final notesMaxHeight =
+        MediaQuery.sizeOf(context).height < 700 ? 220.0 : 280.0;
 
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Card(
-                child: Padding(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Card(
+                        child: Padding(
                   padding: const EdgeInsets.all(28),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -493,7 +500,16 @@ class _RequiredUpdateScreen extends StatelessWidget {
                             color: colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: Text(releaseNotes),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: notesMaxHeight,
+                            ),
+                            child: Scrollbar(
+                              child: SingleChildScrollView(
+                                child: Text(releaseNotes),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                       const SizedBox(height: 24),
@@ -525,10 +541,14 @@ class _RequiredUpdateScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
