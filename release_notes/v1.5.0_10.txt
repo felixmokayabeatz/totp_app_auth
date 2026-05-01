@@ -1,0 +1,46 @@
+v1.5.0 (Build 10)
+
+Security and account protection
+- Fixed the issue where users could be logged out unexpectedly after a short time.
+- Improved token refresh and heartbeat handling so temporary refresh failures do not wipe the local session.
+- Backup codes can now only be generated from the account's current primary device.
+- Changing the primary device now requires the account password before the role is transferred.
+- Added a Change App PIN action in Settings.
+- Changing the app PIN now verifies the existing PIN first when one is already set.
+- App PIN changes now create a normal security notification and record the device where the PIN was changed.
+- Fixed the PIN/change-password dialog controller issue that could throw "TextEditingController was used after being disposed".
+
+Backup and recovery
+- Android backup-code PDFs now save through the system Downloads location instead of app-private Android data folders.
+- Recovery code status in Settings shows remaining codes and last-used information.
+
+Legal documents
+- Privacy Policy and Terms of Service now load from the BeatzLock backend legal pages so the app and website use the same source.
+- Added native app screens for Privacy Policy and Terms of Service with a web-version link.
+- Legal content in the app now preserves TinyMCE-style formatting such as headings, bold, italic, underline, lists, quotes, links, separators, and code-style blocks.
+
+Ratings and feedback
+- Added an in-app BeatzLock rating flow with star rating, comment, and suggestion fields.
+- Ratings are sent to the BeatzLock website and shown separately by platform.
+- Added a public ratings page with review dates, stars, comments, suggestions, platform filters, sorting, and useful votes.
+- A user can only have one BeatzLock app rating; tapping Rate again loads the previous rating and lets them edit it.
+- Rating edits keep the original created date and update the edited date.
+- Improved the ratings page dropdown styling so options remain readable on the dark site design.
+
+Import and migration
+- Settings now supports importing accounts from a CSV export file from another authenticator app.
+- CSV imports detect common columns such as Service, Account, and Secret, and skip duplicate accounts already on the device.
+
+App lock and first-run experience
+- Added a first-run explanation that BeatzLock uses device security or an app PIN to unlock the app.
+- App Lock is now presented as required in Settings so users understand it protects the local codes.
+
+Notifications and settings
+- Added the Mark all read action for notifications.
+- Added clearer Settings entries for active devices, legal pages, app rating, recovery codes, import, app lock, and app PIN changes.
+
+Stability and polish
+- Improved sync/session behavior around refresh failures and revoked sessions.
+- Improved legal page rendering in the app without requiring a new Flutter HTML dependency.
+- Added backend tests for primary-device password checks, primary-only backup code generation, and app PIN change notifications.
+- General bug fixes and stability improvements.
