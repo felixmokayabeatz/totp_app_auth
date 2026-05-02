@@ -60,7 +60,7 @@ Source: "C:\Programming\totp_app\final_builds\windows\1.5.4_14\app\url_launcher_
 Source: "C:\Programming\totp_app\final_builds\windows\1.5.4_14\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; VC++ runtime - from EXTERNAL permanent folder (NOT in Flutter build)
-Source: "C:\Programming\totp_app\final_builds\vc_redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "C:\Programming\totp_app\vc_redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 
 [Registry]

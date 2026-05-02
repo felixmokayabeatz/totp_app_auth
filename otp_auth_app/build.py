@@ -18,6 +18,7 @@ FINAL_BUILDS_DIR = WORKSPACE_DIR / "final_builds"
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
 PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
 INNO_SCRIPT_DIR = WORKSPACE_DIR / "inno_script"
+VC_REDIST_DIR = WORKSPACE_DIR / "vc_redist"
 INNO_SCRIPT_SEEDS = [
     INNO_SCRIPT_DIR / "BeatzLock v1.iss",
     INNO_SCRIPT_DIR / "BeatzLock.iss",
@@ -111,6 +112,15 @@ def to_inno_path(path: Path) -> str:
     return str(path).replace("/", "\\")
 
 
+def remove_tree_force(path: Path) -> None:
+    """Remove generated build folders, including read-only Windows files."""
+    def handle_remove_error(function, failed_path, _exc_info):
+        os.chmod(failed_path, 0o700)
+        function(failed_path)
+
+    shutil.rmtree(path, onerror=handle_remove_error)
+
+
 def find_inno_setup_script() -> Path | None:
     candidates = []
     candidates.append(get_versioned_inno_script_path())
@@ -163,6 +173,7 @@ def sync_inno_setup_script(script_path: Path):
 
     app_source_dir = to_inno_path(get_windows_app_dir())
     output_dir = to_inno_path(get_windows_installer_dir())
+    vc_redist_path = to_inno_path(VC_REDIST_DIR / "VC_redist.x64.exe")
 
     lines = script_path.read_text(encoding="utf-8").splitlines()
     updated_lines = []
@@ -204,6 +215,13 @@ def sync_inno_setup_script(script_path: Path):
             app_index = lower_line.find("\\app", quote_start)
             if quote_start != -1 and app_index != -1:
                 updated_lines.append(line[:quote_start + 1] + app_source_dir + line[app_index + 4:])
+                continue
+
+        if stripped.startswith("Source: ") and "vc_redist.x64.exe" in stripped.lower():
+            quote_start = line.find('"')
+            quote_end = line.find('"', quote_start + 1)
+            if quote_start != -1 and quote_end != -1:
+                updated_lines.append(line[:quote_start + 1] + vc_redist_path + line[quote_end:])
                 continue
 
         updated_lines.append(line)
@@ -273,6 +291,13 @@ def build_windows_installer() -> bool:
     if expected_output.exists():
         save_build_metadata("windows_installer", str(expected_output))
         print_color(f"✅ Windows installer created: {expected_output}", Colors.GREEN)
+        windows_app_dir = get_windows_app_dir()
+        if windows_app_dir.exists():
+            try:
+                remove_tree_force(windows_app_dir)
+                print_color(f"Removed staged Windows app files: {windows_app_dir}", Colors.GREEN)
+            except OSError as error:
+                print_color(f"Could not remove staged Windows app files: {error}", Colors.YELLOW)
         return True
 
     print_color("Inno Setup finished, but the expected installer was not found.", Colors.YELLOW)
