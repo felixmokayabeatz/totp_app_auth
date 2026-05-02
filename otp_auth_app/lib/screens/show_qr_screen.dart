@@ -1,6 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../services/app_lock_service.dart';
 import '../widgets/account_logo_badge.dart';
 
 class ShowQRScreen extends StatefulWidget {
@@ -21,6 +24,7 @@ class ShowQRScreen extends StatefulWidget {
 
 class _ShowQRScreenState extends State<ShowQRScreen> {
   bool _isSecretRevealed = false;
+  final AppLockService _appLockService = AppLockService();
 
   @override
   Widget build(BuildContext context) {
@@ -146,33 +150,82 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Use any authenticator app that supports time-based one-time passwords.',
+                    'Enter your BeatzLock PIN to show the QR code, then scan it with another authenticator if you want the same account in more than one app or device.',
                     style: TextStyle(fontSize: 13, color: mutedText),
                   ),
                   const SizedBox(height: 18),
                   Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: colorScheme.outlineVariant.withOpacity(0.35),
-                        ),
-                      ),
-                      child: QrImageView(
-                        data: otpUrl,
-                        version: QrVersions.auto,
-                        size: isWide ? 220 : 200,
-                        backgroundColor: Colors.white,
-                        eyeStyle: const QrEyeStyle(
-                          color: Colors.black,
-                          eyeShape: QrEyeShape.square,
-                        ),
-                        dataModuleStyle: const QrDataModuleStyle(
-                          color: Colors.black,
-                          dataModuleShape: QrDataModuleShape.square,
-                        ),
+                    child: GestureDetector(
+                      onTap: _isSecretRevealed ? null : _revealSensitiveInfo,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          ImageFiltered(
+                            imageFilter: ImageFilter.blur(
+                              sigmaX: _isSecretRevealed ? 0 : 7,
+                              sigmaY: _isSecretRevealed ? 0 : 7,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: colorScheme.outlineVariant
+                                      .withOpacity(0.35),
+                                ),
+                              ),
+                              child: QrImageView(
+                                data: otpUrl,
+                                version: QrVersions.auto,
+                                size: isWide ? 220 : 200,
+                                backgroundColor: Colors.white,
+                                eyeStyle: const QrEyeStyle(
+                                  color: Colors.black,
+                                  eyeShape: QrEyeShape.square,
+                                ),
+                                dataModuleStyle: const QrDataModuleStyle(
+                                  color: Colors.black,
+                                  dataModuleShape: QrDataModuleShape.square,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!_isSecretRevealed)
+                            Container(
+                              width: isWide ? 252 : 232,
+                              height: isWide ? 252 : 232,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.44),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.lock_outline_rounded,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'QR code hidden',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  FilledButton.tonalIcon(
+                                    onPressed: _revealSensitiveInfo,
+                                    icon: const Icon(Icons.pin_rounded),
+                                    label: const Text('Enter PIN'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -194,7 +247,32 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'If scanning fails, reveal and copy the secret key manually.',
+                            'BeatzLock lets you export this setup QR so you can keep the same login in another trusted authenticator too.',
+                            style: TextStyle(fontSize: 12, color: mutedText),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : const Color(0xFFF4F5F7),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.qr_code_scanner_rounded,
+                            size: 18, color: colorScheme.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'If scanning fails, copy the secret key manually after PIN unlock.',
                             style: TextStyle(fontSize: 12, color: mutedText),
                           ),
                         ),
@@ -240,11 +318,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                               : Icons.visibility_rounded,
                           color: mutedText,
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _isSecretRevealed = !_isSecretRevealed;
-                          });
-                        },
+                        onPressed: _isSecretRevealed
+                            ? _hideSensitiveInfo
+                            : _revealSensitiveInfo,
                         tooltip:
                             _isSecretRevealed ? 'Hide secret' : 'Reveal secret',
                       ),
@@ -252,13 +328,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   ),
                   const SizedBox(height: 16),
                   GestureDetector(
-                    onTap: () {
-                      if (!_isSecretRevealed) {
-                        setState(() {
-                          _isSecretRevealed = true;
-                        });
-                      }
-                    },
+                    onTap: _isSecretRevealed ? null : _revealSensitiveInfo,
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -291,7 +361,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                     color: mutedText, size: 22),
                                 const SizedBox(height: 10),
                                 Text(
-                                  'Tap to reveal',
+                                  'Enter PIN to reveal',
                                   style: TextStyle(
                                     color: colorScheme.onSurface,
                                     fontSize: 14,
@@ -442,6 +512,27 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     if (widget.secret.isEmpty) return '**** ****';
     final groupCount = (widget.secret.length / 4).ceil().clamp(2, 4);
     return List.generate(groupCount, (_) => '****').join(' ');
+  }
+
+  Future<void> _revealSensitiveInfo() async {
+    final unlocked = await _appLockService.authenticateWithPinOnly(context);
+    if (!mounted) return;
+
+    if (unlocked) {
+      setState(() => _isSecretRevealed = true);
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('PIN required to show QR code and secret key.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _hideSensitiveInfo() {
+    setState(() => _isSecretRevealed = false);
   }
 
   void _copySecret() {
