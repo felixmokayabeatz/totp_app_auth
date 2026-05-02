@@ -29,7 +29,7 @@ class AppConfig {
       'https://felixmokayabeatz.online/beatzlock-apps/';
 
   // Change this to false when building for production
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
   static String get apiUrl {
     if (!isDevelopment) return prodApiUrl;
