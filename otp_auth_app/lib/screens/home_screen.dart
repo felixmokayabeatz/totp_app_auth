@@ -1028,6 +1028,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   // â”€â”€â”€ Delete account dialog with enhanced warnings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showDeleteAccountDialog(String accountId, String serviceName) async {
+    final isLoggedIn = await _syncService.isLoggedIn();
+    if (!mounted) return;
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
@@ -1058,7 +1061,7 @@ class _HomeScreenState extends State<HomeScreen>
             _deleteOptionTile(
               icon: Icons.phone_android_rounded,
               title: 'This device only',
-              subtitle: _isSyncEnabled
+              subtitle: isLoggedIn && _isSyncEnabled
                   ? 'Cloud sync is ON. This account may come back when you sync!'
                   : 'Local only. Other devices keep the account.',
               color: Colors.orange,
@@ -1066,11 +1069,18 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             const SizedBox(height: 8),
             _deleteOptionTile(
-              icon: Icons.cloud_off_rounded,
-              title: 'Everywhere (Permanent)',
-              subtitle: 'Removed from all devices & cloud. Cannot be undone!',
-              color: Colors.red,
-              onTap: () => Navigator.pop(context, 'everywhere'),
+              icon: isLoggedIn
+                  ? Icons.cloud_off_rounded
+                  : Icons.lock_outline_rounded,
+              title: isLoggedIn
+                  ? 'Everywhere (Permanent)'
+                  : 'Everywhere (Sign in required)',
+              subtitle: isLoggedIn
+                  ? 'Removed from all devices & cloud. Cannot be undone!'
+                  : 'Cloud deletion is not available while using offline mode.',
+              color: isLoggedIn ? Colors.red : Colors.grey,
+              onTap: () =>
+                  Navigator.pop(context, isLoggedIn ? 'everywhere' : 'signin'),
             ),
           ],
         ),
@@ -1085,9 +1095,17 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (choice == null || choice == 'cancel') return;
 
+    if (choice == 'signin') {
+      _showSnackBar(
+        'Sign in first to delete synced accounts everywhere.',
+        Colors.orange,
+      );
+      return;
+    }
+
     if (choice == 'local') {
       // Show warning about sync if enabled
-      if (_isSyncEnabled) {
+      if (isLoggedIn && _isSyncEnabled) {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
@@ -1134,12 +1152,20 @@ class _HomeScreenState extends State<HomeScreen>
       });
       _showSnackBar('Account removed from this device only', Colors.orange);
     } else if (choice == 'everywhere') {
+      if (!await _syncService.isLoggedIn()) {
+        _showSnackBar(
+          'Sign in first to delete synced accounts everywhere.',
+          Colors.orange,
+        );
+        return;
+      }
+
       // Show final confirmation with "DELETE" typing
       final confirmed = await _showDeleteConfirmationDialog(
           context, serviceName, cardColor, textPrimary, textSecondary);
       if (!confirmed) return;
 
-      _showSnackBar('Deleting everywhereâ€¦', Colors.grey);
+      _showSnackBar('Deleting everywhere', Colors.grey);
       final ok = await _syncService.deleteAccountEverywhere(accountId);
       if (ok) {
         setState(() {
@@ -1149,7 +1175,7 @@ class _HomeScreenState extends State<HomeScreen>
         });
         _showSnackBar('Account deleted from all devices', Colors.red);
       } else {
-        _showSnackBar('Failed to delete from cloud â€“ try again', Colors.red);
+        _showSnackBar('Failed to delete from cloud try again', Colors.red);
       }
     }
   }
