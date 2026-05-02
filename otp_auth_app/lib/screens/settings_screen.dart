@@ -138,10 +138,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (info == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Updates are not configured for this platform yet.'),
+          content:
+              const Text('Updates are not configured for this platform yet.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
@@ -153,7 +155,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: const Text('You are already on the latest version.'),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
@@ -576,10 +579,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final commentController = TextEditingController();
     final suggestionController = TextEditingController();
     final displayNameController = TextEditingController();
-    displayNameController.text =
-        existingRating?.displayName == 'Anonymous user'
-            ? ''
-            : existingRating?.displayName ?? '';
+    displayNameController.text = existingRating?.displayName == 'Anonymous user'
+        ? ''
+        : (existingRating?.displayName ?? '');
     commentController.text = existingRating?.comment ?? '';
     suggestionController.text = existingRating?.suggestion ?? '';
 
@@ -609,8 +611,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           existingRating == null
                               ? 'Rate this app and leave a comment or suggestion for the public BeatzLock ratings page.'
                               : 'Edit your existing BeatzLock rating. The original date stays the same and the edit date updates after saving.',
-                          style:
-                              TextStyle(color: _textSecondary, fontSize: 13),
+                          style: TextStyle(color: _textSecondary, fontSize: 13),
                         ),
                         const SizedBox(height: 16),
                         TextField(
@@ -724,84 +725,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: const Text('Edit'),
               )
             else
-            ElevatedButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () async {
-                      final comment = commentController.text.trim();
-                      final suggestion = suggestionController.text.trim();
-                      final displayName = displayNameController.text.trim();
-                      if (comment.isEmpty && suggestion.isEmpty) {
+              ElevatedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final comment = commentController.text.trim();
+                        final suggestion = suggestionController.text.trim();
+                        final displayName = displayNameController.text.trim();
+                        if (comment.isEmpty && suggestion.isEmpty) {
+                          setDialogState(() {
+                            errorText =
+                                'Add a comment or suggestion before submitting.';
+                          });
+                          return;
+                        }
+
                         setDialogState(() {
-                          errorText =
-                              'Add a comment or suggestion before submitting.';
+                          isSubmitting = true;
+                          errorText = null;
                         });
-                        return;
-                      }
 
-                      setDialogState(() {
-                        isSubmitting = true;
-                        errorText = null;
-                      });
+                        try {
+                          final packageInfo = await PackageInfo.fromPlatform();
+                          final deviceLabel =
+                              await _syncService.getCurrentDeviceLabel();
+                          await _appRatingService.submitRating(
+                            reviewerKey: reviewerKey,
+                            platform: _appUpdateService.currentPlatform.isEmpty
+                                ? 'unknown'
+                                : _appUpdateService.currentPlatform,
+                            displayName: displayName,
+                            stars: selectedStars,
+                            comment: comment,
+                            suggestion: suggestion,
+                            appVersion: packageInfo.version,
+                            buildNumber: packageInfo.buildNumber,
+                            deviceLabel: deviceLabel,
+                          );
 
-                      try {
-                        final packageInfo = await PackageInfo.fromPlatform();
-                        final deviceLabel =
-                            await _syncService.getCurrentDeviceLabel();
-                        await _appRatingService.submitRating(
-                          reviewerKey: reviewerKey,
-                          platform: _appUpdateService.currentPlatform.isEmpty
-                              ? 'unknown'
-                              : _appUpdateService.currentPlatform,
-                          displayName: displayName,
-                          stars: selectedStars,
-                          comment: comment,
-                          suggestion: suggestion,
-                          appVersion: packageInfo.version,
-                          buildNumber: packageInfo.buildNumber,
-                          deviceLabel: deviceLabel,
-                        );
+                          if (!dialogContext.mounted) return;
+                          Navigator.pop(dialogContext);
+                          if (!mounted) return;
 
-                        if (!dialogContext.mounted) return;
-                        Navigator.pop(dialogContext);
-                        if (!mounted) return;
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(existingRating == null
-                                ? 'Thanks for the review!'
-                                : 'Your review was updated.'),
-                            backgroundColor: const Color(0xFF10B981),
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(existingRating == null
+                                  ? 'Thanks for the review!'
+                                  : 'Your review was updated.'),
+                              backgroundColor: const Color(0xFF10B981),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
-                          ),
-                        );
-                      } catch (_) {
-                        if (!dialogContext.mounted) return;
-                        setDialogState(() {
-                          isSubmitting = false;
-                          errorText =
-                              'Could not submit right now. Please try again.';
-                        });
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.white,
+                          );
+                        } catch (_) {
+                          if (!dialogContext.mounted) return;
+                          setDialogState(() {
+                            isSubmitting = false;
+                            errorText =
+                                'Could not submit right now. Please try again.';
+                          });
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                ),
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(existingRating == null ? 'Submit' : 'Save Edit'),
               ),
-              child: isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(existingRating == null ? 'Submit' : 'Save Edit'),
-            ),
           ],
         ),
       ),
@@ -1032,8 +1033,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(height: 4),
                         Text(
                           '${selectedEntries.length} account${selectedEntries.length == 1 ? '' : 's'} ready to import',
-                          style:
-                              TextStyle(color: _textSecondary, fontSize: 12),
+                          style: TextStyle(color: _textSecondary, fontSize: 12),
                         ),
                       ],
                     ),
@@ -1104,9 +1104,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<_ImportResult> _importOtpEntries(List<OTPImportEntry> entries) async {
-    final userId =
-        await SecureStorageService().read(SecureStorageService.currentUserKey) ??
-            'default_user';
+    final userId = await SecureStorageService()
+            .read(SecureStorageService.currentUserKey) ??
+        'default_user';
     final userBox = await _syncService.getUserBox();
     var importedCount = 0;
     var skippedCount = 0;
