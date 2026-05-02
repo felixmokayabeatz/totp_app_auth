@@ -18,4 +18,29 @@
 
 [x] - Fix the long relese notes going out out container on log in screen
 
-[x] - Show mlpiple platforms on the rate platform
+[x] - Show mulpiple platforms on the rate platform
+
+[ ] - Only logged in user can send reviews on the app.
+
+[ ] -  The log out heatbeat not working perefctly it takes alot of time to actally sign out still showing otp codes whne i click sign out remotely that device
+
+[ ] -  The accent color does not really work if i chagneg it should reflect all over the app fix that
+
+[ ] -  Fix the when download pdf on main device to use devive pin as the devile lock pin/biometric or fallback to app pin if set
+
+[ ] - For imports account from other auth app like Google auth for now:
+
+        From Google Authenticator → your app
+
+        In Google Authenticator:
+        Menu → Transfer accounts → Export accounts
+        It shows one or more QR codes
+        In your app:
+        Scan those QR codes
+        Support both:
+        otpauth:// → single account
+        otpauth-migration:// → multiple accounts (Google’s bulk format)
+
+        👉 Done—all accounts imported.
+
+[ ] - Add an app to work offline by default if the user want to sync then we can use our current exixting flow. SOme user don't like to create an account to use things, but leave te current flow to sign and sign up just add offline as a default one. You can tell the user that is they sign in and the sych is automatic and cross platform.
