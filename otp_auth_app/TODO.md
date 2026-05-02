@@ -1,4 +1,4 @@
-# To do
+# To do List
 
 [x] - Add a read all button on settings
 
@@ -18,4 +18,4 @@
 
 [x] - Fix the long relese notes going out out container on log in screen
 
-[ ] - Show mlpiple platforms on the rate platform
+[x] - Show mlpiple platforms on the rate platform
