@@ -1,7 +1,5 @@
 # BeatzLock Authenticator Terms of Service
 
-Last updated: 02 May 2026
-
 These Terms of Service explain the rules for using BeatzLock Authenticator, including the BeatzLock mobile, desktop, and web-related services, APIs, update services, account services, sync services, and recovery features.
 
 By creating an account, signing in, syncing data, downloading updates, or otherwise using BeatzLock, you agree to these terms. If you do not agree, do not use the app or service.

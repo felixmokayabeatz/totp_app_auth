@@ -1,7 +1,5 @@
 # BeatzLock Authenticator Privacy Policy
 
-Last updated: 02 May 2026
-
 This Privacy Policy explains how BeatzLock Authenticator collects, uses, stores, protects, and shares information when you use the BeatzLock app, account services, sync services, update services, recovery features, device session features, notification features, ratings, APIs, and related websites.
 
 BeatzLock is designed for security and privacy. A key goal is to collect only what is needed to operate the app and to keep sensitive OTP data encrypted when sync is used.

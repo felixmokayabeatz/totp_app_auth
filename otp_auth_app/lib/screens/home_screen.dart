@@ -922,7 +922,7 @@ class _HomeScreenState extends State<HomeScreen>
                   style: TextStyle(color: textPrimary, fontSize: 17)),
             ]),
             content: Text(
-              'âš ï¸ Cloud sync is currently ENABLED.\n\n'
+              'Cloud sync is currently ENABLED.\n\n'
               'If you delete this account locally only, it may be restored from the cloud when you sync.\n\n'
               'To permanently delete this account, choose "Everywhere" instead.\n\n'
               'Are you sure you want to delete locally only?',
