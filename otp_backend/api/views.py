@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -738,6 +739,20 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         current_device_id = get_request_device_id(self.request)
         if not current_device_id:
             return None
+
+        had_revoked_session = DeviceSession.objects.filter(
+            user=self.request.user,
+            device_id=current_device_id,
+        ).filter(is_active=False).exists() or DeviceSession.objects.filter(
+            user=self.request.user,
+            device_id=current_device_id,
+            revoked_at__isnull=False,
+        ).exists()
+        if had_revoked_session:
+            raise AuthenticationFailed(
+                'This device session has been signed out.',
+                code='session_revoked',
+            )
 
         return ensure_device_session(
             self.request.user,

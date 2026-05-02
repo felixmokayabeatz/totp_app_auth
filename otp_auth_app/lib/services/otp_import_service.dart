@@ -289,7 +289,7 @@ class OTPImportService {
       final data = uri.queryParameters['data'];
       if (data == null || data.isEmpty) return const [];
 
-      final bytes = base64Url.decode(base64Url.normalize(data));
+      final bytes = _decodeMigrationPayload(data);
       final messages = _readLengthDelimitedFields(bytes, 1);
       final entries = <OTPImportEntry>[];
 
@@ -301,6 +301,15 @@ class OTPImportService {
       return entries;
     } catch (_) {
       return const [];
+    }
+  }
+
+  Uint8List _decodeMigrationPayload(String data) {
+    final normalized = data.replaceAll(' ', '+');
+    try {
+      return base64Url.decode(base64Url.normalize(normalized));
+    } catch (_) {
+      return base64.decode(base64.normalize(normalized));
     }
   }
 

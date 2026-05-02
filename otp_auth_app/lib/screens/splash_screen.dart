@@ -51,10 +51,11 @@ class _SplashScreenState extends State<SplashScreen>
     final syncService = SyncService();
 
     if (token == null || token.isEmpty) {
+      await Provider.of<AuthProvider>(context, listen: false).continueOffline();
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => LoginScreen()),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
       return;
     }
@@ -62,10 +63,11 @@ class _SplashScreenState extends State<SplashScreen>
     final restoredKey = await syncService.restoreEncryptionKey();
     if (!restoredKey) {
       await syncService.logout();
+      await Provider.of<AuthProvider>(context, listen: false).continueOffline();
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => LoginScreen()),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
       return;
     }

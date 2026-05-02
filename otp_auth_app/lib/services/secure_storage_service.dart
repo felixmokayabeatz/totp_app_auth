@@ -9,6 +9,7 @@ class SecureStorageService {
   static const accessTokenKey = 'access_token';
   static const refreshTokenKey = 'refresh_token';
   static const currentUserKey = 'current_user';
+  static const localVaultUserKey = 'local_vault_user';
   static const userEmailKey = 'user_email';
   static const userIdKey = 'user_id';
   static const encryptionKey = 'encryption_key';
@@ -18,6 +19,7 @@ class SecureStorageService {
     accessTokenKey,
     refreshTokenKey,
     currentUserKey,
+    localVaultUserKey,
     userEmailKey,
     userIdKey,
     encryptionKey,
@@ -58,10 +60,16 @@ class SecureStorageService {
     }
   }
 
-  Future<void> deleteSessionData({bool preserveAppPin = true}) async {
+  Future<void> deleteSessionData({
+    bool preserveAppPin = true,
+    bool preserveLocalVault = true,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     for (final key in _knownKeys) {
       if (preserveAppPin && key == appPinHashKey) {
+        continue;
+      }
+      if (preserveLocalVault && key == localVaultUserKey) {
         continue;
       }
       await prefs.remove(key);

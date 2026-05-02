@@ -88,13 +88,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final gradientColors = _currentGradientColors(context);
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: _pages[_currentPage].gradientColors,
+            colors: gradientColors,
           ),
         ),
         child: SafeArea(
@@ -149,6 +151,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildBottomBar() {
+    final gradientColors = _currentGradientColors(context);
+
     return Container(
       padding: EdgeInsets.all(24),
       child: Column(
@@ -209,7 +213,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               style: ElevatedButton.styleFrom(
                 minimumSize: Size(200, 50),
                 backgroundColor: Colors.white,
-                foregroundColor: _pages[_currentPage].gradientColors[0],
+                foregroundColor: gradientColors[0],
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(25),
                 ),
@@ -254,6 +258,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         ],
       ),
     );
+  }
+
+  List<Color> _currentGradientColors(BuildContext context) {
+    if (_currentPage == 0 || !widget.isFirstLaunch) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return [colorScheme.primary, colorScheme.secondary];
+    }
+
+    return _pages[_currentPage].gradientColors;
   }
 }
 

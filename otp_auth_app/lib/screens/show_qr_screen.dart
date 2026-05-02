@@ -47,8 +47,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor:
-            isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
+        backgroundColor: colorScheme.primary,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -553,8 +552,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         backgroundColor: isDark ? const Color(0xFF1E1E32) : Colors.white,
         title: Row(
           children: [
-            const Icon(Icons.help_outline,
-                color: Color(0xFF4F46E5), size: 24),
+            Icon(Icons.help_outline,
+                color: Theme.of(context).colorScheme.primary, size: 24),
             const SizedBox(width: 10),
             const Text('About Secret Key'),
           ],

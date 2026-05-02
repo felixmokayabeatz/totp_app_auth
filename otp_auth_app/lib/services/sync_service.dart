@@ -40,7 +40,14 @@ class SyncService {
 
   String? _extractServerError(dynamic data) {
     if (data is String && data.trim().isNotEmpty) {
-      return data.trim();
+      final trimmed = data.trim();
+      final lower = trimmed.toLowerCase();
+      if (lower.startsWith('<!doctype html') ||
+          lower.startsWith('<html') ||
+          lower.contains('<title>page not found')) {
+        return null;
+      }
+      return trimmed;
     }
 
     if (data is List<int>) {
@@ -50,6 +57,12 @@ class SyncService {
         try {
           return _extractServerError(jsonDecode(decoded));
         } catch (_) {
+          final lower = decoded.toLowerCase();
+          if (lower.startsWith('<!doctype html') ||
+              lower.startsWith('<html') ||
+              lower.contains('<title>page not found')) {
+            return null;
+          }
           return decoded;
         }
       } catch (_) {
@@ -125,6 +138,9 @@ class SyncService {
         if (status == 403) {
           return 'You are not authorized to perform this action.';
         }
+        if (status == 404) {
+          return 'Auth endpoint not found. Make sure the OTP backend is running, not just the update server.';
+        }
         if (status == 500) {
           return 'Server error while processing the request. Please try again.';
         }
@@ -169,11 +185,21 @@ class SyncService {
   // ─── Sync preference ──────────────────────────────────────────────────────
   Future<bool> isSyncEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_syncEnabledKey) ?? true;
+    final storedValue = prefs.getBool(_syncEnabledKey);
+    if (storedValue != null) {
+      return storedValue;
+    }
+    return isLoggedIn();
   }
 
   Future<void> setSyncEnabled(bool value) async {
     final prefs = await SharedPreferences.getInstance();
+    if (value && !await isLoggedIn()) {
+      _lastErrorMessage = 'Sign in to enable automatic cross-platform sync.';
+      await prefs.setBool(_syncEnabledKey, false);
+      return;
+    }
+
     await prefs.setBool(_syncEnabledKey, value);
 
     try {
@@ -186,13 +212,17 @@ class SyncService {
   }
 
   Future<void> refreshSyncPreferenceFromServer() async {
+    if (!await isLoggedIn()) {
+      return;
+    }
+
     try {
       await _updateAuthHeader();
       final response = await _dio.get('sync-preference/get/');
       if (response.statusCode == 200) {
         final serverValue = response.data['sync_enabled'] as bool;
         final prefs = await SharedPreferences.getInstance();
-        final localValue = prefs.getBool(_syncEnabledKey) ?? true;
+        final localValue = prefs.getBool(_syncEnabledKey) ?? await isLoggedIn();
         if (serverValue != localValue) {
           await prefs.setBool(_syncEnabledKey, serverValue);
           print('Sync preference updated from server: $serverValue');
@@ -206,7 +236,8 @@ class SyncService {
   // ─── Box helpers ──────────────────────────────────────────────────────────
   Future<String> _getUserBoxName() async {
     final username =
-        await _secureStorage.read(SecureStorageService.currentUserKey);
+        await _secureStorage.read(SecureStorageService.currentUserKey) ??
+            await _secureStorage.read(SecureStorageService.localVaultUserKey);
     if (username == null || username.isEmpty) return 'otp_accounts_default';
     return 'otp_accounts_$username';
   }
@@ -256,6 +287,8 @@ class SyncService {
     final currentUserId = await _getCurrentUserId();
     final storedUsername =
         await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    final localVaultUsername =
+        await _secureStorage.read(SecureStorageService.localVaultUserKey) ?? '';
     final storedUserId =
         await _secureStorage.read(SecureStorageService.userIdKey) ?? '';
     final storedEmail =
@@ -264,6 +297,7 @@ class SyncService {
       'otp_accounts',
       'otp_accounts_default',
       if (storedUsername.isNotEmpty) 'otp_accounts_$storedUsername',
+      if (localVaultUsername.isNotEmpty) 'otp_accounts_$localVaultUsername',
       if (storedUserId.isNotEmpty) 'otp_accounts_$storedUserId',
       if (storedEmail.isNotEmpty) 'otp_accounts_$storedEmail',
     };
@@ -425,6 +459,7 @@ class SyncService {
 
   Future<String> _getCurrentUserId() async {
     return await _secureStorage.read(SecureStorageService.currentUserKey) ??
+        await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
         'default_user';
   }
 
@@ -547,12 +582,15 @@ class SyncService {
             SecureStorageService.refreshTokenKey, response.data['refresh']);
         await _secureStorage.write(
             SecureStorageService.currentUserKey, canonicalUsername);
+        await _secureStorage.write(
+            SecureStorageService.localVaultUserKey, canonicalUsername);
         await _secureStorage.write(SecureStorageService.userEmailKey, email);
         await _secureStorage.write(SecureStorageService.userIdKey,
             response.data['user']['id'].toString());
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
         _initEncryption(canonicalUsername, password);
+        await setSyncEnabled(true);
         return true;
       }
       _lastErrorMessage = 'Registration failed. Please try again.';
@@ -590,6 +628,8 @@ class SyncService {
             SecureStorageService.refreshTokenKey, response.data['refresh']);
         await _secureStorage.write(
             SecureStorageService.currentUserKey, canonicalUsername);
+        await _secureStorage.write(
+            SecureStorageService.localVaultUserKey, canonicalUsername);
         await _secureStorage.write(SecureStorageService.userEmailKey,
             response.data['user']['email'] ?? '');
         await _secureStorage.write(SecureStorageService.userIdKey,
@@ -603,6 +643,7 @@ class SyncService {
 
         await _storeEncryptionKey(encryptionKey);
         _encryptionKey = encryptionKey;
+        await setSyncEnabled(true);
 
         try {
           await migrateLegacyLocalAccounts();
@@ -710,6 +751,11 @@ class SyncService {
   // ─── Download and merge ───────────────────────────────────────────────────
   Future<void> downloadAndMergeAccounts() async {
     await _updateAuthHeader();
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      return;
+    }
 
     if (!await _ensureEncryptionKeyAvailable()) {
       print('Encryption key not set - user must log in first');
@@ -834,7 +880,10 @@ class SyncService {
     final prefs = await SharedPreferences.getInstance();
     final token =
         await _secureStorage.read(SecureStorageService.accessTokenKey);
-    if (token == null || token.isEmpty) return false;
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'Sign in to enable automatic cross-platform sync.';
+      return false;
+    }
 
     if (!await _ensureEncryptionKeyAvailable()) {
       _lastErrorMessage =
@@ -1828,6 +1877,9 @@ class SyncService {
   }
 
   Future<void> logout({bool notifyServer = true}) async {
+    final currentVaultUser =
+        await _secureStorage.read(SecureStorageService.currentUserKey);
+
     if (notifyServer) {
       try {
         await _updateAuthHeader();
@@ -1848,6 +1900,13 @@ class SyncService {
           );
         }
       } catch (_) {}
+    }
+
+    if (currentVaultUser != null && currentVaultUser.trim().isNotEmpty) {
+      await _secureStorage.write(
+        SecureStorageService.localVaultUserKey,
+        currentVaultUser.trim(),
+      );
     }
 
     await _secureStorage.deleteSessionData();

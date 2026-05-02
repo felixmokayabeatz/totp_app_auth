@@ -29,7 +29,7 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
   }
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _accent => const Color(0xFF4F46E5);
+  Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _bgColor =>
       _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
@@ -61,7 +61,7 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
           widget.fallbackTitle,
           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
-        backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
+        backgroundColor: _accent,
         foregroundColor: Colors.white,
       ),
       body: FutureBuilder<LegalDocument>(

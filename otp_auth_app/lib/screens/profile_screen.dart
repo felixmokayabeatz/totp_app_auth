@@ -25,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _userEmail = '';
   String _username = '';
   final TextEditingController _bioController = TextEditingController();
+  Color get _accent => Theme.of(context).colorScheme.primary;
 
   @override
   void initState() {
@@ -199,7 +200,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ElevatedButton(
             onPressed: _updateBio,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF4F46E5),
+              backgroundColor: _accent,
               foregroundColor: Colors.white,
             ),
             child: Text('Save'),
@@ -223,7 +224,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: isDark ? Color(0xFF1A1A2E) : Color(0xFF4F46E5),
+        backgroundColor: _accent,
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
@@ -233,7 +234,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       body: _isLoading
           ? Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                valueColor: AlwaysStoppedAnimation<Color>(_accent),
               ),
             )
           : SingleChildScrollView(
@@ -254,7 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(
                                   colors: [
-                                    Color(0xFF4F46E5),
+                                    _accent,
                                     Color(0xFF7C3AED)
                                   ],
                                 ),
@@ -307,7 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 child: Container(
                                   padding: EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Color(0xFF4F46E5),
+                                    color: _accent,
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                       color: Colors.white,
@@ -385,7 +386,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                             IconButton(
                               icon: Icon(Icons.edit, size: 18),
-                              color: Color(0xFF4F46E5),
+                              color: _accent,
                               onPressed: _showEditBioDialog,
                             ),
                           ],
@@ -460,10 +461,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: Color(0xFF4F46E5).withOpacity(0.1),
+              color: _accent.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 16, color: Color(0xFF4F46E5)),
+            child: Icon(icon, size: 16, color: _accent),
           ),
           SizedBox(width: 12),
           Expanded(

@@ -8,6 +8,10 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key, this.returnToPreviousOnOffline = false});
+
+  final bool returnToPreviousOnOffline;
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -44,6 +48,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Timer? _resendTimer;
   int _resetResendCooldown = 0;
   Timer? _resetResendTimer;
+
+  static const String _syncValueMessage =
+      'You can use BeatzLock offline. Sign in only when you want automatic cross-platform sync.';
 
   // Password strength variables
   double _passwordStrength = 0.0;
@@ -334,12 +341,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final accent = colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final inputCardColor =
         isDark ? const Color(0xFF1E1E32) : Colors.grey.shade50;
     final inputBorderColor = isDark
         ? Colors.white.withOpacity(0.12)
-        : const Color(0xFF667eea).withOpacity(0.3);
+        : accent.withOpacity(0.3);
     final inputLabelColor = isDark ? Colors.white70 : Colors.grey.shade700;
     final inputTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
@@ -349,7 +358,7 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            colors: [accent, colorScheme.secondary],
           ),
         ),
         child: Center(
@@ -365,7 +374,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.security, size: 80, color: Color(0xFF667eea)),
+                    Icon(Icons.security, size: 80, color: accent),
                     SizedBox(height: 20),
                     Text(
                       _show2FA
@@ -505,8 +514,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF667eea),
+                            borderSide: BorderSide(
+                              color: accent,
                               width: 1.4,
                             ),
                           ),
@@ -556,7 +565,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             labelText: 'New Password',
                             labelStyle: TextStyle(color: inputLabelColor),
                             prefixIcon: Icon(Icons.lock_outline,
-                                color: Color(0xFF667eea)),
+                                color: accent),
                             suffixIcon: IconButton(
                               icon: Icon(
                                   _obscureResetPassword
@@ -603,14 +612,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       Row(
                         children: [
                           Icon(Icons.format_size,
-                              size: 18, color: Color(0xFF667eea)),
+                              size: 18, color: accent),
                           SizedBox(width: 8),
                           Text(
                             'Length: ${_resetPasswordLength.toInt()}',
                             style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: Color(0xFF667eea)),
+                                color: accent),
                           ),
                           Expanded(
                             child: Slider(
@@ -618,7 +627,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               min: 8,
                               max: 20,
                               divisions: 12,
-                              activeColor: Color(0xFF667eea),
+                              activeColor: accent,
                               inactiveColor: Colors.grey.shade300,
                               onChanged: (value) {
                                 setState(() {
@@ -634,11 +643,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: TextButton.icon(
                           onPressed: _suggestResetStrongPassword,
                           icon: Icon(Icons.auto_awesome,
-                              size: 16, color: Color(0xFF667eea)),
+                              size: 16, color: accent),
                           label: Text(
                             'Suggest strong password',
                             style: TextStyle(
-                                fontSize: 12, color: Color(0xFF667eea)),
+                                fontSize: 12, color: accent),
                           ),
                         ),
                       ),
@@ -657,7 +666,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             labelText: 'Confirm New Password',
                             labelStyle: TextStyle(color: inputLabelColor),
                             prefixIcon: Icon(Icons.lock_outline,
-                                color: Color(0xFF667eea)),
+                                color: accent),
                             suffixIcon: IconButton(
                               icon: Icon(
                                   _obscureResetConfirmPassword
@@ -710,7 +719,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 style: TextStyle(
                                   color: _resetResendCooldown > 0
                                       ? Colors.grey
-                                      : Color(0xFF667eea),
+                                      : accent,
                                 ),
                               ),
                             ),
@@ -870,14 +879,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         Row(
                           children: [
                             Icon(Icons.format_size,
-                                size: 18, color: Color(0xFF667eea)),
+                                size: 18, color: accent),
                             SizedBox(width: 8),
                             Text(
                               'Length: ${_passwordLength.toInt()}',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: Color(0xFF667eea),
+                                color: accent,
                               ),
                             ),
                             Expanded(
@@ -886,7 +895,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 min: 8,
                                 max: 20,
                                 divisions: 12,
-                                activeColor: Color(0xFF667eea),
+                                activeColor: accent,
                                 inactiveColor: Colors.grey.shade300,
                                 onChanged: (value) {
                                   setState(() {
@@ -902,11 +911,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: TextButton.icon(
                             onPressed: _suggestStrongPassword,
                             icon: Icon(Icons.auto_awesome,
-                                size: 16, color: Color(0xFF667eea)),
+                                size: 16, color: accent),
                             label: Text(
                               'Suggest strong password',
                               style: TextStyle(
-                                  fontSize: 12, color: Color(0xFF667eea)),
+                                  fontSize: 12, color: accent),
                             ),
                           ),
                         ),
@@ -969,6 +978,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       SizedBox(height: 16),
 
+                      if (_isLogin) ...[
+                        Text(
+                          _syncValueMessage,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: inputLabelColor,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _continueOffline,
+                          icon: const Icon(Icons.lock_outline_rounded),
+                          label: const Text('Continue offline'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
                       // Forgot Password link
                       if (_isLogin)
                         TextButton(
@@ -980,7 +1014,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                           child: Text(
                             'Forgot Password?',
-                            style: TextStyle(color: Color(0xFF667eea)),
+                            style: TextStyle(color: accent),
                           ),
                         ),
 
@@ -1039,8 +1073,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF667eea),
+                            borderSide: BorderSide(
+                              color: accent,
                               width: 1.4,
                             ),
                           ),
@@ -1112,7 +1146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 style: TextStyle(
                                   color: _resendCooldown > 0
                                       ? Colors.grey
-                                      : Color(0xFF667eea),
+                                      : accent,
                                 ),
                               ),
                             ),
@@ -1257,6 +1291,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => HomeScreen()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _continueOffline() async {
+    await _syncService.logout(notifyServer: false);
+    await Provider.of<AuthProvider>(context, listen: false).continueOffline();
+    if (!mounted) return;
+
+    if (widget.returnToPreviousOnOffline && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
       (route) => false,
     );
   }

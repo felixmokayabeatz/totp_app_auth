@@ -18,6 +18,7 @@ class OTPService {
     if (_cachedUserId != null) return _cachedUserId!;
     _cachedUserId =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
+            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
             'default_user';
     return _cachedUserId!;
   }

@@ -43,12 +43,14 @@ void main() async {
 
   await SecureStorageService().init();
   await BiometricService().init();
+  final themeProvider = ThemeProvider();
+  await themeProvider.loadPreferences();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => themeProvider),
       ],
       child: const MyApp(),
     ),
@@ -64,7 +66,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
-  static const Duration _sessionHeartbeatInterval = Duration(seconds: 30);
+  static const Duration _sessionHeartbeatInterval = Duration(seconds: 5);
 
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
@@ -185,7 +187,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     try {
       if (token == null || token.isEmpty) {
-        await authProvider.logout();
+        await authProvider.continueOffline();
         return;
       }
 
@@ -199,7 +201,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final sessionStillValid = await _syncService.validateCurrentSession();
       if (!sessionStillValid) {
         await _syncService.logout(notifyServer: false);
-        await authProvider.logout();
+        await authProvider.continueOffline();
         return;
       }
 
@@ -224,7 +226,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       final tokenStillExists =
           await secureStorage.read(SecureStorageService.accessTokenKey);
       if (tokenStillExists == null || tokenStillExists.isEmpty) {
-        await authProvider.logout();
+        await authProvider.continueOffline();
       }
     } finally {
       if (mounted) {
@@ -265,7 +267,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         return;
       }
 
-      await authProvider.logout();
+      await authProvider.continueOffline();
       if (!mounted) return;
 
       setState(() {
@@ -387,14 +389,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       onUpdateNow: _openRequiredUpdate,
                       onRefreshStatus: _refreshUpdateStatus,
                     )
-                  : authProvider.isAuthenticated
+                  : authProvider.canUseApp
                       ? (_isLocked
                           ? _AppLockScreen(
                               isBusy: _unlockInProgress,
                               onUnlock: _unlockApp,
                               onUsePin: _unlockWithPin,
                             )
-                          : HomeScreen())
+                          : HomeScreen(
+                              key: ValueKey(authProvider.sessionScopeKey),
+                            ))
                       : LoginScreen(),
         );
       },

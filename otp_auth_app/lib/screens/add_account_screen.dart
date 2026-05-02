@@ -29,6 +29,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   bool get _isMobile => Platform.isAndroid || Platform.isIOS;
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _accent => Theme.of(context).colorScheme.primary;
 
   @override
   void initState() {
@@ -46,7 +47,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           _isScanning ? 'Scan QR Code' : 'Add Account',
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
-        backgroundColor: _isDark ? Color(0xFF1A1A2E) : Color(0xFF4F46E5),
+        backgroundColor: _accent,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -126,7 +127,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                       _isProcessingQR = false;
                     }),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF4F46E5),
+                      backgroundColor: _accent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -141,7 +142,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         ),
         // Overlay with frame
         Positioned.fill(
-          child: CustomPaint(painter: _ScannerOverlayPainter()),
+          child: CustomPaint(painter: _ScannerOverlayPainter(color: _accent)),
         ),
         // Bottom hint
         Positioned(
@@ -204,6 +205,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           setState(() {
             _isScanning = false;
             _cameraFailed = false;
+            _isProcessingQR = false;
           });
 
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -259,9 +261,13 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   Future<void> _saveImportedEntries(List<OTPImportEntry> entries) async {
     final userId =
         await SecureStorageService().read(SecureStorageService.currentUserKey) ??
+            await SecureStorageService()
+                .read(SecureStorageService.localVaultUserKey) ??
             'default_user';
     final syncService = SyncService();
     final userBox = await syncService.getUserBox();
+    final shouldSync =
+        await syncService.isLoggedIn() && await syncService.isSyncEnabled();
     var importedCount = 0;
     var skippedCount = 0;
 
@@ -289,10 +295,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       importedCount++;
     }
 
-    try {
-      await syncService.syncAccounts();
-    } catch (e) {
-      debugPrint('Imported account sync error: $e');
+    if (shouldSync) {
+      try {
+        await syncService.syncAccounts();
+      } catch (e) {
+        debugPrint('Imported account sync error: $e');
+      }
     }
 
     if (!mounted) return;
@@ -328,7 +336,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 _cameraFailed
                     ? Icons.warning_rounded
                     : Icons.info_outline_rounded,
-                _cameraFailed ? Colors.orange : Color(0xFF4F46E5),
+                _cameraFailed ? Colors.orange : _accent,
               ),
             SizedBox(height: 8),
             _sectionLabel('Service Details'),
@@ -366,7 +374,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               suffix: _isMobile && !_cameraFailed
                   ? IconButton(
                       icon: Icon(Icons.qr_code_scanner_rounded,
-                          color: Color(0xFF4F46E5)),
+                          color: _accent),
                       onPressed: () => setState(() {
                         _isScanning = true;
                         _cameraFailed = false;
@@ -383,7 +391,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               child: ElevatedButton(
                 onPressed: _saveAccount,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF4F46E5),
+                  backgroundColor: _accent,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
@@ -472,7 +480,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           hintText: hint,
           hintStyle: TextStyle(
               color: _isDark ? Colors.white24 : Colors.grey[400], fontSize: 13),
-          prefixIcon: Icon(icon, color: Color(0xFF4F46E5), size: 20),
+          prefixIcon: Icon(icon, color: _accent, size: 20),
           suffixIcon: suffix,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
@@ -486,7 +494,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+            borderSide: BorderSide(color: _accent, width: 1.5),
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
@@ -502,8 +510,12 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     if (_formKey.currentState!.validate()) {
       final userId =
           await SecureStorageService().read(SecureStorageService.currentUserKey) ??
+              await SecureStorageService()
+                  .read(SecureStorageService.localVaultUserKey) ??
               'default_user';
       final syncService = SyncService();
+      final isSignedIn = await syncService.isLoggedIn();
+      final shouldSync = isSignedIn && await syncService.isSyncEnabled();
 
       // Get the USER-SPECIFIC box, not the generic one
       final userBox = await syncService.getUserBox();
@@ -553,19 +565,23 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       // Save to USER-SPECIFIC box
       await userBox.put(newAccount.id, newAccount);
 
-      try {
-        await syncService.syncAccounts();
-      } catch (e) {
-        debugPrint('Sync error: $e');
+      if (shouldSync) {
+        try {
+          await syncService.syncAccounts();
+        } catch (e) {
+          debugPrint('Sync error: $e');
+        }
       }
 
-      try {
-        await syncService.logAccountAddedNotification(
-          serviceName: serviceName,
-          accountLabel: newAccount.accountLabel,
-        );
-      } catch (e) {
-        debugPrint('Notification log error: $e');
+      if (isSignedIn) {
+        try {
+          await syncService.logAccountAddedNotification(
+            serviceName: serviceName,
+            accountLabel: newAccount.accountLabel,
+          );
+        } catch (e) {
+          debugPrint('Notification log error: $e');
+        }
       }
 
       if (mounted) {
@@ -587,6 +603,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
 // Scanner frame overlay painter
 class _ScannerOverlayPainter extends CustomPainter {
+  const _ScannerOverlayPainter({required this.color});
+
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -608,7 +628,7 @@ class _ScannerOverlayPainter extends CustomPainter {
 
     // Corner marks
     final cornerPaint = Paint()
-      ..color = Color(0xFF4F46E5)
+      ..color = color
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -639,5 +659,6 @@ class _ScannerOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_) => false;
+  bool shouldRepaint(covariant _ScannerOverlayPainter oldDelegate) =>
+      oldDelegate.color != color;
 }

@@ -16,6 +16,37 @@ class DeviceSessionJWTAuthentication(JWTAuthentication):
         user, validated_token = result
         session_id = validated_token.get('session_id')
         if not session_id:
+            device_id = request.headers.get('X-Device-ID', '').strip()
+            if device_id:
+                active_session = DeviceSession.objects.filter(
+                    user=user,
+                    device_id=device_id,
+                    is_active=True,
+                    revoked_at__isnull=True,
+                ).order_by('-last_seen_at', '-created_at').first()
+
+                if active_session is not None:
+                    now = timezone.now()
+                    if (
+                        active_session.last_seen_at is None
+                        or (now - active_session.last_seen_at).total_seconds() >= 15
+                    ):
+                        DeviceSession.objects.filter(id=active_session.id).update(
+                            last_seen_at=now,
+                            updated_at=now,
+                        )
+                elif DeviceSession.objects.filter(
+                    user=user,
+                    device_id=device_id,
+                ).filter(is_active=False).exists() or DeviceSession.objects.filter(
+                    user=user,
+                    device_id=device_id,
+                    revoked_at__isnull=False,
+                ).exists():
+                    raise AuthenticationFailed(
+                        'This device session has been signed out.',
+                        code='session_revoked',
+                    )
             return (user, validated_token)
 
         session = DeviceSession.objects.filter(
@@ -32,7 +63,7 @@ class DeviceSessionJWTAuthentication(JWTAuthentication):
             )
 
         now = timezone.now()
-        if session.last_seen_at is None or (now - session.last_seen_at).total_seconds() >= 60:
+        if session.last_seen_at is None or (now - session.last_seen_at).total_seconds() >= 15:
             DeviceSession.objects.filter(id=session.id).update(
                 last_seen_at=now,
                 updated_at=now,

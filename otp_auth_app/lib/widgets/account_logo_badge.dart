@@ -16,7 +16,10 @@ class AccountLogoBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = _AccountBrandSpec.fromService(service);
+    final brand = _AccountBrandSpec.fromService(
+      service,
+      fallbackColor: Theme.of(context).colorScheme.primary,
+    );
     final domain = _resolveLogoDomain(service, issuer);
 
     return Container(
@@ -144,8 +147,12 @@ class _AccountBrandSpec {
   final IconData? icon;
   final String? text;
 
-  factory _AccountBrandSpec.fromService(String service) {
+  factory _AccountBrandSpec.fromService(
+    String service, {
+    Color? fallbackColor,
+  }) {
     final lower = service.trim().toLowerCase();
+    final resolvedFallbackColor = fallbackColor ?? const Color(0xFF4F46E5);
 
     if (lower.contains('twitter') || lower == 'x' || lower.contains('x.com')) {
       return const _AccountBrandSpec(
@@ -241,16 +248,16 @@ class _AccountBrandSpec {
       );
     }
     if (service.trim().isEmpty) {
-      return const _AccountBrandSpec(
-        backgroundColor: Color(0xFFEDE9FE),
-        foregroundColor: Color(0xFF4F46E5),
+      return _AccountBrandSpec(
+        backgroundColor: resolvedFallbackColor.withOpacity(0.12),
+        foregroundColor: resolvedFallbackColor,
         icon: Icons.lock_rounded,
       );
     }
 
     return _AccountBrandSpec(
-      backgroundColor: const Color(0xFFEDE9FE),
-      foregroundColor: const Color(0xFF4F46E5),
+      backgroundColor: resolvedFallbackColor.withOpacity(0.12),
+      foregroundColor: resolvedFallbackColor,
       text: service.trim().substring(0, 1).toUpperCase(),
     );
   }

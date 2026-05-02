@@ -19,7 +19,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<AppNotificationItem> _notifications = const [];
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _accent => const Color(0xFF4F46E5);
+  Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _bgColor =>
       _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
@@ -142,7 +142,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
+        backgroundColor: _accent,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -178,9 +178,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+          valueColor: AlwaysStoppedAnimation<Color>(_accent),
         ),
       );
     }
@@ -415,7 +415,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   String? _errorMessage;
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _accent => const Color(0xFF4F46E5);
+  Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _bgColor =>
       _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
@@ -464,7 +464,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
+        backgroundColor: _accent,
         foregroundColor: Colors.white,
         elevation: 0,
       ),

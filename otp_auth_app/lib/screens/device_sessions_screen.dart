@@ -20,7 +20,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
   List<DeviceSessionInfo> _sessions = const [];
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _accent => const Color(0xFF4F46E5);
+  Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _bgColor =>
       _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
@@ -321,7 +321,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
+        backgroundColor: _accent,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -334,12 +334,12 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
             _summaryCard(),
             const SizedBox(height: 18),
             if (_isLoading)
-              const Padding(
-                padding: EdgeInsets.only(top: 60),
+              Padding(
+                padding: const EdgeInsets.only(top: 60),
                 child: Center(
                   child: CircularProgressIndicator(
                     valueColor:
-                        AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                        AlwaysStoppedAnimation<Color>(_accent),
                   ),
                 ),
               )

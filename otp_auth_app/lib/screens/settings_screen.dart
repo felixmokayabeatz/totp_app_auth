@@ -21,6 +21,7 @@ import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
 import '../services/secure_storage_service.dart';
+import 'add_account_screen.dart';
 import 'device_sessions_screen.dart';
 import 'legal_document_screen.dart';
 import 'login_screen.dart';
@@ -43,7 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isCheckingForUpdates = false;
   bool _isDownloadingBackupCodes = false;
   bool _isLoadingBackupCodeStatus = false;
-  bool _syncEnabled = true;
+  bool _syncEnabled = false;
   bool _appLockEnabled = false;
   String _appVersionLabel = '...';
   Timer? _syncPrefTimer;
@@ -59,6 +60,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _refreshUpdateInfo();
     _loadBackupCodeStatus();
     _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      if (!await _syncService.isLoggedIn()) {
+        return;
+      }
       await _syncService.refreshSyncPreferenceFromServer();
       final enabled = await _syncService.isSyncEnabled();
       if (mounted && enabled != _syncEnabled) {
@@ -98,6 +102,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadBackupCodeStatus() async {
     if (_isLoadingBackupCodeStatus) return;
+    if (!await _syncService.isLoggedIn()) {
+      if (mounted) {
+        setState(() {
+          _backupCodeStatus = null;
+          _isLoadingBackupCodeStatus = false;
+        });
+      }
+      return;
+    }
 
     setState(() {
       _isLoadingBackupCodeStatus = true;
@@ -254,9 +267,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _accent => const Color(0xFF4F46E5);
-  Color get _bgColor =>
-      _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
+  Color get _accent => Theme.of(context).colorScheme.primary;
+  Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
+  Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white38 : Colors.grey.shade500;
@@ -276,7 +289,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 fontWeight: FontWeight.w700,
                 fontSize: 18,
                 color: Colors.white)),
-        backgroundColor: _isDark ? const Color(0xFF1A1A2E) : _accent,
+        backgroundColor: _accent,
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -314,7 +327,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.picture_as_pdf_rounded,
               label: 'Download Backup Codes',
-              sub: 'Save a PDF with your recovery codes',
+              sub: authProvider.isAuthenticated
+                  ? 'Save a PDF with your recovery codes'
+                  : 'Sign in to generate account recovery codes',
               trailing: _isDownloadingBackupCodes
                   ? SizedBox(
                       width: 18,
@@ -328,15 +343,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.key_rounded,
               label: 'Recovery Code Status',
-              sub: _backupCodeStatusSubtitle(),
+              sub: authProvider.isAuthenticated
+                  ? _backupCodeStatusSubtitle()
+                  : 'Sign in to view recovery code status',
               trailing: _backupCodeStatusTrailing(),
-              onTap: _loadBackupCodeStatus,
+              onTap: authProvider.isAuthenticated
+                  ? _loadBackupCodeStatus
+                  : () => _requireSignedIn(
+                        'Recovery codes are available after you sign in.',
+                      ),
             ),
             _dividerLine(),
             _tappableTile(
               icon: Icons.download_rounded,
               label: 'Import Accounts',
-              sub: 'Import a CSV export from another authenticator',
+              sub: 'Import CSV, otpauth links, or Google Authenticator QR exports',
               onTap: _showImportAccountsDialog,
             ),
             _dividerLine(),
@@ -375,9 +396,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.sync_rounded,
               label: 'Sync Now',
-              sub: _syncEnabled
-                  ? 'Manually sync with cloud'
-                  : 'Cloud sync is disabled',
+              sub: !authProvider.isAuthenticated
+                  ? 'Sign in to sync across devices'
+                  : _syncEnabled
+                      ? 'Manually sync with cloud'
+                      : 'Cloud sync is disabled',
               trailing: _isSyncing
                   ? SizedBox(
                       width: 18,
@@ -388,7 +411,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? null
                       : const Icon(Icons.lock_outline,
                           size: 16, color: Colors.grey)),
-              onTap: _syncEnabled ? _syncNow : null,
+              onTap: !authProvider.isAuthenticated
+                  ? _openLoginForSync
+                  : (_syncEnabled ? _syncNow : null),
             ),
             _dividerLine(),
 
@@ -398,9 +423,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Sync to Cloud',
               sub: _syncEnabled
                   ? 'Accounts sync automatically'
-                  : 'Sync disabled – local only',
-              value: _syncEnabled,
+                  : 'Sync disabled - local only',
+              value: authProvider.isAuthenticated && _syncEnabled,
               onChanged: (val) async {
+                if (!authProvider.isAuthenticated) {
+                  if (val) {
+                    await _openLoginForSync();
+                  }
+                  return;
+                }
                 await _syncService.setSyncEnabled(val);
                 setState(() => _syncEnabled = val);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -421,41 +452,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _settingsCard([
             _tappableTile(
               icon: Icons.person_outline_rounded,
-              label: 'Profile',
-              sub: 'Edit profile information',
-              onTap: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => ProfileScreen())),
+              label: authProvider.isAuthenticated ? 'Profile' : 'Sign in',
+              sub: authProvider.isAuthenticated
+                  ? 'Edit profile information'
+                  : 'Enable automatic sync and account tools',
+              onTap: authProvider.isAuthenticated
+                  ? () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => ProfileScreen()))
+                  : _openLoginForSync,
             ),
             _dividerLine(),
             _tappableTile(
               icon: Icons.lock_outline_rounded,
               label: 'Change Password',
               sub: 'Update your password',
-              onTap: _showChangePasswordDialog,
+              onTap: () async {
+                if (await _requireSignedIn(
+                    'Password changes are available after you sign in.')) {
+                  _showChangePasswordDialog();
+                }
+              },
             ),
             _dividerLine(),
             _tappableTile(
               icon: Icons.devices_rounded,
               label: 'Active Devices',
               sub: 'See where your account is signed in',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const DeviceSessionsScreen(),
-                ),
-              ),
+              onTap: () async {
+                if (!await _requireSignedIn(
+                    'Device sessions are available after you sign in.')) {
+                  return;
+                }
+                if (!mounted) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DeviceSessionsScreen(),
+                  ),
+                );
+              },
             ),
             _dividerLine(),
             _tappableTile(
               icon: Icons.notifications_none_rounded,
               label: 'Notifications',
               sub: 'View recent security activity',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const NotificationsScreen(),
-                ),
-              ),
+              onTap: () async {
+                if (!await _requireSignedIn(
+                    'Notifications are available after you sign in.')) {
+                  return;
+                }
+                if (!mounted) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const NotificationsScreen(),
+                  ),
+                );
+              },
             ),
           ]),
           const SizedBox(height: 20),
@@ -516,12 +570,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout_rounded),
-              label: const Text('Logout',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              onPressed: authProvider.isAuthenticated ? _logout : _openLoginForSync,
+              icon: Icon(authProvider.isAuthenticated
+                  ? Icons.logout_rounded
+                  : Icons.login_rounded),
+              label: Text(
+                  authProvider.isAuthenticated
+                      ? 'Sign out to offline mode'
+                      : 'Sign in for sync',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade600,
+                backgroundColor:
+                    authProvider.isAuthenticated ? Colors.red.shade600 : _accent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
@@ -538,10 +599,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _changeAppPin() async {
     final success = await _appLockService.setupAppPinFromSettings(context);
     if (success) {
-      final deviceLabel = await _syncService.getCurrentDeviceLabel();
-      unawaited(
-        _syncService.logAppPinChangedNotification(deviceLabel: deviceLabel),
-      );
+      if (await _syncService.isLoggedIn()) {
+        final deviceLabel = await _syncService.getCurrentDeviceLabel();
+        unawaited(
+          _syncService.logAppPinChangedNotification(deviceLabel: deviceLabel),
+        );
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -563,7 +626,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _openLoginForSync() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(returnToPreviousOnOffline: true),
+      ),
+    );
+    if (!mounted) return;
+    await _loadSyncPreference();
+    await _loadBackupCodeStatus();
+  }
+
+  Future<bool> _requireSignedIn(String message) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.isAuthenticated && await _syncService.isLoggedIn()) {
+      return true;
+    }
+
+    final signIn = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Text('Sign in required', style: TextStyle(color: _textPrimary)),
+        content: Text(
+          '$message\n\nYou can keep using local codes offline. Sign in when you want automatic cross-platform sync.',
+          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Not now'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Sign in'),
+          ),
+        ],
+      ),
+    );
+
+    if (signIn == true && mounted) {
+      await _openLoginForSync();
+    }
+    return false;
+  }
+
   Future<void> _openRateApp() async {
+    if (!await _requireSignedIn('Only signed-in users can send app reviews.')) {
+      return;
+    }
+
     final reviewerKey = await _ratingReviewerKey();
     AppRating? existingRating;
     try {
@@ -813,8 +931,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final storage = SecureStorageService();
     final rawUser = (await storage.read(SecureStorageService.userIdKey)) ??
         (await storage.read(SecureStorageService.userEmailKey)) ??
-        (await storage.read(SecureStorageService.currentUserKey)) ??
-        await _syncService.getCurrentDeviceLabel();
+        (await storage.read(SecureStorageService.currentUserKey));
+    if (rawUser == null || rawUser.trim().isEmpty) {
+      throw StateError('Signed-in user required to rate the app.');
+    }
     final normalized = rawUser.trim().toLowerCase();
     final digest = sha256.convert(
       utf8.encode('beatzlock_rating_v1|$normalized'),
@@ -931,9 +1051,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Choose a CSV export from another authenticator. The file should include columns such as Service, Account, Secret.',
+                  'Scan Google Authenticator transfer QR codes, or choose a CSV export with columns such as Service, Account, Secret.',
                   style: TextStyle(color: _textSecondary, fontSize: 13),
                 ),
+                if (Platform.isAndroid || Platform.isIOS) ...[
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: isImporting
+                        ? null
+                        : () async {
+                            Navigator.pop(dialogContext);
+                            final imported = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const AddAccountScreen(startScanning: true),
+                              ),
+                            );
+                            if (imported == true && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text(
+                                      'Imported QR accounts successfully.'),
+                                  backgroundColor: const Color(0xFF10B981),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    label: const Text('Scan transfer QR'),
+                  ),
+                ],
                 if (!Platform.isWindows) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -1104,10 +1256,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<_ImportResult> _importOtpEntries(List<OTPImportEntry> entries) async {
-    final userId = await SecureStorageService()
-            .read(SecureStorageService.currentUserKey) ??
+    final storage = SecureStorageService();
+    final userId = await storage.read(SecureStorageService.currentUserKey) ??
+        await storage.read(SecureStorageService.localVaultUserKey) ??
         'default_user';
     final userBox = await _syncService.getUserBox();
+    final isSignedIn = await _syncService.isLoggedIn();
     var importedCount = 0;
     var skippedCount = 0;
 
@@ -1134,15 +1288,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await userBox.put(account.id, account);
       importedCount++;
 
-      try {
-        await _syncService.logAccountAddedNotification(
-          serviceName: entry.service,
-          accountLabel: entry.accountLabel,
-        );
-      } catch (_) {}
+      if (isSignedIn) {
+        try {
+          await _syncService.logAccountAddedNotification(
+            serviceName: entry.service,
+            accountLabel: entry.accountLabel,
+          );
+        } catch (_) {}
+      }
     }
 
-    if (importedCount > 0) {
+    if (importedCount > 0 && isSignedIn && await _syncService.isSyncEnabled()) {
       await _syncService.syncAccounts();
     }
 
@@ -1153,6 +1309,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _downloadBackupCodes() async {
+    if (!await _requireSignedIn(
+      'Backup-code PDFs are tied to your synced account and primary device.',
+    )) {
+      return;
+    }
+
+    final authenticated = await _appLockService.authenticateToUnlock(context);
+    if (!mounted) return;
+    if (!authenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              const Text('Unlock with device security or your app PIN first.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isDownloadingBackupCodes = true);
     final savedPath = await _syncService.downloadBackupCodesPdf();
     if (!mounted) return;
@@ -1312,6 +1491,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     // ── "Everywhere" path: require OTP ──────────────────────────────────────
+    if (!await _syncService.isLoggedIn()) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title:
+              Text('Sign in required', style: TextStyle(color: _textPrimary)),
+          content: Text(
+            'Cloud deletion is not possible while you are using BeatzLock offline. You can delete the local copy on this device, or sign in first to delete synced accounts everywhere.',
+            style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Got it'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _openLoginForSync();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Sign in'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final username = await SecureStorageService()
             .read(SecureStorageService.currentUserKey) ??
         '';
@@ -1810,12 +2024,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _cardColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: _isDark
+              ? [
+                  Color.lerp(_cardColor, _accent, 0.12)!,
+                  Color.lerp(_cardColor, _accentSecondary, 0.08)!,
+                ]
+              : [
+                  Color.lerp(Colors.white, _accent, 0.08)!,
+                  Color.lerp(Colors.white, _accentSecondary, 0.06)!,
+                ],
+        ),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _accent.withOpacity(_isDark ? 0.18 : 0.14)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(_isDark ? 0.2 : 0.06),
-              blurRadius: 12,
+              color: (_isDark ? Colors.black : _accent)
+                  .withOpacity(_isDark ? 0.24 : 0.08),
+              blurRadius: 16,
               offset: const Offset(0, 3))
         ],
       ),
@@ -1825,8 +2053,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-                color: _accent.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(16)),
+              gradient: LinearGradient(
+                colors: [
+                  _accent.withOpacity(0.18),
+                  _accentSecondary.withOpacity(0.12),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _accent.withOpacity(0.18)),
+            ),
             child: Icon(Icons.person_rounded, color: _accent, size: 28),
           ),
           const SizedBox(width: 14),
@@ -1834,7 +2069,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(authProvider.userEmail ?? 'User',
+                Text(
+                    authProvider.isAuthenticated
+                        ? (authProvider.userEmail ?? 'Signed in')
+                        : 'Offline vault',
                     style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -1842,7 +2080,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
-                Text('Premium Account',
+                Text(
+                    authProvider.isAuthenticated
+                        ? 'Automatic sync enabled'
+                        : 'Local codes only',
                     style: TextStyle(fontSize: 12, color: _textSecondary)),
               ],
             ),
@@ -1864,8 +2105,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: const BoxDecoration(
                         shape: BoxShape.circle, color: Color(0xFF10B981))),
                 const SizedBox(width: 5),
-                const Text('Active',
-                    style: TextStyle(
+                Text(authProvider.isAuthenticated ? 'Synced' : 'Offline',
+                    style: const TextStyle(
                         color: Color(0xFF10B981),
                         fontSize: 11,
                         fontWeight: FontWeight.w600)),
@@ -1894,10 +2135,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _accent.withOpacity(_isDark ? 0.14 : 0.08)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(_isDark ? 0.2 : 0.05),
-              blurRadius: 12,
+              color: (_isDark ? Colors.black : _accent)
+                  .withOpacity(_isDark ? 0.22 : 0.045),
+              blurRadius: 14,
               offset: const Offset(0, 3))
         ],
       ),
@@ -2002,6 +2245,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         color: destructive
             ? Colors.red.withOpacity(0.08)
             : _accent.withOpacity(0.08),
+        border: Border.all(
+          color: destructive
+              ? Colors.red.withOpacity(0.14)
+              : _accent.withOpacity(0.14),
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Icon(icon, size: 18, color: destructive ? Colors.red : _accent),
@@ -2017,6 +2265,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shape: BoxShape.circle,
         border: Border.all(
             color: _isDark ? Colors.white24 : Colors.grey.shade200, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.24),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
     );
   }
@@ -2117,25 +2372,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    width: 48,
-                    height: 48,
+                    width: 54,
+                    height: 54,
+                    padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: entry.value,
                       shape: BoxShape.circle,
                       border: selected
-                          ? Border.all(color: _textPrimary, width: 3)
-                          : null,
+                          ? Border.all(color: entry.value, width: 2)
+                          : Border.all(color: Colors.transparent, width: 2),
                       boxShadow: [
                         BoxShadow(
-                            color: entry.value.withOpacity(0.4),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3))
+                          color: selected
+                              ? entry.value.withOpacity(0.32)
+                              : Colors.transparent,
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        )
                       ],
                     ),
-                    child: selected
-                        ? const Icon(Icons.check_rounded,
-                            color: Colors.white, size: 20)
-                        : null,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: entry.value,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: selected
+                          ? const Icon(Icons.check_rounded,
+                              color: Colors.white, size: 20)
+                          : null,
+                    ),
                   ),
                 );
               }).toList(),
@@ -2204,10 +2469,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirmed == true) {
-      await Provider.of<AuthProvider>(context, listen: false).logout();
       await _syncService.logout();
-      Navigator.pushAndRemoveUntil(context,
-          MaterialPageRoute(builder: (_) => LoginScreen()), (r) => false);
+      await Provider.of<AuthProvider>(context, listen: false).continueOffline();
+      if (!mounted) return;
+      Navigator.pop(context);
     }
   }
 }

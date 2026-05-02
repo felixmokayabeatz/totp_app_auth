@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/otp_account.dart';
 import '../providers/auth_provider.dart';
 import '../services/otp_service.dart';
@@ -19,12 +20,16 @@ import '../config/app_config.dart';
 import '../widgets/account_logo_badge.dart';
 
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
+  static const _offlineBackupReminderKey = 'offline_backup_reminder_last_shown';
+
   final OTPService _otpService = OTPService();
   final SyncService _syncService = SyncService();
   final ProfileService _profileService = ProfileService();
@@ -42,9 +47,11 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isLoadingVault = true;
   String? _loadError;
   int _unreadNotificationCount = 0;
+  Color get _accent => Theme.of(context).colorScheme.primary;
+  Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
 
   // Track sync status for warning messages
-  bool _isSyncEnabled = true;
+  bool _isSyncEnabled = false;
 
   @override
   void initState() {
@@ -66,10 +73,11 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadData() async {
     try {
+      final isSignedIn = await _syncService.isLoggedIn();
       await _syncService.migrateLegacyLocalAccounts();
       await _initUserBox();
       await _loadProfileData();
-      if (await _syncService.isSyncEnabled()) {
+      if (isSignedIn && await _syncService.isSyncEnabled()) {
         await _syncService.downloadAndMergeAccounts();
         await _initUserBox();
       }
@@ -82,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen>
           _loadError = null;
         });
       }
+      await _showOfflineBackupReminderIfNeeded();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -92,7 +101,59 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> _showOfflineBackupReminderIfNeeded() async {
+    if (!mounted || await _syncService.isLoggedIn()) return;
+    if ((_userBox?.isEmpty ?? true)) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final lastShownMs = prefs.getInt(_offlineBackupReminderKey) ?? 0;
+    final lastShown = DateTime.fromMillisecondsSinceEpoch(lastShownMs);
+    if (DateTime.now().difference(lastShown) < const Duration(hours: 24)) {
+      return;
+    }
+
+    await prefs.setInt(
+      _offlineBackupReminderKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Your codes are saved on this device. Sign in anytime to back them up and sync across devices.',
+          ),
+          backgroundColor: _accent,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 7),
+          action: SnackBarAction(
+            label: 'Sign in',
+            textColor: Colors.white,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const LoginScreen(returnToPreviousOnOffline: true),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    });
+  }
+
   Future<void> _loadUnreadNotificationCount() async {
+    if (!await _syncService.isLoggedIn()) {
+      if (mounted) {
+        setState(() => _unreadNotificationCount = 0);
+      }
+      return;
+    }
+
     final notifications = await _syncService.getNotifications();
     if (!mounted) return;
 
@@ -112,10 +173,16 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadProfileData() async {
-    final username =
-        await SecureStorageService().read(SecureStorageService.currentUserKey);
-    if (mounted)
-      setState(() => _username = username ?? 'User');
+    final storage = SecureStorageService();
+    final username = await storage.read(SecureStorageService.currentUserKey) ??
+        await storage.read(SecureStorageService.localVaultUserKey);
+    if (mounted) {
+      setState(() => _username = username ?? 'Offline vault');
+    }
+    if (username == null || username.isEmpty) {
+      return;
+    }
+
     final profile = await _profileService.getProfile();
     if (profile != null && mounted) {
       setState(() => _profilePhotoUrl = profile['profile']?['profile_photo']);
@@ -165,8 +232,7 @@ class _HomeScreenState extends State<HomeScreen>
     final accountCount = _userBox?.length ?? 0;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: LayoutBuilder(
         builder: (context, constraints) {
           // Check if it's a wide screen (laptop/desktop)
@@ -186,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   // â”€â”€â”€ Header with account count - FIXED for desktop right alignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildHeader(bool isDark, int accountCount, bool isWideScreen) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final actionButtons = Wrap(
       spacing: isWideScreen ? 4 : 6,
       runSpacing: 6,
@@ -201,6 +268,13 @@ class _HomeScreenState extends State<HomeScreen>
         _headerAction(
           Icons.notifications_none_rounded,
           () async {
+            if (!authProvider.isAuthenticated) {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => LoginScreen()),
+              );
+              return;
+            }
             await Navigator.push(
               context,
               MaterialPageRoute(
@@ -232,10 +306,18 @@ class _HomeScreenState extends State<HomeScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A2E) : const Color(0xFF4F46E5),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(_accent, Colors.black, isDark ? 0.28 : 0.08)!,
+            _accent,
+            Color.lerp(_accentSecondary, _accent, 0.22)!,
+          ],
+        ),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: _accent.withOpacity(isDark ? 0.28 : 0.22),
               blurRadius: 12,
               offset: const Offset(0, 4))
         ],
@@ -250,6 +332,13 @@ class _HomeScreenState extends State<HomeScreen>
                 children: [
                   GestureDetector(
                     onTap: () async {
+                      if (!authProvider.isAuthenticated) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => LoginScreen()),
+                        );
+                        return;
+                      }
                       final result = await Navigator.push(context,
                           MaterialPageRoute(builder: (_) => ProfileScreen()));
                       if (result == true) _loadProfileData();
@@ -385,7 +474,7 @@ class _HomeScreenState extends State<HomeScreen>
                       border: Border.all(
                         color: isDark
                             ? const Color(0xFF1A1A2E)
-                            : const Color(0xFF4F46E5),
+                            : _accent,
                         width: 1.5,
                       ),
                     ),
@@ -413,81 +502,87 @@ class _HomeScreenState extends State<HomeScreen>
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       constraints: BoxConstraints(
-        maxWidth: isWideScreen ? 600 : double.infinity,
+        maxWidth: isWideScreen ? 760 : double.infinity,
       ),
       child: Row(
         children: [
           Expanded(
             child: Container(
+              height: 48,
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E1E32) : Colors.white,
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _accent.withOpacity(0.16)),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 8,
+                      color: _accent.withOpacity(isDark ? 0.14 : 0.08),
+                      blurRadius: 14,
                       offset: const Offset(0, 2))
                 ],
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      style: TextStyle(
-                          color:
-                              isDark ? Colors.white : const Color(0xFF1A1A2E),
-                          fontSize: 14),
-                      onChanged: (v) =>
-                          setState(() => _searchQuery = v.toLowerCase()),
-                      decoration: InputDecoration(
-                        hintText: 'Search accounts',
-                        hintStyle: TextStyle(
-                            color: isDark ? Colors.white38 : Colors.grey[400],
-                            fontSize: 14),
-                        prefixIcon: Icon(Icons.search_rounded,
-                            color: isDark ? Colors.white38 : Colors.grey[400],
-                            size: 20),
-                        border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
+              child: TextField(
+                style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                    fontSize: 14),
+                onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                decoration: InputDecoration(
+                  hintText: 'Search accounts',
+                  hintStyle: TextStyle(
+                      color: isDark ? Colors.white38 : Colors.grey[400],
+                      fontSize: 14),
+                  prefixIcon: Icon(Icons.search_rounded,
+                      color: _accent.withOpacity(isDark ? 0.82 : 0.66),
+                      size: 20),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Tooltip(
+            message: 'Add account',
+            child: InkWell(
+              onTap: _openAddAccount,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                height: 48,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isWideScreen ? 18 : 14,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _accent,
+                      Color.lerp(_accentSecondary, _accent, 0.18)!,
+                    ],
                   ),
-                  GestureDetector(
-                    onTap: () async {
-                      final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => AddAccountScreen()));
-                      if (result == true) {
-                        await _initUserBox();
-                        _updateAllOTPs();
-                        await _loadUnreadNotificationCount();
-                      }
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                          color: const Color(0xFF4F46E5),
-                          borderRadius: BorderRadius.circular(10)),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add_rounded,
-                              color: Colors.white, size: 18),
-                          SizedBox(width: 4),
-                          Text('Add',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
-                        ],
-                      ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withOpacity(0.24),
+                      blurRadius: 16,
+                      offset: const Offset(0, 5),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.add_rounded,
+                        color: Colors.white, size: 20),
+                    if (isWideScreen) ...[
+                      const SizedBox(width: 6),
+                      const Text('Add',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -496,12 +591,25 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  Future<void> _openAddAccount() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AddAccountScreen()),
+    );
+    if (result == true) {
+      await _initUserBox();
+      _updateAllOTPs();
+      await _loadUnreadNotificationCount();
+      await _showOfflineBackupReminderIfNeeded();
+    }
+  }
+
   // â”€â”€â”€ Accounts list with creation date â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAccountsList(bool isDark) {
     if (_isLoadingVault) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+          valueColor: AlwaysStoppedAnimation<Color>(_accent),
         ),
       );
     }
@@ -516,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen>
               Icon(
                 Icons.error_outline_rounded,
                 size: 44,
-                color: isDark ? Colors.white70 : const Color(0xFF4F46E5),
+                color: isDark ? Colors.white70 : _accent,
               ),
               const SizedBox(height: 12),
               Text(
@@ -585,8 +693,7 @@ class _HomeScreenState extends State<HomeScreen>
                       color: Colors.black.withOpacity(0.08), blurRadius: 20)
                 ],
               ),
-              child: const Icon(Icons.security_rounded,
-                  size: 40, color: Color(0xFF4F46E5)),
+              child: Icon(Icons.security_rounded, size: 40, color: _accent),
             ),
             const SizedBox(height: 20),
             Text('No accounts yet',
@@ -627,20 +734,31 @@ class _HomeScreenState extends State<HomeScreen>
                 duration: const Duration(milliseconds: 300),
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [
+                            const Color(0xFF1E1E32),
+                            Color.lerp(const Color(0xFF1E1E32), _accent, 0.06)!,
+                          ]
+                        : [
+                            Colors.white,
+                            Color.lerp(Colors.white, _accent, 0.035)!,
+                          ],
+                  ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isExpiring
                         ? Colors.red.withOpacity(0.4)
-                        : (isDark
-                            ? Colors.white.withOpacity(0.06)
-                            : Colors.transparent),
+                        : _accent.withOpacity(isDark ? 0.18 : 0.10),
                     width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
-                        blurRadius: 12,
+                        color: (isDark ? Colors.black : _accent)
+                            .withOpacity(isDark ? 0.22 : 0.07),
+                        blurRadius: 16,
                         offset: const Offset(0, 3))
                   ],
                 ),
@@ -710,9 +828,15 @@ class _HomeScreenState extends State<HomeScreen>
                                 decoration: BoxDecoration(
                                   color: isExpiring
                                       ? Colors.red.withOpacity(0.1)
-                                      : const Color(0xFF4F46E5)
-                                          .withOpacity(0.08),
+                                      : _accent.withOpacity(
+                                          isDark ? 0.18 : 0.10,
+                                        ),
                                   borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isExpiring
+                                        ? Colors.red.withOpacity(0.16)
+                                        : _accent.withOpacity(0.14),
+                                  ),
                                 ),
                                 child: FittedBox(
                                   fit: BoxFit.scaleDown,
@@ -752,10 +876,10 @@ class _HomeScreenState extends State<HomeScreen>
                         child: LinearProgressIndicator(
                           value: timer / 30,
                           backgroundColor:
-                              isDark ? Colors.white10 : Colors.grey[100],
+                              _accent.withOpacity(isDark ? 0.14 : 0.10),
                           valueColor: AlwaysStoppedAnimation<Color>(isExpiring
                               ? Colors.red
-                              : const Color(0xFF4F46E5)),
+                              : _accent),
                           minHeight: 4,
                         ),
                       ),
@@ -1269,10 +1393,27 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _syncData() async {
+    if (!await _syncService.isLoggedIn()) {
+      _showSnackBar(
+        'Sign in to enable automatic cross-platform sync.',
+        Colors.orange,
+      );
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(returnToPreviousOnOffline: true),
+        ),
+      );
+      await _loadSyncStatus();
+      await _initUserBox();
+      _updateAllOTPs();
+      return;
+    }
+
     final syncEnabled = await _syncService.isSyncEnabled();
 
     if (!syncEnabled) {
-      _showSnackBar('Sync is disabled. Enable it in Settings â†’ Sync to Cloud',
+      _showSnackBar('Sync is disabled. Enable it in Settings -> Sync to Cloud',
           Colors.orange);
       return;
     }
@@ -1333,7 +1474,7 @@ class _HomeScreenState extends State<HomeScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4F46E5),
+                backgroundColor: _accent,
                 foregroundColor: Colors.white),
             child: const Text('Logout'),
           ),
@@ -1341,10 +1482,9 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
     if (confirmed == true) {
-      await Provider.of<AuthProvider>(context, listen: false).logout();
       await _syncService.logout();
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => LoginScreen()));
+      await Provider.of<AuthProvider>(context, listen: false).continueOffline();
+      await _loadData();
     }
   }
 
