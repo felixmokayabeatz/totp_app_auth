@@ -685,6 +685,14 @@ def build_windows_and_apk():
     android_ok = build_android("1")
     return windows_ok and android_ok
 
+
+def build_linux_and_apk():
+    """Build Linux .deb and Android APK in one run."""
+    print_color("\nBuilding Linux and Android APK artifacts...", Colors.CYAN)
+    linux_ok = build_linux()
+    android_ok = build_android("1")
+    return linux_ok and android_ok
+
 # ==================== UTILITIES ====================
 def clean_all():
     """Clean all build artifacts"""
@@ -797,62 +805,63 @@ def main_menu():
   2. Windows (.exe + installer bundle)
   3. Android (.apk + .aab)
   4. Build All (Windows + APK)
+  5. Build All (Linux + APK)
 
 {'RUN OPTIONS:':^50}
-  5. Run Linux (debug mode)
-  6. Run Windows (debug mode)
-  7. Run Android (debug mode)
-  8. Run Web (Chrome)
-  9. Run with Hot Reload (development)
+  6. Run Linux (debug mode)
+  7. Run Windows (debug mode)
+  8. Run Android (debug mode)
+  9. Run Web (Chrome)
+  10. Run with Hot Reload (development)
 
 {'UTILITIES:':^50}
-  10. Clean all build files
-  11. Fix Windows build (clear CMake cache)
-  12. List previous builds
-  13. Open final builds directory
-  14. List available devices
-  15. Run tests
-  16. Analyze code
-  17. Exit
+  11. Clean all build files
+  12. Fix Windows build (clear CMake cache)
+  13. List previous builds
+  14. Open final builds directory
+  15. List available devices
+  16. Run tests
+  17. Analyze code
+  18. Exit
 
 Current platform: {system}
 Current app version: {APP_FULL_VERSION}
 """)
         
-        choice = input("Enter your choice (1-17): ").strip()
+        choice = input("Enter your choice (1-18): ").strip()
 
-        if choice == "17":
+        if choice == "18":
             print_color("\nGoodbye!", Colors.GREEN)
             break
         
-        if choice == "10":
+        if choice == "11":
             clean_all()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "11":
+        elif choice == "12":
             if system == "Windows":
                 fix_windows_build()
             else:
                 print_color("This option is only for Windows!", Colors.YELLOW)
             input("\nPress Enter to continue...")
             continue
-        elif choice == "12":
+        elif choice == "13":
             list_builds()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "13":
+        elif choice == "14":
             open_installer_dir()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "14":
+        elif choice == "15":
             list_devices()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "15":
+        elif choice == "16":
             run_tests()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "16":
+        elif choice == "17":
             analyze_code()
             input("\nPress Enter to continue...")
             continue
@@ -887,19 +896,25 @@ Current app version: {APP_FULL_VERSION}
                 build_windows_and_apk()
         elif choice == "5":
             if system != "Linux":
+                print_color("Linux + APK builds require Linux OS!", Colors.YELLOW)
+                print_color("   Run this script on Linux to build the .deb + APK together", Colors.YELLOW)
+            else:
+                build_linux_and_apk()
+        elif choice == "6":
+            if system != "Linux":
                 print_color("Linux run requires Linux OS!", Colors.YELLOW)
             else:
                 run_linux()
-        elif choice == "6":
+        elif choice == "7":
             if system != "Windows":
                 print_color("Windows run requires Windows OS!", Colors.YELLOW)
             else:
                 run_windows()
-        elif choice == "7":
-            run_android()
         elif choice == "8":
-            run_web()
+            run_android()
         elif choice == "9":
+            run_web()
+        elif choice == "10":
             hot_reload()
         else:
             print_color("Invalid choice", Colors.RED)
