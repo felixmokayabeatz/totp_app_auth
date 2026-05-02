@@ -17,7 +17,10 @@ PROJECT_DIR = str(SCRIPT_DIR)
 FINAL_BUILDS_DIR = WORKSPACE_DIR / "final_builds"
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
 PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
+INNO_SCRIPT_DIR = WORKSPACE_DIR / "inno_script"
 INNO_SCRIPT_SEEDS = [
+    INNO_SCRIPT_DIR / "BeatzLock v1.iss",
+    INNO_SCRIPT_DIR / "BeatzLock.iss",
     WORKSPACE_DIR / "BeatzLock v1.iss",
     WORKSPACE_DIR / "BeatzLock.iss",
 ]
@@ -89,7 +92,7 @@ def get_platform_version_dir(platform_name: str) -> Path:
 
 
 def get_versioned_inno_script_path() -> Path:
-    return WORKSPACE_DIR / f"beatzlock_{APP_ARTIFACT_VERSION}.iss"
+    return INNO_SCRIPT_DIR / f"beatzlock_{APP_ARTIFACT_VERSION}.iss"
 
 
 def get_windows_app_dir() -> Path:
@@ -110,8 +113,10 @@ def to_inno_path(path: Path) -> str:
 
 def find_inno_setup_script() -> Path | None:
     candidates = []
+    candidates.append(get_versioned_inno_script_path())
+    candidates.extend(sorted(INNO_SCRIPT_DIR.glob("beatzlock_*.iss"), reverse=True))
     candidates.extend(INNO_SCRIPT_SEEDS)
-    candidates.extend(sorted(WORKSPACE_DIR.glob("beatzlock_*.iss")))
+    candidates.extend(sorted(WORKSPACE_DIR.glob("beatzlock_*.iss"), reverse=True))
 
     seen = set()
     for candidate in candidates:
@@ -243,11 +248,16 @@ def build_windows_installer() -> bool:
         print_color("No Inno Setup script found to compile.", Colors.RED)
         return False
 
-    sync_inno_setup_script(script_path)
     target_script_path = get_versioned_inno_script_path()
     if script_path.resolve() != target_script_path.resolve():
-        shutil.copy2(script_path, target_script_path)
+        target_script_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_script_path.exists():
+            target_script_path.unlink()
+        shutil.move(str(script_path), target_script_path)
         script_path = target_script_path
+        print_color(f"Inno Setup script renamed to: {script_path}", Colors.GREEN)
+
+    sync_inno_setup_script(script_path)
 
     compiler_path = find_inno_compiler()
     if not compiler_path:
