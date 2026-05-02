@@ -9,6 +9,7 @@ import '../services/otp_service.dart';
 import '../services/sync_service.dart';
 import '../services/profile_service.dart';
 import '../services/secure_storage_service.dart';
+import '../services/encryption_service.dart';
 import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
@@ -127,7 +128,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           backgroundColor: _accent,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 7),
+          duration: const Duration(seconds: 3),
           action: SnackBarAction(
             label: 'Sign in',
             textColor: Colors.white,
@@ -908,13 +909,7 @@ class _HomeScreenState extends State<HomeScreen>
                           _accountAction(
                             Icons.qr_code_rounded,
                             'QR',
-                            () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) => ShowQRScreen(
-                                        secret: account.secret,
-                                        service: account.service,
-                                        issuer: account.issuer))),
+                            () => _openQrForAccount(account),
                             isDark,
                           ),
                           _accountAction(
@@ -936,6 +931,67 @@ class _HomeScreenState extends State<HomeScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _openQrForAccount(OTPAccount account) async {
+    final userId = await _otpService.getCurrentUserId();
+    final base32Secret = _readBase32Secret(account, userId);
+
+    if (base32Secret == null) {
+      _showSnackBar(
+        'Could not unlock the Base32 secret for this account.',
+        Colors.red,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShowQRScreen(
+          secret: base32Secret,
+          advancedSecret: account.secret,
+          service: account.service,
+          issuer: account.issuer,
+        ),
+      ),
+    );
+  }
+
+  String? _readBase32Secret(OTPAccount account, String userId) {
+    final storedSecret = account.secret;
+
+    try {
+      final decrypted = EncryptionService.decryptSecret(storedSecret, userId);
+      final cleanDecrypted = _cleanBase32Secret(decrypted);
+      if (_isBase32Secret(cleanDecrypted)) {
+        return cleanDecrypted;
+      }
+    } catch (_) {}
+
+    final cleanStored = _cleanBase32Secret(storedSecret);
+    if (_isBase32Secret(cleanStored)) {
+      return cleanStored;
+    }
+
+    final cleanCached = _cleanBase32Secret(account.getSecret(userId));
+    if (_isBase32Secret(cleanCached)) {
+      return cleanCached;
+    }
+
+    return null;
+  }
+
+  String _cleanBase32Secret(String value) {
+    return value
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll('=', '')
+        .toUpperCase();
+  }
+
+  bool _isBase32Secret(String value) {
+    return value.isNotEmpty && RegExp(r'^[A-Z2-7]+$').hasMatch(value);
   }
 
   String _formatDate(DateTime date) {

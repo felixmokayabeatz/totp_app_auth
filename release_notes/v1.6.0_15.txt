@@ -1,0 +1,13 @@
+v1.6.0 (Build 15)
+
+What's new
+- Added offline-first use, so you can use the authenticator without creating an account.
+- Signing in still enables automatic backup and cross-platform sync.
+- Local accounts now stay available on the same device after signing out.
+- Added Google Authenticator imports, including transfer QR codes with multiple accounts.
+- QR export now shows the human-friendly Base32 secret by default, with advanced Base64 hidden behind a reveal.
+- Remote sign-out now reacts faster through the heartbeat flow.
+- Accent colors now apply more consistently across the app with refreshed UI touches.
+- Reviews now require a signed-in account.
+- Backup PDF download now uses the device/app unlock flow before exporting.
+- Improved offline account deletion messaging and sync sign-in return flow.

@@ -8,12 +8,14 @@ import '../widgets/account_logo_badge.dart';
 
 class ShowQRScreen extends StatefulWidget {
   final String secret;
+  final String? advancedSecret;
   final String service;
   final String? issuer;
 
   const ShowQRScreen({
     Key? key,
     required this.secret,
+    this.advancedSecret,
     required this.service,
     this.issuer,
   }) : super(key: key);
@@ -24,7 +26,18 @@ class ShowQRScreen extends StatefulWidget {
 
 class _ShowQRScreenState extends State<ShowQRScreen> {
   bool _isSecretRevealed = false;
+  bool _isAdvancedSecretRevealed = false;
   final AppLockService _appLockService = AppLockService();
+
+  String get _base32Secret => widget.secret
+      .replaceAll(RegExp(r'\s+'), '')
+      .toUpperCase()
+      .replaceAll(RegExp(r'[^A-Z2-7]'), '');
+
+  String get _advancedSecret => widget.advancedSecret?.trim() ?? '';
+
+  bool get _hasAdvancedSecret =>
+      _advancedSecret.isNotEmpty && _advancedSecret != _base32Secret;
 
   @override
   Widget build(BuildContext context) {
@@ -33,8 +46,15 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     final colorScheme = theme.colorScheme;
     final mutedText =
         isDark ? Colors.white60 : colorScheme.onSurfaceVariant;
-    final otpUrl =
-        'otpauth://totp/${widget.issuer != null ? "${widget.issuer}:" : ""}${widget.service}?secret=${widget.secret}&issuer=${widget.issuer ?? widget.service}';
+    final issuer = (widget.issuer?.trim().isNotEmpty ?? false)
+        ? widget.issuer!.trim()
+        : widget.service.trim();
+    final label = issuer.isNotEmpty ? '$issuer:${widget.service}' : widget.service;
+    final query = Uri(queryParameters: {
+      'secret': _base32Secret,
+      'issuer': issuer,
+    }).query;
+    final otpUrl = 'otpauth://totp/${Uri.encodeComponent(label)}?$query';
 
     return Scaffold(
       backgroundColor:
@@ -155,7 +175,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   const SizedBox(height: 18),
                   Center(
                     child: GestureDetector(
-                      onTap: _isSecretRevealed ? null : _revealSensitiveInfo,
+                      onTap: _isSecretRevealed
+                          ? null
+                          : () {
+                              _revealSensitiveInfo();
+                            },
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
@@ -217,7 +241,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                   ),
                                   const SizedBox(height: 10),
                                   FilledButton.tonalIcon(
-                                    onPressed: _revealSensitiveInfo,
+                                    onPressed: () {
+                                      _revealSensitiveInfo();
+                                    },
                                     icon: const Icon(Icons.pin_rounded),
                                     label: const Text('Enter PIN'),
                                   ),
@@ -294,7 +320,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Secret key',
+                              'Base32 secret',
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -303,7 +329,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Reveal this only if you need to type it in manually.',
+                              'Reveal this if you need to type the setup key manually.',
                               style:
                                   TextStyle(fontSize: 13, color: mutedText),
                             ),
@@ -319,7 +345,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         ),
                         onPressed: _isSecretRevealed
                             ? _hideSensitiveInfo
-                            : _revealSensitiveInfo,
+                            : () {
+                                _revealSensitiveInfo();
+                              },
                         tooltip:
                             _isSecretRevealed ? 'Hide secret' : 'Reveal secret',
                       ),
@@ -327,7 +355,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   ),
                   const SizedBox(height: 16),
                   GestureDetector(
-                    onTap: _isSecretRevealed ? null : _revealSensitiveInfo,
+                    onTap: _isSecretRevealed
+                        ? null
+                        : () {
+                            _revealSensitiveInfo();
+                          },
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -344,7 +376,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                       ),
                       child: _isSecretRevealed
                           ? SelectableText(
-                              widget.secret,
+                              _formatSecret(_base32Secret),
                               style: TextStyle(
                                 color: colorScheme.onSurface,
                                 fontSize: 16,
@@ -386,9 +418,79 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     child: FilledButton.icon(
                       onPressed: _isSecretRevealed ? _copySecret : null,
                       icon: const Icon(Icons.copy_rounded),
-                      label: const Text('Copy secret key'),
+                      label: const Text('Copy Base32 secret'),
                     ),
                   ),
+                  if (_hasAdvancedSecret) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _toggleAdvancedSecret,
+                        icon: Icon(
+                          _isAdvancedSecretRevealed
+                              ? Icons.expand_less_rounded
+                              : Icons.expand_more_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _isAdvancedSecretRevealed
+                              ? 'Hide advanced Base64'
+                              : 'Advanced Base64',
+                        ),
+                      ),
+                    ),
+                    if (_isSecretRevealed && _isAdvancedSecretRevealed)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.black.withOpacity(0.18)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: colorScheme.outlineVariant.withOpacity(0.35),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Encrypted storage value',
+                                    style: TextStyle(
+                                      color: mutedText,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: _copyAdvancedSecret,
+                                  icon: const Icon(Icons.copy_rounded, size: 18),
+                                  tooltip: 'Copy advanced Base64',
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            SelectableText(
+                              _advancedSecret,
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 18),
                   Container(
                     width: double.infinity,
@@ -508,18 +610,27 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
   }
 
   String _maskedSecret() {
-    if (widget.secret.isEmpty) return '**** ****';
-    final groupCount = (widget.secret.length / 4).ceil().clamp(2, 4);
+    if (_base32Secret.isEmpty) return '**** ****';
+    final groupCount = (_base32Secret.length / 4).ceil().clamp(2, 4);
     return List.generate(groupCount, (_) => '****').join(' ');
   }
 
-  Future<void> _revealSensitiveInfo() async {
+  String _formatSecret(String value) {
+    final chunks = <String>[];
+    for (var i = 0; i < value.length; i += 4) {
+      final end = i + 4 > value.length ? value.length : i + 4;
+      chunks.add(value.substring(i, end));
+    }
+    return chunks.join(' ');
+  }
+
+  Future<bool> _revealSensitiveInfo() async {
     final unlocked = await _appLockService.authenticateWithPinOnly(context);
-    if (!mounted) return;
+    if (!mounted) return false;
 
     if (unlocked) {
       setState(() => _isSecretRevealed = true);
-      return;
+      return true;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -528,17 +639,40 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         duration: Duration(seconds: 2),
       ),
     );
+    return false;
   }
 
   void _hideSensitiveInfo() {
-    setState(() => _isSecretRevealed = false);
+    setState(() {
+      _isSecretRevealed = false;
+      _isAdvancedSecretRevealed = false;
+    });
   }
 
   void _copySecret() {
-    Clipboard.setData(ClipboardData(text: widget.secret));
+    Clipboard.setData(ClipboardData(text: _base32Secret));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Secret copied to clipboard'),
+        content: Text('Base32 secret copied to clipboard'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _toggleAdvancedSecret() async {
+    if (!_isSecretRevealed) {
+      final unlocked = await _revealSensitiveInfo();
+      if (!unlocked || !mounted) return;
+    }
+
+    setState(() => _isAdvancedSecretRevealed = !_isAdvancedSecretRevealed);
+  }
+
+  void _copyAdvancedSecret() {
+    Clipboard.setData(ClipboardData(text: _advancedSecret));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Advanced Base64 copied to clipboard'),
         duration: Duration(seconds: 2),
       ),
     );
