@@ -17,6 +17,10 @@ PROJECT_DIR = str(SCRIPT_DIR)
 FINAL_BUILDS_DIR = WORKSPACE_DIR / "final_builds"
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
 PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
+INNO_SCRIPT_SEEDS = [
+    WORKSPACE_DIR / "BeatzLock v1.iss",
+    WORKSPACE_DIR / "BeatzLock.iss",
+]
 
 # Platform-specific build dirs
 LINUX_DIR = str(FINAL_BUILDS_DIR / "linux")
@@ -84,6 +88,43 @@ def get_platform_version_dir(platform_name: str) -> Path:
     return FINAL_BUILDS_DIR / platform_name / APP_ARTIFACT_VERSION
 
 
+def get_versioned_inno_script_path() -> Path:
+    return WORKSPACE_DIR / f"beatzlock_{APP_ARTIFACT_VERSION}.iss"
+
+
+def get_windows_app_dir() -> Path:
+    return get_platform_version_dir("windows") / "app"
+
+
+def get_windows_installer_dir() -> Path:
+    return get_platform_version_dir("windows")
+
+
+def get_windows_installer_path() -> Path:
+    return get_windows_installer_dir() / f"beatzlock_{APP_ARTIFACT_VERSION}_x64.exe"
+
+
+def to_inno_path(path: Path) -> str:
+    return str(path).replace("/", "\\")
+
+
+def find_inno_setup_script() -> Path | None:
+    candidates = []
+    candidates.extend(INNO_SCRIPT_SEEDS)
+    candidates.extend(sorted(WORKSPACE_DIR.glob("beatzlock_*.iss")))
+
+    seen = set()
+    for candidate in candidates:
+        normalized = str(candidate).lower()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
 def refresh_version_context(announce=False):
     """Reload version info from pubspec.yaml."""
     global APP_FULL_VERSION, APP_VERSION, APP_BUILD_NUMBER, APP_ARTIFACT_VERSION
@@ -108,6 +149,124 @@ def get_linux_bundle_binary_name(bundle_path: Path) -> str:
         if entry.is_file() and os.access(entry, os.X_OK):
             return entry.name
     raise FileNotFoundError(f"No executable found in Linux bundle: {bundle_path}")
+
+
+def sync_inno_setup_script(script_path: Path):
+    """Update the Inno script for the current version and output folder."""
+    if not script_path.exists():
+        return False
+
+    app_source_dir = to_inno_path(get_windows_app_dir())
+    output_dir = to_inno_path(get_windows_installer_dir())
+
+    lines = script_path.read_text(encoding="utf-8").splitlines()
+    updated_lines = []
+    saw_app_version_define = False
+    saw_artifact_define = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.startswith('#define MyAppVersion "'):
+            updated_lines.append(f'#define MyAppVersion "{APP_FULL_VERSION}"')
+            saw_app_version_define = True
+            continue
+
+        if stripped.startswith('#define MyAppArtifactVersion "'):
+            updated_lines.append(f'#define MyAppArtifactVersion "{APP_ARTIFACT_VERSION}"')
+            saw_artifact_define = True
+            continue
+
+        if stripped.startswith("AppVersion="):
+            updated_lines.append("AppVersion={#MyAppVersion}")
+            continue
+
+        if stripped.startswith("AppVerName="):
+            updated_lines.append("AppVerName={#MyAppName} {#MyAppVersion}")
+            continue
+
+        if stripped.startswith("OutputDir="):
+            updated_lines.append(f"OutputDir={output_dir}")
+            continue
+
+        if stripped.startswith("OutputBaseFilename="):
+            updated_lines.append("OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64")
+            continue
+
+        if stripped.startswith("Source: ") and "\\final_builds\\windows\\" in stripped.lower():
+            lower_line = line.lower()
+            quote_start = line.find('"')
+            app_index = lower_line.find("\\app", quote_start)
+            if quote_start != -1 and app_index != -1:
+                updated_lines.append(line[:quote_start + 1] + app_source_dir + line[app_index + 4:])
+                continue
+
+        updated_lines.append(line)
+
+    if not saw_app_version_define:
+        for index, line in enumerate(updated_lines):
+            if line.strip() == '#define MyAppName "beatzLock"':
+                updated_lines.insert(index + 1, f'#define MyAppVersion "{APP_FULL_VERSION}"')
+                break
+
+    if not saw_artifact_define:
+        for index, line in enumerate(updated_lines):
+            if line.strip().startswith('#define MyAppVersion "'):
+                updated_lines.insert(index + 1, f'#define MyAppArtifactVersion "{APP_ARTIFACT_VERSION}"')
+                break
+
+    script_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+    return True
+
+
+def find_inno_compiler() -> str | None:
+    """Locate ISCC.exe for compiling Inno Setup scripts."""
+    compiler = shutil.which("iscc")
+    if compiler:
+        return compiler
+
+    common_paths = [
+        r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+        r"C:\Program Files\Inno Setup 6\ISCC.exe",
+    ]
+    for path in common_paths:
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
+def build_windows_installer() -> bool:
+    """Compile the Inno Setup installer into final_builds/windows/<version>/."""
+    script_path = find_inno_setup_script()
+    if script_path is None:
+        print_color("No Inno Setup script found to compile.", Colors.RED)
+        return False
+
+    sync_inno_setup_script(script_path)
+    target_script_path = get_versioned_inno_script_path()
+    if script_path.resolve() != target_script_path.resolve():
+        shutil.copy2(script_path, target_script_path)
+        script_path = target_script_path
+
+    compiler_path = find_inno_compiler()
+    if not compiler_path:
+        print_color("Inno Setup compiler (ISCC.exe) not found.", Colors.RED)
+        print_color("Install Inno Setup 6 or add ISCC.exe to PATH.", Colors.YELLOW)
+        return False
+
+    get_windows_installer_dir().mkdir(parents=True, exist_ok=True)
+    if not run(f'"{compiler_path}" "{script_path}"', cwd=str(WORKSPACE_DIR)):
+        return False
+
+    expected_output = get_windows_installer_path()
+    if expected_output.exists():
+        save_build_metadata("windows_installer", str(expected_output))
+        print_color(f"✅ Windows installer created: {expected_output}", Colors.GREEN)
+        return True
+
+    print_color("Inno Setup finished, but the expected installer was not found.", Colors.YELLOW)
+    return False
 
 
 def run(cmd, cwd=None, shell=True, capture_output=False):
@@ -438,14 +597,14 @@ def build_windows():
         print_color(f"Windows build failed - output not found at {exe_path}", Colors.RED)
         return False
     
-    final_build_dir = get_platform_version_dir("windows") / "app"
+    final_build_dir = get_windows_app_dir()
     if final_build_dir.exists():
         shutil.rmtree(final_build_dir)
     shutil.copytree(exe_path, final_build_dir)
     save_build_metadata("windows_exe", str(final_build_dir))
     
-    print_color(f"Windows build copied to {final_build_dir}", Colors.GREEN)
-    return True
+    print_color(f"Windows app staged for installer: {final_build_dir}", Colors.GREEN)
+    return build_windows_installer()
 
 def build_android(choice: str | None = None):
     """Build Android APK and App Bundle"""
@@ -633,7 +792,7 @@ def main_menu():
         print_color(f"""
 {'BUILD OPTIONS:':^50}
   1. Linux (.deb final build)
-  2. Windows (.exe app folder)
+  2. Windows installer (.exe)
   3. Android (.apk + .aab)
   4. Build All (Windows + APK)
   5. Build All (Linux + APK)
