@@ -7,6 +7,7 @@ class AppRating {
     required this.id,
     required this.platform,
     required this.platformDisplay,
+    required this.displayName,
     required this.stars,
     required this.comment,
     required this.suggestion,
@@ -21,6 +22,7 @@ class AppRating {
   final int id;
   final String platform;
   final String platformDisplay;
+  final String displayName;
   final int stars;
   final String comment;
   final String suggestion;
@@ -37,6 +39,9 @@ class AppRating {
       platform: json['platform']?.toString() ?? 'unknown',
       platformDisplay:
           json['platform_display']?.toString() ?? 'Unknown platform',
+      displayName: json['display_name']?.toString() ??
+          json['display_name_or_anonymous']?.toString() ??
+          'Anonymous user',
       stars: int.tryParse(json['stars']?.toString() ?? '') ?? 5,
       comment: json['comment']?.toString() ?? '',
       suggestion: json['suggestion']?.toString() ?? '',
@@ -83,6 +88,7 @@ class AppRatingService {
   Future<AppRating> submitRating({
     required String reviewerKey,
     required String platform,
+    required String displayName,
     required int stars,
     required String comment,
     required String suggestion,
@@ -95,6 +101,7 @@ class AppRatingService {
       data: {
         'reviewer_key': reviewerKey,
         'platform': platform,
+        'display_name': displayName.trim(),
         'stars': stars,
         'comment': comment.trim(),
         'suggestion': suggestion.trim(),

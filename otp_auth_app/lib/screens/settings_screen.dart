@@ -575,6 +575,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final commentController = TextEditingController();
     final suggestionController = TextEditingController();
+    final displayNameController = TextEditingController();
+    displayNameController.text =
+        existingRating?.displayName == 'Anonymous user'
+            ? ''
+            : existingRating?.displayName ?? '';
     commentController.text = existingRating?.comment ?? '';
     suggestionController.text = existingRating?.suggestion ?? '';
 
@@ -608,6 +613,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               TextStyle(color: _textSecondary, fontSize: 13),
                         ),
                         const SizedBox(height: 16),
+                        TextField(
+                          controller: displayNameController,
+                          enabled: !isSubmitting,
+                          maxLength: 80,
+                          decoration: const InputDecoration(
+                            labelText: 'Display name',
+                            hintText: 'Name to show on the public ratings page',
+                            helperText:
+                                'Leave this blank and we will show Anonymous user.',
+                            border: OutlineInputBorder(),
+                            counterText: '',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(5, (index) {
@@ -711,6 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : () async {
                       final comment = commentController.text.trim();
                       final suggestion = suggestionController.text.trim();
+                      final displayName = displayNameController.text.trim();
                       if (comment.isEmpty && suggestion.isEmpty) {
                         setDialogState(() {
                           errorText =
@@ -733,6 +753,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           platform: _appUpdateService.currentPlatform.isEmpty
                               ? 'unknown'
                               : _appUpdateService.currentPlatform,
+                          displayName: displayName,
                           stars: selectedStars,
                           comment: comment,
                           suggestion: suggestion,
@@ -812,6 +833,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 16),
         Center(child: _starStrip(rating.stars, size: 30)),
         const SizedBox(height: 14),
+        _ratingMetaLine('Name', rating.displayName),
         _ratingMetaLine('Platform', rating.platformDisplay),
         _ratingMetaLine('Original date', _formatRatingDate(rating.createdAt)),
         _ratingMetaLine('Last edited', _formatRatingDate(rating.updatedAt)),

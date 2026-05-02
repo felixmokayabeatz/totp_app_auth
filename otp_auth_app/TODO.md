@@ -16,4 +16,6 @@
 
 [x] -  Add the Privacy poilcy and Terms of use are from db from another repo in that shows the privacy terms is here aswell
 
-[ ] - Fix the long relese notes going out out container on log in screen
+[x] - Fix the long relese notes going out out container on log in screen
+
+[ ] - Show mlpiple platforms on the rate platform
