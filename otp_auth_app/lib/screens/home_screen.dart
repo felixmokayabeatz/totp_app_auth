@@ -48,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isLoadingVault = true;
   String? _loadError;
   int _unreadNotificationCount = 0;
+  bool _offlineBackupReminderVisible = false;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
 
@@ -105,6 +106,7 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _showOfflineBackupReminderIfNeeded() async {
     if (!mounted || await _syncService.isLoggedIn()) return;
     if ((_userBox?.isEmpty ?? true)) return;
+    if (_offlineBackupReminderVisible) return;
 
     final prefs = await SharedPreferences.getInstance();
     final lastShownMs = prefs.getInt(_offlineBackupReminderKey) ?? 0;
@@ -121,29 +123,47 @@ class _HomeScreenState extends State<HomeScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Your codes are saved on this device. Sign in anytime to back them up and sync across devices.',
-          ),
-          backgroundColor: _accent,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Sign in',
-            textColor: Colors.white,
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      const LoginScreen(returnToPreviousOnOffline: true),
-                ),
-              );
-            },
-          ),
-        ),
-      );
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      _offlineBackupReminderVisible = true;
+      messenger
+          .showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Your codes are saved on this device. Sign in anytime to back them up and sync across devices.',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () {
+                      messenger.hideCurrentSnackBar();
+                      _openLoginForSync();
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'Sign in',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: _accent,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+            ),
+          )
+          .closed
+          .whenComplete(() {
+        _offlineBackupReminderVisible = false;
+      });
     });
   }
 
@@ -306,16 +326,13 @@ class _HomeScreenState extends State<HomeScreen>
           tooltip: 'Notifications',
           badgeCount: _unreadNotificationCount,
         ),
-        _headerAction(
-            Icons.settings_rounded,
-            () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => SettingsScreen()),
-              );
-              await _loadUnreadNotificationCount();
-            },
-            tooltip: 'Settings'),
+        _headerAction(Icons.settings_rounded, () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => SettingsScreen()),
+          );
+          await _loadUnreadNotificationCount();
+        }, tooltip: 'Settings'),
         _headerAction(
             isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
             () => Provider.of<ThemeProvider>(context, listen: false)
@@ -492,9 +509,7 @@ class _HomeScreenState extends State<HomeScreen>
                       color: const Color(0xFFEF4444),
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: isDark
-                            ? const Color(0xFF1A1A2E)
-                            : _accent,
+                        color: isDark ? const Color(0xFF1A1A2E) : _accent,
                         width: 1.5,
                       ),
                     ),
@@ -544,7 +559,8 @@ class _HomeScreenState extends State<HomeScreen>
                 style: TextStyle(
                     color: isDark ? Colors.white : const Color(0xFF1A1A2E),
                     fontSize: 14),
-                onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                onChanged: (v) =>
+                    setState(() => _searchQuery = v.toLowerCase()),
                 decoration: InputDecoration(
                   hintText: 'Search accounts',
                   hintStyle: TextStyle(
@@ -897,9 +913,8 @@ class _HomeScreenState extends State<HomeScreen>
                           value: timer / 30,
                           backgroundColor:
                               _accent.withOpacity(isDark ? 0.14 : 0.10),
-                          valueColor: AlwaysStoppedAnimation<Color>(isExpiring
-                              ? Colors.red
-                              : _accent),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              isExpiring ? Colors.red : _accent),
                           minHeight: 4,
                         ),
                       ),
@@ -1494,6 +1509,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _openLoginForSync() async {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -1551,7 +1567,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
       content: Row(children: [
         Icon(
             color == Colors.green || color == const Color(0xFF10B981)
@@ -1583,8 +1601,7 @@ class _HomeScreenState extends State<HomeScreen>
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.white),
+                backgroundColor: _accent, foregroundColor: Colors.white),
             child: const Text('Logout'),
           ),
         ],

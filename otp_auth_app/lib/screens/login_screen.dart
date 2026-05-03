@@ -1289,6 +1289,11 @@ class _LoginScreenState extends State<LoginScreen> {
     await authProvider.setUserData(currentUsername, email, userId);
     if (!mounted) return;
 
+    if (widget.returnToPreviousOnOffline && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => HomeScreen()),
       (route) => false,
