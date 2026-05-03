@@ -5,9 +5,13 @@ import 'login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final bool isFirstLaunch;
+  final Future<void> Function()? onFinished;
 
-  const OnboardingScreen({Key? key, required this.isFirstLaunch})
-      : super(key: key);
+  const OnboardingScreen({
+    super.key,
+    required this.isFirstLaunch,
+    this.onFinished,
+  });
 
   @override
   _OnboardingScreenState createState() => _OnboardingScreenState();
@@ -17,6 +21,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
   late PageController _pageController;
   int _currentPage = 0;
+  bool _isFinishing = false;
 
   // Full onboarding for first-time users
   final List<OnboardingData> _fullPages = [
@@ -49,9 +54,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     ),
     OnboardingData(
       title: 'Get Started',
-      subtitle: 'Join BeatzLock',
+      subtitle: 'Your vault is ready',
       description:
-          'Create an account or login to start securing your 2FA codes',
+          'Use BeatzLock offline now, then sign in whenever you want cloud sync across your devices.',
       icon: Icons.rocket_launch,
       gradientColors: [Color(0xFFf12711), Color(0xFFf5af19)],
       isNewUser: true,
@@ -150,7 +155,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _buildBottomBar() {
+            Widget _buildBottomBar() {
     final gradientColors = _currentGradientColors(context);
 
     return Container(
@@ -185,13 +190,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             duration: Duration(milliseconds: 300),
             child: ElevatedButton(
               key: ValueKey(_currentPage),
-              onPressed: () {
+              onPressed: _isFinishing ? null : () async {
                 if (_currentPage == _pages.length - 1) {
-                  // Last page - go to login
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => LoginScreen()),
-                  );
+                  await _finishOnboarding();
                 } else {
                   _pageController.nextPage(
                     duration: Duration(milliseconds: 500),
@@ -202,9 +203,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 child: Text(
-                  _currentPage == _pages.length - 1
+                  _isFinishing
+                      ? 'Starting...'
+                      : _currentPage == _pages.length - 1
                       ? (widget.isFirstLaunch
-                          ? 'Get Started'
+                          ? 'Start Using BeatzLock'
                           : 'Continue to Login')
                       : 'Next',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -261,12 +264,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   List<Color> _currentGradientColors(BuildContext context) {
-    if (_currentPage == 0 || !widget.isFirstLaunch) {
-      final colorScheme = Theme.of(context).colorScheme;
-      return [colorScheme.primary, colorScheme.secondary];
+    final colorScheme = Theme.of(context).colorScheme;
+    return [colorScheme.primary, colorScheme.secondary];
+  }
+
+  Future<void> _finishOnboarding() async {
+    if (widget.onFinished != null) {
+      setState(() => _isFinishing = true);
+      try {
+        await widget.onFinished!();
+      } finally {
+        if (mounted) {
+          setState(() => _isFinishing = false);
+        }
+      }
+      return;
     }
 
-    return _pages[_currentPage].gradientColors;
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => LoginScreen()),
+    );
   }
 }
 
@@ -345,7 +364,7 @@ class OnboardingPage extends StatelessWidget {
               fontSize: data.isNewUser ? 32 : 28,
               fontWeight: FontWeight.bold,
               color: Colors.white,
-              letterSpacing: 1,
+              letterSpacing: 0,
             ),
             textAlign: TextAlign.center,
           ),
@@ -359,7 +378,7 @@ class OnboardingPage extends StatelessWidget {
               fontSize: 16,
               fontWeight: FontWeight.w500,
               color: Colors.white70,
-              letterSpacing: 0.5,
+              letterSpacing: 0,
             ),
             textAlign: TextAlign.center,
           ),

@@ -174,11 +174,24 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadProfileData() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isSignedIn =
+        authProvider.isAuthenticated && await _syncService.isLoggedIn();
+
+    if (!isSignedIn) {
+      if (mounted) {
+        setState(() {
+          _username = 'Offline vault';
+          _profilePhotoUrl = null;
+        });
+      }
+      return;
+    }
+
     final storage = SecureStorageService();
-    final username = await storage.read(SecureStorageService.currentUserKey) ??
-        await storage.read(SecureStorageService.localVaultUserKey);
+    final username = await storage.read(SecureStorageService.currentUserKey);
     if (mounted) {
-      setState(() => _username = username ?? 'Offline vault');
+      setState(() => _username = username ?? 'Signed in');
     }
     if (username == null || username.isEmpty) {
       return;
@@ -264,6 +277,12 @@ class _HomeScreenState extends State<HomeScreen>
                 : Icons.visibility_off_rounded,
             _toggleBlurAll,
             tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
+        if (!authProvider.isAuthenticated)
+          _headerAction(
+            Icons.login_rounded,
+            _openLoginForSync,
+            tooltip: 'Sign in to sync',
+          ),
         _headerAction(Icons.sync_rounded, _syncData,
             tooltip: 'Sync', loading: _isSyncing),
         _headerAction(
@@ -1474,21 +1493,29 @@ class _HomeScreenState extends State<HomeScreen>
     _showSnackBar('Copied to clipboard', const Color(0xFF10B981));
   }
 
+  void _openLoginForSync() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(returnToPreviousOnOffline: true),
+      ),
+    );
+    if (!mounted) return;
+
+    await _loadSyncStatus();
+    await _initUserBox();
+    await _loadProfileData();
+    await _loadUnreadNotificationCount();
+    _updateAllOTPs();
+  }
+
   void _syncData() async {
     if (!await _syncService.isLoggedIn()) {
       _showSnackBar(
         'Sign in to enable automatic cross-platform sync.',
         Colors.orange,
       );
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const LoginScreen(returnToPreviousOnOffline: true),
-        ),
-      );
-      await _loadSyncStatus();
-      await _initUserBox();
-      _updateAllOTPs();
+      _openLoginForSync();
       return;
     }
 

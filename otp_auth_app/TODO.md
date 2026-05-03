@@ -47,6 +47,8 @@
 
 [ ] - Make the app work offline by default. Users should not need to create an account to use local OTP storage. Keep the current sign-in/sign-up flow as an optional sync path, and tell users that signing in enables automatic cross-platform sync.
 
+[ ] - Show terms oaf service and privacy for first time users and bitton to tha screen, and a button to agree, also the onbarding screen for new users as well it must match the teme and it should work. Also when unsigned it still show my username on top I can't tell if it caches or something? fix that man
+
 ## Code Notes
 
 - Reviews: `lib/services/app_rating_service.dart`, `lib/screens/login_screen.dart`, and rating endpoints in `lib/config/app_config.dart`.

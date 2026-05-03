@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/app_update_info.dart';
 import 'models/otp_account.dart';
@@ -12,7 +13,9 @@ import 'models/password_entry.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
+import 'screens/legal_consent_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'services/app_update_service.dart';
 import 'services/app_lock_service.dart';
 import 'services/biometric_service.dart';
@@ -67,6 +70,9 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
   static const Duration _sessionHeartbeatInterval = Duration(seconds: 5);
+  static const String _legalConsentAcceptedKey =
+      'legal_consent_accepted_v1';
+  static const String _onboardingCompletedKey = 'onboarding_completed_v1';
 
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
@@ -80,6 +86,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _sessionHeartbeatInProgress = false;
   bool _openingRequiredUpdate = false;
   bool _sessionReady = false;
+  bool _legalConsentAccepted = true;
+  bool _onboardingCompleted = true;
   DateTime? _backgroundedAt;
   Timer? _updateTimer;
   Timer? _sessionHeartbeatTimer;
@@ -112,9 +120,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _initializeApp() async {
     try {
+      await _loadFirstRunState();
       await _refreshUpdateStatus();
       final dialogContext = _navigatorKey.currentContext;
-      if (dialogContext != null) {
+      if (dialogContext != null && _firstRunFlowCompleted) {
         await _appLockService.ensureMandatoryLock(dialogContext);
       }
       await _restoreSession();
@@ -133,6 +142,87 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       });
       unawaited(_runSessionHeartbeat());
     }
+  }
+
+  bool get _firstRunFlowCompleted =>
+      _legalConsentAccepted && _onboardingCompleted;
+
+  Future<void> _loadFirstRunState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final storedLegalConsent = prefs.getBool(_legalConsentAcceptedKey);
+    final storedOnboarding = prefs.getBool(_onboardingCompletedKey);
+    final firstRun = await _isFirstRunInstall();
+
+    _legalConsentAccepted = storedLegalConsent ?? !firstRun;
+    _onboardingCompleted = storedOnboarding ?? !firstRun;
+
+    if (!firstRun) {
+      if (storedLegalConsent == null) {
+        await prefs.setBool(_legalConsentAcceptedKey, true);
+      }
+      if (storedOnboarding == null) {
+        await prefs.setBool(_onboardingCompletedKey, true);
+      }
+    }
+  }
+
+  Future<bool> _isFirstRunInstall() async {
+    final storage = SecureStorageService();
+    final accessToken =
+        await storage.read(SecureStorageService.accessTokenKey);
+    final currentUser =
+        await storage.read(SecureStorageService.currentUserKey);
+    final localVaultUser =
+        await storage.read(SecureStorageService.localVaultUserKey);
+
+    if ((accessToken?.isNotEmpty ?? false) ||
+        (currentUser?.isNotEmpty ?? false) ||
+        (localVaultUser?.isNotEmpty ?? false)) {
+      return false;
+    }
+
+    if (Hive.box<OTPAccount>('otp_accounts').isNotEmpty) {
+      return false;
+    }
+
+    try {
+      final defaultBox = Hive.isBoxOpen('otp_accounts_default')
+          ? Hive.box<OTPAccount>('otp_accounts_default')
+          : await Hive.openBox<OTPAccount>('otp_accounts_default');
+      if (defaultBox.isNotEmpty) {
+        return false;
+      }
+    } catch (e) {
+      debugPrint('First-run default vault check failed: $e');
+    }
+
+    return true;
+  }
+
+  Future<void> _acceptLegalConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_legalConsentAcceptedKey, true);
+    if (!mounted) return;
+
+    setState(() {
+      _legalConsentAccepted = true;
+    });
+  }
+
+  Future<void> _completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingCompletedKey, true);
+
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext != null) {
+      await _appLockService.ensureMandatoryLock(dialogContext);
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _onboardingCompleted = true;
+      _isLocked = true;
+    });
   }
 
   Future<void> _refreshUpdateStatus() async {
@@ -389,6 +479,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       onUpdateNow: _openRequiredUpdate,
                       onRefreshStatus: _refreshUpdateStatus,
                     )
+                  : !_legalConsentAccepted
+                      ? LegalConsentScreen(onAccepted: _acceptLegalConsent)
+                      : !_onboardingCompleted
+                          ? OnboardingScreen(
+                              isFirstLaunch: true,
+                              onFinished: _completeOnboarding,
+                            )
                   : authProvider.canUseApp
                       ? (_isLocked
                           ? _AppLockScreen(
