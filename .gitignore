@@ -80,3 +80,5 @@ final_builds/
 totp_app_venv/
 local.py
 .codex
+.build_tools/
+beatzlock_*_amd64.deb

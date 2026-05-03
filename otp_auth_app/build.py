@@ -7,6 +7,7 @@ import subprocess
 import platform
 import sys
 import json
+import glob
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +31,7 @@ INNO_SCRIPT_SEEDS = [
 LINUX_DIR = str(FINAL_BUILDS_DIR / "linux")
 WINDOWS_DIR = str(FINAL_BUILDS_DIR / "windows")
 ANDROID_DIR = str(FINAL_BUILDS_DIR / "android")
+BUILD_TOOLS_DIR = WORKSPACE_DIR / ".build_tools" / "bin"
 
 # App metadata (customize these)
 APP_NAME = "BeatzLock"
@@ -304,17 +306,20 @@ def build_windows_installer() -> bool:
     return False
 
 
-def run(cmd, cwd=None, shell=True, capture_output=False):
+def run(cmd, cwd=None, shell=True, capture_output=False, env=None):
     """Run shell command with error handling"""
     print_color(f"\n>>> Running: {cmd}", Colors.CYAN)
+    process_env = os.environ.copy()
+    if env:
+        process_env.update(env)
     try:
         if capture_output:
             result = subprocess.run(cmd, shell=shell, check=True, cwd=cwd, 
-                                   capture_output=True, text=True)
+                                   capture_output=True, text=True, env=process_env)
             return result
         else:
             result = subprocess.run(cmd, shell=shell, check=True, cwd=cwd, 
-                                   capture_output=False, text=True)
+                                   capture_output=False, text=True, env=process_env)
             return result
     except subprocess.CalledProcessError as e:
         print_color(f"❌ Command failed with exit code {e.returncode}", Colors.RED)
@@ -331,6 +336,113 @@ def ensure_dirs():
     for dir_path in [LINUX_DIR, WINDOWS_DIR, ANDROID_DIR]:
         os.makedirs(dir_path, exist_ok=True)
         print_color(f"✓ Directory ready: {dir_path}", Colors.GREEN)
+
+
+def find_tool_path(tool_name: str, exclude_build_tools=False) -> str | None:
+    """Find a build tool in PATH or common LLVM install folders."""
+    if exclude_build_tools:
+        for path_dir in os.environ.get("PATH", "").split(os.pathsep):
+            if not path_dir:
+                continue
+            if Path(path_dir).resolve() == BUILD_TOOLS_DIR.resolve():
+                continue
+            candidate = Path(path_dir) / tool_name
+            if candidate.exists() and os.access(candidate, os.X_OK):
+                return str(candidate)
+
+    tool_path = shutil.which(tool_name)
+    if tool_path and not (
+        exclude_build_tools and Path(tool_path).parent.resolve() == BUILD_TOOLS_DIR.resolve()
+    ):
+        return tool_path
+
+    for llvm_bin_dir in sorted(glob.glob("/usr/lib/llvm-*/bin"), reverse=True):
+        candidate = Path(llvm_bin_dir) / tool_name
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+
+    return None
+
+
+def link_build_tool(tool_name: str, target: str) -> None:
+    """Create or refresh a symlink in the workspace build tools folder."""
+    BUILD_TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    link_path = BUILD_TOOLS_DIR / tool_name
+    if link_path.exists() or link_path.is_symlink():
+        current_target = os.readlink(link_path) if link_path.is_symlink() else None
+        if current_target == target:
+            return
+        link_path.unlink()
+    os.symlink(target, link_path)
+
+
+def write_build_tool_wrapper(tool_name: str, target: str) -> None:
+    """Create or refresh a tiny executable wrapper in the build tools folder."""
+    BUILD_TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    wrapper_path = BUILD_TOOLS_DIR / tool_name
+    wrapper_content = f'#!/bin/sh\nexec "{target}" "$@"\n'
+    if wrapper_path.exists() or wrapper_path.is_symlink():
+        if wrapper_path.is_file() and not wrapper_path.is_symlink():
+            try:
+                if wrapper_path.read_text(encoding="utf-8") == wrapper_content:
+                    return
+            except UnicodeDecodeError:
+                pass
+        wrapper_path.unlink()
+    wrapper_path.write_text(wrapper_content, encoding="utf-8")
+    os.chmod(wrapper_path, 0o755)
+
+
+def get_linux_build_env() -> dict[str, str]:
+    """Return an environment that lets Dart native-assets find Clang's linker."""
+    if platform.system() != "Linux":
+        return {}
+
+    clang_path = find_tool_path("clang", exclude_build_tools=True)
+    if not clang_path:
+        return {}
+
+    clang_bin_dir = Path(clang_path).resolve().parent
+    has_adjacent_linker = any(
+        (clang_bin_dir / tool_name).exists() for tool_name in ("ld.lld", "ld")
+    )
+    if has_adjacent_linker:
+        return {}
+
+    linker_path = (
+        find_tool_path("ld.lld", exclude_build_tools=True)
+        or find_tool_path("ld", exclude_build_tools=True)
+    )
+    if not linker_path:
+        print_color("⚠️  No ld.lld or ld linker found for Linux native assets.", Colors.YELLOW)
+        return {}
+
+    write_build_tool_wrapper("clang", clang_path)
+    clangxx_path = find_tool_path("clang++", exclude_build_tools=True)
+    if clangxx_path:
+        write_build_tool_wrapper("clang++", clangxx_path)
+    link_build_tool(Path(linker_path).name, linker_path)
+    if Path(linker_path).name != "ld":
+        ld_path = find_tool_path("ld", exclude_build_tools=True)
+        if ld_path:
+            link_build_tool("ld", ld_path)
+
+    archiver_path = (
+        find_tool_path("llvm-ar", exclude_build_tools=True)
+        or find_tool_path("ar", exclude_build_tools=True)
+    )
+    if archiver_path:
+        link_build_tool(Path(archiver_path).name, archiver_path)
+        if Path(archiver_path).name != "ar":
+            ar_path = find_tool_path("ar", exclude_build_tools=True)
+            if ar_path:
+                link_build_tool("ar", ar_path)
+
+    print_color(
+        f"✓ Using workspace Clang linker shim: {BUILD_TOOLS_DIR}",
+        Colors.GREEN,
+    )
+    return {"PATH": f"{BUILD_TOOLS_DIR}{os.pathsep}{os.environ.get('PATH', '')}"}
 
 def check_flutter():
     """Verify Flutter is installed and configured"""
@@ -523,7 +635,8 @@ def build_linux_deb(skip_deb_package=False):
         return False
     
     # Build Flutter Linux app
-    if not run("flutter build linux --release", cwd=PROJECT_DIR):
+    linux_build_env = get_linux_build_env()
+    if not run("flutter build linux --release", cwd=PROJECT_DIR, env=linux_build_env):
         return False
     
     bundle_path = SCRIPT_DIR / "build/linux/x64/release/bundle"
