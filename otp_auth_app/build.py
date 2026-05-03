@@ -358,8 +358,9 @@ def check_linux_desktop_requirements():
         capture_output=True,
         text=True,
     ).returncode == 0 if shutil.which("pkg-config") else False
+    webp_ready = Path("/usr/include/webp").is_dir()
 
-    if not missing_tools and gtk_ready:
+    if not missing_tools and gtk_ready and webp_ready:
         return True
 
     print_color("\n❌ Linux desktop prerequisites are missing.", Colors.RED)
@@ -373,9 +374,12 @@ def check_linux_desktop_requirements():
     if not gtk_ready:
         print_color("Missing GTK 3 development files (gtk+-3.0).", Colors.YELLOW)
 
+    if not webp_ready:
+        print_color("Missing WebP development headers (/usr/include/webp).", Colors.YELLOW)
+
     print_color("\nInstall them with:", Colors.BLUE)
     print("  sudo apt update")
-    print("  sudo apt install cmake ninja-build pkg-config libgtk-3-dev")
+    print("  sudo apt install cmake ninja-build pkg-config libgtk-3-dev libwebp-dev")
     print_color("\nThen try the Linux run/build again.", Colors.BLUE)
     return False
 
