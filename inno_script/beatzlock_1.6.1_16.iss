@@ -3,8 +3,8 @@
 ; Non-commercial use only
 
 #define MyAppName "beatzLock"
-#define MyAppVersion "1.6.0+15"
-#define MyAppArtifactVersion "1.6.0_15"
+#define MyAppVersion "1.6.1+16"
+#define MyAppArtifactVersion "1.6.1_16"
 #define MyAppPublisher "felixmokayabeatz Inc."
 #define MyAppURL "https://www.felixmokayabeatz.online/"
 #define MyAppExeName "otp_auth_app.exe"
@@ -38,7 +38,7 @@ ChangesAssociations=yes
 DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
-OutputDir=C:\Programming\totp_app\final_builds\windows\1.6.0_15
+OutputDir=C:\Programming\totp_app\final_builds\windows\1.6.1_16
 OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64
 SetupIconFile=C:\Programming\totp_app\otp_backend\static\favicon.ico
 SolidCompression=yes
@@ -52,12 +52,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Main application files (from Flutter build)
-Source: "C:\Programming\totp_app\final_builds\windows\1.6.0_15\app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.6.0_15\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
-Source: "C:\Programming\totp_app\final_builds\windows\1.6.0_15\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.6.0_15\app\local_auth_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.6.0_15\app\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.6.0_15\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.6.1_16\app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.6.1_16\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
+Source: "C:\Programming\totp_app\final_builds\windows\1.6.1_16\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.6.1_16\app\local_auth_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.6.1_16\app\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.6.1_16\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; VC++ runtime - from EXTERNAL permanent folder (NOT in Flutter build)
 Source: "C:\Programming\totp_app\vc_redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
