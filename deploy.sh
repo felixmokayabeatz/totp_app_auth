@@ -260,6 +260,7 @@ full_deploy() {
         echo -e "${GREEN}✓ Virtual environment created${NC}"
     fi
     source $VENV_PATH/bin/activate
+    python3 -m ensurepip --upgrade
     pip install --upgrade pip
     pip install -r $BACKEND_PATH/requirements.txt gunicorn psycopg2-binary
     
