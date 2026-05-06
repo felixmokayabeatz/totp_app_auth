@@ -44,6 +44,7 @@ class EmailTemplateRenderTests(SimpleTestCase):
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     DEFAULT_FROM_EMAIL='BeatzLock Authenticator <noreply@example.com>',
     EMAIL_HOST_USER='support@example.com',
+    SUPPORT_EMAIL='felixmokayabeatz@proton.me',
 )
 class TwoFactorEmailDeliveryTests(APITestCase):
     def setUp(self):
@@ -68,6 +69,7 @@ class TwoFactorEmailDeliveryTests(APITestCase):
         self.assertEqual(len(mail.outbox), 1)
         message = mail.outbox[0]
         self.assertEqual(message.subject, 'Your 2FA Verification Code - BeatzLock Authenticator')
+        self.assertEqual(message.reply_to, ['felixmokayabeatz@proton.me'])
         self.assertEqual(message.extra_headers.get('Auto-Submitted'), 'auto-generated')
         self.assertEqual(message.alternatives[0].mimetype, 'text/html')
         self.assertIn('Your verification code', message.alternatives[0].content)
@@ -77,6 +79,7 @@ class TwoFactorEmailDeliveryTests(APITestCase):
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     DEFAULT_FROM_EMAIL='BeatzLock Authenticator <noreply@example.com>',
     EMAIL_HOST_USER='support@example.com',
+    SUPPORT_EMAIL='felixmokayabeatz@proton.me',
 )
 class DeleteOtpEmailDeliveryTests(APITestCase):
     def setUp(self):
@@ -95,6 +98,7 @@ class DeleteOtpEmailDeliveryTests(APITestCase):
         self.assertEqual(len(mail.outbox), 1)
         message = mail.outbox[0]
         self.assertEqual(message.subject, 'BeatzLock Confirm Delete All Accounts')
+        self.assertEqual(message.reply_to, ['felixmokayabeatz@proton.me'])
         self.assertEqual(message.extra_headers.get('X-Auto-Response-Suppress'), 'All')
         self.assertEqual(message.alternatives[0].mimetype, 'text/html')
         self.assertIn('Confirm account deletion', message.alternatives[0].content)

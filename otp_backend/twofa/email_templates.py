@@ -5,7 +5,7 @@ from django.utils import timezone
 
 
 def _support_email():
-    return getattr(settings, 'EMAIL_HOST_USER', '') or ''
+    return getattr(settings, 'SUPPORT_EMAIL', '') or getattr(settings, 'EMAIL_HOST_USER', '') or ''
 
 
 def _from_email():
@@ -83,11 +83,13 @@ def _render_text(context):
 
 
 def send_transactional_email(*, subject, recipient, text_content, html_content, fail_silently=False):
+    support_email = _support_email()
     email = EmailMultiAlternatives(
         subject=subject,
         body=text_content,
         from_email=_from_email(),
         to=[recipient],
+        reply_to=[support_email] if support_email else None,
         headers={
             'X-Auto-Response-Suppress': 'All',
             'Auto-Submitted': 'auto-generated',
