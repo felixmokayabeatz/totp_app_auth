@@ -175,4 +175,24 @@ class AppRatingService {
 
     throw StateError('Could not submit app rating.');
   }
+
+  Future<bool> deleteRating({
+    required String reviewerKey,
+    required String platform,
+  }) async {
+    final response = await _dio.post(
+      AppConfig.ratingDeleteApiUrl,
+      data: {
+        'reviewer_key': reviewerKey,
+        'platform': platform,
+      },
+    );
+
+    if (response.statusCode == 200 && response.data is Map) {
+      final data = Map<String, dynamic>.from(response.data as Map);
+      return data['deleted'] == true || data['platform_deleted'] == true;
+    }
+
+    throw StateError('Could not delete app rating.');
+  }
 }

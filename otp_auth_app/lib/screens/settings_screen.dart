@@ -717,6 +717,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     var selectedStars = (existingRating?.stars ?? 5).clamp(1, 5).toInt();
     var isSubmitting = false;
+    var isDeleting = false;
     var isEditing = existingRating == null;
     String? errorText;
 
@@ -753,7 +754,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Text(
                           existingRating == null
                               ? 'Rate this platform build and leave a comment or suggestion for the public BeatzLock ratings page.'
-                              : 'Edit your rating for this platform only. Reviews you submit from Android, Windows, Linux, or other platforms stay separate.',
+                              : 'Edit or delete your rating for this platform only. Your other platform reviews stay on the same account record.',
                           style: TextStyle(color: _textSecondary, fontSize: 13),
                         ),
                         if (platformSummary != null) ...[
@@ -842,6 +843,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: isSubmitting
+                  || isDeleting
                   ? null
                   : () async {
                       final uri = Uri.parse(AppConfig.rateAppUrl);
@@ -859,12 +861,113 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             TextButton(
               onPressed:
-                  isSubmitting ? null : () => Navigator.pop(dialogContext),
+                  (isSubmitting || isDeleting)
+                      ? null
+                      : () => Navigator.pop(dialogContext),
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
+            if (existingRating != null)
+              TextButton(
+                onPressed: (isSubmitting || isDeleting)
+                    ? null
+                    : () async {
+                        final confirmed = await showDialog<bool>(
+                          context: dialogContext,
+                          builder: (confirmContext) => AlertDialog(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            backgroundColor: _cardColor,
+                            title: Text(
+                              'Delete review?',
+                              style: TextStyle(color: _textPrimary),
+                            ),
+                            content: Text(
+                              'This removes only your ${existingRating!.platformDisplay} review. Reviews from your other platforms stay intact.',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(confirmContext, false),
+                                child: const Text('Cancel'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.pop(confirmContext, true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (confirmed != true) {
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isDeleting = true;
+                          errorText = null;
+                        });
+
+                        try {
+                          final deleted = await _appRatingService.deleteRating(
+                            reviewerKey: reviewerKey,
+                            platform: currentPlatform,
+                          );
+                          if (!dialogContext.mounted) return;
+                          Navigator.pop(dialogContext);
+                          if (!mounted) return;
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                deleted
+                                    ? 'Your review for this platform was deleted.'
+                                    : 'No review was found for this platform.',
+                              ),
+                              backgroundColor: deleted
+                                  ? Colors.orange
+                                  : _accent,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          );
+                        } catch (_) {
+                          if (!dialogContext.mounted) return;
+                          setDialogState(() {
+                            isDeleting = false;
+                            errorText =
+                                'Could not delete right now. Please try again.';
+                          });
+                        }
+                      },
+                child: isDeleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.red,
+                        ),
+                      )
+                    : const Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.red),
+                      ),
+              ),
             if (existingRating != null && !isEditing)
               ElevatedButton(
-                onPressed: isSubmitting
+                onPressed: (isSubmitting || isDeleting)
                     ? null
                     : () => setDialogState(() {
                           isEditing = true;
@@ -878,7 +981,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               )
             else
               ElevatedButton(
-                onPressed: isSubmitting
+                onPressed: (isSubmitting || isDeleting)
                     ? null
                     : () async {
                         final comment = commentController.text.trim();
@@ -990,7 +1093,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'You already rated this platform. You can edit it here, and your reviews from other platforms will stay separate.',
+          'You already rated this platform. You can edit or delete just this platform review here, while your other platform reviews stay on the same account record.',
           style: TextStyle(color: _textSecondary, fontSize: 13),
         ),
         const SizedBox(height: 16),

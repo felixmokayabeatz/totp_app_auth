@@ -80,6 +80,9 @@ class AppConfig {
   static String get ratingSubmitApiUrl =>
       '${beatzLockAppsBaseUrl}api/ratings/submit/';
 
+  static String get ratingDeleteApiUrl =>
+      '${beatzLockAppsBaseUrl}api/ratings/delete/';
+
   static String get ratingsApiUrl => '${beatzLockAppsBaseUrl}api/ratings/';
 
   static String get myRatingApiUrl => '${beatzLockAppsBaseUrl}api/ratings/me/';
