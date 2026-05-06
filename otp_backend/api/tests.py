@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -220,3 +221,48 @@ class AppNotificationTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         notification = self.user.app_notifications.latest('created_at')
         self.assertEqual(notification.notification_type, 'app_pin_changed')
+
+
+@override_settings(BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-review-secret')
+class ExternalReviewReplyNotificationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='review-user',
+            email='review@example.com',
+            password='testpass123',
+        )
+        self.client = APIClient()
+
+    def test_external_reply_creates_in_app_notification(self):
+        response = self.client.post(
+            reverse('receive_external_review_reply'),
+            {
+                'user_id': str(self.user.id),
+                'email': self.user.email,
+                'platform_label': 'Android (APK)',
+                'stars': 5,
+                'display_name': 'Felix',
+                'admin_reply': 'Thanks for the review and support.',
+            },
+            format='json',
+            HTTP_X_BEATZLOCK_SERVICE_SECRET='shared-review-secret',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        notification = self.user.app_notifications.latest('created_at')
+        self.assertEqual(notification.notification_type, 'app_review_reply')
+
+    def test_external_reply_rejects_wrong_secret(self):
+        response = self.client.post(
+            reverse('receive_external_review_reply'),
+            {
+                'user_id': str(self.user.id),
+                'platform_label': 'Windows (EXE)',
+                'stars': 4,
+                'admin_reply': 'Reply text.',
+            },
+            format='json',
+            HTTP_X_BEATZLOCK_SERVICE_SECRET='wrong-secret',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

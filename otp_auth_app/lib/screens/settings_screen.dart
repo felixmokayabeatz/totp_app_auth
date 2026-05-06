@@ -682,14 +682,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    final currentPlatform = _appUpdateService.currentPlatform.isEmpty
+        ? 'unknown'
+        : _appUpdateService.currentPlatform;
     final reviewerKey = await _ratingReviewerKey();
     AppRating? existingRating;
+    AppRatingSummary? platformSummary;
     try {
       existingRating = await _appRatingService.fetchMyRating(
         reviewerKey: reviewerKey,
+        platform: currentPlatform,
       );
     } catch (_) {
       existingRating = null;
+    }
+    try {
+      platformSummary = await _appRatingService.fetchPlatformSummary(
+        platform: currentPlatform,
+      );
+    } catch (_) {
+      platformSummary = null;
     }
 
     if (!mounted) return;
@@ -720,17 +732,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 430,
             child: SingleChildScrollView(
               child: existingRating != null && !isEditing
-                  ? _buildExistingRatingPreview(existingRating!)
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (platformSummary != null) ...[
+                          _buildPlatformSummaryCard(
+                            platformLabel: existingRating!.platformDisplay,
+                            summary: platformSummary!,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        _buildExistingRatingPreview(existingRating!),
+                      ],
+                    )
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           existingRating == null
-                              ? 'Rate this app and leave a comment or suggestion for the public BeatzLock ratings page.'
-                              : 'Edit your existing BeatzLock rating. The original date stays the same and the edit date updates after saving.',
+                              ? 'Rate this platform build and leave a comment or suggestion for the public BeatzLock ratings page.'
+                              : 'Edit your rating for this platform only. Reviews you submit from Android, Windows, Linux, or other platforms stay separate.',
                           style: TextStyle(color: _textSecondary, fontSize: 13),
                         ),
+                        if (platformSummary != null) ...[
+                          const SizedBox(height: 14),
+                          _buildPlatformSummaryCard(
+                            platformLabel:
+                                existingRating?.platformDisplay ??
+                                _platformLabelFromSlug(currentPlatform),
+                            summary: platformSummary!,
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         TextField(
                           controller: displayNameController,
@@ -867,11 +901,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           final packageInfo = await PackageInfo.fromPlatform();
                           final deviceLabel =
                               await _syncService.getCurrentDeviceLabel();
+                          final storage = SecureStorageService();
                           await _appRatingService.submitRating(
                             reviewerKey: reviewerKey,
-                            platform: _appUpdateService.currentPlatform.isEmpty
-                                ? 'unknown'
-                                : _appUpdateService.currentPlatform,
+                            platform: currentPlatform,
                             displayName: displayName,
                             stars: selectedStars,
                             comment: comment,
@@ -879,6 +912,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             appVersion: packageInfo.version,
                             buildNumber: packageInfo.buildNumber,
                             deviceLabel: deviceLabel,
+                            accountUserId: await storage
+                                    .read(SecureStorageService.userIdKey) ??
+                                '',
+                            accountEmail: await storage
+                                    .read(SecureStorageService.userEmailKey) ??
+                                '',
+                            accountUsername: await storage
+                                    .read(SecureStorageService.currentUserKey) ??
+                                '',
                           );
 
                           if (!dialogContext.mounted) return;
@@ -948,7 +990,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'You already rated BeatzLock. You can edit it, but it will stay as one review on the public ratings page.',
+          'You already rated this platform. You can edit it here, and your reviews from other platforms will stay separate.',
           style: TextStyle(color: _textSecondary, fontSize: 13),
         ),
         const SizedBox(height: 16),
@@ -958,6 +1000,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ratingMetaLine('Platform', rating.platformDisplay),
         _ratingMetaLine('Original date', _formatRatingDate(rating.createdAt)),
         _ratingMetaLine('Last edited', _formatRatingDate(rating.updatedAt)),
+        if (rating.adminReply.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text('Admin reply',
+              style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(rating.adminReply,
+              style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5)),
+        ],
         if (rating.comment.isNotEmpty) ...[
           const SizedBox(height: 14),
           Text('Comment',
@@ -1004,6 +1057,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildPlatformSummaryCard({
+    required String platformLabel,
+    required AppRatingSummary summary,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _accent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _accent.withOpacity(0.18)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.insights_rounded, color: _accent, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '$platformLabel average: ${summary.average.toStringAsFixed(1)} / 5 from ${summary.count} review${summary.count == 1 ? '' : 's'}',
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _platformLabelFromSlug(String platform) {
+    switch (platform) {
+      case 'android':
+        return 'Android (APK)';
+      case 'windows':
+        return 'Windows (EXE)';
+      case 'linux':
+        return 'Linux';
+      case 'macos':
+        return 'macOS';
+      case 'ios':
+        return 'iOS';
+      default:
+        return 'Unknown';
+    }
   }
 
   Widget _starStrip(int stars, {double size = 20}) {

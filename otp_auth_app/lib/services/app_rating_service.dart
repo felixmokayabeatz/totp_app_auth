@@ -15,8 +15,10 @@ class AppRating {
     required this.buildNumber,
     required this.deviceLabel,
     required this.usefulCount,
+    required this.adminReply,
     required this.createdAt,
     required this.updatedAt,
+    required this.adminRepliedAt,
   });
 
   final int id;
@@ -30,8 +32,10 @@ class AppRating {
   final String buildNumber;
   final String deviceLabel;
   final int usefulCount;
+  final String adminReply;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? adminRepliedAt;
 
   factory AppRating.fromJson(Map<String, dynamic> json) {
     return AppRating(
@@ -49,8 +53,28 @@ class AppRating {
       buildNumber: json['build_number']?.toString() ?? '',
       deviceLabel: json['device_label']?.toString() ?? '',
       usefulCount: int.tryParse(json['useful_count']?.toString() ?? '') ?? 0,
+      adminReply: json['admin_reply']?.toString() ?? '',
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
+      adminRepliedAt:
+          DateTime.tryParse(json['admin_replied_at']?.toString() ?? ''),
+    );
+  }
+}
+
+class AppRatingSummary {
+  const AppRatingSummary({
+    required this.average,
+    required this.count,
+  });
+
+  final double average;
+  final int count;
+
+  factory AppRatingSummary.fromJson(Map<String, dynamic> json) {
+    return AppRatingSummary(
+      average: double.tryParse(json['average']?.toString() ?? '') ?? 0,
+      count: int.tryParse(json['count']?.toString() ?? '') ?? 0,
     );
   }
 }
@@ -67,10 +91,16 @@ class AppRatingService {
 
   final Dio _dio;
 
-  Future<AppRating?> fetchMyRating({required String reviewerKey}) async {
+  Future<AppRating?> fetchMyRating({
+    required String reviewerKey,
+    required String platform,
+  }) async {
     final response = await _dio.get(
       AppConfig.myRatingApiUrl,
-      queryParameters: {'reviewer_key': reviewerKey},
+      queryParameters: {
+        'reviewer_key': reviewerKey,
+        'platform': platform,
+      },
     );
 
     if (response.statusCode == 200 && response.data is Map) {
@@ -85,6 +115,23 @@ class AppRatingService {
     throw StateError('Could not load app rating.');
   }
 
+  Future<AppRatingSummary> fetchPlatformSummary({required String platform}) async {
+    final response = await _dio.get(
+      AppConfig.ratingsApiUrl,
+      queryParameters: {'platform': platform},
+    );
+
+    if (response.statusCode == 200 && response.data is Map) {
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final summary = data['summary'];
+      if (summary is Map) {
+        return AppRatingSummary.fromJson(Map<String, dynamic>.from(summary));
+      }
+    }
+
+    throw StateError('Could not load platform rating summary.');
+  }
+
   Future<AppRating> submitRating({
     required String reviewerKey,
     required String platform,
@@ -95,6 +142,9 @@ class AppRatingService {
     required String appVersion,
     required String buildNumber,
     required String deviceLabel,
+    required String accountUserId,
+    required String accountEmail,
+    required String accountUsername,
   }) async {
     final response = await _dio.post(
       AppConfig.ratingSubmitApiUrl,
@@ -108,6 +158,9 @@ class AppRatingService {
         'app_version': appVersion.trim(),
         'build_number': buildNumber.trim(),
         'device_label': deviceLabel.trim(),
+        'account_user_id': accountUserId.trim(),
+        'account_email': accountEmail.trim(),
+        'account_username': accountUsername.trim(),
       },
     );
 

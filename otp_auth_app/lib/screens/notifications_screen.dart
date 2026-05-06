@@ -86,6 +86,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.add_circle_outline_rounded;
       case 'app_pin_changed':
         return Icons.pin_rounded;
+      case 'app_review_reply':
+        return Icons.rate_review_rounded;
       default:
         return Icons.notifications_none_rounded;
     }

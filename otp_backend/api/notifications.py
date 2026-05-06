@@ -222,3 +222,31 @@ def create_daily_active_devices_notification(
         ),
         metadata={'active_count': active_count},
     )
+
+
+def create_app_review_reply_notification(
+    user: User,
+    *,
+    platform_label: str,
+    stars: int,
+    admin_reply: str,
+    display_name: str | None = None,
+) -> AppNotification:
+    reviewer_name = (display_name or '').strip() or 'Anonymous user'
+    return create_notification(
+        user,
+        'app_review_reply',
+        title='Reply to your BeatzLock review',
+        message=f'BeatzLock replied to your {platform_label} review.',
+        details=(
+            f'Your {stars}-star review on {platform_label} received a reply. '
+            f'Reviewer name: {reviewer_name}. '
+            f'Reply: {admin_reply}'
+        ),
+        metadata={
+            'platform_label': platform_label,
+            'stars': stars,
+            'display_name': reviewer_name,
+            'admin_reply': admin_reply,
+        },
+    )

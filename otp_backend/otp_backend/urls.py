@@ -18,6 +18,7 @@ from api.views import (
     get_sync_preference,
     download_backup_codes,
     get_backup_code_status,
+    receive_external_review_reply,
 )
 from api.token_views import DeviceSessionTokenRefreshView
 from twofa.views import (
@@ -70,4 +71,5 @@ urlpatterns = [
     path('api/sync-preference/get/', get_sync_preference, name='get_sync_preference'),
     path('api/backup-codes/download/', download_backup_codes, name='download_backup_codes'),
     path('api/backup-codes/status/', get_backup_code_status, name='get_backup_code_status'),
+    path('api/external/review-reply/', receive_external_review_reply, name='receive_external_review_reply'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

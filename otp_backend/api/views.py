@@ -1,11 +1,17 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import (
+    action,
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from django.core.mail import EmailMultiAlternatives
 from django.core.mail import send_mail
@@ -40,6 +46,7 @@ from .notifications import (
     build_device_label,
     create_account_added_notification,
     create_app_pin_changed_notification,
+    create_app_review_reply_notification,
     create_daily_active_devices_notification,
     create_password_changed_notification,
     create_recovery_codes_generated_notification,
@@ -705,6 +712,58 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'success': True}, status=201)
 
         return Response({'error': 'Unsupported notification event'}, status=400)
+
+
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def receive_external_review_reply(request):
+    configured_secret = settings.BEATZLOCK_INTERNAL_SERVICE_SECRET
+    provided_secret = request.headers.get('X-BeatzLock-Service-Secret', '')
+
+    if not configured_secret or not constant_time_compare(
+        provided_secret,
+        configured_secret,
+    ):
+        return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+    user_id = str(request.data.get('user_id') or '').strip()
+    email = str(request.data.get('email') or '').strip().lower()
+    platform_label = str(request.data.get('platform_label') or 'Unknown').strip() or 'Unknown'
+    admin_reply = str(request.data.get('admin_reply') or '').strip()
+    display_name = str(request.data.get('display_name') or '').strip()
+
+    try:
+        stars = int(request.data.get('stars') or 0)
+    except (TypeError, ValueError):
+        stars = 0
+
+    if not admin_reply:
+        return Response({'error': 'admin_reply is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = None
+    if user_id:
+        user = User.objects.filter(id=user_id).first()
+    if user is None and email:
+        user = User.objects.filter(email__iexact=email).first()
+    if user is None:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    notification = create_app_review_reply_notification(
+        user,
+        platform_label=platform_label,
+        stars=max(1, min(stars or 1, 5)),
+        admin_reply=admin_reply,
+        display_name=display_name or None,
+    )
+    return Response(
+        {
+            'success': True,
+            'notification_id': notification.id,
+            'user_id': user.id,
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
 
 class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):

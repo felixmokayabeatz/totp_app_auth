@@ -49,6 +49,7 @@ DEFAULT_FROM_EMAIL = (
     or (f'BeatzLock Authenticator <{EMAIL_HOST_USER}>' if EMAIL_HOST_USER else None)
 )
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+BEATZLOCK_INTERNAL_SERVICE_SECRET = os.getenv('BEATZLOCK_INTERNAL_SERVICE_SECRET', '')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
