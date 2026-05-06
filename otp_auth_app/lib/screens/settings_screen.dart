@@ -1109,14 +1109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ratingMetaLine('Last edited', _formatRatingDate(rating.updatedAt)),
         if (rating.adminReply.isNotEmpty) ...[
           const SizedBox(height: 14),
-          Text('Admin reply',
-              style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(rating.adminReply,
-              style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5)),
+          _buildReplyStatusCard(rating),
         ],
         if (rating.comment.isNotEmpty) ...[
           const SizedBox(height: 14),
@@ -1141,6 +1134,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5)),
         ],
       ],
+    );
+  }
+
+  Widget _buildReplyStatusCard(AppRating rating) {
+    final repliedOn = rating.adminRepliedAt != null
+        ? 'Replied on ${_formatRatingDate(rating.adminRepliedAt)}'
+        : 'Reply available for this platform';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF16A34A).withOpacity(_isDark ? 0.16 : 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF16A34A).withOpacity(_isDark ? 0.34 : 0.22),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF22C55E),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'BeatzLock replied',
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            repliedOn,
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            rating.adminReply,
+            style: TextStyle(
+              color: _textPrimary,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
