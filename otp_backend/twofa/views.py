@@ -1,8 +1,6 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.core.mail import EmailMultiAlternatives
-from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -22,7 +20,17 @@ from api.notifications import (
 from api.device_sessions import attach_session_to_refresh_token
 from api.models import BackupCodeSet
 from .models import EmailVerification
-from .email_templates import get_2fa_email_template, get_password_changed_email_template, get_password_reset_email_template
+from .email_templates import (
+    get_2fa_email_template,
+    get_2fa_email_text,
+    get_password_changed_email_template,
+    get_password_changed_email_text,
+    get_password_reset_email_template,
+    get_password_reset_email_text,
+    get_recovery_code_password_changed_email_template,
+    get_recovery_code_password_changed_email_text,
+    send_transactional_email,
+)
 import logging
 import traceback
 import sys
@@ -137,19 +145,16 @@ def send_2fa_code(request):
         # Prepare email
         debug_print(f"[2FA] Preparing email to: {user.email}")
         html_content = get_2fa_email_template(user.username, verification.code)
-        text_content = f"Your 2FA verification code is: {verification.code}\n\nThis code expires in 10 minutes."
-        
-        email = EmailMultiAlternatives(
-            subject='Your 2FA Verification Code - OTP Authenticator',
-            body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[user.email],
-        )
-        email.attach_alternative(html_content, "text/html")
-        
+        text_content = get_2fa_email_text(user.username, verification.code)
+
         # Send email
         debug_print(f"[2FA] Sending email...")
-        email.send()
+        send_transactional_email(
+            subject='Your 2FA Verification Code - BeatzLock Authenticator',
+            recipient=user.email,
+            text_content=text_content,
+            html_content=html_content,
+        )
         
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[2FA] Email sent successfully in {elapsed_time:.2f} seconds")
@@ -290,18 +295,15 @@ def send_password_reset_code(request):
         # Prepare and send email
         debug_print(f"[PASSWORD RESET] Preparing reset email")
         html_content = get_password_reset_email_template(user.username, verification.code)
-        text_content = f"Your password reset code is: {verification.code}\n\nThis code expires in 10 minutes."
-        
-        email_msg = EmailMultiAlternatives(
-            subject='Password Reset Code - BeatzLock Authenticator',
-            body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[user.email],
-        )
-        email_msg.attach_alternative(html_content, "text/html")
-        
+        text_content = get_password_reset_email_text(user.username, verification.code)
+
         debug_print(f"[PASSWORD RESET] Sending email to: {user.email}")
-        email_msg.send()
+        send_transactional_email(
+            subject='Password Reset Code - BeatzLock Authenticator',
+            recipient=user.email,
+            text_content=text_content,
+            html_content=html_content,
+        )
         
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[PASSWORD RESET] Email sent successfully in {elapsed_time:.2f} seconds")
@@ -410,16 +412,14 @@ def reset_password(request):
         # Send password changed notification
         debug_print(f"[PASSWORD RESET] Sending password changed notification to: {user.email}")
         html_content = get_password_changed_email_template(user.username)
-        text_content = f"Your password has been changed successfully. If you didn't make this change, please contact support immediately."
-        
-        email_msg = EmailMultiAlternatives(
+        text_content = get_password_changed_email_text(user.username)
+
+        send_transactional_email(
             subject='Password Changed Successfully - BeatzLock Authenticator',
-            body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[user.email],
+            recipient=user.email,
+            text_content=text_content,
+            html_content=html_content,
         )
-        email_msg.attach_alternative(html_content, "text/html")
-        email_msg.send()
         
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[PASSWORD RESET] Password reset completed successfully in {elapsed_time:.2f} seconds")
@@ -546,19 +546,14 @@ def reset_password_with_recovery_code(request):
         )
 
         if user.email:
-            html_content = get_password_changed_email_template(user.username)
-            text_content = (
-                "Your BeatzLock recovery code was used to change your password and sign in to your account. "
-                "If you didn't make this change, please reset your password immediately."
-            )
-            email_msg = EmailMultiAlternatives(
+            html_content = get_recovery_code_password_changed_email_template(user.username)
+            text_content = get_recovery_code_password_changed_email_text(user.username)
+            send_transactional_email(
                 subject='Recovery code used to change your password - BeatzLock Authenticator',
-                body=text_content,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[user.email],
+                recipient=user.email,
+                text_content=text_content,
+                html_content=html_content,
             )
-            email_msg.attach_alternative(html_content, "text/html")
-            email_msg.send()
 
         return Response({
             'success': True,

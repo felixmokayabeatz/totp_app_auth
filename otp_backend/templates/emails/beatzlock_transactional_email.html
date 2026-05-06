@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <title>{{ title }}</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #eef4fb;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #101827;
+        }
+        table {
+            border-collapse: collapse;
+        }
+        a {
+            color: #0ea5e9;
+        }
+        .shell {
+            width: 100%;
+            background:
+                radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 30%),
+                radial-gradient(circle at top right, rgba(99, 102, 241, 0.18), transparent 26%),
+                linear-gradient(180deg, #08111f 0%, #0f172a 18%, #eef4fb 18%, #eef4fb 100%);
+        }
+        .card {
+            width: 100%;
+            max-width: 640px;
+            overflow: hidden;
+            border: 1px solid #d9e6f3;
+            border-radius: 24px;
+            background: #ffffff;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+        }
+        .header {
+            padding: 34px 30px;
+            background:
+                radial-gradient(circle at top right, rgba(56, 189, 248, 0.16), transparent 34%),
+                linear-gradient(135deg, #08111f, #11203b 58%, #163056);
+            color: #ffffff;
+        }
+        .eyebrow {
+            font-size: 13px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #8edbff;
+        }
+        .title {
+            margin: 10px 0 0;
+            font-size: 28px;
+            line-height: 1.2;
+        }
+        .subtitle {
+            margin: 10px 0 0;
+            color: #cdd8e8;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .content {
+            padding: 30px;
+        }
+        .greeting {
+            margin: 0 0 14px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .intro {
+            margin: 0 0 22px;
+            color: #475569;
+            line-height: 1.7;
+        }
+        .code-box {
+            margin: 0 0 22px;
+            padding: 20px;
+            border: 1px solid #cfe6fb;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #f7fbff, #eef6ff);
+            text-align: center;
+        }
+        .code-label,
+        .section-label,
+        .notice-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #48627f;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .code-value {
+            font-size: 36px;
+            line-height: 1;
+            font-weight: 800;
+            letter-spacing: 8px;
+            color: #0f172a;
+        }
+        .code-caption {
+            margin-top: 10px;
+            color: #64748b;
+            font-size: 13px;
+        }
+        .section {
+            margin: 0 0 14px;
+            padding: 16px 18px;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            background: #f8fafc;
+        }
+        .section-text,
+        .notice-text {
+            color: #334155;
+            line-height: 1.7;
+        }
+        .notice {
+            margin: 0 0 14px;
+            padding: 16px 18px;
+            border-radius: 18px;
+            border-left: 4px solid #2563eb;
+            background: #eff6ff;
+        }
+        .notice.warning {
+            border-left-color: #d97706;
+            background: #fff7ed;
+        }
+        .notice.danger {
+            border-left-color: #dc2626;
+            background: #fef2f2;
+        }
+        .notice.success {
+            border-left-color: #059669;
+            background: #ecfdf5;
+        }
+        .notice.info {
+            border-left-color: #0284c7;
+            background: #f0f9ff;
+        }
+        .closing {
+            margin: 24px 0 0;
+            color: #64748b;
+            line-height: 1.7;
+        }
+        .footer {
+            padding: 22px 30px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+            font-size: 13px;
+            text-align: center;
+        }
+        .preheader {
+            display: none !important;
+            visibility: hidden;
+            opacity: 0;
+            color: transparent;
+            height: 0;
+            width: 0;
+            overflow: hidden;
+            mso-hide: all;
+        }
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #08111f;
+                color: #e2e8f0;
+            }
+            .shell {
+                background:
+                    radial-gradient(circle at top left, rgba(14, 165, 233, 0.2), transparent 30%),
+                    radial-gradient(circle at top right, rgba(99, 102, 241, 0.22), transparent 26%),
+                    linear-gradient(180deg, #08111f 0%, #0f172a 100%);
+            }
+            .card {
+                border-color: #1e293b;
+                background: #0f172a;
+                box-shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
+            }
+            .content,
+            .greeting {
+                color: #e2e8f0 !important;
+            }
+            .intro,
+            .section-text,
+            .notice-text,
+            .closing,
+            .footer {
+                color: #cbd5e1 !important;
+            }
+            .code-box,
+            .section {
+                border-color: #22334b;
+                background: #111c31;
+            }
+            .code-label,
+            .section-label,
+            .notice-label,
+            .code-caption {
+                color: #93a8c2 !important;
+            }
+            .code-value {
+                color: #f8fafc !important;
+            }
+            .notice {
+                background: #13233d;
+            }
+            .notice.warning {
+                background: #30210e;
+            }
+            .notice.danger {
+                background: #351416;
+            }
+            .notice.success {
+                background: #10271f;
+            }
+            .notice.info {
+                background: #0f2434;
+            }
+            .footer {
+                background: #0b1324;
+                border-top-color: #1e293b;
+            }
+        }
+        @media (max-width: 600px) {
+            .header,
+            .content,
+            .footer {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+            .card {
+                border-radius: 18px;
+            }
+            .code-value {
+                font-size: 30px;
+                letter-spacing: 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="preheader">{{ preheader }}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="shell">
+        <tr>
+            <td align="center" style="padding: 28px 12px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" class="card">
+                    <tr>
+                        <td class="header">
+                            <div class="eyebrow">{{ eyebrow }}</div>
+                            <h1 class="title">{{ title }}</h1>
+                            <p class="subtitle">{{ subtitle }}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="content">
+                            <p class="greeting">{{ greeting }}</p>
+                            <p class="intro">{{ intro }}</p>
+
+                            {% if code %}
+                                <div class="code-box">
+                                    <span class="code-label">{{ code.label }}</span>
+                                    <div class="code-value">{{ code.value }}</div>
+                                    <div class="code-caption">{{ code.caption }}</div>
+                                </div>
+                            {% endif %}
+
+                            {% for section in sections %}
+                                <div class="section">
+                                    <span class="section-label">{{ section.label }}</span>
+                                    <div class="section-text">{{ section.body|linebreaksbr }}</div>
+                                </div>
+                            {% endfor %}
+
+                            {% if notice %}
+                                <div class="notice {{ notice.tone|default:'info' }}">
+                                    <span class="notice-label">{{ notice.title }}</span>
+                                    <div class="notice-text">{{ notice.body|linebreaksbr }}</div>
+                                </div>
+                            {% endif %}
+
+                            {% if follow_up %}
+                                <div class="notice {{ follow_up.tone|default:'info' }}">
+                                    <span class="notice-label">{{ follow_up.title }}</span>
+                                    <div class="notice-text">{{ follow_up.body|linebreaksbr }}</div>
+                                </div>
+                            {% endif %}
+
+                            <p class="closing">
+                                This is an automated security message, please do not reply.
+                                {% if support_email %}
+                                    Need help? Email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+                                {% endif %}
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="footer">
+                            <strong>BeatzLock Authenticator</strong><br>
+                            Secure two-factor authentication for your account.<br><br>
+                            &copy; {{ current_year }} BeatzLock. All rights reserved.
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
