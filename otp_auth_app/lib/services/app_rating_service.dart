@@ -79,6 +79,16 @@ class AppRatingSummary {
   }
 }
 
+class AppRatingLookup {
+  const AppRatingLookup({
+    required this.rating,
+    required this.displayName,
+  });
+
+  final AppRating? rating;
+  final String displayName;
+}
+
 class AppRatingService {
   AppRatingService()
       : _dio = Dio(
@@ -91,7 +101,7 @@ class AppRatingService {
 
   final Dio _dio;
 
-  Future<AppRating?> fetchMyRating({
+  Future<AppRatingLookup> fetchMyRating({
     required String reviewerKey,
     required String platform,
   }) async {
@@ -106,10 +116,17 @@ class AppRatingService {
     if (response.statusCode == 200 && response.data is Map) {
       final data = Map<String, dynamic>.from(response.data as Map);
       final rating = data['rating'];
+      final displayName = data['display_name']?.toString() ?? '';
       if (rating is Map) {
-        return AppRating.fromJson(Map<String, dynamic>.from(rating));
+        return AppRatingLookup(
+          rating: AppRating.fromJson(Map<String, dynamic>.from(rating)),
+          displayName: displayName,
+        );
       }
-      return null;
+      return AppRatingLookup(
+        rating: null,
+        displayName: displayName,
+      );
     }
 
     throw StateError('Could not load app rating.');

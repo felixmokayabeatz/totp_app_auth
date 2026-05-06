@@ -687,14 +687,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : _appUpdateService.currentPlatform;
     final reviewerKey = await _ratingReviewerKey();
     AppRating? existingRating;
+    String savedDisplayName = '';
     AppRatingSummary? platformSummary;
     try {
-      existingRating = await _appRatingService.fetchMyRating(
+      final lookup = await _appRatingService.fetchMyRating(
         reviewerKey: reviewerKey,
         platform: currentPlatform,
       );
+      existingRating = lookup.rating;
+      savedDisplayName = lookup.displayName;
     } catch (_) {
       existingRating = null;
+      savedDisplayName = '';
     }
     try {
       platformSummary = await _appRatingService.fetchPlatformSummary(
@@ -709,9 +713,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final commentController = TextEditingController();
     final suggestionController = TextEditingController();
     final displayNameController = TextEditingController();
-    displayNameController.text = existingRating?.displayName == 'Anonymous user'
+    displayNameController.text = (existingRating?.displayName == 'Anonymous user'
         ? ''
-        : (existingRating?.displayName ?? '');
+        : (existingRating?.displayName ?? savedDisplayName));
     commentController.text = existingRating?.comment ?? '';
     suggestionController.text = existingRating?.suggestion ?? '';
 
