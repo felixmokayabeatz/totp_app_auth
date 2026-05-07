@@ -796,5 +796,33 @@
     "host_platform": "",
     "is_directory": false,
     "sequence": 57
+  },
+  {
+    "sequence": 58,
+    "platform": "windows",
+    "artifact_type": "exe_bundle",
+    "file": "app",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.6.5_20\\app",
+    "relative_path": "final_builds/windows/1.6.5_20/app",
+    "is_directory": true,
+    "timestamp": "2026-05-07T20:02:12",
+    "version": "1.6.5+20",
+    "build_number": "20",
+    "artifact_version": "1.6.5_20",
+    "host_platform": "Windows"
+  },
+  {
+    "sequence": 59,
+    "platform": "windows",
+    "artifact_type": "installer",
+    "file": "beatzlock_1.6.5_20_x64.exe",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.6.5_20\\beatzlock_1.6.5_20_x64.exe",
+    "relative_path": "final_builds/windows/1.6.5_20/beatzlock_1.6.5_20_x64.exe",
+    "is_directory": false,
+    "timestamp": "2026-05-07T20:02:46",
+    "version": "1.6.5+20",
+    "build_number": "20",
+    "artifact_version": "1.6.5_20",
+    "host_platform": "Windows"
   }
 ]

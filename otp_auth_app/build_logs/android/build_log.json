@@ -600,5 +600,19 @@
     "host_platform": "",
     "is_directory": false,
     "sequence": 43
+  },
+  {
+    "sequence": 44,
+    "platform": "android",
+    "artifact_type": "apk",
+    "file": "beatzlock_1.6.5_20.apk",
+    "path": "C:\\Programming\\totp_app\\final_builds\\android\\1.6.5_20\\beatzlock_1.6.5_20.apk",
+    "relative_path": "final_builds/android/1.6.5_20/beatzlock_1.6.5_20.apk",
+    "is_directory": false,
+    "timestamp": "2026-05-07T20:09:22",
+    "version": "1.6.5+20",
+    "build_number": "20",
+    "artifact_version": "1.6.5_20",
+    "host_platform": "Windows"
   }
 ]
