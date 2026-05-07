@@ -1,4 +1,4 @@
-v1.6.2 (Build 17)
+v1.6.4 (Build 19)
 
 What's new
 - Added offline-first use, so you can use the authenticator without creating an account.
