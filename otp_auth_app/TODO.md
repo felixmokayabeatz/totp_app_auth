@@ -20,15 +20,15 @@
 
 [x] - Show multiple platforms on the rate platform.
 
-[ ] - Only logged-in users can send reviews in the app.
+[x] - Only logged-in users can send reviews in the app.
 
-[ ] - Fix remote sign-out heartbeat. When a device is signed out remotely, it should stop showing OTP codes quickly instead of taking a long time to actually sign out.
+[x] - Fix remote sign-out heartbeat. When a device is signed out remotely, it should stop showing OTP codes quickly instead of taking a long time to actually sign out.
 
-[ ] - Fix accent color so changing it reflects across the whole app.
+[x] - Fix accent color so changing it reflects across the whole app.
 
-[ ] - When downloading the backup-code PDF on the main device, require the device PIN/biometric lock first. If system auth is unavailable, fall back to the app PIN if one is set.
+[x] - When downloading the backup-code PDF on the main device, require the device PIN/biometric lock first. If system auth is unavailable, fall back to the app PIN if one is set.
 
-[ ] - Import accounts from other authenticator apps, starting with Google Authenticator:
+[x] - Import accounts from other authenticator apps, starting with Google Authenticator:
 
       From Google Authenticator -> BeatzLock:
 
@@ -45,9 +45,12 @@
 
       Done: all accounts imported.
 
-[ ] - Make the app work offline by default. Users should not need to create an account to use local OTP storage. Keep the current sign-in/sign-up flow as an optional sync path, and tell users that signing in enables automatic cross-platform sync.
+[x] - Make the app work offline by default. Users should not need to create an account to use local OTP storage. Keep the current sign-in/sign-up flow as an optional sync path, and tell users that signing in enables automatic cross-platform sync.
 
-[ ] - Show terms oaf service and privacy for first time users and bitton to tha screen, and a button to agree, also the onbarding screen for new users as well it must match the teme and it should work. Also when unsigned it still show my username on top I can't tell if it caches or something? fix that man
+[x] - Show terms oaf service and privacy for first time users and bitton to tha screen, and a button to agree, also the onbarding screen for new users as well it must match the teme and it should work. Also when unsigned it still show my username on top I can't tell if it caches or something? fix that man
+
+[ ] - Clear in app notifications, user can select type, old notifications and which to leave add that
+
 
 ## Code Notes
 
