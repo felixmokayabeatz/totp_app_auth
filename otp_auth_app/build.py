@@ -16,6 +16,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 WORKSPACE_DIR = SCRIPT_DIR.parent
 PROJECT_DIR = str(SCRIPT_DIR)
 FINAL_BUILDS_DIR = WORKSPACE_DIR / "final_builds"
+BUILD_LOGS_DIR = SCRIPT_DIR / "build_logs"
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
 PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
 INNO_SCRIPT_DIR = WORKSPACE_DIR / "inno_script"
@@ -87,11 +88,17 @@ APP_FULL_VERSION = ""
 APP_VERSION = ""
 APP_BUILD_NUMBER = ""
 APP_ARTIFACT_VERSION = ""
+SUPPORTED_BUILD_LOG_PLATFORMS = ("windows", "linux", "android")
 
 
 def get_platform_version_dir(platform_name: str) -> Path:
     """Return final_builds/<platform>/<version>/ for released artifacts."""
     return FINAL_BUILDS_DIR / platform_name / APP_ARTIFACT_VERSION
+
+
+def get_build_log_dir(platform_name: str) -> Path:
+    """Return otp_auth_app/build_logs/<platform>/ for incremental JSON logs."""
+    return BUILD_LOGS_DIR / platform_name
 
 
 def get_versioned_inno_script_path() -> Path:
@@ -291,7 +298,7 @@ def build_windows_installer() -> bool:
 
     expected_output = get_windows_installer_path()
     if expected_output.exists():
-        save_build_metadata("windows_installer", str(expected_output))
+        save_platform_build_metadata("windows", "installer", expected_output)
         print_color(f"✅ Windows installer created: {expected_output}", Colors.GREEN)
         windows_app_dir = get_windows_app_dir()
         if windows_app_dir.exists():
@@ -504,8 +511,8 @@ def check_device_connected():
         return len(devices) > 0
     return False
 
-def save_build_metadata(platform_name, file_path):
-    """Save build information to JSON log"""
+def save_build_metadata_legacy(platform_name, file_path):
+    """Legacy combined build log writer retained for backward compatibility."""
     FINAL_BUILDS_DIR.mkdir(parents=True, exist_ok=True)
     log_file = FINAL_BUILDS_DIR / "build_log.json"
     
@@ -528,6 +535,103 @@ def save_build_metadata(platform_name, file_path):
         json.dump(logs, f, indent=2)
     
     print_color(f"✓ Build info saved to {log_file}", Colors.GREEN)
+
+def ensure_build_log_directories():
+    """Create per-platform build log directories when missing."""
+    for platform_name in SUPPORTED_BUILD_LOG_PLATFORMS:
+        get_build_log_dir(platform_name).mkdir(parents=True, exist_ok=True)
+
+
+def load_build_log_entries(log_file: Path) -> list[dict]:
+    """Load a build log JSON array, falling back to an empty list."""
+    try:
+        data = json.loads(log_file.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+    if isinstance(data, list):
+        return [entry for entry in data if isinstance(entry, dict)]
+
+    return []
+
+
+def write_build_log_entries(log_file: Path, logs: list[dict]) -> None:
+    """Write a build log JSON array in a stable, readable format."""
+    log_file.write_text(json.dumps(logs, indent=2) + "\n", encoding="utf-8")
+
+
+def migrate_legacy_android_build_log() -> None:
+    """Move any legacy build_logs/apk/build_log.json entries into android."""
+    legacy_dir = BUILD_LOGS_DIR / "apk"
+    legacy_log_file = legacy_dir / "build_log.json"
+    android_log_file = get_build_log_dir("android") / "build_log.json"
+
+    if not legacy_log_file.exists():
+        return
+
+    legacy_logs = load_build_log_entries(legacy_log_file)
+    android_logs = load_build_log_entries(android_log_file)
+    merged_logs = legacy_logs + android_logs
+
+    for index, entry in enumerate(merged_logs, start=1):
+        entry["sequence"] = index
+        entry["platform"] = "android"
+
+    write_build_log_entries(android_log_file, merged_logs)
+    legacy_log_file.unlink()
+
+    remaining_items = list(legacy_dir.iterdir()) if legacy_dir.exists() else []
+    if not remaining_items:
+        legacy_dir.rmdir()
+
+    print_color(f"Build info migrated to {android_log_file}", Colors.GREEN)
+
+
+def save_platform_build_metadata(platform_name: str, artifact_type: str, file_path: str | Path):
+    """Append build information into the platform-specific JSON log."""
+    if platform_name not in SUPPORTED_BUILD_LOG_PLATFORMS:
+        raise ValueError(f"Unsupported build log platform: {platform_name}")
+
+    ensure_build_log_directories()
+    if platform_name == "android":
+        migrate_legacy_android_build_log()
+
+    log_file = get_build_log_dir(platform_name) / "build_log.json"
+    logs = load_build_log_entries(log_file)
+
+    output_path = Path(file_path).resolve()
+    try:
+        relative_path = output_path.relative_to(WORKSPACE_DIR.resolve())
+    except ValueError:
+        relative_path = output_path
+
+    next_sequence = max(
+        (
+            int(entry.get("sequence", 0))
+            for entry in logs
+            if str(entry.get("sequence", "")).isdigit()
+        ),
+        default=0,
+    ) + 1
+
+    logs.append({
+        "sequence": next_sequence,
+        "platform": platform_name,
+        "artifact_type": artifact_type,
+        "file": output_path.name,
+        "path": str(output_path),
+        "relative_path": str(relative_path).replace("\\", "/"),
+        "is_directory": output_path.is_dir(),
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "version": APP_FULL_VERSION,
+        "build_number": APP_BUILD_NUMBER,
+        "artifact_version": APP_ARTIFACT_VERSION,
+        "host_platform": platform.system(),
+    })
+
+    write_build_log_entries(log_file, logs)
+    print_color(f"Build info saved to {log_file}", Colors.GREEN)
+
 
 def clean_windows_cache():
     """Clean Windows build cache to fix CMake generator mismatch"""
@@ -715,7 +819,7 @@ exit 0
         if final_deb_path.exists():
             final_deb_path.unlink()
         shutil.move(str(deb_output), final_deb_path)
-        save_build_metadata("linux_deb", str(final_deb_path))
+        save_platform_build_metadata("linux", "deb", final_deb_path)
 
         print_color(f"✅ Linux .deb created: {final_deb_path}", Colors.GREEN)
         return True
@@ -753,7 +857,7 @@ def build_windows():
     if final_build_dir.exists():
         shutil.rmtree(final_build_dir)
     shutil.copytree(exe_path, final_build_dir)
-    save_build_metadata("windows_exe", str(final_build_dir))
+    save_platform_build_metadata("windows", "exe_bundle", final_build_dir)
     
     print_color(f"Windows app staged for installer: {final_build_dir}", Colors.GREEN)
     return build_windows_installer()
@@ -784,7 +888,7 @@ def build_android(choice: str | None = None):
                 android_version_dir.mkdir(parents=True, exist_ok=True)
                 apk_dest = android_version_dir / f"beatzlock_{APP_ARTIFACT_VERSION}.apk"
                 shutil.copy(apk_path, apk_dest)
-                save_build_metadata("android_apk", str(apk_dest))
+                save_platform_build_metadata("android", "apk", apk_dest)
                 print_color(f"✅ APK created: {apk_dest}", Colors.GREEN)
     
     if choice == "2" or choice == "4":
@@ -798,7 +902,7 @@ def build_android(choice: str | None = None):
                 android_version_dir.mkdir(parents=True, exist_ok=True)
                 aab_dest = android_version_dir / f"beatzlock_{APP_ARTIFACT_VERSION}.aab"
                 shutil.copy(aab_path, aab_dest)
-                save_build_metadata("android_aab", str(aab_dest))
+                save_platform_build_metadata("android", "aab", aab_dest)
                 print_color(f"✅ App Bundle created: {aab_dest}", Colors.GREEN)
     
     if choice == "3":
@@ -815,6 +919,7 @@ def build_android(choice: str | None = None):
                     abi_name = apk.removeprefix("app-").removesuffix("-release.apk")
                     dst = android_version_dir / f"beatzlock_{APP_ARTIFACT_VERSION}_{abi_name}.apk"
                     shutil.copy(src, dst)
+                    save_platform_build_metadata("android", f"split_apk_{abi_name}", dst)
                     print_color(f"✅ {dst}", Colors.GREEN)
     
     return success
