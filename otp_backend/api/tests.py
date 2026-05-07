@@ -208,6 +208,33 @@ class AppNotificationTests(APITestCase):
         self.assertEqual(unread_count, 0)
         self.assertEqual(self.user.app_notifications.filter(read_at__isnull=True).count(), 0)
 
+    def test_clear_notifications_filters_by_type_and_keeps_unread(self):
+        response = self.client.post(
+            reverse('notifications-clear'),
+            {
+                'notification_type': 'password_changed',
+                'keep_unread': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['success'], True)
+        self.assertEqual(response.data['deleted_count'], 1)
+        self.assertFalse(
+            self.user.app_notifications.filter(notification_type='password_changed').exists()
+        )
+        self.assertEqual(self.user.app_notifications.count(), 2)
+
+    def test_clear_notifications_rejects_invalid_age_filter(self):
+        response = self.client.post(
+            reverse('notifications-clear'),
+            {'older_than_days': 'old-ish'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_log_app_pin_changed_notification_records_device(self):
         response = self.client.post(
             reverse('notifications-log-event'),

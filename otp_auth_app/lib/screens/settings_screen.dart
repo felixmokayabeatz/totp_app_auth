@@ -357,7 +357,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.download_rounded,
               label: 'Import Accounts',
-              sub: 'Import CSV, otpauth links, or Google Authenticator QR exports',
+              sub:
+                  'Import CSV, otpauth links, or Google Authenticator QR exports',
               onTap: _showImportAccountsDialog,
             ),
             _dividerLine(),
@@ -411,9 +412,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? null
                       : const Icon(Icons.lock_outline,
                           size: 16, color: Colors.grey)),
-              onTap: !authProvider.isAuthenticated
-                  ? _openLoginForSync
-                  : (_syncEnabled ? _syncNow : null),
+              onTap:
+                  !authProvider.isAuthenticated ? _openLoginForSync : _syncNow,
             ),
             _dividerLine(),
 
@@ -570,7 +570,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(
-              onPressed: authProvider.isAuthenticated ? _logout : _openLoginForSync,
+              onPressed:
+                  authProvider.isAuthenticated ? _logout : _openLoginForSync,
               icon: Icon(authProvider.isAuthenticated
                   ? Icons.logout_rounded
                   : Icons.login_rounded),
@@ -581,8 +582,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: const TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w700)),
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    authProvider.isAuthenticated ? Colors.red.shade600 : _accent,
+                backgroundColor: authProvider.isAuthenticated
+                    ? Colors.red.shade600
+                    : _accent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
@@ -713,9 +715,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final commentController = TextEditingController();
     final suggestionController = TextEditingController();
     final displayNameController = TextEditingController();
-    displayNameController.text = (existingRating?.displayName == 'Anonymous user'
-        ? ''
-        : (existingRating?.displayName ?? savedDisplayName));
+    displayNameController.text =
+        (existingRating?.displayName == 'Anonymous user'
+            ? ''
+            : (existingRating?.displayName ?? savedDisplayName));
     commentController.text = existingRating?.comment ?? '';
     suggestionController.text = existingRating?.suggestion ?? '';
 
@@ -764,8 +767,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (platformSummary != null) ...[
                           const SizedBox(height: 14),
                           _buildPlatformSummaryCard(
-                            platformLabel:
-                                existingRating?.platformDisplay ??
+                            platformLabel: existingRating?.platformDisplay ??
                                 _platformLabelFromSlug(currentPlatform),
                             summary: platformSummary!,
                           ),
@@ -846,8 +848,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: isSubmitting
-                  || isDeleting
+              onPressed: isSubmitting || isDeleting
                   ? null
                   : () async {
                       final uri = Uri.parse(AppConfig.rateAppUrl);
@@ -864,10 +865,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('View Ratings'),
             ),
             TextButton(
-              onPressed:
-                  (isSubmitting || isDeleting)
-                      ? null
-                      : () => Navigator.pop(dialogContext),
+              onPressed: (isSubmitting || isDeleting)
+                  ? null
+                  : () => Navigator.pop(dialogContext),
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
             if (existingRating != null)
@@ -937,9 +937,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ? 'Your review for this platform was deleted.'
                                     : 'No review was found for this platform.',
                               ),
-                              backgroundColor: deleted
-                                  ? Colors.orange
-                                  : _accent,
+                              backgroundColor:
+                                  deleted ? Colors.orange : _accent,
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -1025,8 +1024,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             accountEmail: await storage
                                     .read(SecureStorageService.userEmailKey) ??
                                 '',
-                            accountUsername: await storage
-                                    .read(SecureStorageService.currentUserKey) ??
+                            accountUsername: await storage.read(
+                                    SecureStorageService.currentUserKey) ??
                                 '',
                           );
 

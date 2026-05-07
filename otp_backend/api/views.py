@@ -684,6 +684,38 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
         )
         return Response({'success': True, 'marked_count': marked_count})
 
+    @action(detail=False, methods=['post'], url_path='clear')
+    def clear(self, request):
+        queryset = AppNotification.objects.filter(user=request.user)
+
+        notification_type = (request.data.get('notification_type') or '').strip()
+        if notification_type and notification_type != 'all':
+            queryset = queryset.filter(notification_type=notification_type)
+
+        keep_unread = request.data.get('keep_unread') is True
+        if keep_unread:
+            queryset = queryset.filter(is_read=True)
+
+        older_than_days = request.data.get('older_than_days')
+        if older_than_days not in (None, '', 'all'):
+            try:
+                days = int(older_than_days)
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'older_than_days must be a number.'},
+                    status=400,
+                )
+            if days < 0:
+                return Response(
+                    {'error': 'older_than_days must be 0 or greater.'},
+                    status=400,
+                )
+            cutoff = timezone.now() - timezone.timedelta(days=days)
+            queryset = queryset.filter(created_at__lt=cutoff)
+
+        deleted_count, _ = queryset.delete()
+        return Response({'success': True, 'deleted_count': deleted_count})
+
     @action(detail=False, methods=['post'], url_path='log-event')
     def log_event(self, request):
         event_type = (request.data.get('event_type') or '').strip()

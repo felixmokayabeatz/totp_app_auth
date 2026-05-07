@@ -1600,6 +1600,58 @@ class SyncService {
     }
   }
 
+  Future<int?> clearNotifications({
+    String? notificationType,
+    int? olderThanDays,
+    bool keepUnread = false,
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to manage notifications.';
+      return null;
+    }
+
+    final data = <String, dynamic>{
+      'notification_type': notificationType ?? 'all',
+      'keep_unread': keepUnread,
+    };
+    if (olderThanDays != null) {
+      data['older_than_days'] = olderThanDays;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'notifications/clear/',
+          data: data,
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        return int.tryParse(response.data['deleted_count'].toString()) ?? 0;
+      }
+
+      _lastErrorMessage = 'Could not clear notifications.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not clear notifications.',
+      );
+      return null;
+    } catch (e) {
+      _lastErrorMessage = 'Could not clear notifications.';
+      return null;
+    }
+  }
+
   Future<bool> logAccountAddedNotification({
     required String serviceName,
     String? accountLabel,

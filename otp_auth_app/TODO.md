@@ -49,8 +49,9 @@
 
 [x] - Show terms oaf service and privacy for first time users and bitton to tha screen, and a button to agree, also the onbarding screen for new users as well it must match the teme and it should work. Also when unsigned it still show my username on top I can't tell if it caches or something? fix that man
 
-[ ] - Clear in app notifications, user can select type, old notifications and which to leave add that
+[x] - Add Clear in app notifications, user can select type, age/old notifications and which to leave add that
 
+[x] - Fix synch now in settngs should tell the use that synch is disabled if they click,if the togle is disabled, current just does nothing there the user might thik his device is not respomdng without a message
 
 ## Code Notes
 

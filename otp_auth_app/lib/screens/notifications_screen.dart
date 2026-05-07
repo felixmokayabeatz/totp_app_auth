@@ -15,6 +15,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   bool _isLoading = true;
   bool _isMarkingAllRead = false;
+  bool _isClearingNotifications = false;
   String? _errorMessage;
   List<AppNotificationItem> _notifications = const [];
 
@@ -26,6 +27,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
   int get _unreadCount => _notifications.where((item) => !item.isRead).length;
+
+  static const Map<String, String> _notificationTypeLabels = {
+    'all': 'All types',
+    'sign_in': 'Sign-ins',
+    'password_changed': 'Password changes',
+    'recovery_code_used': 'Recovery-code use',
+    'recovery_codes_generated': 'Recovery-code PDFs',
+    'account_added': 'Account additions',
+    'app_pin_changed': 'App PIN changes',
+    'app_review_reply': 'Review replies',
+    'active_devices_daily': 'Active-device summaries',
+  };
+
+  static const Map<String, String> _ageFilterLabels = {
+    'all': 'Any age',
+    '7': 'Older than 7 days',
+    '30': 'Older than 30 days',
+    '90': 'Older than 90 days',
+  };
 
   @override
   void initState() {
@@ -46,7 +66,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     setState(() {
       _notifications = notifications;
-      _errorMessage = notifications.isEmpty ? _syncService.lastErrorMessage : null;
+      _errorMessage =
+          notifications.isEmpty ? _syncService.lastErrorMessage : null;
       _isLoading = false;
     });
   }
@@ -131,6 +152,141 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  Future<void> _showClearNotificationsDialog() async {
+    if (_isClearingNotifications || _notifications.isEmpty) return;
+
+    var selectedType = 'all';
+    var selectedAge = 'all';
+    var keepUnread = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: _cardColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                'Clear notifications',
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedType,
+                    decoration: const InputDecoration(
+                      labelText: 'Type',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _notificationTypeLabels.entries
+                        .map(
+                          (entry) => DropdownMenuItem<String>(
+                            value: entry.key,
+                            child: Text(entry.value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setDialogState(() => selectedType = value);
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedAge,
+                    decoration: const InputDecoration(
+                      labelText: 'Age',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _ageFilterLabels.entries
+                        .map(
+                          (entry) => DropdownMenuItem<String>(
+                            value: entry.key,
+                            child: Text(entry.value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setDialogState(() => selectedAge = value);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    value: keepUnread,
+                    contentPadding: EdgeInsets.zero,
+                    activeColor: _accent,
+                    title: Text(
+                      'Keep unread notifications',
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setDialogState(() => keepUnread = value ?? true);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Clear'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isClearingNotifications = true);
+    final deletedCount = await _syncService.clearNotifications(
+      notificationType: selectedType,
+      olderThanDays: selectedAge == 'all' ? null : int.tryParse(selectedAge),
+      keepUnread: keepUnread,
+    );
+    if (!mounted) return;
+
+    setState(() => _isClearingNotifications = false);
+
+    final success = deletedCount != null;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Cleared $deletedCount notification${deletedCount == 1 ? '' : 's'}.'
+              : (_syncService.lastErrorMessage ??
+                  'Could not clear notifications.'),
+        ),
+        backgroundColor: success ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    if (success) {
+      await _loadNotifications();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -148,6 +304,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          if (_notifications.isNotEmpty)
+            IconButton(
+              tooltip: 'Clear notifications',
+              onPressed: _isClearingNotifications
+                  ? null
+                  : _showClearNotificationsDialog,
+              icon: _isClearingNotifications
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.delete_sweep_rounded),
+            ),
           if (_unreadCount > 0)
             TextButton(
               onPressed: _isMarkingAllRead ? null : _markAllRead,
@@ -432,7 +605,8 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   }
 
   Future<void> _loadDetail() async {
-    final detail = await _syncService.getNotificationDetail(widget.notification.id);
+    final detail =
+        await _syncService.getNotificationDetail(widget.notification.id);
     if (!mounted) return;
 
     setState(() {
