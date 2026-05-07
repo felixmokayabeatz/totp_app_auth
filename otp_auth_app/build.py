@@ -614,7 +614,7 @@ def save_platform_build_metadata(platform_name: str, artifact_type: str, file_pa
         default=0,
     ) + 1
 
-    logs.append({
+    new_entry = {
         "sequence": next_sequence,
         "platform": platform_name,
         "artifact_type": artifact_type,
@@ -627,7 +627,38 @@ def save_platform_build_metadata(platform_name: str, artifact_type: str, file_pa
         "build_number": APP_BUILD_NUMBER,
         "artifact_version": APP_ARTIFACT_VERSION,
         "host_platform": platform.system(),
-    })
+    }
+
+    release_key = (
+        str(new_entry.get("version") or "").strip(),
+        str(new_entry.get("build_number") or "").strip(),
+    )
+
+    replaced = False
+    for index, entry in enumerate(logs):
+        existing_key = (
+            str(entry.get("version") or "").strip(),
+            str(entry.get("build_number") or "").strip(),
+        )
+        if existing_key == release_key:
+            preserved_sequence = int(entry.get("sequence", next_sequence) or next_sequence)
+            new_entry["sequence"] = preserved_sequence
+            logs[index] = new_entry
+            replaced = True
+            break
+
+    if not replaced:
+        logs.append(new_entry)
+
+    logs.sort(
+        key=lambda entry: (
+            str(entry.get("timestamp") or ""),
+            int(entry.get("sequence", 0) or 0),
+        )
+    )
+
+    for index, entry in enumerate(logs, start=1):
+        entry["sequence"] = index
 
     write_build_log_entries(log_file, logs)
     print_color(f"Build info saved to {log_file}", Colors.GREEN)

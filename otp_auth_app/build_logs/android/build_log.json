@@ -3,351 +3,15 @@
     "platform": "android",
     "artifact_type": "apk",
     "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\installer\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-17T14:20:13.631416",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 1
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\installer\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-17T16:27:00.255684",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 2
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\installer\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-18T01:54:43.131213",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 3
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\installer\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-18T02:04:36.066094",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 4
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-18T12:43:11.204420",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 5
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-18T14:18:26.249202",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 6
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-18T14:21:11.353051",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 7
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-21T13:45:13.213332",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 8
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-21T16:23:55.825876",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 9
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T12:43:29.381298",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 10
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T13:04:22.115727",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 11
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T17:29:16.355587",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 12
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T19:22:11.412198",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 13
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T20:18:40.059848",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 14
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T20:38:12.517970",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 15
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T21:38:13.334268",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 16
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T22:07:04.765968",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 17
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T22:39:19.409950",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 18
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T23:10:00.601455",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 19
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-22T23:45:55.361953",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 20
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-23T01:15:10.396598",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 21
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-23T20:12:50.281681",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 22
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-23T23:16:56.380323",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 23
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-23T23:53:30.280662",
-    "version": "1.0.0",
-    "build_number": "",
-    "artifact_version": "1.0.0",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 24
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_v1.0.0.apk",
     "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_v1.0.0.apk",
     "relative_path": "",
     "timestamp": "2026-04-24T22:13:37.414595",
     "version": "1.0.0",
-    "build_number": "",
+    "build_number": "1",
     "artifact_version": "1.0.0",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 25
+    "sequence": 1
   },
   {
     "platform": "android",
@@ -361,7 +25,7 @@
     "artifact_version": "1.0.1_2",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 26
+    "sequence": 2
   },
   {
     "platform": "android",
@@ -375,21 +39,7 @@
     "artifact_version": "1.0.2_3",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 27
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "BeatzLock_1.2.0_4.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\BeatzLock_1.2.0_4.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-26T09:34:40.060245",
-    "version": "1.2.0+4",
-    "build_number": "4",
-    "artifact_version": "1.2.0_4",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 28
+    "sequence": 3
   },
   {
     "platform": "android",
@@ -403,7 +53,7 @@
     "artifact_version": "1.2.0_4",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 29
+    "sequence": 4
   },
   {
     "platform": "android",
@@ -417,21 +67,7 @@
     "artifact_version": "1.3.0_5",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 30
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "beatzlock_1.4.0_6.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\beatzlock_1.4.0_6.apk",
-    "relative_path": "",
-    "timestamp": "2026-04-26T19:33:29.103819",
-    "version": "1.4.0+6",
-    "build_number": "6",
-    "artifact_version": "1.4.0_6",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 31
+    "sequence": 5
   },
   {
     "platform": "android",
@@ -445,7 +81,7 @@
     "artifact_version": "1.4.0_6",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 32
+    "sequence": 6
   },
   {
     "platform": "android",
@@ -459,7 +95,7 @@
     "artifact_version": "1.4.1_7",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 33
+    "sequence": 7
   },
   {
     "platform": "android",
@@ -473,7 +109,7 @@
     "artifact_version": "1.4.2_7",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 34
+    "sequence": 8
   },
   {
     "platform": "android",
@@ -487,7 +123,7 @@
     "artifact_version": "1.4.3_8",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 35
+    "sequence": 9
   },
   {
     "platform": "android",
@@ -501,7 +137,7 @@
     "artifact_version": "1.4.4_9",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 36
+    "sequence": 10
   },
   {
     "platform": "android",
@@ -515,35 +151,7 @@
     "artifact_version": "1.6.1_16",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 37
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "beatzlock_1.6.2_17.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\1.6.2_17\\beatzlock_1.6.2_17.apk",
-    "relative_path": "",
-    "timestamp": "2026-05-06T14:32:06.816266",
-    "version": "1.6.2+17",
-    "build_number": "17",
-    "artifact_version": "1.6.2_17",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 38
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "beatzlock_1.6.2_17.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\1.6.2_17\\beatzlock_1.6.2_17.apk",
-    "relative_path": "",
-    "timestamp": "2026-05-06T16:53:53.261069",
-    "version": "1.6.2+17",
-    "build_number": "17",
-    "artifact_version": "1.6.2_17",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 39
+    "sequence": 11
   },
   {
     "platform": "android",
@@ -557,7 +165,7 @@
     "artifact_version": "1.6.2_17",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 40
+    "sequence": 12
   },
   {
     "platform": "android",
@@ -571,21 +179,7 @@
     "artifact_version": "1.6.3_18",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 41
-  },
-  {
-    "platform": "android",
-    "artifact_type": "apk",
-    "file": "beatzlock_1.6.4_19.apk",
-    "path": "C:\\Programming\\totp_app\\final_builds\\android\\1.6.4_19\\beatzlock_1.6.4_19.apk",
-    "relative_path": "",
-    "timestamp": "2026-05-07T00:51:59.424242",
-    "version": "1.6.4+19",
-    "build_number": "19",
-    "artifact_version": "1.6.4_19",
-    "host_platform": "",
-    "is_directory": false,
-    "sequence": 42
+    "sequence": 13
   },
   {
     "platform": "android",
@@ -599,10 +193,10 @@
     "artifact_version": "1.6.4_19",
     "host_platform": "",
     "is_directory": false,
-    "sequence": 43
+    "sequence": 14
   },
   {
-    "sequence": 44,
+    "sequence": 15,
     "platform": "android",
     "artifact_type": "apk",
     "file": "beatzlock_1.6.5_20.apk",
