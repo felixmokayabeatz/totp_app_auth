@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -71,6 +72,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
   static const Duration _sessionHeartbeatInterval = Duration(seconds: 5);
+  static const Duration _startupLogoDuration = Duration(milliseconds: 1250);
   static const String _legalConsentAcceptedKey = 'legal_consent_accepted_v1';
   static const String _onboardingCompletedKey = 'onboarding_completed_v1';
 
@@ -88,6 +90,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _sessionReady = false;
   bool _legalConsentAccepted = true;
   bool _onboardingCompleted = true;
+  bool _startupLogoDone = false;
   DateTime? _backgroundedAt;
   Timer? _updateTimer;
   Timer? _sessionHeartbeatTimer;
@@ -106,6 +109,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _sessionHeartbeatInterval,
       (_) => unawaited(_runSessionHeartbeat()),
     );
+    unawaited(_finishStartupLogo());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
     });
@@ -146,6 +150,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
         unawaited(_runSessionHeartbeat());
       }
+    }
+  }
+
+  Future<void> _finishStartupLogo() async {
+    await Future<void>.delayed(_startupLogoDuration);
+    if (mounted) {
+      setState(() => _startupLogoDone = true);
     }
   }
 
@@ -494,7 +505,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           theme: themeProvider.lightTheme,
           darkTheme: themeProvider.darkTheme,
           themeMode: themeProvider.themeMode,
-          home: !_initialized || !_sessionReady
+          home: !_startupLogoDone || !_initialized || !_sessionReady
               ? const _LaunchLoadingScreen()
               : _requiredUpdateInfo != null
                   ? _RequiredUpdateScreen(
@@ -753,31 +764,166 @@ class _RequiredUpdateScreen extends StatelessWidget {
   }
 }
 
-class _LaunchLoadingScreen extends StatelessWidget {
+class _LaunchLoadingScreen extends StatefulWidget {
   const _LaunchLoadingScreen();
+
+  @override
+  State<_LaunchLoadingScreen> createState() => _LaunchLoadingScreenState();
+}
+
+class _LaunchLoadingScreenState extends State<_LaunchLoadingScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1250),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      backgroundColor: colorScheme.surface,
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.shield_outlined, size: 48, color: colorScheme.primary),
-            const SizedBox(height: 16),
-            Text(
-              'Preparing secure access...',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(color: colorScheme.primary),
-            ),
-          ],
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final value = _controller.value;
+            final intro = Curves.easeOutBack.transform(
+              (value / 0.58).clamp(0.0, 1.0).toDouble(),
+            );
+            final settle = Curves.easeOutCubic.transform(
+              ((value - 0.58) / 0.42).clamp(0.0, 1.0).toDouble(),
+            );
+            final breathe = (math.sin(value * math.pi * 2) + 1) / 2;
+            final logoScale = 0.72 + (intro * 0.3) - (settle * 0.02);
+            final logoOffset = 18 * (1 - intro);
+            final glowOpacity = (0.16 + breathe * 0.12) * intro;
+            final ringScale = 0.76 + (intro * 0.26) + (breathe * 0.06);
+            final shineProgress = Curves.easeInOutCubic.transform(
+              ((value - 0.18) / 0.62).clamp(0.0, 1.0).toDouble(),
+            );
+
+            return SizedBox(
+              width: 220,
+              height: 220,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Opacity(
+                    opacity: glowOpacity,
+                    child: Transform.scale(
+                      scale: ringScale,
+                      child: Container(
+                        width: 160,
+                        height: 160,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              colorScheme.primary.withValues(alpha: 0.58),
+                              colorScheme.secondary.withValues(alpha: 0.28),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Opacity(
+                    opacity: 0.28 * intro,
+                    child: Transform.scale(
+                      scale: 0.9 + breathe * 0.08,
+                      child: Container(
+                        width: 144,
+                        height: 144,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: colorScheme.primary.withValues(alpha: 0.42),
+                            width: 1.6,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: Offset(0, logoOffset),
+                    child: Transform.scale(
+                      scale: logoScale,
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 116,
+                            height: 116,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(28),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: colorScheme.primary
+                                      .withValues(alpha: 0.28),
+                                  blurRadius: 34,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: Image.asset(
+                                'linux/runner/resources/app_icon.png',
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: Transform.translate(
+                                offset: Offset(-150 + shineProgress * 300, 0),
+                                child: Transform.rotate(
+                                  angle: -0.42,
+                                  child: Align(
+                                    alignment: Alignment.center,
+                                    child: Container(
+                                      width: 28,
+                                      height: 170,
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Colors.white.withValues(alpha: 0),
+                                            Colors.white.withValues(
+                                              alpha: 0.44 * intro,
+                                            ),
+                                            Colors.white.withValues(alpha: 0),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
