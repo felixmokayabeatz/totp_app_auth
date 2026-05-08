@@ -18,6 +18,7 @@ import '../services/app_update_service.dart';
 import '../services/sync_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
+import '../services/profile_service.dart';
 import '../services/secure_storage_service.dart';
 import 'add_account_screen.dart';
 import 'device_sessions_screen.dart';
@@ -38,6 +39,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
   final AppRatingService _appRatingService = AppRatingService();
+  final ProfileService _profileService = ProfileService();
 
   bool _isSyncing = false;
   bool _isCheckingForUpdates = false;
@@ -46,6 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoadingBackupCodeStatus = false;
   bool _syncEnabled = false;
   String _appVersionLabel = '...';
+  String? _profilePhotoUrl;
   Timer? _syncPrefTimer;
   final ValueNotifier<double?> _updateProgressNotifier =
       ValueNotifier<double?>(null);
@@ -59,6 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadAppVersion();
     _refreshUpdateInfo();
     _loadBackupCodeStatus();
+    _loadProfilePhoto();
     _syncPrefTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       if (!await _syncService.isLoggedIn()) {
         return;
@@ -114,6 +118,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _backupCodeStatus = status;
       _isLoadingBackupCodeStatus = false;
+    });
+  }
+
+  Future<void> _loadProfilePhoto() async {
+    if (!await _syncService.isLoggedIn()) {
+      if (mounted) setState(() => _profilePhotoUrl = null);
+      return;
+    }
+
+    final profile = await _profileService.getProfile();
+    if (!mounted) return;
+
+    setState(() {
+      _profilePhotoUrl = profile?['profile']?['profile_photo']?.toString();
     });
   }
 
@@ -505,8 +523,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ? 'Edit profile information'
                   : 'Enable automatic sync and account tools',
               onTap: authProvider.isAuthenticated
-                  ? () => Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => ProfileScreen()))
+                  ? () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ProfileScreen()),
+                      );
+                      if (!mounted) return;
+                      await _loadProfilePhoto();
+                    }
                   : _openLoginForSync,
             ),
             _dividerLine(),
@@ -689,6 +713,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     await _loadSyncPreference();
     await _loadBackupCodeStatus();
+    await _loadProfilePhoto();
   }
 
   Future<bool> _requireSignedIn(String message) async {
@@ -2394,7 +2419,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: _accent.withValues(alpha: 0.18)),
             ),
-            child: Icon(Icons.person_rounded, color: _accent, size: 28),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: _profilePhotoUrl != null && _profilePhotoUrl!.isNotEmpty
+                  ? Image.network(
+                      '${AppConfig.mediaUrl}${_profilePhotoUrl!.replaceFirst('/media/', '')}',
+                      fit: BoxFit.cover,
+                      width: 52,
+                      height: 52,
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.person_rounded,
+                        color: _accent,
+                        size: 28,
+                      ),
+                    )
+                  : Icon(Icons.person_rounded, color: _accent, size: 28),
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
