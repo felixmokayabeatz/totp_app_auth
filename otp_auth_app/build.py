@@ -188,9 +188,15 @@ def sync_inno_setup_script(script_path: Path):
     updated_lines = []
     saw_app_version_define = False
     saw_artifact_define = False
+    saw_close_applications = False
+    saw_restart_applications = False
+    setup_section_index = None
 
-    for line in lines:
+    for index, line in enumerate(lines):
         stripped = line.strip()
+
+        if stripped == "[Setup]":
+            setup_section_index = len(updated_lines)
 
         if stripped.startswith('#define MyAppVersion "'):
             updated_lines.append(f'#define MyAppVersion "{APP_FULL_VERSION}"')
@@ -218,6 +224,16 @@ def sync_inno_setup_script(script_path: Path):
             updated_lines.append("OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64")
             continue
 
+        if stripped.startswith("CloseApplications="):
+            updated_lines.append("CloseApplications=yes")
+            saw_close_applications = True
+            continue
+
+        if stripped.startswith("RestartApplications="):
+            updated_lines.append("RestartApplications=yes")
+            saw_restart_applications = True
+            continue
+
         if stripped.startswith("Source: ") and "\\final_builds\\windows\\" in stripped.lower():
             lower_line = line.lower()
             quote_start = line.find('"')
@@ -234,6 +250,13 @@ def sync_inno_setup_script(script_path: Path):
                 continue
 
         updated_lines.append(line)
+
+    if setup_section_index is not None:
+        insert_at = setup_section_index + 1
+        if not saw_restart_applications:
+            updated_lines.insert(insert_at, "RestartApplications=yes")
+        if not saw_close_applications:
+            updated_lines.insert(insert_at, "CloseApplications=yes")
 
     if not saw_app_version_define:
         for index, line in enumerate(updated_lines):

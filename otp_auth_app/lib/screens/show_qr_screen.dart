@@ -670,19 +670,40 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                 ),
               ),
               const SizedBox(width: 4),
-              InkWell(
-                onTap: () => setState(() => _isOtpHidden = !_isOtpHidden),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(3),
-                  child: Icon(
-                    _isOtpHidden
-                        ? Icons.visibility_rounded
-                        : Icons.visibility_off_rounded,
-                    size: 16,
-                    color: isDark
-                        ? Colors.white60
-                        : colorScheme.onSurfaceVariant,
+              Tooltip(
+                message: 'Copy OTP',
+                child: InkWell(
+                  onTap: _copyOtp,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 16,
+                      color: isDark
+                          ? Colors.white60
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Tooltip(
+                message: _isOtpHidden ? 'Show OTP' : 'Hide OTP',
+                child: InkWell(
+                  onTap: () => setState(() => _isOtpHidden = !_isOtpHidden),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(
+                      _isOtpHidden
+                          ? Icons.visibility_rounded
+                          : Icons.visibility_off_rounded,
+                      size: 16,
+                      color: isDark
+                          ? Colors.white60
+                          : colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
@@ -729,6 +750,16 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
   String _formatOtp(String otp) {
     if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
     return otp;
+  }
+
+  void _copyOtp() {
+    Clipboard.setData(ClipboardData(text: _currentOtp.replaceAll(' ', '')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('OTP copied to clipboard'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   String _maskedSecret() {

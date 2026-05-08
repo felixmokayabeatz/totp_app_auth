@@ -222,7 +222,7 @@ if command -v pkexec >/dev/null 2>&1; then
   pkexec sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$DEB_PATH"
 elif command -v xdg-open >/dev/null 2>&1; then
   xdg-open "\$DEB_PATH"
-  exit 2
+  exit 0
 else
   exit 1
 fi
