@@ -250,5 +250,19 @@
     "build_number": "23",
     "artifact_version": "1.6.8_23",
     "host_platform": "Windows"
+  },
+  {
+    "sequence": 19,
+    "platform": "windows",
+    "artifact_type": "installer",
+    "file": "beatzlock_1.6.9_24_x64.exe",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.6.9_24\\beatzlock_1.6.9_24_x64.exe",
+    "relative_path": "final_builds/windows/1.6.9_24/beatzlock_1.6.9_24_x64.exe",
+    "is_directory": false,
+    "timestamp": "2026-05-08T23:29:38",
+    "version": "1.6.9+24",
+    "build_number": "24",
+    "artifact_version": "1.6.9_24",
+    "host_platform": "Windows"
   }
 ]
