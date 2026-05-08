@@ -336,7 +336,9 @@ class _HomeScreenState extends State<HomeScreen>
         _headerAction(
             isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
             () => Provider.of<ThemeProvider>(context, listen: false)
-                .toggleTheme(),
+                .toggleTheme(
+                    platformBrightness:
+                        MediaQuery.platformBrightnessOf(context)),
             tooltip: 'Theme'),
       ],
     );
@@ -578,35 +580,38 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          Tooltip(
-            message: 'Scan QR code',
-            child: InkWell(
-              onTap: () => _openAddAccount(startScanning: true),
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E1E32) : Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _accent.withValues(alpha: 0.22)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _accent.withValues(alpha: isDark ? 0.14 : 0.08),
-                      blurRadius: 14,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.qr_code_scanner_rounded,
-                  color: _accent,
-                  size: 21,
+          if (!isWideScreen) ...[
+            const SizedBox(width: 10),
+            Tooltip(
+              message: 'Scan QR code',
+              child: InkWell(
+                onTap: () => _openAddAccount(startScanning: true),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: _accent.withValues(alpha: 0.22)),
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            _accent.withValues(alpha: isDark ? 0.14 : 0.08),
+                        blurRadius: 14,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.qr_code_scanner_rounded,
+                    color: _accent,
+                    size: 21,
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
           const SizedBox(width: 10),
           Tooltip(
             message: 'Add account',
@@ -1600,7 +1605,11 @@ class _HomeScreenState extends State<HomeScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSyncing = false);
-      _showSnackBar('Sync failed', Colors.red);
+      _showSnackBar(
+        _syncService.lastErrorMessage ??
+            'Sync failed. Check your internet connection.',
+        Colors.red,
+      );
     }
   }
 

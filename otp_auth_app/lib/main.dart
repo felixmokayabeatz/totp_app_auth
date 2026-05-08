@@ -92,6 +92,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Timer? _updateTimer;
   Timer? _sessionHeartbeatTimer;
   AppUpdateInfo? _requiredUpdateInfo;
+  double? _requiredUpdateProgress;
 
   @override
   void initState() {
@@ -257,9 +258,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     setState(() {
       _openingRequiredUpdate = true;
+      _requiredUpdateProgress = null;
     });
 
     try {
+      if (_appUpdateService.canSelfUpdate) {
+        final result = await _appUpdateService.installUpdate(
+          info,
+          onReceiveProgress: (received, total) {
+            if (!mounted) return;
+            setState(() {
+              _requiredUpdateProgress =
+                  total > 0 ? (received / total).clamp(0, 1).toDouble() : null;
+            });
+          },
+        );
+        if (result.started) return;
+        debugPrint('Self-update failed: ${result.message}');
+      }
+
       final opened = await _appUpdateService.openUpdate(info);
       if (!opened) {
         debugPrint('Failed to open update URL: ${info.preferredOpenUrl}');
@@ -268,6 +285,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _openingRequiredUpdate = false;
+          _requiredUpdateProgress = null;
         });
       }
     }
@@ -483,6 +501,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ? _RequiredUpdateScreen(
                       info: _requiredUpdateInfo!,
                       isOpeningUpdate: _openingRequiredUpdate,
+                      canSelfUpdate: _appUpdateService.canSelfUpdate,
+                      updateProgress: _requiredUpdateProgress,
                       onUpdateNow: _openRequiredUpdate,
                       onRefreshStatus: _refreshUpdateStatus,
                     )
@@ -515,12 +535,16 @@ class _RequiredUpdateScreen extends StatelessWidget {
   const _RequiredUpdateScreen({
     required this.info,
     required this.isOpeningUpdate,
+    required this.canSelfUpdate,
+    required this.updateProgress,
     required this.onUpdateNow,
     required this.onRefreshStatus,
   });
 
   final AppUpdateInfo info;
   final bool isOpeningUpdate;
+  final bool canSelfUpdate;
+  final double? updateProgress;
   final Future<void> Function() onUpdateNow;
   final Future<void> Function() onRefreshStatus;
 
@@ -640,14 +664,34 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                             strokeWidth: 2,
                                           ),
                                         )
-                                      : const Icon(Icons.open_in_new_rounded),
+                                      : const Icon(
+                                          Icons.system_update_alt_rounded,
+                                        ),
                                   label: Text(
                                     isOpeningUpdate
-                                        ? 'Opening download...'
+                                        ? (canSelfUpdate
+                                            ? 'Installing update...'
+                                            : 'Opening download...')
                                         : 'Update now',
                                   ),
                                 ),
                               ),
+                              if (isOpeningUpdate && canSelfUpdate) ...[
+                                const SizedBox(height: 12),
+                                LinearProgressIndicator(value: updateProgress),
+                                const SizedBox(height: 8),
+                                Text(
+                                  updateProgress == null
+                                      ? 'Preparing download...'
+                                      : '${(updateProgress! * 100).toStringAsFixed(0)}%',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
                               const SizedBox(height: 10),
                               SizedBox(
                                 width: double.infinity,

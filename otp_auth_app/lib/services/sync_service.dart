@@ -1051,8 +1051,10 @@ class SyncService {
         return false;
       }
     } on DioException catch (e) {
-      _lastErrorMessage = e.response?.data?['error']?.toString() ??
-          'Sync failed. Please sign in again if this device lost its session.';
+      _lastErrorMessage = _isSessionRevokedError(e)
+          ? (_extractServerError(e.response?.data) ??
+              'This device session is no longer active.')
+          : _friendlyRequestError(e, 'Sync failed. Please try again.');
       debugPrint('syncAccounts error: $e');
       return false;
     } catch (e) {

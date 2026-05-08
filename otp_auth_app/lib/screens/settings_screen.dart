@@ -41,11 +41,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _isSyncing = false;
   bool _isCheckingForUpdates = false;
+  bool _isInstallingUpdate = false;
   bool _isDownloadingBackupCodes = false;
   bool _isLoadingBackupCodeStatus = false;
   bool _syncEnabled = false;
   String _appVersionLabel = '...';
   Timer? _syncPrefTimer;
+  final ValueNotifier<double?> _updateProgressNotifier =
+      ValueNotifier<double?>(null);
   AppUpdateInfo? _updateInfo;
   Map<String, dynamic>? _backupCodeStatus;
 
@@ -71,6 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _syncPrefTimer?.cancel();
+    _updateProgressNotifier.dispose();
     super.dispose();
   }
 
@@ -139,8 +143,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (info == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              const Text('Updates are not configured for this platform yet.'),
+          content: Text(
+            _appUpdateService.lastErrorMessage ??
+                'Could not check for updates right now.',
+          ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
           shape:
@@ -155,6 +161,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(
           content: const Text('You are already on the latest version.'),
           backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    if (_appUpdateService.canSelfUpdate) {
+      setState(() => _isInstallingUpdate = true);
+      _updateProgressNotifier.value = null;
+      unawaited(_showUpdateProgressDialog(info));
+
+      final result = await _appUpdateService.installUpdate(
+        info,
+        onReceiveProgress: (received, total) {
+          if (total <= 0) {
+            _updateProgressNotifier.value = null;
+            return;
+          }
+          _updateProgressNotifier.value = received / total;
+        },
+      );
+      if (!mounted) return;
+
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      setState(() => _isInstallingUpdate = false);
+
+      if (result.started) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+
+      final opened = await _appUpdateService.openUpdate(info);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            opened
+                ? '${result.message} Opening the download page instead.'
+                : result.message,
+          ),
+          backgroundColor: opened ? Colors.orange : Colors.red,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -182,7 +242,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String _updateSubtitle() {
     if (_appUpdateService.currentPlatform.isEmpty) {
-      return 'Updates are not configured for this platform';
+      return 'Updates are not available for this platform';
+    }
+
+    if (_isInstallingUpdate) {
+      return 'Downloading and starting the updater...';
     }
 
     if (_isCheckingForUpdates) {
@@ -191,7 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final info = _updateInfo;
     if (info == null) {
-      return 'Check for a newer version';
+      return _appUpdateService.lastErrorMessage ?? 'Check for a newer version';
     }
 
     if (info.updateAvailable && info.forceUpdate) {
@@ -292,13 +356,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           _sectionLabel('Appearance'),
           _settingsCard([
-            _switchTile(
-              icon: Icons.dark_mode_rounded,
-              label: 'Dark Mode',
-              sub: 'Turn dark mode on or off',
-              value: themeProvider.themeMode == ThemeMode.dark,
-              onChanged: (enabled) => themeProvider
-                  .setThemeMode(enabled ? ThemeMode.dark : ThemeMode.light),
+            _themeModeTile(
+              themeProvider: themeProvider,
             ),
             _dividerLine(),
             _tappableTile(
@@ -2425,6 +2484,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _dividerLine() =>
       Divider(height: 1, indent: 68, endIndent: 16, color: _dividerColor);
 
+  Widget _themeModeTile({required ThemeProvider themeProvider}) {
+    final mode = themeProvider.themeMode;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          _iconBox(mode == ThemeMode.system
+              ? Icons.brightness_auto_rounded
+              : mode == ThemeMode.dark
+                  ? Icons.dark_mode_rounded
+                  : Icons.light_mode_rounded),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Theme',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: _textPrimary)),
+                const SizedBox(height: 2),
+                Text(_themeModeSubtitle(mode),
+                    style: TextStyle(fontSize: 12, color: _textSecondary)),
+                const SizedBox(height: 10),
+                SegmentedButton<ThemeMode>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: ThemeMode.system,
+                      icon: Icon(Icons.brightness_auto_rounded, size: 16),
+                      label: Text('System'),
+                    ),
+                    ButtonSegment(
+                      value: ThemeMode.light,
+                      icon: Icon(Icons.light_mode_rounded, size: 16),
+                      label: Text('Light'),
+                    ),
+                    ButtonSegment(
+                      value: ThemeMode.dark,
+                      icon: Icon(Icons.dark_mode_rounded, size: 16),
+                      label: Text('Dark'),
+                    ),
+                  ],
+                  selected: {mode},
+                  onSelectionChanged: (selection) {
+                    themeProvider.setThemeMode(selection.first);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _themeModeSubtitle(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => 'Following this device',
+      ThemeMode.light => 'Light mode',
+      ThemeMode.dark => 'Dark mode',
+    };
+  }
+
   Widget _switchTile({
     required IconData icon,
     required String label,
@@ -2568,7 +2692,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildUpdateTrailing() {
-    if (_isCheckingForUpdates) {
+    if (_isCheckingForUpdates || _isInstallingUpdate) {
       return SizedBox(
         width: 18,
         height: 18,
@@ -2604,6 +2728,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Icons.refresh_rounded,
       color: _isDark ? Colors.white24 : Colors.grey.shade300,
       size: 20,
+    );
+  }
+
+  Future<void> _showUpdateProgressDialog(AppUpdateInfo info) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.system_update_alt_rounded, color: _accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Installing ${info.latestLabel}',
+                style: TextStyle(color: _textPrimary, fontSize: 17),
+              ),
+            ),
+          ],
+        ),
+        content: ValueListenableBuilder<double?>(
+          valueListenable: _updateProgressNotifier,
+          builder: (context, progress, _) {
+            final percent =
+                progress == null ? null : (progress * 100).clamp(0, 100);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Downloading the update. The installer will start when the download finishes.',
+                  style: TextStyle(color: _textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                LinearProgressIndicator(value: progress),
+                const SizedBox(height: 10),
+                Text(
+                  percent == null
+                      ? 'Preparing download...'
+                      : '${percent.toStringAsFixed(0)}%',
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -2704,8 +2881,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isSyncing = false);
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content:
-          Text(success ? 'Sync complete' : 'Sync failed – check connection'),
+      content: Text(
+        success
+            ? 'Sync complete'
+            : (_syncService.lastErrorMessage ??
+                'Sync failed. Check your internet connection.'),
+      ),
       backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

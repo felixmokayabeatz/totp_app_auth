@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../services/app_lock_service.dart';
+import '../services/otp_service.dart';
 import '../widgets/account_logo_badge.dart';
 
 class ShowQRScreen extends StatefulWidget {
@@ -29,7 +31,12 @@ class ShowQRScreen extends StatefulWidget {
 class _ShowQRScreenState extends State<ShowQRScreen> {
   bool _isSecretRevealed = false;
   bool _isAdvancedSecretRevealed = false;
+  bool _isOtpHidden = false;
+  String _currentOtp = '------';
+  int _secondsRemaining = 30;
+  Timer? _otpTimer;
   final AppLockService _appLockService = AppLockService();
+  final OTPService _otpService = OTPService();
 
   String get _base32Secret => widget.secret
       .replaceAll(RegExp(r'\s+'), '')
@@ -40,6 +47,29 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
 
   bool get _hasAdvancedSecret =>
       _advancedSecret.isNotEmpty && _advancedSecret != _base32Secret;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshOtp();
+    _otpTimer = Timer.periodic(const Duration(seconds: 1), (_) => _refreshOtp());
+  }
+
+  @override
+  void dispose() {
+    _otpTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshOtp() async {
+    final otp = await _otpService.generateOTP(_base32Secret);
+    final seconds = _otpService.secondsRemaining();
+    if (!mounted) return;
+    setState(() {
+      _currentOtp = otp;
+      _secondsRemaining = seconds;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +83,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     final accountLabel = widget.accountLabel?.trim() ?? '';
     final labelName = accountLabel.isNotEmpty ? accountLabel : widget.service;
     final label = issuer.isNotEmpty ? '$issuer:$labelName' : labelName;
+    final accountDescriptor = accountLabel.isNotEmpty
+        ? '${accountLabel.contains('@') ? 'Email' : 'Account'}: $accountLabel'
+        : widget.issuer ?? 'Authenticator setup';
     final query = Uri(queryParameters: {
       'secret': _base32Secret,
       'issuer': issuer,
@@ -121,9 +154,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          accountLabel.isNotEmpty
-                              ? accountLabel
-                              : widget.issuer ?? 'Authenticator setup',
+                          accountDescriptor,
                           style: TextStyle(
                             fontSize: 13,
                             color: mutedText,
@@ -134,27 +165,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : const Color(0xFFF1F3F7),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      'TOTP',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: isDark
-                            ? colorScheme.primary
-                            : const Color(0xFF475569),
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ),
+                  _buildOtpBadge(context, isDark),
                 ],
               ),
             );
@@ -615,6 +626,109 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
       ),
       child: child,
     );
+  }
+
+  Widget _buildOtpBadge(BuildContext context, bool isDark) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isExpiring = _secondsRemaining <= 5;
+    final otpText = _isOtpHidden ? '*** ***' : _formatOtp(_currentOtp);
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 118, maxWidth: 148),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : colorScheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isExpiring
+              ? Colors.red.withValues(alpha: 0.28)
+              : colorScheme.primary.withValues(alpha: 0.14),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    otpText,
+                    style: TextStyle(
+                      color: isExpiring ? Colors.red : colorScheme.onSurface,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'monospace',
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: () => setState(() => _isOtpHidden = !_isOtpHidden),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Icon(
+                    _isOtpHidden
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    size: 16,
+                    color: isDark
+                        ? Colors.white60
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'TOTP',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${_secondsRemaining}s',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isExpiring
+                      ? Colors.red
+                      : (isDark ? Colors.white60 : colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatOtp(String otp) {
+    if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
+    return otp;
   }
 
   String _maskedSecret() {

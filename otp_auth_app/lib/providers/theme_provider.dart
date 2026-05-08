@@ -26,7 +26,13 @@ class ThemeProvider extends ChangeNotifier {
   ThemeData get lightTheme => _buildTheme(Brightness.light);
   ThemeData get darkTheme => _buildTheme(Brightness.dark);
 
-  bool get isDarkMode => _themeMode == ThemeMode.dark;
+  bool isDarkMode([Brightness? platformBrightness]) {
+    return switch (_themeMode) {
+      ThemeMode.dark => true,
+      ThemeMode.light => false,
+      ThemeMode.system => platformBrightness == Brightness.dark,
+    };
+  }
 
   Future<void> loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
@@ -206,14 +212,9 @@ class ThemeProvider extends ChangeNotifier {
     return background.computeLuminance() > 0.45 ? Colors.black : Colors.white;
   }
 
-  void toggleTheme() {
-    if (_themeMode == ThemeMode.light) {
-      _themeMode = ThemeMode.dark;
-    } else if (_themeMode == ThemeMode.dark) {
-      _themeMode = ThemeMode.system;
-    } else {
-      _themeMode = ThemeMode.light;
-    }
+  void toggleTheme({Brightness? platformBrightness}) {
+    final currentlyDark = isDarkMode(platformBrightness);
+    _themeMode = currentlyDark ? ThemeMode.light : ThemeMode.dark;
     unawaited(_savePreferences());
     notifyListeners();
   }
