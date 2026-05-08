@@ -371,6 +371,24 @@ def find_tool_path(tool_name: str, exclude_build_tools=False) -> str | None:
     return None
 
 
+def find_clang_toolchain_with_linker() -> Path | None:
+    """Find a Clang bin directory that also contains a linker."""
+    clang_path = find_tool_path("clang", exclude_build_tools=True)
+    if clang_path:
+        clang_bin_dir = Path(clang_path).resolve().parent
+        if any((clang_bin_dir / tool_name).exists() for tool_name in ("ld.lld", "ld")):
+            return clang_bin_dir
+
+    for llvm_bin_dir in sorted(glob.glob("/usr/lib/llvm-*/bin"), reverse=True):
+        candidate_dir = Path(llvm_bin_dir)
+        if not (candidate_dir / "clang").exists():
+            continue
+        if any((candidate_dir / tool_name).exists() for tool_name in ("ld.lld", "ld")):
+            return candidate_dir
+
+    return Path(clang_path).resolve().parent if clang_path else None
+
+
 def link_build_tool(tool_name: str, target: str) -> None:
     """Create or refresh a symlink in the workspace build tools folder."""
     BUILD_TOOLS_DIR.mkdir(parents=True, exist_ok=True)
@@ -405,41 +423,42 @@ def get_linux_build_env() -> dict[str, str]:
     if platform.system() != "Linux":
         return {}
 
-    clang_path = find_tool_path("clang", exclude_build_tools=True)
-    if not clang_path:
+    clang_bin_dir = find_clang_toolchain_with_linker()
+    if not clang_bin_dir:
         return {}
 
-    clang_bin_dir = Path(clang_path).resolve().parent
-    has_adjacent_linker = any(
-        (clang_bin_dir / tool_name).exists() for tool_name in ("ld.lld", "ld")
-    )
-    if has_adjacent_linker:
+    clang_path = clang_bin_dir / "clang"
+    if not clang_path.exists():
         return {}
 
     linker_path = (
-        find_tool_path("ld.lld", exclude_build_tools=True)
-        or find_tool_path("ld", exclude_build_tools=True)
+        (clang_bin_dir / "ld.lld")
+        if (clang_bin_dir / "ld.lld").exists()
+        else (clang_bin_dir / "ld")
+        if (clang_bin_dir / "ld").exists()
+        else None
     )
     if not linker_path:
         print_color("⚠️  No ld.lld or ld linker found for Linux native assets.", Colors.YELLOW)
         return {}
 
-    write_build_tool_wrapper("clang", clang_path)
-    clangxx_path = find_tool_path("clang++", exclude_build_tools=True)
-    if clangxx_path:
-        write_build_tool_wrapper("clang++", clangxx_path)
-    link_build_tool(Path(linker_path).name, linker_path)
+    write_build_tool_wrapper("clang", str(clang_path))
+    clangxx_path = clang_bin_dir / "clang++"
+    if clangxx_path.exists():
+        write_build_tool_wrapper("clang++", str(clangxx_path))
+    link_build_tool(linker_path.name, str(linker_path))
     if Path(linker_path).name != "ld":
         ld_path = find_tool_path("ld", exclude_build_tools=True)
         if ld_path:
             link_build_tool("ld", ld_path)
 
     archiver_path = (
-        find_tool_path("llvm-ar", exclude_build_tools=True)
-        or find_tool_path("ar", exclude_build_tools=True)
+        (clang_bin_dir / "llvm-ar")
+        if (clang_bin_dir / "llvm-ar").exists()
+        else Path(find_tool_path("ar", exclude_build_tools=True) or "")
     )
-    if archiver_path:
-        link_build_tool(Path(archiver_path).name, archiver_path)
+    if archiver_path and archiver_path.exists():
+        link_build_tool(archiver_path.name, str(archiver_path))
         if Path(archiver_path).name != "ar":
             ar_path = find_tool_path("ar", exclude_build_tools=True)
             if ar_path:
@@ -704,7 +723,7 @@ def run_linux():
         return False
     
     print_color("Starting Linux app (press Ctrl+C to stop)...", Colors.GREEN)
-    run("flutter run -d linux", cwd=PROJECT_DIR)
+    run("flutter run -d linux", cwd=PROJECT_DIR, env=get_linux_build_env())
     return True
 
 def run_windows():
@@ -759,7 +778,7 @@ def hot_reload():
     if platform.system() == "Windows":
         run("flutter run", cwd=PROJECT_DIR)
     else:
-        run("flutter run", cwd=PROJECT_DIR)
+        run("flutter run", cwd=PROJECT_DIR, env=get_linux_build_env())
 
 # ==================== BUILD FUNCTIONS ====================
 def build_linux_deb(skip_deb_package=False):
