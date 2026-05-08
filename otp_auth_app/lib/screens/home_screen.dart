@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -580,7 +582,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
           ),
-          if (!isWideScreen) ...[
+          if (Platform.isAndroid || Platform.isIOS) ...[
             const SizedBox(width: 10),
             Tooltip(
               message: 'Scan QR code',
@@ -672,6 +674,16 @@ class _HomeScreenState extends State<HomeScreen>
       _updateAllOTPs();
       await _loadUnreadNotificationCount();
       await _showOfflineBackupReminderIfNeeded();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Success. Account added.'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
     }
   }
 

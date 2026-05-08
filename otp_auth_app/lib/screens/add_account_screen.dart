@@ -55,13 +55,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             Padding(
               padding: EdgeInsets.only(right: 8),
               child: TextButton.icon(
-                onPressed: () {
+                onPressed: () async {
+                  if (_isScanning) {
+                    await _switchToManualEntry();
+                    return;
+                  }
                   setState(() {
-                    _isScanning = !_isScanning;
-                    if (!_isScanning) {
-                      _cameraFailed = false;
-                      _isProcessingQR = false;
-                    }
+                    _isScanning = true;
+                    _cameraFailed = false;
+                    _isProcessingQR = false;
                   });
                 },
                 icon: Icon(
@@ -121,11 +123,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                   ),
                   SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => setState(() {
-                      _isScanning = false;
-                      _cameraFailed = true;
-                      _isProcessingQR = false;
-                    }),
+                    onPressed: () => _switchToManualEntry(cameraFailed: true),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       foregroundColor: Colors.white,
@@ -158,10 +156,25 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 colors: [Colors.black87, Colors.transparent],
               ),
             ),
-            child: Text(
-              'Point your camera at the QR code from your authenticator setup page',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-              textAlign: TextAlign.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Point your camera at the QR code from your authenticator setup page',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: () => _switchToManualEntry(cameraFailed: true),
+                  icon: Icon(Icons.edit_rounded, color: Colors.white, size: 18),
+                  label: Text(
+                    'Enter manually instead',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -171,7 +184,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           left: 16,
           child: IconButton(
             icon: Icon(Icons.arrow_back, color: Colors.white, size: 24),
-            onPressed: () => setState(() => _isScanning = false),
+            onPressed: _switchToManualEntry,
             style: IconButton.styleFrom(
               backgroundColor: Colors.black54,
               shape: CircleBorder(),
@@ -185,6 +198,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   Future<void> _parseQRCode(String qrData) async {
     if (_isProcessingQR) return;
     _isProcessingQR = true;
+    await _stopScanner();
 
     try {
       final importedEntries = OTPImportService().parse(qrData);
@@ -195,6 +209,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             setState(() {
               _isProcessingQR = false;
             });
+            await _restartScanner();
           } else {
             _isProcessingQR = false;
           }
@@ -222,6 +237,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           ));
         }
         _isProcessingQR = false;
+        await _restartScanner();
       }
     } catch (e) {
       debugPrint('QR parse error: $e');
@@ -233,13 +249,43 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         ));
       }
       _isProcessingQR = false;
+      await _restartScanner();
+    }
+  }
+
+  Future<void> _switchToManualEntry({bool cameraFailed = false}) async {
+    await _stopScanner();
+    if (!mounted) return;
+
+    setState(() {
+      _isScanning = false;
+      _cameraFailed = cameraFailed;
+      _isProcessingQR = false;
+    });
+  }
+
+  Future<void> _stopScanner() async {
+    try {
+      await _scannerController?.stop();
+    } catch (e) {
+      debugPrint('Scanner stop error: $e');
+    }
+  }
+
+  Future<void> _restartScanner() async {
+    if (!mounted || !_isMobile || !_isScanning || _cameraFailed) return;
+
+    try {
+      await _scannerController?.start();
+    } catch (e) {
+      debugPrint('Scanner restart error: $e');
     }
   }
 
   Future<bool?> _confirmScannedEntries(List<OTPImportEntry> entries) {
     final title = entries.length == 1
-        ? 'Add scanned account?'
-        : 'Add ${entries.length} scanned accounts?';
+        ? 'Confirm addition'
+        : 'Confirm ${entries.length} additions';
     final content = entries.length == 1
         ? _formatEntrySummary(entries.first)
         : entries.take(5).map(_formatEntrySummary).join('\n');
@@ -258,7 +304,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Add'),
+            child: Text('Confirm addition'),
           ),
         ],
       ),
@@ -315,17 +361,17 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
     if (!mounted) return;
 
-    final message = importedCount == 0
-        ? 'No new accounts imported.'
-        : 'Imported $importedCount account${importedCount == 1 ? '' : 's'}${skippedCount > 0 ? ', skipped $skippedCount duplicate${skippedCount == 1 ? '' : 's'}' : ''}.';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor:
-            importedCount == 0 ? Colors.orange : const Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    if (importedCount == 0) {
+      final message =
+          'No new accounts added${skippedCount > 0 ? '. Duplicate skipped.' : '.'}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
 
     Navigator.pop(context, importedCount > 0);
   }

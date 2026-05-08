@@ -604,6 +604,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             _dividerLine(),
             _tappableTile(
+              icon: Icons.article_outlined,
+              label: 'Release Notes',
+              sub: 'See what changed in this installed version',
+              onTap: _showInstalledReleaseNotes,
+            ),
+            _dividerLine(),
+            _tappableTile(
               icon: Icons.privacy_tip_outlined,
               label: 'Privacy Policy',
               sub: 'Read our privacy policy',
@@ -1410,8 +1417,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (imported == true && mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: const Text(
-                                      'Imported QR accounts successfully.'),
+                                  content:
+                                      const Text('Success. Account added.'),
                                   backgroundColor: const Color(0xFF10B981),
                                   behavior: SnackBarBehavior.floating,
                                   shape: RoundedRectangleBorder(
@@ -2767,6 +2774,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Icons.refresh_rounded,
       color: _isDark ? Colors.white24 : Colors.grey.shade300,
       size: 20,
+    );
+  }
+
+  Future<void> _showInstalledReleaseNotes() {
+    const releaseNotes = '''
+v1.6.10 (Build 25)
+
+What's new
+- Settings now shows release notes for the installed app version.
+- Update screens show both the current version and the latest available version.
+- Update details now show release notes before installing from settings.
+- The phone scan shortcut stays on mobile only.
+- If scanning is not possible, users can switch to manual secret-key entry.
+- Scan confirmation now says "Confirm addition".
+- Scan success now says "Success. Account added." instead of import wording.
+''';
+
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.article_outlined, color: _accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Release Notes',
+                style: TextStyle(color: _textPrimary, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460, maxHeight: 420),
+          child: Scrollbar(
+            child: SingleChildScrollView(
+              child: Text(
+                releaseNotes.trim(),
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
     );
   }
 
