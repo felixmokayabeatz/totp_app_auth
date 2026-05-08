@@ -1,0 +1,20 @@
+v1.6.6 (Build 21)
+
+What's new
+- Added a direct QR scan button on the home screen for faster account setup on phones.
+- QR scans now ask for confirmation before adding an account.
+- Duplicate account checks now allow the same service with different emails, while blocking the same service and email from being added twice.
+- Added a clear notifications action with filters for notification type, age, and whether unread notifications should be kept.
+- Sync Now in Settings now gives clear feedback when cloud sync is disabled instead of appearing unresponsive.
+- Added offline-first use, so you can use the authenticator without creating an account.
+- Added separate ratings and reviews for each app platform.
+- Signing in still enables automatic backup and cross-platform sync.
+- Local accounts now stay available on the same device after signing out.
+- Added Google Authenticator imports, including transfer QR codes with multiple accounts.
+- QR export now shows the human-friendly Base32 secret by default, with advanced Base64 hidden behind a reveal.
+- Remote sign-out now reacts faster through the heartbeat flow.
+- Accent colors now apply more consistently across the app with refreshed UI touches.
+- Reviews now require a signed-in account.
+- Backup PDF download now uses the device/app unlock flow before exporting.
+- Improved offline account deletion messaging and sync sign-in return flow.
+- Optimized the onboarding screen for computer screens.
