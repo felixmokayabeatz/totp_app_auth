@@ -614,7 +614,7 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 6),
                                         Text(
-                                          'Install ${info.latestLabel} to continue using BeatzLock.',
+                                          'Install the latest version to continue using BeatzLock.',
                                           style: Theme.of(context)
                                               .textTheme
                                               .bodyMedium
@@ -629,10 +629,22 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 20),
-                              Text(
-                                info.reason,
-                                style: Theme.of(context).textTheme.bodyLarge,
+                              _RequiredUpdateVersionRow(
+                                label: 'Current version',
+                                value: info.currentLabel,
                               ),
+                              const SizedBox(height: 8),
+                              _RequiredUpdateVersionRow(
+                                label: 'Latest version',
+                                value: info.latestLabel,
+                              ),
+                              if (info.reason.trim().isNotEmpty) ...[
+                                const SizedBox(height: 18),
+                                Text(
+                                  info.reason.trim(),
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                              ],
                               if (releaseNotes.isNotEmpty) ...[
                                 const SizedBox(height: 16),
                                 Text(
@@ -759,6 +771,54 @@ class _RequiredUpdateScreen extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _RequiredUpdateVersionRow extends StatelessWidget {
+  const _RequiredUpdateVersionRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -236,5 +236,33 @@
     "build_number": "22",
     "artifact_version": "1.6.7_22",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 18,
+    "platform": "android",
+    "artifact_type": "apk",
+    "file": "beatzlock_1.6.9_24.apk",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/final_builds/android/1.6.9_24/beatzlock_1.6.9_24.apk",
+    "relative_path": "final_builds/android/1.6.9_24/beatzlock_1.6.9_24.apk",
+    "is_directory": false,
+    "timestamp": "2026-05-09T00:26:49",
+    "version": "1.6.9+24",
+    "build_number": "24",
+    "artifact_version": "1.6.9_24",
+    "host_platform": "Linux"
+  },
+  {
+    "sequence": 19,
+    "platform": "android",
+    "artifact_type": "apk",
+    "file": "beatzlock_1.6.10_25.apk",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/final_builds/android/1.6.10_25/beatzlock_1.6.10_25.apk",
+    "relative_path": "final_builds/android/1.6.10_25/beatzlock_1.6.10_25.apk",
+    "is_directory": false,
+    "timestamp": "2026-05-09T00:40:08",
+    "version": "1.6.10+25",
+    "build_number": "25",
+    "artifact_version": "1.6.10_25",
+    "host_platform": "Linux"
   }
 ]

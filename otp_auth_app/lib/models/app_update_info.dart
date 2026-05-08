@@ -30,6 +30,8 @@ class AppUpdateInfo {
 
   String get latestLabel => '$latestVersion (Build $latestBuildNumber)';
 
+  String get currentLabel => '$currentVersion (Build $currentBuildNumber)';
+
   String get preferredOpenUrl =>
       downloadUrl.trim().isNotEmpty ? downloadUrl : downloadsPageUrl;
 

@@ -236,5 +236,33 @@
     "build_number": "22",
     "artifact_version": "1.6.7_22",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 18,
+    "platform": "linux",
+    "artifact_type": "deb",
+    "file": "beatzlock_1.6.9_24_amd64.deb",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/final_builds/linux/1.6.9_24/beatzlock_1.6.9_24_amd64.deb",
+    "relative_path": "final_builds/linux/1.6.9_24/beatzlock_1.6.9_24_amd64.deb",
+    "is_directory": false,
+    "timestamp": "2026-05-09T00:22:29",
+    "version": "1.6.9+24",
+    "build_number": "24",
+    "artifact_version": "1.6.9_24",
+    "host_platform": "Linux"
+  },
+  {
+    "sequence": 19,
+    "platform": "linux",
+    "artifact_type": "deb",
+    "file": "beatzlock_1.6.10_25_amd64.deb",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/final_builds/linux/1.6.10_25/beatzlock_1.6.10_25_amd64.deb",
+    "relative_path": "final_builds/linux/1.6.10_25/beatzlock_1.6.10_25_amd64.deb",
+    "is_directory": false,
+    "timestamp": "2026-05-09T00:37:57",
+    "version": "1.6.10+25",
+    "build_number": "25",
+    "artifact_version": "1.6.10_25",
+    "host_platform": "Linux"
   }
 ]

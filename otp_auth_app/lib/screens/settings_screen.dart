@@ -187,6 +187,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    final shouldUpdate = await _showUpdateDetailsDialog(info);
+    if (shouldUpdate != true || !mounted) return;
+
     if (_appUpdateService.canSelfUpdate) {
       setState(() => _isInstallingUpdate = true);
       _updateProgressNotifier.value = null;
@@ -273,11 +276,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (info.updateAvailable && info.forceUpdate) {
-      return 'Required update available: ${info.latestLabel}';
+      return 'Required: ${info.currentLabel} to ${info.latestLabel}';
     }
 
     if (info.updateAvailable) {
-      return 'Optional update available: ${info.latestLabel}';
+      return 'Optional: ${info.currentLabel} to ${info.latestLabel}';
     }
 
     return 'You are using the latest version';
@@ -2764,6 +2767,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Icons.refresh_rounded,
       color: _isDark ? Colors.white24 : Colors.grey.shade300,
       size: 20,
+    );
+  }
+
+  Future<bool?> _showUpdateDetailsDialog(AppUpdateInfo info) {
+    final releaseNotes = info.releaseNotes.trim();
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.system_update_alt_rounded, color: _accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                info.forceUpdate ? 'Required update' : 'Update available',
+                style: TextStyle(color: _textPrimary, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _updateVersionLine('Current', info.currentLabel),
+              const SizedBox(height: 8),
+              _updateVersionLine('Latest', info.latestLabel),
+              const SizedBox(height: 14),
+              Text(
+                _appUpdateService.canSelfUpdate
+                    ? 'BeatzLock can download and start this update from settings on Windows and Linux/Kali.'
+                    : 'The download page will open so you can install the update.',
+                style: TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+              if (info.reason.trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  info.reason.trim(),
+                  style: TextStyle(color: _textPrimary, fontSize: 13),
+                ),
+              ],
+              if (releaseNotes.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Release notes',
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _dividerColor),
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 220),
+                    child: Scrollbar(
+                      child: SingleChildScrollView(
+                        child: Text(
+                          releaseNotes,
+                          style: TextStyle(
+                            color: _textSecondary,
+                            fontSize: 13,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Later'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.system_update_alt_rounded, size: 18),
+            label: Text(
+              _appUpdateService.canSelfUpdate
+                  ? 'Install update'
+                  : 'Open download',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _updateVersionLine(String label, String version) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 62,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            version,
+            style: TextStyle(
+              color: _textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
