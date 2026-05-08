@@ -792,122 +792,129 @@ class _LaunchLoadingScreenState extends State<_LaunchLoadingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final backgroundColor = theme.scaffoldBackgroundColor;
+    final isDark = theme.brightness == Brightness.dark;
+    final backgroundAccent = Color.lerp(
+      backgroundColor,
+      colorScheme.primary,
+      isDark ? 0.16 : 0.06,
+    )!;
 
     return Scaffold(
-      backgroundColor: colorScheme.surface,
-      body: Center(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            final value = _controller.value;
-            final intro = Curves.easeOutBack.transform(
-              (value / 0.58).clamp(0.0, 1.0).toDouble(),
-            );
-            final settle = Curves.easeOutCubic.transform(
-              ((value - 0.58) / 0.42).clamp(0.0, 1.0).toDouble(),
-            );
-            final breathe = (math.sin(value * math.pi * 2) + 1) / 2;
-            final logoScale = 0.72 + (intro * 0.3) - (settle * 0.02);
-            final logoOffset = 18 * (1 - intro);
-            final glowOpacity = (0.16 + breathe * 0.12) * intro;
-            final ringScale = 0.76 + (intro * 0.26) + (breathe * 0.06);
-            final shineProgress = Curves.easeInOutCubic.transform(
-              ((value - 0.18) / 0.62).clamp(0.0, 1.0).toDouble(),
-            );
+      backgroundColor: backgroundColor,
+      body: SizedBox.expand(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                backgroundColor,
+                backgroundAccent,
+                backgroundColor,
+              ],
+            ),
+          ),
+          child: Center(
+            child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              final value = _controller.value;
+              final intro = Curves.easeOutBack.transform(
+                (value / 0.58).clamp(0.0, 1.0).toDouble(),
+              );
+              final settle = Curves.easeOutCubic.transform(
+                ((value - 0.58) / 0.42).clamp(0.0, 1.0).toDouble(),
+              );
+              final breathe = (math.sin(value * math.pi * 2) + 1) / 2;
+              final logoScale = 0.72 + (intro * 0.3) - (settle * 0.02);
+              final logoOffset = 18 * (1 - intro);
+              final glowOpacity = (0.16 + breathe * 0.12) * intro;
+              final shineProgress = Curves.easeInOutCubic.transform(
+                ((value - 0.18) / 0.62).clamp(0.0, 1.0).toDouble(),
+              );
 
-            return SizedBox(
-              width: 220,
-              height: 220,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Opacity(
-                    opacity: glowOpacity,
-                    child: Transform.scale(
-                      scale: ringScale,
-                      child: Container(
-                        width: 160,
-                        height: 160,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              colorScheme.primary.withValues(alpha: 0.58),
-                              colorScheme.secondary.withValues(alpha: 0.28),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Opacity(
-                    opacity: 0.28 * intro,
-                    child: Transform.scale(
-                      scale: 0.9 + breathe * 0.08,
-                      child: Container(
-                        width: 144,
-                        height: 144,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: colorScheme.primary.withValues(alpha: 0.42),
-                            width: 1.6,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Transform.translate(
-                    offset: Offset(0, logoOffset),
-                    child: Transform.scale(
-                      scale: logoScale,
-                      child: Stack(
-                        children: [
-                          Container(
-                            width: 116,
-                            height: 116,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(28),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: colorScheme.primary
-                                      .withValues(alpha: 0.28),
-                                  blurRadius: 34,
-                                  spreadRadius: 2,
-                                ),
+              return SizedBox(
+                width: 250,
+                height: 250,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: glowOpacity,
+                      child: Transform.scale(
+                        scale: 0.9 + (intro * 0.12) + (breathe * 0.04),
+                        child: Container(
+                          width: 182,
+                          height: 182,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                colorScheme.primary.withValues(alpha: 0.58),
+                                colorScheme.secondary.withValues(alpha: 0.28),
+                                Colors.transparent,
                               ],
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(28),
-                              child: Image.asset(
-                                'linux/runner/resources/app_icon.png',
-                                fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Transform.translate(
+                      offset: Offset(0, logoOffset),
+                      child: Transform.scale(
+                        scale: logoScale,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 138,
+                              height: 138,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(34),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: colorScheme.primary
+                                        .withValues(alpha: 0.28),
+                                    blurRadius: 38,
+                                    spreadRadius: 3,
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(34),
+                                child: Image.asset(
+                                  'linux/runner/resources/app_icon.png',
+                                  fit: BoxFit.cover,
+                                ),
                               ),
                             ),
-                          ),
-                          Positioned.fill(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(28),
-                              child: Transform.translate(
-                                offset: Offset(-150 + shineProgress * 300, 0),
-                                child: Transform.rotate(
-                                  angle: -0.42,
-                                  child: Align(
-                                    alignment: Alignment.center,
-                                    child: Container(
-                                      width: 28,
-                                      height: 170,
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Colors.white.withValues(alpha: 0),
-                                            Colors.white.withValues(
-                                              alpha: 0.44 * intro,
-                                            ),
-                                            Colors.white.withValues(alpha: 0),
-                                          ],
+                            Positioned.fill(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(34),
+                                child: Transform.translate(
+                                  offset:
+                                      Offset(-170 + shineProgress * 340, 0),
+                                  child: Transform.rotate(
+                                    angle: -0.42,
+                                    child: Align(
+                                      alignment: Alignment.center,
+                                      child: Container(
+                                        width: 32,
+                                        height: 194,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Colors.white
+                                                  .withValues(alpha: 0),
+                                              Colors.white.withValues(
+                                                alpha: 0.44 * intro,
+                                              ),
+                                              Colors.white
+                                                  .withValues(alpha: 0),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -915,15 +922,16 @@ class _LaunchLoadingScreenState extends State<_LaunchLoadingScreen>
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            );
-          },
+                  ],
+                ),
+              );
+            },
+            ),
+        ),
         ),
       ),
     );
