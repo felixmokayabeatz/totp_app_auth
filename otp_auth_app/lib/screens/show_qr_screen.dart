@@ -52,7 +52,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
   void initState() {
     super.initState();
     _refreshOtp();
-    _otpTimer = Timer.periodic(const Duration(seconds: 1), (_) => _refreshOtp());
+    _otpTimer =
+        Timer.periodic(const Duration(seconds: 1), (_) => _refreshOtp());
   }
 
   @override
@@ -714,8 +715,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: colorScheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
@@ -737,7 +737,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   fontWeight: FontWeight.w700,
                   color: isExpiring
                       ? Colors.red
-                      : (isDark ? Colors.white60 : colorScheme.onSurfaceVariant),
+                      : (isDark
+                          ? Colors.white60
+                          : colorScheme.onSurfaceVariant),
                 ),
               ),
             ],
