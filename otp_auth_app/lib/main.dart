@@ -92,7 +92,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Timer? _updateTimer;
   Timer? _sessionHeartbeatTimer;
   AppUpdateInfo? _requiredUpdateInfo;
-  double? _requiredUpdateProgress;
+  AppDownloadProgress? _requiredUpdateProgress;
 
   @override
   void initState() {
@@ -265,11 +265,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (_appUpdateService.canSelfUpdate) {
         final result = await _appUpdateService.installUpdate(
           info,
-          onReceiveProgress: (received, total) {
+          onReceiveProgress: (progress) {
             if (!mounted) return;
             setState(() {
-              _requiredUpdateProgress =
-                  total > 0 ? (received / total).clamp(0, 1).toDouble() : null;
+              _requiredUpdateProgress = progress;
             });
           },
         );
@@ -544,7 +543,7 @@ class _RequiredUpdateScreen extends StatelessWidget {
   final AppUpdateInfo info;
   final bool isOpeningUpdate;
   final bool canSelfUpdate;
-  final double? updateProgress;
+  final AppDownloadProgress? updateProgress;
   final Future<void> Function() onUpdateNow;
   final Future<void> Function() onRefreshStatus;
 
@@ -678,12 +677,50 @@ class _RequiredUpdateScreen extends StatelessWidget {
                               ),
                               if (isOpeningUpdate && canSelfUpdate) ...[
                                 const SizedBox(height: 12),
-                                LinearProgressIndicator(value: updateProgress),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        updateProgress?.percentLabel ??
+                                            'Preparing download...',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Flexible(
+                                      child: Text(
+                                        updateProgress?.speedLabel ??
+                                            'Speed: Calculating...',
+                                        textAlign: TextAlign.right,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                LinearProgressIndicator(
+                                  value: updateProgress?.ratio,
+                                ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  updateProgress == null
-                                      ? 'Preparing download...'
-                                      : '${(updateProgress! * 100).toStringAsFixed(0)}%',
+                                  updateProgress?.sizeLabel ??
+                                      'Downloaded: 0 MB',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall

@@ -96,7 +96,7 @@ class AppUpdateService {
 
   Future<AppSelfUpdateResult> installUpdate(
     AppUpdateInfo info, {
-    void Function(int received, int total)? onReceiveProgress,
+    void Function(AppDownloadProgress progress)? onReceiveProgress,
   }) async {
     if (!canSelfUpdate) {
       return const AppSelfUpdateResult(
@@ -141,7 +141,7 @@ class AppUpdateService {
   Future<String> _downloadInstaller(
     AppUpdateInfo info,
     Uri downloadUri, {
-    void Function(int received, int total)? onReceiveProgress,
+    void Function(AppDownloadProgress progress)? onReceiveProgress,
   }) async {
     final tempDir = await getTemporaryDirectory();
     final updateDir = Directory(
@@ -155,11 +155,38 @@ class AppUpdateService {
     final fileName =
         'beatzlock_${info.latestVersion}_${info.latestBuildNumber}$extension';
     final filePath = '${updateDir.path}${Platform.pathSeparator}$fileName';
+    DateTime? lastProgressAt;
+    int lastReceivedBytes = 0;
+    double? smoothedBytesPerSecond;
 
     await _dio.download(
       downloadUri.toString(),
       filePath,
-      onReceiveProgress: onReceiveProgress,
+      onReceiveProgress: (received, total) {
+        final now = DateTime.now();
+        final previousProgressAt = lastProgressAt;
+        if (previousProgressAt != null) {
+          final seconds =
+              now.difference(previousProgressAt).inMilliseconds / 1000;
+          final bytesDelta = received - lastReceivedBytes;
+          if (seconds > 0 && bytesDelta >= 0) {
+            final instantBytesPerSecond = bytesDelta / seconds;
+            smoothedBytesPerSecond = smoothedBytesPerSecond == null
+                ? instantBytesPerSecond
+                : (smoothedBytesPerSecond! * 0.7) +
+                    (instantBytesPerSecond * 0.3);
+          }
+        }
+        lastProgressAt = now;
+        lastReceivedBytes = received;
+        onReceiveProgress?.call(
+          AppDownloadProgress(
+            receivedBytes: received,
+            totalBytes: total,
+            bytesPerSecond: smoothedBytesPerSecond,
+          ),
+        );
+      },
       options: Options(
         followRedirects: true,
         responseType: ResponseType.bytes,
@@ -269,4 +296,49 @@ class AppSelfUpdateResult {
 
   final bool started;
   final String message;
+}
+
+class AppDownloadProgress {
+  const AppDownloadProgress({
+    required this.receivedBytes,
+    required this.totalBytes,
+    required this.bytesPerSecond,
+  });
+
+  final int receivedBytes;
+  final int totalBytes;
+  final double? bytesPerSecond;
+
+  bool get hasTotal => totalBytes > 0;
+
+  double? get ratio {
+    if (!hasTotal) return null;
+    return (receivedBytes / totalBytes).clamp(0, 1).toDouble();
+  }
+
+  String get percentLabel {
+    final value = ratio;
+    if (value == null) return 'Preparing download...';
+    return '${(value * 100).toStringAsFixed(0)}%';
+  }
+
+  String get sizeLabel {
+    if (!hasTotal) return 'Downloaded: ${_formatMegabytes(receivedBytes)}';
+    return 'Downloaded: ${_formatMegabytes(receivedBytes)} / ${_formatMegabytes(totalBytes)}';
+  }
+
+  String get speedLabel {
+    final speed = bytesPerSecond;
+    if (speed == null || speed <= 0) return 'Speed: Calculating...';
+    if (speed >= 1024 * 1024) return 'Speed: ${_formatMegabytes(speed)}/s';
+    return 'Speed: ${(speed / 1024).toStringAsFixed(0)} KB/s';
+  }
+
+  static String _formatMegabytes(num bytes) {
+    if (bytes <= 0) return '0 MB';
+    final megabytes = bytes / (1024 * 1024);
+    if (megabytes < 0.1) return '<0.1 MB';
+    if (megabytes >= 100) return '${megabytes.toStringAsFixed(0)} MB';
+    return '${megabytes.toStringAsFixed(1)} MB';
+  }
 }

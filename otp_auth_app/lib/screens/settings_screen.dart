@@ -50,8 +50,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _appVersionLabel = '...';
   String? _profilePhotoUrl;
   Timer? _syncPrefTimer;
-  final ValueNotifier<double?> _updateProgressNotifier =
-      ValueNotifier<double?>(null);
+  final ValueNotifier<AppDownloadProgress?> _updateProgressNotifier =
+      ValueNotifier<AppDownloadProgress?>(null);
   AppUpdateInfo? _updateInfo;
   Map<String, dynamic>? _backupCodeStatus;
 
@@ -194,12 +194,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       final result = await _appUpdateService.installUpdate(
         info,
-        onReceiveProgress: (received, total) {
-          if (total <= 0) {
-            _updateProgressNotifier.value = null;
-            return;
-          }
-          _updateProgressNotifier.value = received / total;
+        onReceiveProgress: (progress) {
+          _updateProgressNotifier.value = progress;
         },
       );
       if (!mounted) return;
@@ -2790,11 +2786,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
-        content: ValueListenableBuilder<double?>(
+        content: ValueListenableBuilder<AppDownloadProgress?>(
           valueListenable: _updateProgressNotifier,
           builder: (context, progress, _) {
-            final percent =
-                progress == null ? null : (progress * 100).clamp(0, 100);
             return Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2804,12 +2798,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(color: _textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
-                LinearProgressIndicator(value: progress),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        progress?.percentLabel ?? 'Preparing download...',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        progress?.speedLabel ?? 'Speed: Calculating...',
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: _textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(value: progress?.ratio),
                 const SizedBox(height: 10),
                 Text(
-                  percent == null
-                      ? 'Preparing download...'
-                      : '${percent.toStringAsFixed(0)}%',
+                  progress?.sizeLabel ?? 'Downloaded: 0 MB',
                   style: TextStyle(
                     color: _textSecondary,
                     fontSize: 12,
