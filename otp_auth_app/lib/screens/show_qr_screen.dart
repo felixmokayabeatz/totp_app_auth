@@ -11,6 +11,7 @@ class ShowQRScreen extends StatefulWidget {
   final String? advancedSecret;
   final String service;
   final String? issuer;
+  final String? accountLabel;
 
   const ShowQRScreen({
     super.key,
@@ -18,6 +19,7 @@ class ShowQRScreen extends StatefulWidget {
     this.advancedSecret,
     required this.service,
     this.issuer,
+    this.accountLabel,
   });
 
   @override
@@ -48,8 +50,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     final issuer = (widget.issuer?.trim().isNotEmpty ?? false)
         ? widget.issuer!.trim()
         : widget.service.trim();
-    final label =
-        issuer.isNotEmpty ? '$issuer:${widget.service}' : widget.service;
+    final accountLabel = widget.accountLabel?.trim() ?? '';
+    final labelName = accountLabel.isNotEmpty ? accountLabel : widget.service;
+    final label = issuer.isNotEmpty ? '$issuer:$labelName' : labelName;
     final query = Uri(queryParameters: {
       'secret': _base32Secret,
       'issuer': issuer,
@@ -118,7 +121,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          widget.issuer ?? 'Authenticator setup',
+                          accountLabel.isNotEmpty
+                              ? accountLabel
+                              : widget.issuer ?? 'Authenticator setup',
                           style: TextStyle(
                             fontSize: 13,
                             color: mutedText,

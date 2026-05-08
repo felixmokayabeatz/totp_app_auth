@@ -1020,6 +1020,7 @@ class _HomeScreenState extends State<HomeScreen>
           advancedSecret: account.secret,
           service: account.service,
           issuer: account.issuer,
+          accountLabel: account.accountLabel,
         ),
       ),
     );
