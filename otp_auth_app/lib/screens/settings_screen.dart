@@ -7,7 +7,6 @@ import 'package:file_selector_windows/file_selector_windows.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
@@ -17,7 +16,6 @@ import '../services/app_rating_service.dart';
 import '../models/otp_account.dart';
 import '../services/app_update_service.dart';
 import '../services/sync_service.dart';
-import '../services/biometric_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
 import '../services/secure_storage_service.dart';
@@ -29,13 +27,14 @@ import 'notifications_screen.dart';
 import 'profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
   @override
-  _SettingsScreenState createState() => _SettingsScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
-  final BiometricService _biometricService = BiometricService();
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
   final AppRatingService _appRatingService = AppRatingService();
@@ -45,7 +44,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDownloadingBackupCodes = false;
   bool _isLoadingBackupCodeStatus = false;
   bool _syncEnabled = false;
-  bool _appLockEnabled = false;
   String _appVersionLabel = '...';
   Timer? _syncPrefTimer;
   AppUpdateInfo? _updateInfo;
@@ -55,7 +53,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadSyncPreference();
-    _loadAppLockSettings();
     _loadAppVersion();
     _refreshUpdateInfo();
     _loadBackupCodeStatus();
@@ -80,15 +77,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSyncPreference() async {
     final enabled = await _syncService.isSyncEnabled();
     if (mounted) setState(() => _syncEnabled = enabled);
-  }
-
-  Future<void> _loadAppLockSettings() async {
-    final appLockEnabled = await _appLockService.isAppLockEnabled();
-    if (mounted) {
-      setState(() {
-        _appLockEnabled = appLockEnabled;
-      });
-    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -274,7 +262,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white38 : Colors.grey.shade500;
   Color get _dividerColor =>
-      _isDark ? Colors.white.withOpacity(0.06) : Colors.grey.shade100;
+      _isDark ? Colors.white.withValues(alpha: 0.06) : Colors.grey.shade100;
 
   @override
   Widget build(BuildContext context) {
@@ -372,7 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.12),
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Text(
@@ -433,6 +421,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 await _syncService.setSyncEnabled(val);
+                if (!context.mounted) return;
                 setState(() => _syncEnabled = val);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(val
@@ -483,7 +472,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'Device sessions are available after you sign in.')) {
                   return;
                 }
-                if (!mounted) return;
+                if (!context.mounted) return;
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -502,7 +491,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'Notifications are available after you sign in.')) {
                   return;
                 }
-                if (!mounted) return;
+                if (!context.mounted) return;
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -599,16 +588,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _changeAppPin() async {
+    final messenger = ScaffoldMessenger.of(context);
     final success = await _appLockService.setupAppPinFromSettings(context);
+    if (!mounted) return;
     if (success) {
       if (await _syncService.isLoggedIn()) {
         final deviceLabel = await _syncService.getCurrentDeviceLabel();
+        if (!context.mounted) return;
         unawaited(
           _syncService.logAppPinChangedNotification(deviceLabel: deviceLabel),
         );
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
             content: Text('PIN changed successfully'),
             backgroundColor: Colors.green),
@@ -646,6 +638,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return true;
     }
 
+    if (!mounted) return false;
     final signIn = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -746,12 +739,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         if (platformSummary != null) ...[
                           _buildPlatformSummaryCard(
-                            platformLabel: existingRating!.platformDisplay,
-                            summary: platformSummary!,
+                            platformLabel: existingRating.platformDisplay,
+                            summary: platformSummary,
                           ),
                           const SizedBox(height: 16),
                         ],
-                        _buildExistingRatingPreview(existingRating!),
+                        _buildExistingRatingPreview(existingRating),
                       ],
                     )
                   : Column(
@@ -769,7 +762,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _buildPlatformSummaryCard(
                             platformLabel: existingRating?.platformDisplay ??
                                 _platformLabelFromSlug(currentPlatform),
-                            summary: platformSummary!,
+                            summary: platformSummary,
                           ),
                         ],
                         const SizedBox(height: 16),
@@ -1145,10 +1138,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF16A34A).withOpacity(_isDark ? 0.16 : 0.08),
+        color: const Color(0xFF16A34A).withValues(alpha: _isDark ? 0.16 : 0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFF16A34A).withOpacity(_isDark ? 0.34 : 0.22),
+          color:
+              const Color(0xFF16A34A).withValues(alpha: _isDark ? 0.34 : 0.22),
         ),
       ),
       child: Column(
@@ -1228,9 +1222,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _accent.withOpacity(0.08),
+        color: _accent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _accent.withOpacity(0.18)),
+        border: Border.all(color: _accent.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
@@ -1577,6 +1571,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    if (!mounted) return;
     final authenticated = await _appLockService.authenticateToUnlock(context);
     if (!mounted) return;
     if (!authenticated) {
@@ -1617,10 +1612,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     await _loadBackupCodeStatus();
+    if (!mounted) return;
 
     await showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Row(
@@ -1712,6 +1708,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (choice == null || choice == 'cancel') return;
 
     if (choice == 'local') {
+      if (!mounted) return;
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
@@ -1741,6 +1738,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (confirm != true) return;
 
       await _syncService.deleteAllLocalOnly();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text(
             'All accounts removed from this device. Sync to restore.'),
@@ -1754,6 +1752,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // ── "Everywhere" path: require OTP ──────────────────────────────────────
     if (!await _syncService.isLoggedIn()) {
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
@@ -1794,6 +1793,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final otpSent = await _syncService.sendDeleteOtp(username);
     if (!otpSent) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:
             Text('Failed to send verification code. Check your connection.'),
@@ -1803,10 +1803,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final otpController = TextEditingController();
+    if (!mounted) return;
     final verified = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text('Confirm Deletion', style: TextStyle(color: _textPrimary)),
@@ -1825,7 +1826,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               decoration: BoxDecoration(
                 color: _isDark ? Colors.white12 : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withOpacity(0.4)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
               ),
               child: TextField(
                 controller: otpController,
@@ -1851,7 +1852,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () {
               otpController.dispose();
-              Navigator.pop(context, false);
+              Navigator.pop(dialogContext, false);
             },
             child: Text('Cancel', style: TextStyle(color: _textSecondary)),
           ),
@@ -1861,15 +1862,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: () async {
               final code = otpController.text.trim();
               if (code.length != 6) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(
                   content: Text('Enter the 6-digit code'),
                   backgroundColor: Colors.red,
                 ));
                 return;
               }
               final ok = await _syncService.verifyDeleteOtp(username, code);
+              if (!dialogContext.mounted) return;
               otpController.dispose();
-              Navigator.pop(context, ok);
+              Navigator.pop(dialogContext, ok);
             },
             child: const Text('Delete Everything'),
           ),
@@ -1878,6 +1880,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (verified != true) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Invalid code – deletion cancelled'),
         backgroundColor: Colors.red,
@@ -1886,6 +1889,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final ok = await _syncService.deleteAllEverywhere();
+    if (!mounted) return;
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('All accounts deleted everywhere'),
@@ -1914,9 +1918,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
+          color: color.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.25)),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
         child: Row(
           children: [
@@ -1924,7 +1928,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10)),
               child: Icon(icon, color: color, size: 18),
             ),
@@ -1941,12 +1945,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 2),
                   Text(subtitle,
                       style: TextStyle(
-                          fontSize: 11, color: color.withOpacity(0.7))),
+                          fontSize: 11, color: color.withValues(alpha: 0.7))),
                 ],
               ),
             ),
             Icon(Icons.chevron_right_rounded,
-                color: color.withOpacity(0.5), size: 18),
+                color: color.withValues(alpha: 0.5), size: 18),
           ],
         ),
       ),
@@ -1959,43 +1963,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
     final otpCodeController = TextEditingController();
-    bool _obscureCurrent = true;
-    bool _obscureNew = true;
-    bool _obscureConfirm = true;
-    bool _show2FA = false;
-    double _passwordStrength = 0.0;
-    String _passwordStrengthText = '';
-    Color _passwordStrengthColor = Colors.grey;
-    double _passwordLength = 16;
+    bool obscureCurrent = true;
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+    bool show2FA = false;
+    double passwordStrength = 0.0;
+    String passwordStrengthText = '';
+    Color passwordStrengthColor = Colors.grey;
+    double passwordLength = 16;
 
     void checkStrength(StateSetter setState) {
       final pw = newPasswordController.text;
       if (pw.isEmpty) {
         setState(() {
-          _passwordStrength = 0;
-          _passwordStrengthText = '';
+          passwordStrength = 0;
+          passwordStrengthText = '';
         });
         return;
       }
       int score = 0;
-      if (pw.length >= 12)
+      if (pw.length >= 12) {
         score += 25;
-      else if (pw.length >= 8) score += 15;
+      } else if (pw.length >= 8) {
+        score += 15;
+      }
       if (pw.contains(RegExp(r'[0-9]'))) score += 25;
       if (pw.contains(RegExp(r'[A-Z]'))) score += 25;
-      if (pw.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]')))
+      if (pw.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_+=\[\]\\;/-]'))) {
         score += 25;
+      }
       setState(() {
-        _passwordStrength = score / 100;
+        passwordStrength = score / 100;
         if (score < 50) {
-          _passwordStrengthText = 'Weak';
-          _passwordStrengthColor = Colors.red;
+          passwordStrengthText = 'Weak';
+          passwordStrengthColor = Colors.red;
         } else if (score < 75) {
-          _passwordStrengthText = 'Medium';
-          _passwordStrengthColor = Colors.orange;
+          passwordStrengthText = 'Medium';
+          passwordStrengthColor = Colors.orange;
         } else {
-          _passwordStrengthText = 'Strong';
-          _passwordStrengthColor = Colors.green;
+          passwordStrengthText = 'Strong';
+          passwordStrengthColor = Colors.green;
         }
       });
     }
@@ -2011,8 +2018,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           nu[(random + 2) % nu.length] +
           sy[(random + 3) % sy.length];
       final all = up + lo + nu + sy;
-      for (int i = pw.length; i < length; i++)
+      for (int i = pw.length; i < length; i++) {
         pw += all[(random + i) % all.length];
+      }
       final chars = pw.split('');
       for (int i = chars.length - 1; i > 0; i--) {
         final j = (random + i) % (i + 1);
@@ -2030,10 +2038,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context, setState) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text(_show2FA ? 'Verify 2FA Code' : 'Change Password'),
+          title: Text(show2FA ? 'Verify 2FA Code' : 'Change Password'),
           content: SizedBox(
             width: 350,
-            child: _show2FA
+            child: show2FA
                 ? Column(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.email_outlined, size: 50, color: _accent),
                     const SizedBox(height: 16),
@@ -2045,7 +2053,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decoration: BoxDecoration(
                         color: _isDark ? Colors.white12 : Colors.grey.shade50,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _accent.withOpacity(0.3)),
+                        border:
+                            Border.all(color: _accent.withValues(alpha: 0.3)),
                       ),
                       child: TextField(
                         controller: otpCodeController,
@@ -2070,28 +2079,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _pwField(
                         currentPasswordController,
                         'Current Password',
-                        _obscureCurrent,
-                        () =>
-                            setState(() => _obscureCurrent = !_obscureCurrent)),
+                        obscureCurrent,
+                        () => setState(() => obscureCurrent = !obscureCurrent)),
                     const SizedBox(height: 16),
-                    _pwField(newPasswordController, 'New Password', _obscureNew,
-                        () => setState(() => _obscureNew = !_obscureNew),
+                    _pwField(newPasswordController, 'New Password', obscureNew,
+                        () => setState(() => obscureNew = !obscureNew),
                         onChange: () => checkStrength(setState)),
                     if (newPasswordController.text.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Row(children: [
                         Expanded(
                             child: LinearProgressIndicator(
-                                value: _passwordStrength,
+                                value: passwordStrength,
                                 backgroundColor: Colors.grey.shade300,
                                 valueColor: AlwaysStoppedAnimation<Color>(
-                                    _passwordStrengthColor),
+                                    passwordStrengthColor),
                                 minHeight: 4,
                                 borderRadius: BorderRadius.circular(2))),
                         const SizedBox(width: 8),
-                        Text(_passwordStrengthText,
+                        Text(passwordStrengthText,
                             style: TextStyle(
-                                color: _passwordStrengthColor,
+                                color: passwordStrengthColor,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12)),
                       ]),
@@ -2100,27 +2108,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Row(children: [
                       Icon(Icons.format_size, size: 18, color: _accent),
                       const SizedBox(width: 8),
-                      Text('Length: ${_passwordLength.toInt()}',
+                      Text('Length: ${passwordLength.toInt()}',
                           style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                               color: _accent)),
                       Expanded(
                           child: Slider(
-                        value: _passwordLength,
+                        value: passwordLength,
                         min: 8,
                         max: 20,
                         divisions: 12,
                         activeColor: _accent,
                         inactiveColor: Colors.grey.shade300,
-                        onChanged: (v) => setState(() => _passwordLength = v),
+                        onChanged: (v) => setState(() => passwordLength = v),
                       )),
                     ]),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
                         onPressed: () {
-                          final pw = generatePassword(_passwordLength.toInt());
+                          final pw = generatePassword(passwordLength.toInt());
                           setState(() {
                             newPasswordController.text = pw;
                             confirmPasswordController.text = pw;
@@ -2137,9 +2145,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _pwField(
                         confirmPasswordController,
                         'Confirm New Password',
-                        _obscureConfirm,
-                        () =>
-                            setState(() => _obscureConfirm = !_obscureConfirm)),
+                        obscureConfirm,
+                        () => setState(() => obscureConfirm = !obscureConfirm)),
                   ]),
           ),
           actions: [
@@ -2155,7 +2162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10))),
-              onPressed: _show2FA
+              onPressed: show2FA
                   ? () async {
                       if (otpCodeController.text.length != 6) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -2169,10 +2176,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           '';
                       final valid = await _syncService.verify2FACode(
                           username, otpCodeController.text);
+                      if (!context.mounted) return;
                       if (valid) {
                         final changed = await _syncService.changePassword(
                             currentPasswordController.text,
                             newPasswordController.text);
+                        if (!context.mounted) return;
                         Navigator.pop(context);
                         if (changed) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -2218,7 +2227,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 backgroundColor: Colors.red));
                         return;
                       }
-                      if (_passwordStrength < 0.5) {
+                      if (passwordStrength < 0.5) {
                         ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                                 content: Text('Use a stronger password'),
@@ -2230,8 +2239,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           '';
                       final sent = await _syncService.send2FACode(
                           username, currentPasswordController.text);
+                      if (!context.mounted) return;
                       if (sent) {
-                        setState(() => _show2FA = true);
+                        setState(() => show2FA = true);
                         ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                                 content: Text('Code sent to your email'),
@@ -2243,7 +2253,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 backgroundColor: Colors.red));
                       }
                     },
-              child: Text(_show2FA ? 'Verify & Change' : 'Send Code'),
+              child: Text(show2FA ? 'Verify & Change' : 'Send Code'),
             ),
           ],
         ),
@@ -2258,7 +2268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: _isDark ? Colors.white12 : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _accent.withOpacity(0.3)),
+        border: Border.all(color: _accent.withValues(alpha: 0.3)),
       ),
       child: TextField(
         controller: ctrl,
@@ -2300,11 +2310,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _accent.withOpacity(_isDark ? 0.18 : 0.14)),
+        border:
+            Border.all(color: _accent.withValues(alpha: _isDark ? 0.18 : 0.14)),
         boxShadow: [
           BoxShadow(
               color: (_isDark ? Colors.black : _accent)
-                  .withOpacity(_isDark ? 0.24 : 0.08),
+                  .withValues(alpha: _isDark ? 0.24 : 0.08),
               blurRadius: 16,
               offset: const Offset(0, 3))
         ],
@@ -2317,12 +2328,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  _accent.withOpacity(0.18),
-                  _accentSecondary.withOpacity(0.12),
+                  _accent.withValues(alpha: 0.18),
+                  _accentSecondary.withValues(alpha: 0.12),
                 ],
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _accent.withOpacity(0.18)),
+              border: Border.all(color: _accent.withValues(alpha: 0.18)),
             ),
             child: Icon(Icons.person_rounded, color: _accent, size: 28),
           ),
@@ -2353,10 +2364,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withOpacity(0.1),
+              color: const Color(0xFF10B981).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
-              border:
-                  Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+              border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.3)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -2397,11 +2408,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _accent.withOpacity(_isDark ? 0.14 : 0.08)),
+        border:
+            Border.all(color: _accent.withValues(alpha: _isDark ? 0.14 : 0.08)),
         boxShadow: [
           BoxShadow(
               color: (_isDark ? Colors.black : _accent)
-                  .withOpacity(_isDark ? 0.22 : 0.045),
+                  .withValues(alpha: _isDark ? 0.22 : 0.045),
               blurRadius: 14,
               offset: const Offset(0, 3))
         ],
@@ -2444,7 +2456,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: _accent,
             inactiveThumbColor: Colors.grey.shade400,
             inactiveTrackColor: _isDark ? Colors.white12 : Colors.grey.shade200,
@@ -2505,12 +2517,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       height: 38,
       decoration: BoxDecoration(
         color: destructive
-            ? Colors.red.withOpacity(0.08)
-            : _accent.withOpacity(0.08),
+            ? Colors.red.withValues(alpha: 0.08)
+            : _accent.withValues(alpha: 0.08),
         border: Border.all(
           color: destructive
-              ? Colors.red.withOpacity(0.14)
-              : _accent.withOpacity(0.14),
+              ? Colors.red.withValues(alpha: 0.14)
+              : _accent.withValues(alpha: 0.14),
         ),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -2529,7 +2541,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             color: _isDark ? Colors.white24 : Colors.grey.shade200, width: 2),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.24),
+            color: color.withValues(alpha: 0.24),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -2542,9 +2554,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF10B981).withOpacity(0.1),
+        color: const Color(0xFF10B981).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+        border:
+            Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
       ),
       child: Text(version,
           style: const TextStyle(
@@ -2566,8 +2579,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final info = _updateInfo;
     if (info != null && info.updateAvailable) {
       final bgColor = info.forceUpdate
-          ? Colors.red.withOpacity(0.12)
-          : const Color(0xFF10B981).withOpacity(0.12);
+          ? Colors.red.withValues(alpha: 0.12)
+          : const Color(0xFF10B981).withValues(alpha: 0.12);
       final fgColor = info.forceUpdate ? Colors.red : const Color(0xFF10B981);
 
       return Container(
@@ -2645,7 +2658,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       boxShadow: [
                         BoxShadow(
                           color: selected
-                              ? entry.value.withOpacity(0.32)
+                              ? entry.value.withValues(alpha: 0.32)
                               : Colors.transparent,
                           blurRadius: 14,
                           offset: const Offset(0, 4),
@@ -2674,16 +2687,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _soon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('$feature coming soon'),
-      backgroundColor: _accent,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      duration: const Duration(seconds: 2),
-    ));
-  }
-
   void _syncNow() async {
     if (!_syncEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -2697,6 +2700,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isSyncing = true);
     final success = await _syncService.syncAccounts();
+    if (!mounted) return;
     setState(() => _isSyncing = false);
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -2732,6 +2736,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (confirmed == true) {
       await _syncService.logout();
+      if (!mounted) return;
       await Provider.of<AuthProvider>(context, listen: false).continueOffline();
       if (!mounted) return;
       Navigator.pop(context);

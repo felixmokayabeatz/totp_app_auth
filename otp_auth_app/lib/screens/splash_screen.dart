@@ -7,7 +7,6 @@ import '../providers/auth_provider.dart';
 import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
 import 'home_screen.dart';
-import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -51,6 +50,7 @@ class _SplashScreenState extends State<SplashScreen>
     final syncService = SyncService();
 
     if (token == null || token.isEmpty) {
+      if (!mounted) return;
       await Provider.of<AuthProvider>(context, listen: false).continueOffline();
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -63,6 +63,7 @@ class _SplashScreenState extends State<SplashScreen>
     final restoredKey = await syncService.restoreEncryptionKey();
     if (!restoredKey) {
       await syncService.logout();
+      if (!mounted) return;
       await Provider.of<AuthProvider>(context, listen: false).continueOffline();
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -79,6 +80,7 @@ class _SplashScreenState extends State<SplashScreen>
     final userId =
         await secureStorage.read(SecureStorageService.userIdKey) ?? '';
 
+    if (!mounted) return;
     await Provider.of<AuthProvider>(context, listen: false)
         .setUserData(username, email, userId);
 
@@ -140,7 +142,8 @@ class _SplashScreenState extends State<SplashScreen>
                             width: 92,
                             height: 92,
                             decoration: BoxDecoration(
-                              color: colorScheme.primary.withOpacity(0.12),
+                              color:
+                                  colorScheme.primary.withValues(alpha: 0.12),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -204,7 +207,7 @@ class _SplashScreenState extends State<SplashScreen>
           height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
           ),
         ),
       ),

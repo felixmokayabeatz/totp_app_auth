@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class WindowService {
   static bool _alwaysOnTop = false;
 
@@ -11,7 +13,7 @@ class WindowService {
 
   static Future<void> _setWindowAlwaysOnTop(bool value) async {
     // This is a placeholder - actual implementation requires native code
-    print('Always on top set to: $value');
+    debugPrint('Always on top set to: $value');
     // For now, we'll just store the value
   }
 }

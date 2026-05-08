@@ -15,8 +15,9 @@ class AuthProvider extends ChangeNotifier {
   String? get userEmail => _userEmail;
   String? get username => _username;
   String? get userId => _userId;
-  String get sessionScopeKey =>
-      _isAuthenticated ? 'user:${_userId ?? _username ?? 'signed-in'}' : 'offline';
+  String get sessionScopeKey => _isAuthenticated
+      ? 'user:${_userId ?? _username ?? 'signed-in'}'
+      : 'offline';
 
   Future<void> setUserData(String username, String email, String id) async {
     _username = username;

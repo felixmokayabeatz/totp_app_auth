@@ -85,8 +85,8 @@ class OTPImportService {
 
     final entries = <OTPImportEntry>[];
     for (final row in dataRows) {
-      final resolvedSecretIndex =
-          secretIndex ?? row.indexWhere((cell) => _isBase32Secret(_cleanSecret(cell)));
+      final resolvedSecretIndex = secretIndex ??
+          row.indexWhere((cell) => _isBase32Secret(_cleanSecret(cell)));
       if (resolvedSecretIndex < 0 || resolvedSecretIndex >= row.length) {
         continue;
       }
@@ -229,8 +229,8 @@ class OTPImportService {
           service: service.trim(),
           secret: _cleanSecret(secret),
           issuer: item['issuer']?.toString(),
-          accountLabel:
-              item['account_label']?.toString() ?? item['accountLabel']?.toString(),
+          accountLabel: item['account_label']?.toString() ??
+              item['accountLabel']?.toString(),
         );
       }).where((entry) {
         return entry.service.isNotEmpty && _isBase32Secret(entry.secret);
@@ -275,8 +275,7 @@ class OTPImportService {
         service: parsedService.isEmpty ? 'Imported Account' : parsedService,
         secret: secret,
         issuer: issuer?.isEmpty == true ? null : issuer,
-        accountLabel:
-            parsedAccountLabel.isEmpty ? null : parsedAccountLabel,
+        accountLabel: parsedAccountLabel.isEmpty ? null : parsedAccountLabel,
       );
     } catch (_) {
       return null;

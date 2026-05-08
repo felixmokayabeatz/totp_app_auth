@@ -8,8 +8,10 @@ import '../services/secure_storage_service.dart';
 import '../config/app_config.dart';
 
 class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
   @override
-  _ProfileScreenState createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen>
@@ -45,8 +47,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       _userEmail = 'No email';
       _username = 'User';
     });
-    final email =
-        await secureStorage.read(SecureStorageService.userEmailKey) ?? 'No email';
+    final email = await secureStorage.read(SecureStorageService.userEmailKey) ??
+        'No email';
     final username =
         await secureStorage.read(SecureStorageService.currentUserKey) ?? 'User';
     if (!mounted) return;
@@ -93,7 +95,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         await _uploadProfilePhoto();
       }
     } catch (e) {
-      print('Image picker error: $e');
+      debugPrint('Image picker error: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Select a file to upload'),
@@ -112,6 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
 
     final success = await _profileService.updateProfilePhoto(_profileImage!);
+    if (!mounted) return;
 
     setState(() {
       _isUploading = false;
@@ -119,6 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (success) {
       await _loadProfile();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Profile photo updated!'),
@@ -148,6 +153,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
 
     final success = await _profileService.updateBio(_bioController.text);
+    if (!mounted) return;
 
     setState(() {
       _isUploading = false;
@@ -164,6 +170,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           behavior: SnackBarBehavior.floating,
         ),
       );
+      if (!mounted) return;
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -254,14 +261,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(
-                                  colors: [
-                                    _accent,
-                                    Color(0xFF7C3AED)
-                                  ],
+                                  colors: [_accent, Color(0xFF7C3AED)],
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
+                                    color: Colors.black.withValues(alpha: 0.2),
                                     blurRadius: 20,
                                     offset: Offset(0, 10),
                                   ),
@@ -363,7 +367,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha: 0.06),
                           blurRadius: 12,
                           offset: Offset(0, 2),
                         ),
@@ -419,7 +423,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha: 0.06),
                           blurRadius: 12,
                           offset: Offset(0, 2),
                         ),
@@ -461,7 +465,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: _accent.withOpacity(0.1),
+              color: _accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, size: 16, color: _accent),

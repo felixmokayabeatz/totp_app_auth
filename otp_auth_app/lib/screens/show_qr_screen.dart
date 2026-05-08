@@ -13,15 +13,15 @@ class ShowQRScreen extends StatefulWidget {
   final String? issuer;
 
   const ShowQRScreen({
-    Key? key,
+    super.key,
     required this.secret,
     this.advancedSecret,
     required this.service,
     this.issuer,
-  }) : super(key: key);
+  });
 
   @override
-  _ShowQRScreenState createState() => _ShowQRScreenState();
+  State<ShowQRScreen> createState() => _ShowQRScreenState();
 }
 
 class _ShowQRScreenState extends State<ShowQRScreen> {
@@ -44,12 +44,12 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
-    final mutedText =
-        isDark ? Colors.white60 : colorScheme.onSurfaceVariant;
+    final mutedText = isDark ? Colors.white60 : colorScheme.onSurfaceVariant;
     final issuer = (widget.issuer?.trim().isNotEmpty ?? false)
         ? widget.issuer!.trim()
         : widget.service.trim();
-    final label = issuer.isNotEmpty ? '$issuer:${widget.service}' : widget.service;
+    final label =
+        issuer.isNotEmpty ? '$issuer:${widget.service}' : widget.service;
     final query = Uri(queryParameters: {
       'secret': _base32Secret,
       'issuer': issuer,
@@ -134,7 +134,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.white.withOpacity(0.06)
+                          ? Colors.white.withValues(alpha: 0.06)
                           : const Color(0xFFF1F3F7),
                       borderRadius: BorderRadius.circular(999),
                     ),
@@ -195,7 +195,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
                                   color: colorScheme.outlineVariant
-                                      .withOpacity(0.35),
+                                      .withValues(alpha: 0.35),
                                 ),
                               ),
                               child: QrImageView(
@@ -219,7 +219,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                               width: isWide ? 252 : 232,
                               height: isWide ? 252 : 232,
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.44),
+                                color: Colors.black.withValues(alpha: 0.44),
                                 borderRadius: BorderRadius.circular(18),
                               ),
                               child: Column(
@@ -261,7 +261,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.white.withOpacity(0.05)
+                          ? Colors.white.withValues(alpha: 0.05)
                           : const Color(0xFFF4F5F7),
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -286,7 +286,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.white.withOpacity(0.05)
+                          ? Colors.white.withValues(alpha: 0.05)
                           : const Color(0xFFF4F5F7),
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -330,8 +330,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                             const SizedBox(height: 4),
                             Text(
                               'Reveal this if you need to type the setup key manually.',
-                              style:
-                                  TextStyle(fontSize: 13, color: mutedText),
+                              style: TextStyle(fontSize: 13, color: mutedText),
                             ),
                           ],
                         ),
@@ -363,15 +362,16 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withOpacity(0.05)
-                          : const Color(0xFFF4F5F7),
-                      borderRadius: BorderRadius.circular(16),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : const Color(0xFFF4F5F7),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: isDark
-                              ? Colors.white.withOpacity(0.08)
-                              : colorScheme.outlineVariant.withOpacity(0.4),
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : colorScheme.outlineVariant
+                                  .withValues(alpha: 0.4),
                         ),
                       ),
                       child: _isSecretRevealed
@@ -447,11 +447,12 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? Colors.black.withOpacity(0.18)
+                              ? Colors.black.withValues(alpha: 0.18)
                               : Colors.white,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: colorScheme.outlineVariant.withOpacity(0.35),
+                            color: colorScheme.outlineVariant
+                                .withValues(alpha: 0.35),
                           ),
                         ),
                         child: Column(
@@ -471,7 +472,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                 ),
                                 IconButton(
                                   onPressed: _copyAdvancedSecret,
-                                  icon: const Icon(Icons.copy_rounded, size: 18),
+                                  icon:
+                                      const Icon(Icons.copy_rounded, size: 18),
                                   tooltip: 'Copy advanced Base64',
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -495,9 +497,10 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                      color:
-                          isDark ? const Color(0xFF2B2435) : const Color(0xFFFFF6E9),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF2B2435)
+                          : const Color(0xFFFFF6E9),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: isDark
@@ -594,12 +597,12 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.06)
-              : colorScheme.outlineVariant.withOpacity(0.35),
+              ? Colors.white.withValues(alpha: 0.06)
+              : colorScheme.outlineVariant.withValues(alpha: 0.35),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.18 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),

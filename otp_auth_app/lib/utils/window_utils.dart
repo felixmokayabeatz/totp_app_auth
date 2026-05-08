@@ -1,10 +1,11 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class WindowUtils {
   static const double minWidth = 900;
   static const double minHeight = 700;
-  
+
   static Future<void> setMinWindowSize() async {
     if (Platform.isWindows) {
       try {
@@ -13,11 +14,11 @@ class WindowUtils {
           {'width': minWidth, 'height': minHeight},
         );
       } catch (e) {
-        print('Error setting min window size: $e');
+        debugPrint('Error setting min window size: $e');
       }
     }
   }
-  
+
   static Future<void> setWindowTitle(String title) async {
     if (Platform.isWindows) {
       try {
@@ -26,7 +27,7 @@ class WindowUtils {
           {'title': title},
         );
       } catch (e) {
-        print('Error setting window title: $e');
+        debugPrint('Error setting window title: $e');
       }
     }
   }

@@ -94,7 +94,8 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(_isDark ? 0.2 : 0.05),
+                      color:
+                          Colors.black.withValues(alpha: _isDark ? 0.2 : 0.05),
                       blurRadius: 12,
                       offset: const Offset(0, 3),
                     ),
@@ -589,13 +590,13 @@ class _HtmlParser {
         TextStyle(
           color: textPrimary,
           fontFamily: 'monospace',
-          backgroundColor: accent.withOpacity(0.08),
+          backgroundColor: accent.withValues(alpha: 0.08),
         ),
       );
     } else if (tag == 's') {
       nextStyle = nextStyle.merge(
         TextStyle(
-          color: nextStyle.color?.withOpacity(0.65),
+          color: nextStyle.color?.withValues(alpha: 0.65),
           decoration: TextDecoration.lineThrough,
         ),
       );
@@ -684,8 +685,8 @@ class _HtmlParser {
       return Color(int.parse('FF$hex', radix: 16));
     }
 
-    final rgbMatch = RegExp(r'rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)')
-        .firstMatch(value);
+    final rgbMatch =
+        RegExp(r'rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)').firstMatch(value);
     if (rgbMatch != null) {
       final red = int.parse(rgbMatch.group(1)!);
       final green = int.parse(rgbMatch.group(2)!);

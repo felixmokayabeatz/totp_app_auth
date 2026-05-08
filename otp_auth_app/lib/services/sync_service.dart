@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -13,7 +14,6 @@ import 'secure_storage_service.dart';
 import '../config/app_config.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 class SyncService {
   // ─── Singleton ────────────────────────────────────────────────────────────
@@ -205,9 +205,9 @@ class SyncService {
     try {
       await _updateAuthHeader();
       await _dio.post('sync-preference/', data: {'sync_enabled': value});
-      print('Sync preference pushed to server: $value');
+      debugPrint('Sync preference pushed to server: $value');
     } catch (e) {
-      print('Failed to push sync preference: $e');
+      debugPrint('Failed to push sync preference: $e');
     }
   }
 
@@ -225,11 +225,11 @@ class SyncService {
         final localValue = prefs.getBool(_syncEnabledKey) ?? await isLoggedIn();
         if (serverValue != localValue) {
           await prefs.setBool(_syncEnabledKey, serverValue);
-          print('Sync preference updated from server: $serverValue');
+          debugPrint('Sync preference updated from server: $serverValue');
         }
       }
     } catch (e) {
-      print('Failed to fetch sync preference: $e');
+      debugPrint('Failed to fetch sync preference: $e');
     }
   }
 
@@ -335,7 +335,7 @@ class SyncService {
     }
 
     if (migratedCount > 0) {
-      print('Migrated $migratedCount local accounts into $targetBoxName');
+      debugPrint('Migrated $migratedCount local accounts into $targetBoxName');
     }
   }
 
@@ -598,11 +598,11 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage =
           _friendlyRequestError(e, 'Registration failed. Please try again.');
-      print('Register error: $e');
+      debugPrint('Register error: $e');
       return false;
     } catch (e) {
       _lastErrorMessage = 'Registration failed. Please try again.';
-      print('Register error: $e');
+      debugPrint('Register error: $e');
       return false;
     }
   }
@@ -648,15 +648,15 @@ class SyncService {
         try {
           await migrateLegacyLocalAccounts();
         } catch (e) {
-          print('Legacy account migration error after login: $e');
+          debugPrint('Legacy account migration error after login: $e');
         }
 
         try {
           final userBox = await _getUserBox();
-          print(
+          debugPrint(
               'User box ${await _getUserBoxName()} has ${userBox.length} accounts');
         } catch (e) {
-          print('User box load error after login: $e');
+          debugPrint('User box load error after login: $e');
         }
 
         try {
@@ -664,7 +664,7 @@ class SyncService {
             await downloadAndMergeAccounts();
           }
         } catch (e) {
-          print('Cloud restore error after login: $e');
+          debugPrint('Cloud restore error after login: $e');
         }
 
         return true;
@@ -673,11 +673,11 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage =
           _friendlyRequestError(e, 'Login failed. Please try again.');
-      print('Login error: $e');
+      debugPrint('Login error: $e');
       return false;
     } catch (e) {
       _lastErrorMessage = 'Login failed. Please try again.';
-      print('Login error: $e');
+      debugPrint('Login error: $e');
       return false;
     }
   }
@@ -687,10 +687,10 @@ class SyncService {
     final storedKey = await _getStoredEncryptionKey();
     if (storedKey != null && storedKey.isNotEmpty) {
       _encryptionKey = storedKey;
-      print('Encryption key restored from Hive');
+      debugPrint('Encryption key restored from Hive');
       return true;
     }
-    print('No stored encryption key found');
+    debugPrint('No stored encryption key found');
     return false;
   }
 
@@ -698,7 +698,7 @@ class SyncService {
   Future<void> deleteAccountLocalOnly(String accountId) async {
     final userBox = await _getUserBox();
     await userBox.delete(accountId);
-    print('Deleted $accountId locally only');
+    debugPrint('Deleted $accountId locally only');
   }
 
   Future<bool> deleteAccountEverywhere(String accountId) async {
@@ -711,13 +711,13 @@ class SyncService {
       if (response.statusCode == 200) {
         final userBox = await _getUserBox();
         await userBox.delete(accountId);
-        print('Deleted $accountId everywhere');
+        debugPrint('Deleted $accountId everywhere');
         return true;
       }
-      print('Server delete failed: ${response.statusCode}');
+      debugPrint('Server delete failed: ${response.statusCode}');
       return false;
     } catch (e) {
-      print('deleteAccountEverywhere error: $e');
+      debugPrint('deleteAccountEverywhere error: $e');
       return false;
     }
   }
@@ -726,7 +726,7 @@ class SyncService {
   Future<void> deleteAllLocalOnly() async {
     final userBox = await _getUserBox();
     await userBox.clear();
-    print('Cleared all accounts locally');
+    debugPrint('Cleared all accounts locally');
   }
 
   Future<bool> deleteAllEverywhere() async {
@@ -738,12 +738,12 @@ class SyncService {
       if (response.statusCode == 200) {
         final userBox = await _getUserBox();
         await userBox.clear();
-        print('Deleted all accounts everywhere');
+        debugPrint('Deleted all accounts everywhere');
         return true;
       }
       return false;
     } catch (e) {
-      print('deleteAllEverywhere error: $e');
+      debugPrint('deleteAllEverywhere error: $e');
       return false;
     }
   }
@@ -758,7 +758,7 @@ class SyncService {
     }
 
     if (!await _ensureEncryptionKeyAvailable()) {
-      print('Encryption key not set - user must log in first');
+      debugPrint('Encryption key not set - user must log in first');
       return;
     }
 
@@ -783,7 +783,7 @@ class SyncService {
         final encryptedContent = response.data['encrypted_content'];
 
         if (encryptedContent.toString().isEmpty) {
-          print('Cloud has no data');
+          debugPrint('Cloud has no data');
           return;
         }
 
@@ -791,7 +791,7 @@ class SyncService {
             EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
 
         if (decrypted.isEmpty || decrypted.trim().isEmpty) {
-          print('Decrypted content is empty');
+          debugPrint('Decrypted content is empty');
           return;
         }
 
@@ -845,15 +845,15 @@ class SyncService {
               updatedTitles++;
             }
           }
-          print(
+          debugPrint(
               'Merged $added accounts from cloud and updated $updatedTitles titles');
           await syncAccounts();
         } catch (jsonError) {
-          print('Failed to parse cloud JSON: $jsonError');
+          debugPrint('Failed to parse cloud JSON: $jsonError');
         }
       }
     } catch (e) {
-      print('downloadAndMergeAccounts error: $e');
+      debugPrint('downloadAndMergeAccounts error: $e');
     }
   }
 
@@ -872,7 +872,7 @@ class SyncService {
   // ─── Main sync ────────────────────────────────────────────────────────────
   Future<bool> syncAccounts({bool preferLocalTitleChanges = false}) async {
     if (!(await isSyncEnabled())) {
-      print('Sync disabled by user preference');
+      debugPrint('Sync disabled by user preference');
       return true;
     }
 
@@ -888,7 +888,7 @@ class SyncService {
     if (!await _ensureEncryptionKeyAvailable()) {
       _lastErrorMessage =
           'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
-      print('Encryption key not set - user must log in first');
+      debugPrint('Encryption key not set - user must log in first');
       return false;
     }
 
@@ -919,7 +919,7 @@ class SyncService {
           final encryptedContent = downloadResponse.data['encrypted_content'];
 
           if (encryptedContent.toString().isEmpty) {
-            print('Cloud has empty data');
+            debugPrint('Cloud has empty data');
           } else {
             final decrypted = EncryptionService.simpleDecrypt(
                 encryptedContent, _encryptionKey!);
@@ -934,23 +934,23 @@ class SyncService {
                   cloudDeletedAccounts = List<String>.from(
                       jsonDecode(downloadResponse.data['deleted_accounts']));
                 }
-                print('Cloud has ${cloudAccounts.length} accounts');
+                debugPrint('Cloud has ${cloudAccounts.length} accounts');
               } catch (jsonError) {
-                print('Failed to parse cloud JSON: $jsonError');
+                debugPrint('Failed to parse cloud JSON: $jsonError');
               }
             }
           }
         }
       } on DioException catch (e) {
         if (e.response?.statusCode == 404) {
-          print('No cloud data yet - normal for new users');
+          debugPrint('No cloud data yet - normal for new users');
         } else {
-          print('Download error: ${e.message}');
+          debugPrint('Download error: ${e.message}');
         }
       }
 
       final tombstones = await _fetchTombstones();
-      print('Tombstones: $tombstones');
+      debugPrint('Tombstones: $tombstones');
 
       final userId = await _getCurrentUserId();
       final localAccountsMap = <String, dynamic>{};
@@ -961,7 +961,7 @@ class SyncService {
         }
         localAccountsMap[a.id] = a;
       }
-      print('Local has ${localAccountsMap.length} accounts');
+      debugPrint('Local has ${localAccountsMap.length} accounts');
 
       int addedFromCloud = 0;
       int updatedTitlesFromCloud = 0;
@@ -1010,7 +1010,7 @@ class SyncService {
           }
         }
       }
-      print(
+      debugPrint(
           'Added $addedFromCloud accounts from cloud and updated $updatedTitlesFromCloud titles');
 
       final finalData = await Future.wait(
@@ -1043,21 +1043,21 @@ class SyncService {
           ));
 
       if (uploadResponse.statusCode == 200) {
-        print('Sync successful - ${finalData.length} accounts synced');
+        debugPrint('Sync successful - ${finalData.length} accounts synced');
         return true;
       } else {
-        print('Sync upload failed: ${uploadResponse.statusCode}');
+        debugPrint('Sync upload failed: ${uploadResponse.statusCode}');
         _lastErrorMessage = 'Sync upload failed. Please try again.';
         return false;
       }
     } on DioException catch (e) {
       _lastErrorMessage = e.response?.data?['error']?.toString() ??
           'Sync failed. Please sign in again if this device lost its session.';
-      print('syncAccounts error: $e');
+      debugPrint('syncAccounts error: $e');
       return false;
     } catch (e) {
       _lastErrorMessage = 'Sync failed. Please try again.';
-      print('syncAccounts error: $e');
+      debugPrint('syncAccounts error: $e');
       return false;
     }
   }
@@ -1074,11 +1074,11 @@ class SyncService {
         e,
         'Unable to send the verification code.',
       );
-      print('send2FA error: $e');
+      debugPrint('send2FA error: $e');
       return false;
     } catch (e) {
       _lastErrorMessage = 'Unable to send the verification code.';
-      print('send2FA error: $e');
+      debugPrint('send2FA error: $e');
       return false;
     }
   }
@@ -1091,11 +1091,11 @@ class SyncService {
       return r.data['success'] == true;
     } on DioException catch (e) {
       _lastErrorMessage = _friendlyRequestError(e, 'Verification failed.');
-      print('verify2FA error: $e');
+      debugPrint('verify2FA error: $e');
       return false;
     } catch (e) {
       _lastErrorMessage = 'Verification failed.';
-      print('verify2FA error: $e');
+      debugPrint('verify2FA error: $e');
       return false;
     }
   }
@@ -1105,7 +1105,7 @@ class SyncService {
     final token =
         await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null) {
-      print('No token available for delete OTP');
+      debugPrint('No token available for delete OTP');
       return false;
     }
     try {
@@ -1119,10 +1119,10 @@ class SyncService {
       );
       return response.data['success'] == true;
     } catch (e) {
-      print('sendDeleteOtp error: $e');
+      debugPrint('sendDeleteOtp error: $e');
       if (e is DioException) {
-        print('Response status: ${e.response?.statusCode}');
-        print('Response data: ${e.response?.data}');
+        debugPrint('Response status: ${e.response?.statusCode}');
+        debugPrint('Response data: ${e.response?.data}');
       }
       return false;
     }
@@ -1144,7 +1144,7 @@ class SyncService {
       );
       return response.data['success'] == true;
     } catch (e) {
-      print('verifyDeleteOtp error: $e');
+      debugPrint('verifyDeleteOtp error: $e');
       return false;
     }
   }
@@ -1212,10 +1212,10 @@ class SyncService {
       // Update stored encryption key
       await _storeEncryptionKey(_encryptionKey!);
 
-      print('Password changed and data re-encrypted successfully');
+      debugPrint('Password changed and data re-encrypted successfully');
       return true;
     } catch (e) {
-      print('changePassword error: $e');
+      debugPrint('changePassword error: $e');
       return false;
     }
   }

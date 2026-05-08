@@ -125,9 +125,8 @@ class SecureStorageService {
     var blockIndex = 0;
 
     while (output.length < input.length) {
-      final keystreamBlock = sha256
-          .convert([...keyBytes, ...nonce, ...utf8.encode(':$blockIndex')])
-          .bytes;
+      final keystreamBlock = sha256.convert(
+          [...keyBytes, ...nonce, ...utf8.encode(':$blockIndex')]).bytes;
       for (final byte in keystreamBlock) {
         if (output.length >= input.length) break;
         output.add(input[output.length] ^ byte);
@@ -141,8 +140,9 @@ class SecureStorageService {
   String _deriveStorageKey() {
     final username =
         Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
-    final homeDir =
-        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '';
+    final homeDir = Platform.environment['USERPROFILE'] ??
+        Platform.environment['HOME'] ??
+        '';
     final seed =
         'beatzlock_secure_storage_v1|${Platform.operatingSystem}|${Platform.localHostname}|$username|$homeDir';
     return sha256.convert(utf8.encode(seed)).toString();

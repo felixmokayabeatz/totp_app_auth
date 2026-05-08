@@ -132,7 +132,8 @@ class AppRatingService {
     throw StateError('Could not load app rating.');
   }
 
-  Future<AppRatingSummary> fetchPlatformSummary({required String platform}) async {
+  Future<AppRatingSummary> fetchPlatformSummary(
+      {required String platform}) async {
     final response = await _dio.get(
       AppConfig.ratingsApiUrl,
       queryParameters: {'platform': platform},

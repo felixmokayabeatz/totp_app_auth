@@ -12,7 +12,7 @@ class AddAccountScreen extends StatefulWidget {
   final bool startScanning;
 
   @override
-  _AddAccountScreenState createState() => _AddAccountScreenState();
+  State<AddAccountScreen> createState() => _AddAccountScreenState();
 }
 
 class _AddAccountScreenState extends State<AddAccountScreen> {
@@ -182,48 +182,26 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     );
   }
 
-  void _parseQRCode(String qrData) {
+  Future<void> _parseQRCode(String qrData) async {
     if (_isProcessingQR) return;
     _isProcessingQR = true;
 
     try {
       final importedEntries = OTPImportService().parse(qrData);
       if (importedEntries.isNotEmpty) {
-        if (importedEntries.length > 1 ||
-            qrData.toLowerCase().startsWith('otpauth-migration://')) {
-          _saveImportedEntries(importedEntries);
+        final confirmed = await _confirmScannedEntries(importedEntries);
+        if (confirmed != true) {
+          if (mounted) {
+            setState(() {
+              _isProcessingQR = false;
+            });
+          } else {
+            _isProcessingQR = false;
+          }
           return;
         }
 
-        final entry = importedEntries.first;
-        _serviceController.text = entry.service;
-        _accountLabelController.text = entry.accountLabel ?? '';
-        _secretController.text = entry.secret;
-        _issuerController.text = entry.issuer ?? '';
-
-        if (mounted) {
-          setState(() {
-            _isScanning = false;
-            _cameraFailed = false;
-            _isProcessingQR = false;
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                    child: Text('QR code scanned! Account details filled.')),
-              ],
-            ),
-            backgroundColor: Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: Duration(seconds: 2),
-          ));
-        }
+        await _saveImportedEntries(importedEntries);
       } else {
         // Not a valid OTP auth QR code
         if (mounted) {
@@ -246,7 +224,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         _isProcessingQR = false;
       }
     } catch (e) {
-      print('QR parse error: $e');
+      debugPrint('QR parse error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to parse QR code'),
@@ -258,12 +236,47 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     }
   }
 
+  Future<bool?> _confirmScannedEntries(List<OTPImportEntry> entries) {
+    final title = entries.length == 1
+        ? 'Add scanned account?'
+        : 'Add ${entries.length} scanned accounts?';
+    final content = entries.length == 1
+        ? _formatEntrySummary(entries.first)
+        : entries.take(5).map(_formatEntrySummary).join('\n');
+    final overflow =
+        entries.length > 5 ? '\n...and ${entries.length - 5} more' : '';
+
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text('$content$overflow'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatEntrySummary(OTPImportEntry entry) {
+    final label = entry.accountLabel?.trim();
+    if (label == null || label.isEmpty) return entry.service;
+    return '${entry.service} - $label';
+  }
+
   Future<void> _saveImportedEntries(List<OTPImportEntry> entries) async {
-    final userId =
-        await SecureStorageService().read(SecureStorageService.currentUserKey) ??
-            await SecureStorageService()
-                .read(SecureStorageService.localVaultUserKey) ??
-            'default_user';
+    final userId = await SecureStorageService()
+            .read(SecureStorageService.currentUserKey) ??
+        await SecureStorageService()
+            .read(SecureStorageService.localVaultUserKey) ??
+        'default_user';
     final syncService = SyncService();
     final userBox = await syncService.getUserBox();
     final shouldSync =
@@ -272,11 +285,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     var skippedCount = 0;
 
     for (final entry in entries) {
-      final duplicate = userBox.values.any((account) {
-        return account.service.toLowerCase() == entry.service.toLowerCase() &&
-            (account.accountLabel ?? '').toLowerCase() ==
-                (entry.accountLabel ?? '').toLowerCase();
-      });
+      final duplicate = _hasDuplicateAccount(
+          userBox.values, entry.service, entry.accountLabel);
       if (duplicate) {
         skippedCount++;
         continue;
@@ -373,8 +383,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               validator: (v) => v!.trim().isEmpty ? 'Required' : null,
               suffix: _isMobile && !_cameraFailed
                   ? IconButton(
-                      icon: Icon(Icons.qr_code_scanner_rounded,
-                          color: _accent),
+                      icon: Icon(Icons.qr_code_scanner_rounded, color: _accent),
                       onPressed: () => setState(() {
                         _isScanning = true;
                         _cameraFailed = false;
@@ -426,9 +435,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       margin: EdgeInsets.only(bottom: 16),
       padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -461,7 +470,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: Offset(0, 2)),
         ],
@@ -508,26 +517,32 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   void _saveAccount() async {
     if (_formKey.currentState!.validate()) {
-      final userId =
-          await SecureStorageService().read(SecureStorageService.currentUserKey) ??
-              await SecureStorageService()
-                  .read(SecureStorageService.localVaultUserKey) ??
-              'default_user';
+      final userId = await SecureStorageService()
+              .read(SecureStorageService.currentUserKey) ??
+          await SecureStorageService()
+              .read(SecureStorageService.localVaultUserKey) ??
+          'default_user';
       final syncService = SyncService();
       final isSignedIn = await syncService.isLoggedIn();
       final shouldSync = isSignedIn && await syncService.isSyncEnabled();
 
       // Get the USER-SPECIFIC box, not the generic one
       final userBox = await syncService.getUserBox();
+      if (!mounted) return;
 
       final serviceName = _serviceController.text.trim();
-      final exists = userBox.values.any(
-        (a) => a.service.toLowerCase() == serviceName.toLowerCase(),
+      final accountLabel = _accountLabelController.text.trim();
+      final exists = _hasDuplicateAccount(
+        userBox.values,
+        serviceName,
+        accountLabel.isEmpty ? null : accountLabel,
       );
 
       if (exists) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('An account for "$serviceName" already exists'),
+          content: Text(accountLabel.isEmpty
+              ? 'An account for "$serviceName" already exists'
+              : 'An account for "$serviceName" and "$accountLabel" already exists'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
           shape:
@@ -555,9 +570,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         issuer: _issuerController.text.trim().isEmpty
             ? null
             : _issuerController.text.trim(),
-        accountLabel: _accountLabelController.text.trim().isEmpty
-            ? null
-            : _accountLabelController.text.trim(),
+        accountLabel: accountLabel.isEmpty ? null : accountLabel,
         createdAt: DateTime.now(),
         userId: userId,
       );
@@ -588,6 +601,25 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         Navigator.pop(context, true);
       }
     }
+  }
+
+  bool _hasDuplicateAccount(
+    Iterable<OTPAccount> accounts,
+    String service,
+    String? accountLabel,
+  ) {
+    final normalizedService = _normalizeComparableText(service);
+    final normalizedLabel = _normalizeComparableText(accountLabel ?? '');
+
+    return accounts.any((account) {
+      return _normalizeComparableText(account.service) == normalizedService &&
+          _normalizeComparableText(account.accountLabel ?? '') ==
+              normalizedLabel;
+    });
+  }
+
+  String _normalizeComparableText(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
   }
 
   @override

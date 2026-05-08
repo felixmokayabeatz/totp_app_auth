@@ -48,8 +48,9 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor =
-        isDark ? colorScheme.surface.withOpacity(0.96) : colorScheme.surface;
+    final surfaceColor = isDark
+        ? colorScheme.surface.withValues(alpha: 0.96)
+        : colorScheme.surface;
 
     return Scaffold(
       body: Container(
@@ -87,8 +88,8 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                   width: 72,
                                   height: 72,
                                   decoration: BoxDecoration(
-                                    color:
-                                        colorScheme.primary.withOpacity(0.12),
+                                    color: colorScheme.primary
+                                        .withValues(alpha: 0.12),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
@@ -125,8 +126,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                               _DocumentButton(
                                 icon: Icons.privacy_tip_outlined,
                                 title: 'Privacy Policy',
-                                subtitle:
-                                    'See how BeatzLock handles your data',
+                                subtitle: 'See how BeatzLock handles your data',
                                 onTap: () =>
                                     _openDocument('privacy', 'Privacy Policy'),
                               ),

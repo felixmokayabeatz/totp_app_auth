@@ -1,5 +1,6 @@
 // models/otp_account.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../services/encryption_service.dart';
 
@@ -53,13 +54,14 @@ class OTPAccount {
     if (_plainSecret != null) return _plainSecret!;
 
     try {
-      final decrypted = EncryptionService.decryptSecret(encryptedSecret, userId);
+      final decrypted =
+          EncryptionService.decryptSecret(encryptedSecret, userId);
       if (_looksLikeBase32Secret(decrypted)) {
         _plainSecret = decrypted;
         return _plainSecret!;
       }
     } catch (e) {
-      print('Decryption error: $e');
+      debugPrint('Decryption error: $e');
     }
 
     if (_looksLikeBase32Secret(encryptedSecret)) {
@@ -73,10 +75,8 @@ class OTPAccount {
   String get secret => encryptedSecret;
 
   bool _looksLikeBase32Secret(String value) {
-    final cleaned = value
-        .replaceAll(RegExp(r'\s+'), '')
-        .replaceAll('=', '')
-        .toUpperCase();
+    final cleaned =
+        value.replaceAll(RegExp(r'\s+'), '').replaceAll('=', '').toUpperCase();
     return cleaned.isNotEmpty && RegExp(r'^[A-Z2-7]+$').hasMatch(cleaned);
   }
 }

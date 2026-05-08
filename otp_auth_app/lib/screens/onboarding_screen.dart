@@ -128,8 +128,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   children: [
                     if (_currentPage > 0)
                       TextButton.icon(
-                        onPressed:
-                            _isFinishing ? null : () => _goToPage(_currentPage - 1),
+                        onPressed: _isFinishing
+                            ? null
+                            : () => _goToPage(_currentPage - 1),
                         icon: const Icon(
                           Icons.arrow_back_rounded,
                           color: Colors.white,
@@ -148,8 +149,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     const Spacer(),
                     if (widget.isFirstLaunch && !_isLastPage)
                       TextButton(
-                        onPressed:
-                            _isFinishing ? null : () => _goToPage(_pages.length - 1),
+                        onPressed: _isFinishing
+                            ? null
+                            : () => _goToPage(_pages.length - 1),
                         child: const Text(
                           'Skip',
                           style: TextStyle(
@@ -212,7 +214,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     decoration: BoxDecoration(
                       color: _currentPage == index
                           ? Colors.white
-                          : Colors.white.withOpacity(0.4),
+                          : Colors.white.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -400,14 +402,14 @@ class OnboardingPage extends StatelessWidget {
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  Colors.white.withOpacity(0.3),
-                                  Colors.white.withOpacity(0.1),
+                                  Colors.white.withValues(alpha: 0.3),
+                                  Colors.white.withValues(alpha: 0.1),
                                 ],
                               ),
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
+                                  color: Colors.black.withValues(alpha: 0.2),
                                   blurRadius: 20,
                                   spreadRadius: 5,
                                 ),
@@ -460,7 +462,7 @@ class OnboardingPage extends StatelessWidget {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: const Row(

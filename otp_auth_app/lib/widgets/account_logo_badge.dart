@@ -249,14 +249,14 @@ class _AccountBrandSpec {
     }
     if (service.trim().isEmpty) {
       return _AccountBrandSpec(
-        backgroundColor: resolvedFallbackColor.withOpacity(0.12),
+        backgroundColor: resolvedFallbackColor.withValues(alpha: 0.12),
         foregroundColor: resolvedFallbackColor,
         icon: Icons.lock_rounded,
       );
     }
 
     return _AccountBrandSpec(
-      backgroundColor: resolvedFallbackColor.withOpacity(0.12),
+      backgroundColor: resolvedFallbackColor.withValues(alpha: 0.12),
       foregroundColor: resolvedFallbackColor,
       text: service.trim().substring(0, 1).toUpperCase(),
     );

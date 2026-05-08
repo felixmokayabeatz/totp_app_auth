@@ -103,7 +103,7 @@ class ThemeProvider extends ChangeNotifier {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark
-            ? colorScheme.surfaceContainerHighest.withOpacity(0.35)
+            ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.35)
             : Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -124,17 +124,17 @@ class ThemeProvider extends ChangeNotifier {
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: colorScheme.primary,
-        linearTrackColor: colorScheme.primary.withOpacity(0.12),
+        linearTrackColor: colorScheme.primary.withValues(alpha: 0.12),
       ),
       switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return colorScheme.onPrimary;
           }
           return isDark ? Colors.white70 : Colors.grey.shade100;
         }),
-        trackColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return colorScheme.primary;
           }
           return isDark ? Colors.white12 : Colors.grey.shade300;
@@ -143,7 +143,7 @@ class ThemeProvider extends ChangeNotifier {
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
           foregroundColor: colorScheme.primary,
-          highlightColor: colorScheme.primary.withOpacity(0.12),
+          highlightColor: colorScheme.primary.withValues(alpha: 0.12),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -164,7 +164,7 @@ class ThemeProvider extends ChangeNotifier {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colorScheme.primary,
-          side: BorderSide(color: colorScheme.primary.withOpacity(0.35)),
+          side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.35)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),

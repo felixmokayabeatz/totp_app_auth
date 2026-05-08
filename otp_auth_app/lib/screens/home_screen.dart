@@ -24,7 +24,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen>
@@ -186,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _initUserBox() async {
     _userBox = await _syncService.getUserBox();
-    print(
+    debugPrint(
         'User box: ${await _syncService.getCurrentUserBoxName()} has ${_userBox?.length ?? 0} accounts');
     if (mounted) {
       setState(() {});
@@ -354,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         boxShadow: [
           BoxShadow(
-              color: _accent.withOpacity(isDark ? 0.28 : 0.22),
+              color: _accent.withValues(alpha: isDark ? 0.28 : 0.22),
               blurRadius: 12,
               offset: const Offset(0, 4))
         ],
@@ -386,7 +386,8 @@ class _HomeScreenState extends State<HomeScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color: Colors.white.withOpacity(0.3), width: 2),
+                            color: Colors.white.withValues(alpha: 0.3),
+                            width: 2),
                       ),
                       child: ClipOval(
                         child: _profilePhotoUrl != null &&
@@ -397,13 +398,13 @@ class _HomeScreenState extends State<HomeScreen>
                                 width: 40,
                                 height: 40,
                                 errorBuilder: (_, __, ___) => Container(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withValues(alpha: 0.2),
                                   child: const Icon(Icons.person,
                                       color: Colors.white, size: 20),
                                 ),
                               )
                             : Container(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 child: const Icon(Icons.person,
                                     color: Colors.white, size: 20),
                               ),
@@ -436,7 +437,7 @@ class _HomeScreenState extends State<HomeScreen>
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 5, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -483,7 +484,7 @@ class _HomeScreenState extends State<HomeScreen>
           height: 36,
           margin: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.12),
+            color: Colors.white.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Stack(
@@ -547,10 +548,10 @@ class _HomeScreenState extends State<HomeScreen>
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF1E1E32) : Colors.white,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _accent.withOpacity(0.16)),
+                border: Border.all(color: _accent.withValues(alpha: 0.16)),
                 boxShadow: [
                   BoxShadow(
-                      color: _accent.withOpacity(isDark ? 0.14 : 0.08),
+                      color: _accent.withValues(alpha: isDark ? 0.14 : 0.08),
                       blurRadius: 14,
                       offset: const Offset(0, 2))
                 ],
@@ -567,12 +568,41 @@ class _HomeScreenState extends State<HomeScreen>
                       color: isDark ? Colors.white38 : Colors.grey[400],
                       fontSize: 14),
                   prefixIcon: Icon(Icons.search_rounded,
-                      color: _accent.withOpacity(isDark ? 0.82 : 0.66),
+                      color: _accent.withValues(alpha: isDark ? 0.82 : 0.66),
                       size: 20),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Tooltip(
+            message: 'Scan QR code',
+            child: InkWell(
+              onTap: () => _openAddAccount(startScanning: true),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: _accent.withValues(alpha: 0.22)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withValues(alpha: isDark ? 0.14 : 0.08),
+                      blurRadius: 14,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: _accent,
+                  size: 21,
                 ),
               ),
             ),
@@ -598,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen>
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: _accent.withOpacity(0.24),
+                      color: _accent.withValues(alpha: 0.24),
                       blurRadius: 16,
                       offset: const Offset(0, 5),
                     ),
@@ -627,10 +657,11 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Future<void> _openAddAccount() async {
+  Future<void> _openAddAccount({bool startScanning = false}) async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => AddAccountScreen()),
+      MaterialPageRoute(
+          builder: (_) => AddAccountScreen(startScanning: startScanning)),
     );
     if (result == true) {
       await _initUserBox();
@@ -726,7 +757,8 @@ class _HomeScreenState extends State<HomeScreen>
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withOpacity(0.08), blurRadius: 20)
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 20)
                 ],
               ),
               child: Icon(Icons.security_rounded, size: 40, color: _accent),
@@ -786,14 +818,14 @@ class _HomeScreenState extends State<HomeScreen>
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isExpiring
-                        ? Colors.red.withOpacity(0.4)
-                        : _accent.withOpacity(isDark ? 0.18 : 0.10),
+                        ? Colors.red.withValues(alpha: 0.4)
+                        : _accent.withValues(alpha: isDark ? 0.18 : 0.10),
                     width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
                         color: (isDark ? Colors.black : _accent)
-                            .withOpacity(isDark ? 0.22 : 0.07),
+                            .withValues(alpha: isDark ? 0.22 : 0.07),
                         blurRadius: 16,
                         offset: const Offset(0, 3))
                   ],
@@ -863,15 +895,15 @@ class _HomeScreenState extends State<HomeScreen>
                                     horizontal: 14, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: isExpiring
-                                      ? Colors.red.withOpacity(0.1)
-                                      : _accent.withOpacity(
-                                          isDark ? 0.18 : 0.10,
+                                      ? Colors.red.withValues(alpha: 0.1)
+                                      : _accent.withValues(
+                                          alpha: isDark ? 0.18 : 0.10,
                                         ),
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
                                     color: isExpiring
-                                        ? Colors.red.withOpacity(0.16)
-                                        : _accent.withOpacity(0.14),
+                                        ? Colors.red.withValues(alpha: 0.16)
+                                        : _accent.withValues(alpha: 0.14),
                                   ),
                                 ),
                                 child: FittedBox(
@@ -912,7 +944,7 @@ class _HomeScreenState extends State<HomeScreen>
                         child: LinearProgressIndicator(
                           value: timer / 30,
                           backgroundColor:
-                              _accent.withOpacity(isDark ? 0.14 : 0.10),
+                              _accent.withValues(alpha: isDark ? 0.14 : 0.10),
                           valueColor: AlwaysStoppedAnimation<Color>(
                               isExpiring ? Colors.red : _accent),
                           minHeight: 4,
@@ -1140,6 +1172,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (choice == 'local') {
       // Show warning about sync if enabled
       if (isLoggedIn && _isSyncEnabled) {
+        if (!mounted) return;
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
@@ -1195,6 +1228,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       // Show final confirmation with "DELETE" typing
+      if (!mounted) return;
       final confirmed = await _showDeleteConfirmationDialog(
           context, serviceName, cardColor, textPrimary, textSecondary);
       if (!confirmed) return;
@@ -1256,9 +1290,10 @@ class _HomeScreenState extends State<HomeScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
+                      color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      border:
+                          Border.all(color: Colors.red.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       children: [
@@ -1298,8 +1333,8 @@ class _HomeScreenState extends State<HomeScreen>
                       hintStyle: TextStyle(color: textSecondary, fontSize: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            BorderSide(color: Colors.red.withOpacity(0.5)),
+                        borderSide: BorderSide(
+                            color: Colors.red.withValues(alpha: 0.5)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -1352,9 +1387,9 @@ class _HomeScreenState extends State<HomeScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.06),
+          color: color.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.25)),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
         child: Row(
           children: [
@@ -1362,7 +1397,7 @@ class _HomeScreenState extends State<HomeScreen>
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10)),
               child: Icon(icon, color: color, size: 18),
             ),
@@ -1378,12 +1413,12 @@ class _HomeScreenState extends State<HomeScreen>
                           color: color)),
                   Text(subtitle,
                       style: TextStyle(
-                          fontSize: 11, color: color.withOpacity(0.7))),
+                          fontSize: 11, color: color.withValues(alpha: 0.7))),
                 ],
               ),
             ),
             Icon(Icons.chevron_right_rounded,
-                color: color.withOpacity(0.5), size: 18),
+                color: color.withValues(alpha: 0.5), size: 18),
           ],
         ),
       ),
@@ -1406,12 +1441,14 @@ class _HomeScreenState extends State<HomeScreen>
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: destructive
-              ? Colors.red.withOpacity(0.08)
-              : (isDark ? Colors.white.withOpacity(0.06) : Colors.grey[50]),
+              ? Colors.red.withValues(alpha: 0.08)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.grey[50]),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: destructive
-                ? Colors.red.withOpacity(0.2)
+                ? Colors.red.withValues(alpha: 0.2)
                 : (isDark ? Colors.white12 : Colors.grey[200]!),
           ),
         ),
@@ -1585,33 +1622,6 @@ class _HomeScreenState extends State<HomeScreen>
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
-  }
-
-  void _logout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Logout'),
-        content: const Text('Your codes will remain saved on this device.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: _accent, foregroundColor: Colors.white),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await _syncService.logout();
-      await Provider.of<AuthProvider>(context, listen: false).continueOffline();
-      await _loadData();
-    }
   }
 
   @override

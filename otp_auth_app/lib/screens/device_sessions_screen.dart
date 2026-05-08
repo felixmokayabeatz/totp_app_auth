@@ -142,8 +142,8 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:
-            Text('Sign Out Other Devices', style: TextStyle(color: _textPrimary)),
+        title: Text('Sign Out Other Devices',
+            style: TextStyle(color: _textPrimary)),
         content: Text(
           'This will sign out other devices but keep your current device and the primary device active.',
           style: TextStyle(color: _textSecondary),
@@ -338,14 +338,14 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                 padding: const EdgeInsets.only(top: 60),
                 child: Center(
                   child: CircularProgressIndicator(
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(_accent),
+                    valueColor: AlwaysStoppedAnimation<Color>(_accent),
                   ),
                 ),
               )
             else if (_sessions.isEmpty)
               _emptyState()
-            else ..._sessions.map(_sessionCard),
+            else
+              ..._sessions.map(_sessionCard),
           ],
         ),
       ),
@@ -369,7 +369,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(_isDark ? 0.18 : 0.05),
+            color: Colors.black.withValues(alpha: _isDark ? 0.18 : 0.05),
             blurRadius: 12,
             offset: const Offset(0, 3),
           ),
@@ -495,7 +495,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(_isDark ? 0.18 : 0.05),
+            color: Colors.black.withValues(alpha: _isDark ? 0.18 : 0.05),
             blurRadius: 12,
             offset: const Offset(0, 3),
           ),
@@ -510,7 +510,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: _accent.withOpacity(0.1),
+                  color: _accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(Icons.devices_rounded, color: _accent),
@@ -547,7 +547,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withOpacity(0.12),
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Text(
@@ -559,13 +559,14 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                     ),
                   ),
                 ),
-              if (session.isPrimary && session.isCurrent) const SizedBox(width: 8),
+              if (session.isPrimary && session.isCurrent)
+                const SizedBox(width: 8),
               if (session.isCurrent)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withOpacity(0.12),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Text(
@@ -616,7 +617,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF2563EB),
                     side: BorderSide(
-                      color: const Color(0xFF2563EB).withOpacity(0.35),
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.35),
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -630,7 +631,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                   label: const Text('Sign Out'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.red,
-                    side: BorderSide(color: Colors.red.withOpacity(0.3)),
+                    side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),

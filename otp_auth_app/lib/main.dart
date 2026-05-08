@@ -71,8 +71,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
   static const Duration _sessionHeartbeatInterval = Duration(seconds: 5);
-  static const String _legalConsentAcceptedKey =
-      'legal_consent_accepted_v1';
+  static const String _legalConsentAcceptedKey = 'legal_consent_accepted_v1';
   static const String _onboardingCompletedKey = 'onboarding_completed_v1';
 
   final AppLockService _appLockService = AppLockService();
@@ -123,8 +122,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       await _loadFirstRunState();
       await _refreshUpdateStatus();
+      if (!mounted) return;
       final dialogContext = _navigatorKey.currentContext;
-      if (dialogContext != null && _firstRunFlowCompleted) {
+      if (dialogContext != null &&
+          dialogContext.mounted &&
+          _firstRunFlowCompleted) {
         await _appLockService.ensureMandatoryLock(dialogContext);
       }
       await _restoreSession();
@@ -136,12 +138,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
       }
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _initialized = true;
-        _isLocked = true;
-      });
-      unawaited(_runSessionHeartbeat());
+      if (mounted) {
+        setState(() {
+          _initialized = true;
+          _isLocked = true;
+        });
+        unawaited(_runSessionHeartbeat());
+      }
     }
   }
 
@@ -169,10 +172,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<bool> _isFirstRunInstall() async {
     final storage = SecureStorageService();
-    final accessToken =
-        await storage.read(SecureStorageService.accessTokenKey);
-    final currentUser =
-        await storage.read(SecureStorageService.currentUserKey);
+    final accessToken = await storage.read(SecureStorageService.accessTokenKey);
+    final currentUser = await storage.read(SecureStorageService.currentUserKey);
     final localVaultUser =
         await storage.read(SecureStorageService.localVaultUserKey);
 
@@ -213,9 +214,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _completeOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_onboardingCompletedKey, true);
+    if (!mounted) return;
 
     final dialogContext = _navigatorKey.currentContext;
-    if (dialogContext != null) {
+    if (dialogContext != null && dialogContext.mounted) {
       await _appLockService.ensureMandatoryLock(dialogContext);
     }
     if (!mounted) return;
@@ -274,6 +276,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Future<void> _restoreSession() async {
     final secureStorage = SecureStorageService();
     final token = await secureStorage.read(SecureStorageService.accessTokenKey);
+    if (!mounted) return;
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
@@ -490,17 +493,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                               isFirstLaunch: true,
                               onFinished: _completeOnboarding,
                             )
-                  : authProvider.canUseApp
-                      ? (_isLocked
-                          ? _AppLockScreen(
-                              isBusy: _unlockInProgress,
-                              onUnlock: _unlockApp,
-                              onUsePin: _unlockWithPin,
-                            )
-                          : HomeScreen(
-                              key: ValueKey(authProvider.sessionScopeKey),
-                            ))
-                      : LoginScreen(),
+                          : authProvider.canUseApp
+                              ? (_isLocked
+                                  ? _AppLockScreen(
+                                      isBusy: _unlockInProgress,
+                                      onUnlock: _unlockApp,
+                                      onUsePin: _unlockWithPin,
+                                    )
+                                  : HomeScreen(
+                                      key: ValueKey(
+                                          authProvider.sessionScopeKey),
+                                    ))
+                              : LoginScreen(),
         );
       },
     );
@@ -541,111 +545,119 @@ class _RequiredUpdateScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(24),
                       child: Card(
                         child: Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.14),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Icon(
-                              Icons.system_update_alt_rounded,
-                              color: Colors.orange,
-                              size: 30,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
+                          padding: const EdgeInsets.all(28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.orange.withValues(alpha: 0.14),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Icon(
+                                      Icons.system_update_alt_rounded,
+                                      color: Colors.orange,
+                                      size: 30,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Update required',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .headlineSmall,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Install ${info.latestLabel} to continue using BeatzLock.',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                info.reason,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                              if (releaseNotes.isNotEmpty) ...[
+                                const SizedBox(height: 16),
                                 Text(
-                                  'Update required',
+                                  'What changed',
                                   style:
-                                      Theme.of(context).textTheme.headlineSmall,
+                                      Theme.of(context).textTheme.titleMedium,
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Install ${info.latestLabel} to continue using BeatzLock.',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight: notesMaxHeight,
+                                    ),
+                                    child: Scrollbar(
+                                      child: SingleChildScrollView(
+                                        child: Text(releaseNotes),
                                       ),
+                                    ),
+                                  ),
                                 ),
                               ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        info.reason,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      if (releaseNotes.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          'What changed',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxHeight: notesMaxHeight,
-                            ),
-                            child: Scrollbar(
-                              child: SingleChildScrollView(
-                                child: Text(releaseNotes),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: isOpeningUpdate ? null : onUpdateNow,
-                          icon: isOpeningUpdate
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                              const SizedBox(height: 24),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed:
+                                      isOpeningUpdate ? null : onUpdateNow,
+                                  icon: isOpeningUpdate
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.open_in_new_rounded),
+                                  label: Text(
+                                    isOpeningUpdate
+                                        ? 'Opening download...'
+                                        : 'Update now',
                                   ),
-                                )
-                              : const Icon(Icons.open_in_new_rounded),
-                          label: Text(
-                            isOpeningUpdate ? 'Opening download...' : 'Update now',
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                  onPressed: onRefreshStatus,
+                                  child: const Text('Check again'),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: onRefreshStatus,
-                          child: const Text('Check again'),
-                        ),
-                      ),
-                    ],
-                  ),
                         ),
                       ),
                     ),
@@ -737,7 +749,7 @@ class _AppLockScreen extends StatelessWidget {
                         width: 72,
                         height: 72,
                         decoration: BoxDecoration(
-                          color: colorScheme.primary.withOpacity(0.12),
+                          color: colorScheme.primary.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(

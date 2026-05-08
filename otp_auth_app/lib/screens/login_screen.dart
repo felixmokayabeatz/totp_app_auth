@@ -13,7 +13,7 @@ class LoginScreen extends StatefulWidget {
   final bool returnToPreviousOnOffline;
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
@@ -62,7 +62,6 @@ class _LoginScreenState extends State<LoginScreen> {
   double _resetPasswordStrength = 0.0;
   String _resetPasswordStrengthText = '';
   Color _resetPasswordStrengthColor = Colors.grey;
-  List<String> _resetPasswordSuggestions = [];
 
   @override
   void initState() {
@@ -135,7 +134,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _resetPasswordStrength = 0.0;
         _resetPasswordStrengthText = '';
         _resetPasswordStrengthColor = Colors.grey;
-        _resetPasswordSuggestions = [];
       });
       return;
     }
@@ -181,7 +179,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _resetPasswordStrengthText = 'Strong';
         _resetPasswordStrengthColor = Colors.green;
       }
-      _resetPasswordSuggestions = suggestions;
     });
   }
 
@@ -225,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _confirmPasswordController.text = strongPassword;
       _checkPasswordStrength();
     });
-    _showSuccess('Strong password generated! (${length} characters)');
+    _showSuccess('Strong password generated! ($length characters)');
   }
 
   void _suggestResetStrongPassword() {
@@ -236,7 +233,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _resetConfirmPasswordController.text = strongPassword;
       _checkResetPasswordStrength();
     });
-    _showSuccess('Strong password generated! (${length} characters)');
+    _showSuccess('Strong password generated! ($length characters)');
   }
 
   void _startResendTimer() {
@@ -264,7 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _resend2FACode() async {
     if (_resendCooldown > 0) {
-      _showError('Please wait ${_resendCooldown} seconds before resending');
+      _showError('Please wait $_resendCooldown seconds before resending');
       return;
     }
     if (_tempUsername == null) {
@@ -314,8 +311,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _resendResetCode() async {
     if (_resetResendCooldown > 0) {
-      _showError(
-          'Please wait ${_resetResendCooldown} seconds before resending');
+      _showError('Please wait $_resetResendCooldown seconds before resending');
       return;
     }
     if (_resetEmail == null && _resetEmailController.text.isEmpty) {
@@ -347,8 +343,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final inputCardColor =
         isDark ? const Color(0xFF1E1E32) : Colors.grey.shade50;
     final inputBorderColor = isDark
-        ? Colors.white.withOpacity(0.12)
-        : accent.withOpacity(0.3);
+        ? Colors.white.withValues(alpha: 0.12)
+        : accent.withValues(alpha: 0.3);
     final inputLabelColor = isDark ? Colors.white70 : Colors.grey.shade700;
     final inputTextColor = isDark ? Colors.white : const Color(0xFF1A1A2E);
 
@@ -419,6 +415,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isLoading ? null : _sendResetCode,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                         child: _isLoading
                             ? SizedBox(
                                 width: 20,
@@ -428,12 +430,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               )
                             : Text('Send Reset Code',
                                 style: TextStyle(fontSize: 18)),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
                       ),
                       TextButton(
                         onPressed: () async {
@@ -444,7 +440,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           setState(() {
                             _isLoading = true;
                           });
-                          final exists = await _syncService.checkRecoveryEmailExists(
+                          final exists =
+                              await _syncService.checkRecoveryEmailExists(
                             _resetEmailController.text.trim(),
                           );
                           if (!mounted) return;
@@ -564,8 +561,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'New Password',
                             labelStyle: TextStyle(color: inputLabelColor),
-                            prefixIcon: Icon(Icons.lock_outline,
-                                color: accent),
+                            prefixIcon: Icon(Icons.lock_outline, color: accent),
                             suffixIcon: IconButton(
                               icon: Icon(
                                   _obscureResetPassword
@@ -611,8 +607,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.format_size,
-                              size: 18, color: accent),
+                          Icon(Icons.format_size, size: 18, color: accent),
                           SizedBox(width: 8),
                           Text(
                             'Length: ${_resetPasswordLength.toInt()}',
@@ -642,12 +637,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
                           onPressed: _suggestResetStrongPassword,
-                          icon: Icon(Icons.auto_awesome,
-                              size: 16, color: accent),
+                          icon:
+                              Icon(Icons.auto_awesome, size: 16, color: accent),
                           label: Text(
                             'Suggest strong password',
-                            style: TextStyle(
-                                fontSize: 12, color: accent),
+                            style: TextStyle(fontSize: 12, color: accent),
                           ),
                         ),
                       ),
@@ -665,8 +659,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Confirm New Password',
                             labelStyle: TextStyle(color: inputLabelColor),
-                            prefixIcon: Icon(Icons.lock_outline,
-                                color: accent),
+                            prefixIcon: Icon(Icons.lock_outline, color: accent),
                             suffixIcon: IconButton(
                               icon: Icon(
                                   _obscureResetConfirmPassword
@@ -686,6 +679,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isLoading ? null : _resetPassword,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
                         child: _isLoading
                             ? SizedBox(
                                 width: 20,
@@ -697,11 +695,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ? 'Reset with Recovery Code'
                                     : 'Reset Password',
                                 style: TextStyle(fontSize: 18)),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
                       ),
                       const SizedBox(height: 12),
                       if (!_useRecoveryCodeForReset)
@@ -878,8 +871,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         SizedBox(height: 8),
                         Row(
                           children: [
-                            Icon(Icons.format_size,
-                                size: 18, color: accent),
+                            Icon(Icons.format_size, size: 18, color: accent),
                             SizedBox(width: 8),
                             Text(
                               'Length: ${_passwordLength.toInt()}',
@@ -914,8 +906,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 size: 16, color: accent),
                             label: Text(
                               'Suggest strong password',
-                              style: TextStyle(
-                                  fontSize: 12, color: accent),
+                              style: TextStyle(fontSize: 12, color: accent),
                             ),
                           ),
                         ),
@@ -955,6 +946,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       ElevatedButton(
                         onPressed: _isLoading ? null : _submitLogin,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                         child: _isLoading
                             ? SizedBox(
                                 width: 20,
@@ -968,12 +965,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 _isLogin ? 'Login' : 'Register',
                                 style: TextStyle(fontSize: 18),
                               ),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
                       ),
 
                       SizedBox(height: 16),
@@ -1110,6 +1101,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isLoading ? null : _verify2FA,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
                         child: _isLoading
                             ? SizedBox(
                                 width: 20,
@@ -1123,12 +1120,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     : 'Verify',
                                 style: TextStyle(fontSize: 18),
                               ),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
                       ),
                       const SizedBox(height: 12),
                       if (!_useRecoveryCodeFor2FA)
@@ -1136,9 +1127,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             TextButton(
-                              onPressed: _resendCooldown == 0
-                                  ? _resend2FACode
-                                  : null,
+                              onPressed:
+                                  _resendCooldown == 0 ? _resend2FACode : null,
                               child: Text(
                                 _resendCooldown > 0
                                     ? 'Resend code (${_resendCooldown}s)'
@@ -1302,6 +1292,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _continueOffline() async {
     await _syncService.logout(notifyServer: false);
+    if (!mounted) return;
     await Provider.of<AuthProvider>(context, listen: false).continueOffline();
     if (!mounted) return;
 
@@ -1328,8 +1319,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Please enter a valid 10-character recovery code');
       return;
     }
-    if (!_useRecoveryCodeForReset &&
-        _resetOtpCodeController.text.length != 6) {
+    if (!_useRecoveryCodeForReset && _resetOtpCodeController.text.length != 6) {
       _showError('Please enter a valid 6-digit code');
       return;
     }
@@ -1431,7 +1421,8 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final success = await _syncService.login(username, _passwordController.text);
+    final success =
+        await _syncService.login(username, _passwordController.text);
     if (!mounted) return;
     setState(() {
       _isLoading = false;
