@@ -18,6 +18,7 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
   bool _isLoading = true;
   bool _isActing = false;
   List<Map<String, dynamic>> _requests = const [];
+  final Map<String, String> _selectedCodes = {};
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
@@ -36,6 +37,11 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
     if (!mounted) return;
     setState(() {
       _requests = requests;
+      final requestIds = requests
+          .map((item) => item['id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      _selectedCodes.removeWhere((requestId, _) => !requestIds.contains(requestId));
       _isLoading = false;
     });
   }
@@ -89,16 +95,55 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
     );
 
     if (success) {
+      _selectedCodes.remove(requestId);
       await _loadRequests();
     }
+  }
+
+  Widget _buildChoiceButton(
+    String choice, {
+    required bool selected,
+    required VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: 108,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: selected
+              ? _accent
+              : _accent.withValues(alpha: _isDark ? 0.18 : 0.08),
+          foregroundColor: selected ? Colors.white : _accent,
+          elevation: 0,
+          side: BorderSide(
+            color: selected ? _accent : _accent.withValues(alpha: 0.4),
+            width: 1.6,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Text(
+          choice,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.8,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildRequestCard(Map<String, dynamic> item) {
     final status = (item['status']?.toString() ?? 'pending').toLowerCase();
     final isPending = status == 'pending';
+    final requestId = item['id']?.toString() ?? '';
     final label = item['requester_device_label']?.toString() ?? 'Unknown device';
     final kind = item['requester_device_kind']?.toString() ?? 'unknown';
     final code = item['verification_code']?.toString() ?? '---';
+    final selectedCode = _selectedCodes[requestId];
     final choices = ((item['verification_choices'] as List?) ?? const [])
         .map((choice) => choice.toString())
         .where((choice) => choice.trim().isNotEmpty)
@@ -187,26 +232,50 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
               children: [
                 if (choices.isNotEmpty)
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       for (final choice in choices)
-                        ElevatedButton(
+                        _buildChoiceButton(
+                          choice,
+                          selected: selectedCode == choice,
                           onPressed: _isActing
                               ? null
-                              : () => _handleRequest(
-                                    item,
-                                    approve: true,
-                                    selectedCode: choice,
-                                  ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _accent,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: Text(choice),
+                              : () => setState(() {
+                                    _selectedCodes[requestId] = choice;
+                                  }),
                         ),
                     ],
                   ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isActing || selectedCode == null
+                        ? null
+                        : () => _handleRequest(
+                              item,
+                              approve: true,
+                              selectedCode: selectedCode,
+                            ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.check_circle_rounded),
+                    label: const Text(
+                      'Accept',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,

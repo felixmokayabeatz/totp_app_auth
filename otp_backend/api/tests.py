@@ -247,6 +247,14 @@ class PasswordlessLoginFlowTests(APITestCase):
             PasswordlessLoginRequest.STATUS_PENDING,
         )
         self.assertEqual(request_obj.requester_device_kind, DeviceSession.DEVICE_KIND_DESKTOP)
+        self.assertNotEqual(
+            request_obj.verification_code,
+            start_response.data['verification_code'],
+        )
+        self.assertEqual(
+            request_obj.get_verification_code(),
+            start_response.data['verification_code'],
+        )
         self.assertTrue(
             self.user.app_notifications.filter(
                 notification_type='passwordless_request',
@@ -255,7 +263,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         approve_response = self.primary_client.post(
             reverse('passwordless-requests-approve', args=[request_id]),
-            {'selected_code': request_obj.verification_code},
+            {'selected_code': request_obj.get_verification_code()},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',

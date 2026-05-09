@@ -102,6 +102,7 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
 
 
 class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
+    verification_code = serializers.SerializerMethodField()
     verification_choices = serializers.SerializerMethodField()
 
     class Meta:
@@ -122,3 +123,6 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
         if builder is None:
             return []
         return builder(obj)
+
+    def get_verification_code(self, obj):
+        return obj.get_verification_code()

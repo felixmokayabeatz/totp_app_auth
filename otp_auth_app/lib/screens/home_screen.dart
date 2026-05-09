@@ -269,43 +269,116 @@ class _HomeScreenState extends State<HomeScreen>
         .map((choice) => choice.toString())
         .where((choice) => choice.trim().isNotEmpty)
         .toList();
+    String? selectedCode;
 
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Passwordless sign-in request'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$label is asking to sign in.',
-              style: TextStyle(
-                color: Theme.of(dialogContext).colorScheme.onSurface,
-                fontWeight: FontWeight.w700,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final theme = Theme.of(dialogContext);
+          final isDark = theme.brightness == Brightness.dark;
+          final surfaceColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
+          final softAccent = _accent.withValues(alpha: isDark ? 0.18 : 0.08);
+
+          Widget buildChoiceButton(String choice) {
+            final isSelected = selectedCode == choice;
+            return SizedBox(
+              width: 108,
+              child: ElevatedButton(
+                onPressed: () {
+                  setDialogState(() => selectedCode = choice);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isSelected ? _accent : softAccent,
+                  foregroundColor: isSelected ? Colors.white : _accent,
+                  elevation: 0,
+                  side: BorderSide(
+                    color: isSelected ? _accent : _accent.withValues(alpha: 0.4),
+                    width: 1.6,
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: Text(
+                  choice,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.8,
+                  ),
+                ),
               ),
+            );
+          }
+
+          return AlertDialog(
+            backgroundColor: surfaceColor,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Passwordless sign-in request'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$label is asking to sign in.',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'On the other device, the code is $code. Choose that exact 3-digit code here, then tap Accept.',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    height: 1.35,
+                  ),
+                ),
+                if (choices.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final choice in choices) buildChoiceButton(choice),
+                    ],
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              'On the other device, the code is $code. Choose that exact 3-digit code here.',
-            ),
-            if (choices.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final choice in choices)
-                    ElevatedButton(
-                      onPressed: () async {
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  final success = await _syncService
+                      .denyPasswordlessRequest(item['id']?.toString() ?? '');
+                  if (!dialogContext.mounted) return;
+                  Navigator.pop(dialogContext);
+                  _showSnackBar(
+                    success
+                        ? 'Denied $label.'
+                        : (_syncService.lastErrorMessage ??
+                            'Could not deny that sign-in request.'),
+                    success ? Colors.orange : Colors.red,
+                  );
+                },
+                child: const Text('Deny'),
+              ),
+              FilledButton(
+                onPressed: selectedCode == null
+                    ? null
+                    : () async {
                         final unlocked = await _appLockService
                             .authenticateToUnlock(dialogContext);
                         if (!dialogContext.mounted || !unlocked) return;
-                        final success = await _syncService.approvePasswordlessRequest(
+                        final success =
+                            await _syncService.approvePasswordlessRequest(
                           item['id']?.toString() ?? '',
-                          selectedCode: choice,
+                          selectedCode: selectedCode!,
                         );
                         if (!dialogContext.mounted) return;
                         Navigator.pop(dialogContext);
@@ -317,31 +390,15 @@ class _HomeScreenState extends State<HomeScreen>
                           success ? const Color(0xFF10B981) : Colors.red,
                         );
                       },
-                      child: Text(choice),
-                    ),
-                ],
+                style: FilledButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Accept'),
               ),
             ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final success = await _syncService
-                  .denyPasswordlessRequest(item['id']?.toString() ?? '');
-              if (!dialogContext.mounted) return;
-              Navigator.pop(dialogContext);
-              _showSnackBar(
-                success
-                    ? 'Denied $label.'
-                    : (_syncService.lastErrorMessage ??
-                        'Could not deny that sign-in request.'),
-                success ? Colors.orange : Colors.red,
-              );
-            },
-            child: const Text('Deny'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

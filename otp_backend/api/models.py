@@ -4,6 +4,8 @@ from django.db import models
 from django.contrib.auth.models import User
 import uuid
 
+from .passwordless_crypto import decrypt_passwordless_code, encrypt_passwordless_code
+
 
 class EncryptedData(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -167,7 +169,7 @@ class PasswordlessLoginRequest(models.Model):
         choices=DeviceSession.DEVICE_KIND_CHOICES,
         default=DeviceSession.DEVICE_KIND_UNKNOWN,
     )
-    verification_code = models.CharField(max_length=7)
+    verification_code = models.TextField()
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -191,3 +193,14 @@ class PasswordlessLoginRequest(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - passwordless {self.status} - {self.requester_device_label}"
+
+    def set_verification_code(self, raw_code: str) -> None:
+        self.verification_code = encrypt_passwordless_code(raw_code)
+
+    def get_verification_code(self) -> str:
+        if not self.verification_code:
+            return ''
+        return decrypt_passwordless_code(self.verification_code)
+
+    def matches_verification_code(self, raw_code: str) -> bool:
+        return self.get_verification_code() == raw_code

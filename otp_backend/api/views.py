@@ -132,14 +132,14 @@ def _generate_passwordless_code() -> str:
 
 
 def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[str]:
-    correct = request_obj.verification_code
+    correct = request_obj.get_verification_code()
     seen = {correct}
     decoys = []
     counter = 0
 
     while len(decoys) < 2:
         digest = hashlib.sha256(
-            f'{request_obj.id}|{request_obj.verification_code}|{counter}'.encode('utf-8')
+            f'{request_obj.id}|{correct}|{counter}'.encode('utf-8')
         ).hexdigest()
         candidate = str(int(digest[:8], 16) % 1000).zfill(3)
         counter += 1
@@ -350,25 +350,27 @@ class AuthViewSet(viewsets.GenericViewSet):
             updated_at=timezone.now(),
         )
 
-        request_obj = PasswordlessLoginRequest.objects.create(
+        verification_code = _generate_passwordless_code()
+        request_obj = PasswordlessLoginRequest(
             user=user,
             requester_device_id=device_id,
             requester_device_label=device_label,
             requester_device_kind=device_kind,
-            verification_code=_generate_passwordless_code(),
             expires_at=timezone.now() + timedelta(minutes=3),
         )
+        request_obj.set_verification_code(verification_code)
+        request_obj.save()
         create_passwordless_request_notification(
             user,
             requester_device_label=request_obj.requester_device_label,
-            verification_code=request_obj.verification_code,
+            verification_code=verification_code,
         )
 
         return Response(
             {
                 'success': True,
                 'request_id': str(request_obj.id),
-                'verification_code': request_obj.verification_code,
+                'verification_code': verification_code,
                 'expires_at': request_obj.expires_at.isoformat(),
                 'primary_device_label': primary_session.device_label,
                 'message': 'Approve this sign-in from your primary phone.',
@@ -1093,8 +1095,7 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 status=400,
             )
 
-        correct_code = login_request.verification_code
-        if selected_code != correct_code:
+        if not login_request.matches_verification_code(selected_code):
             return Response(
                 {'error': 'That code does not match the requesting device.'},
                 status=400,
