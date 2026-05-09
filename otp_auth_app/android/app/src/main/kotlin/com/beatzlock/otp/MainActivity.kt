@@ -42,23 +42,59 @@ class MainActivity : FlutterFragmentActivity() {
                         )
                     }
                 }
+                "saveFileToDownloads" -> {
+                    val fileName = call.argument<String>("fileName")
+                    val mimeType = call.argument<String>("mimeType")
+                    val bytes = call.argument<ByteArray>("bytes")
+
+                    if (fileName.isNullOrBlank() || mimeType.isNullOrBlank() || bytes == null) {
+                        result.error(
+                            "INVALID_ARGUMENTS",
+                            "A file name, MIME type, and file bytes are required.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+
+                    try {
+                        result.success(saveFileToDownloads(fileName, mimeType, bytes))
+                    } catch (error: Exception) {
+                        result.error(
+                            "DOWNLOAD_SAVE_FAILED",
+                            error.message ?: "Unable to save file to Downloads.",
+                            null
+                        )
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
     }
 
     private fun savePdfToDownloads(fileName: String, bytes: ByteArray): String {
+        return saveFileToDownloads(fileName, "application/pdf", bytes)
+    }
+
+    private fun saveFileToDownloads(
+        fileName: String,
+        mimeType: String,
+        bytes: ByteArray
+    ): String {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            savePdfToMediaStoreDownloads(fileName, bytes)
+            saveToMediaStoreDownloads(fileName, mimeType, bytes)
         } else {
-            savePdfToLegacyDownloads(fileName, bytes)
+            saveToLegacyDownloads(fileName, bytes)
         }
     }
 
-    private fun savePdfToMediaStoreDownloads(fileName: String, bytes: ByteArray): String {
+    private fun saveToMediaStoreDownloads(
+        fileName: String,
+        mimeType: String,
+        bytes: ByteArray
+    ): String {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+            put(MediaStore.Downloads.MIME_TYPE, mimeType)
             put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
             put(MediaStore.Downloads.IS_PENDING, 1)
         }
@@ -82,7 +118,7 @@ class MainActivity : FlutterFragmentActivity() {
         return "${Environment.DIRECTORY_DOWNLOADS}/$fileName"
     }
 
-    private fun savePdfToLegacyDownloads(fileName: String, bytes: ByteArray): String {
+    private fun saveToLegacyDownloads(fileName: String, bytes: ByteArray): String {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(
             Environment.DIRECTORY_DOWNLOADS
         )

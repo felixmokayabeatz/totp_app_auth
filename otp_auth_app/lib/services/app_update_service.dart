@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +11,8 @@ import '../models/app_update_info.dart';
 
 class AppUpdateService {
   static final AppUpdateService _instance = AppUpdateService._internal();
+  static const MethodChannel _storageChannel =
+      MethodChannel('com.beatzlock.otp/storage');
   factory AppUpdateService() => _instance;
 
   AppUpdateService._internal()
@@ -25,10 +28,14 @@ class AppUpdateService {
   final Dio _dio;
   AppUpdateInfo? _cachedUpdateInfo;
   String? _lastErrorMessage;
+  String? _pendingLauncherExecutable;
+  List<String>? _pendingLauncherArguments;
 
   AppUpdateInfo? get cachedUpdateInfo => _cachedUpdateInfo;
   String? get lastErrorMessage => _lastErrorMessage;
   bool get canSelfUpdate => Platform.isWindows || Platform.isLinux;
+  bool get canDownloadUpdateInApp =>
+      Platform.isWindows || Platform.isLinux || Platform.isAndroid;
 
   String get currentPlatform {
     if (Platform.isAndroid) return 'android';
@@ -98,10 +105,10 @@ class AppUpdateService {
     AppUpdateInfo info, {
     void Function(AppDownloadProgress progress)? onReceiveProgress,
   }) async {
-    if (!canSelfUpdate) {
+    if (!canDownloadUpdateInApp) {
       return const AppSelfUpdateResult(
         started: false,
-        message: 'Self-update is not supported on this platform.',
+        message: 'In-app update download is not supported on this platform.',
       );
     }
 
@@ -119,11 +126,25 @@ class AppUpdateService {
         downloadUri,
         onReceiveProgress: onReceiveProgress,
       );
-      await _launchInstaller(installerPath);
+      if (Platform.isAndroid) {
+        final savedPath = await _saveAndroidInstallerToDownloads(
+          installerPath,
+          info,
+          downloadUri,
+        );
+        return AppSelfUpdateResult(
+          started: true,
+          message:
+              'Update APK downloaded to $savedPath. Open it from Downloads to install.',
+        );
+      }
+
+      await _prepareDesktopUpdate(installerPath);
       return const AppSelfUpdateResult(
         started: true,
         message:
-            'Updater started. BeatzLock may close and reopen when installation finishes.',
+            'Update is ready. Click OK to close BeatzLock and finish installing it.',
+        requiresAppExit: true,
       );
     } on DioException catch (e) {
       return AppSelfUpdateResult(
@@ -196,44 +217,132 @@ class AppUpdateService {
     return filePath;
   }
 
-  String _installerExtension(Uri uri) {
-    final lastSegment =
-        uri.pathSegments.isEmpty ? '' : uri.pathSegments.last.toLowerCase();
-    if (lastSegment.endsWith('.exe')) return '.exe';
-    if (lastSegment.endsWith('.deb')) return '.deb';
-    if (lastSegment.endsWith('.rpm')) return '.rpm';
-    if (Platform.isWindows) return '.exe';
-    return '.deb';
+  Future<void> launchPreparedUpdateAndExit() async {
+    final executable = _pendingLauncherExecutable;
+    final arguments = _pendingLauncherArguments;
+    if (executable == null || arguments == null) {
+      throw const FileSystemException('No prepared desktop update was found.');
+    }
+
+    _pendingLauncherExecutable = null;
+    _pendingLauncherArguments = null;
+
+    await Process.start(
+      executable,
+      arguments,
+      mode: ProcessStartMode.detached,
+    );
+    exit(0);
   }
 
-  Future<void> _launchInstaller(String installerPath) async {
-    if (Platform.isWindows) {
-      await Process.start(
-        installerPath,
-        const [
-          '/SP-',
-          '/VERYSILENT',
-          '/SUPPRESSMSGBOXES',
-          '/NORESTART',
-          '/CLOSEAPPLICATIONS',
-          '/RESTARTAPPLICATIONS',
-        ],
-        mode: ProcessStartMode.detached,
+  Future<String> _saveAndroidInstallerToDownloads(
+    String installerPath,
+    AppUpdateInfo info,
+    Uri downloadUri,
+  ) async {
+    final file = File(installerPath);
+    final savedPath = await _storageChannel.invokeMethod<String>(
+      'saveFileToDownloads',
+      {
+        'fileName':
+            'beatzlock_${info.latestVersion}_${info.latestBuildNumber}${_installerExtension(downloadUri)}',
+        'mimeType': 'application/vnd.android.package-archive',
+        'bytes': await file.readAsBytes(),
+      },
+    );
+    try {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Temporary Android update files can be safely ignored if cleanup fails.
+    }
+
+    if (savedPath == null || savedPath.isEmpty) {
+      throw const FileSystemException(
+        'Android Downloads save returned no path.',
       );
+    }
+    return savedPath;
+  }
+
+  Future<void> _prepareDesktopUpdate(String installerPath) async {
+    if (Platform.isWindows) {
+      final scriptPath = await _writeWindowsUpdaterScript(
+        installerPath,
+        appPid: pid,
+      );
+      _pendingLauncherExecutable = 'powershell.exe';
+      _pendingLauncherArguments = [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        scriptPath,
+      ];
       return;
     }
 
     if (Platform.isLinux) {
-      final scriptPath = await _writeLinuxUpdaterScript(installerPath);
-      await Process.start(
-        'sh',
-        [scriptPath],
-        mode: ProcessStartMode.detached,
+      final scriptPath = await _writeLinuxUpdaterScript(
+        installerPath,
+        appPid: pid,
       );
+      _pendingLauncherExecutable = 'sh';
+      _pendingLauncherArguments = [scriptPath];
+      return;
     }
+
+    throw UnsupportedError('Desktop update is not supported on this platform.');
   }
 
-  Future<String> _writeLinuxUpdaterScript(String installerPath) async {
+  String _installerExtension(Uri uri) {
+    final lastSegment =
+        uri.pathSegments.isEmpty ? '' : uri.pathSegments.last.toLowerCase();
+    if (lastSegment.endsWith('.exe')) return '.exe';
+    if (lastSegment.endsWith('.apk')) return '.apk';
+    if (lastSegment.endsWith('.deb')) return '.deb';
+    if (lastSegment.endsWith('.rpm')) return '.rpm';
+    if (Platform.isWindows) return '.exe';
+    if (Platform.isAndroid) return '.apk';
+    return '.deb';
+  }
+
+  Future<String> _writeWindowsUpdaterScript(
+    String installerPath, {
+    required int appPid,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final script = File(
+      '${tempDir.path}${Platform.pathSeparator}beatzlock_update.ps1',
+    );
+    final escapedInstallerPath = installerPath.replaceAll("'", "''");
+    await script.writeAsString('''
+\$appPid = $appPid
+\$installerPath = '$escapedInstallerPath'
+
+while (Get-Process -Id \$appPid -ErrorAction SilentlyContinue) {
+  Start-Sleep -Seconds 1
+}
+
+Start-Process -FilePath \$installerPath -ArgumentList @(
+  '/SP-',
+  '/VERYSILENT',
+  '/SUPPRESSMSGBOXES',
+  '/NORESTART',
+  '/CLOSEAPPLICATIONS',
+  '/RESTARTAPPLICATIONS'
+)
+''');
+    return script.path;
+  }
+
+  Future<String> _writeLinuxUpdaterScript(
+    String installerPath, {
+    required int appPid,
+  }) async {
     final tempDir = await getTemporaryDirectory();
     final script = File(
       '${tempDir.path}${Platform.pathSeparator}beatzlock_update.sh',
@@ -244,6 +353,11 @@ class AppUpdateService {
 set -eu
 DEB_PATH='$escapedInstallerPath'
 APP_PATH="/usr/local/BeatzLock/otp_auth_app"
+APP_PID="$appPid"
+
+while kill -0 "\$APP_PID" 2>/dev/null; do
+  sleep 1
+done
 
 if command -v pkexec >/dev/null 2>&1; then
   pkexec sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$DEB_PATH"
@@ -292,10 +406,12 @@ class AppSelfUpdateResult {
   const AppSelfUpdateResult({
     required this.started,
     required this.message,
+    this.requiresAppExit = false,
   });
 
   final bool started;
   final String message;
+  final bool requiresAppExit;
 }
 
 class AppDownloadProgress {

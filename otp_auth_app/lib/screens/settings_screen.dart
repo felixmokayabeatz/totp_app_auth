@@ -190,7 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final shouldUpdate = await _showUpdateDetailsDialog(info);
     if (shouldUpdate != true || !mounted) return;
 
-    if (_appUpdateService.canSelfUpdate) {
+    if (_appUpdateService.canDownloadUpdateInApp) {
       setState(() => _isInstallingUpdate = true);
       _updateProgressNotifier.value = null;
       unawaited(_showUpdateProgressDialog(info));
@@ -209,6 +209,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _isInstallingUpdate = false);
 
       if (result.started) {
+        if (result.requiresAppExit) {
+          final continueUpdate =
+              await _showReadyToCloseForUpdateDialog(result.message);
+          if (!mounted || continueUpdate != true) return;
+
+          try {
+            await _appUpdateService.launchPreparedUpdateAndExit();
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Could not start the update after closing: $e'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            );
+          }
+          return;
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.message),
@@ -263,7 +286,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (_isInstallingUpdate) {
-      return 'Downloading and starting the updater...';
+      return _isAndroidUpdateDownload
+          ? 'Downloading the APK to Downloads...'
+          : 'Downloading the update...';
     }
 
     if (_isCheckingForUpdates) {
@@ -284,6 +309,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return 'You are using the latest version';
+  }
+
+  bool get _isAndroidUpdateDownload =>
+      _appUpdateService.currentPlatform == 'android';
+
+  String get _updateDialogMessage {
+    if (_appUpdateService.canSelfUpdate) {
+      return 'BeatzLock can download this update now. When the download finishes, click OK to close the app and continue the update on Windows or Linux/Kali.';
+    }
+    if (_appUpdateService.canDownloadUpdateInApp && _isAndroidUpdateDownload) {
+      return 'BeatzLock can download the APK to your Downloads folder from settings. Open the saved APK from Downloads to install it.';
+    }
+    return 'The download page will open so you can install the update.';
+  }
+
+  String get _updateActionLabel {
+    if (_appUpdateService.canSelfUpdate) {
+      return 'Download update';
+    }
+    if (_appUpdateService.canDownloadUpdateInApp && _isAndroidUpdateDownload) {
+      return 'Download APK';
+    }
+    return 'Open download';
+  }
+
+  String _updateProgressTitle(AppUpdateInfo info) {
+    return 'Downloading ${info.latestLabel}';
+  }
+
+  String get _updateProgressDescription {
+    if (_isAndroidUpdateDownload) {
+      return 'Downloading the APK to your Downloads folder. Open it from Downloads after the transfer finishes to install the update.';
+    }
+    return 'Downloading the update. When it finishes, BeatzLock will ask for one more OK before the app closes and the update begins.';
   }
 
   String _backupCodeStatusSubtitle() {
@@ -2863,9 +2922,7 @@ What's new
               _updateVersionLine('Latest', info.latestLabel),
               const SizedBox(height: 14),
               Text(
-                _appUpdateService.canSelfUpdate
-                    ? 'BeatzLock can download and start this update from settings on Windows and Linux/Kali.'
-                    : 'The download page will open so you can install the update.',
+                _updateDialogMessage,
                 style: TextStyle(color: _textSecondary, fontSize: 13),
               ),
               if (info.reason.trim().isNotEmpty) ...[
@@ -2924,11 +2981,7 @@ What's new
           FilledButton.icon(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             icon: const Icon(Icons.system_update_alt_rounded, size: 18),
-            label: Text(
-              _appUpdateService.canSelfUpdate
-                  ? 'Install update'
-                  : 'Open download',
-            ),
+            label: Text(_updateActionLabel),
           ),
         ],
       ),
@@ -2976,7 +3029,7 @@ What's new
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Installing ${info.latestLabel}',
+                _updateProgressTitle(info),
                 style: TextStyle(color: _textPrimary, fontSize: 17),
               ),
             ),
@@ -2990,7 +3043,7 @@ What's new
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Downloading the update. The installer will start when the download finishes.',
+                  _updateProgressDescription,
                   style: TextStyle(color: _textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
@@ -3039,6 +3092,43 @@ What's new
             );
           },
         ),
+      ),
+    );
+  }
+
+  Future<bool?> _showReadyToCloseForUpdateDialog(String message) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.check_circle_outline_rounded, color: _accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Update Ready',
+                style: TextStyle(color: _textPrimary, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Later'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
