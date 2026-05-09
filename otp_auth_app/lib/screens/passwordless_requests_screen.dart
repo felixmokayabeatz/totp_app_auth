@@ -54,14 +54,21 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
     }
   }
 
-  Future<void> _handleRequest(Map<String, dynamic> item, bool approve) async {
+  Future<void> _handleRequest(
+    Map<String, dynamic> item, {
+    required bool approve,
+    String? selectedCode,
+  }) async {
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
 
     setState(() => _isActing = true);
     final requestId = item['id']?.toString() ?? '';
     final success = approve
-        ? await _syncService.approvePasswordlessRequest(requestId)
+        ? await _syncService.approvePasswordlessRequest(
+            requestId,
+            selectedCode: selectedCode ?? '',
+          )
         : await _syncService.denyPasswordlessRequest(requestId);
     if (!mounted) return;
     setState(() => _isActing = false);
@@ -89,9 +96,13 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
   Widget _buildRequestCard(Map<String, dynamic> item) {
     final status = (item['status']?.toString() ?? 'pending').toLowerCase();
     final isPending = status == 'pending';
-    final code = item['verification_code']?.toString() ?? '---';
     final label = item['requester_device_label']?.toString() ?? 'Unknown device';
     final kind = item['requester_device_kind']?.toString() ?? 'unknown';
+    final code = item['verification_code']?.toString() ?? '---';
+    final choices = ((item['verification_choices'] as List?) ?? const [])
+        .map((choice) => choice.toString())
+        .where((choice) => choice.trim().isNotEmpty)
+        .toList();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -138,41 +149,72 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
                   : Colors.grey.shade50,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.password_rounded, color: _accent),
-                const SizedBox(width: 10),
-                Text(
-                  code,
-                  style: TextStyle(
-                    color: _textPrimary,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.password_rounded, color: _accent),
+                    const SizedBox(width: 10),
+                    Text(
+                      code,
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
                 ),
+                if (isPending && choices.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Choose the exact 3-digit code shown on $label',
+                    style: TextStyle(
+                      color: _textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 14),
           if (isPending)
-            Row(
+            Column(
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isActing ? null : () => _handleRequest(item, false),
-                    child: const Text('Deny'),
+                if (choices.isNotEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final choice in choices)
+                        ElevatedButton(
+                          onPressed: _isActing
+                              ? null
+                              : () => _handleRequest(
+                                    item,
+                                    approve: true,
+                                    selectedCode: choice,
+                                  ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _accent,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: Text(choice),
+                        ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isActing ? null : () => _handleRequest(item, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Approve'),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _isActing
+                        ? null
+                        : () => _handleRequest(item, approve: false),
+                    child: const Text('Deny'),
                   ),
                 ),
               ],

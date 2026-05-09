@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models/app_update_info.dart';
 import 'models/otp_account.dart';
 import 'models/password_entry.dart';
+import 'models/secure_message.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
@@ -41,9 +42,13 @@ void main() async {
   if (!Hive.isAdapterRegistered(1)) {
     Hive.registerAdapter(PasswordEntryAdapter());
   }
+  if (!Hive.isAdapterRegistered(2)) {
+    Hive.registerAdapter(SecureMessageAdapter());
+  }
 
   await Hive.openBox<OTPAccount>('otp_accounts');
   await Hive.openBox<PasswordEntry>('passwords');
+  await Hive.openBox<SecureMessage>('secure_messages');
   await Hive.openBox('settings');
 
   await SecureStorageService().init();
@@ -363,6 +368,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       if (await _syncService.isSyncEnabled()) {
         await _syncService.downloadAndMergeAccounts();
+        await _syncService.downloadAndMergePasswordEntries();
+        await _syncService.downloadAndMergeSecureMessages();
       }
     } catch (e) {
       debugPrint('Background cloud restore error: $e');

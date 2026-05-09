@@ -1220,6 +1220,22 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
     if (_isLogin) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      final passwordlessApproved = await _startPasswordlessLogin(
+        passwordForSync: password,
+        showFallbackMessage: false,
+      );
+      if (!mounted) return;
+      if (passwordlessApproved) {
+        return;
+      }
+
+      setState(() {
+        _isLoading = true;
+      });
       final sent = await _syncService.send2FACode(
         username,
         password,
@@ -1234,7 +1250,7 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() {
           _show2FA = true;
         });
-        _showSuccess('2FA code sent to your email!');
+        _showSuccess('Primary-phone approval was not completed. A normal 2FA code was sent to your email.');
       } else {
         _showError(_syncService.lastErrorMessage ??
             'Unable to send the verification code. Check your username, password, or internet connection.');
@@ -1312,26 +1328,43 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _startPasswordlessLogin() async {
+  Future<bool> _startPasswordlessLogin({
+    String? passwordForSync,
+    bool showFallbackMessage = true,
+  }) async {
     final username = _usernameController.text.trim();
+    final effectivePassword = passwordForSync ??
+        (_passwordController.text.isEmpty ? null : _passwordController.text);
     if (username.isEmpty) {
       _showError('Enter your username first');
-      return;
+      return false;
     }
 
     final result = await Navigator.push<Map<String, dynamic>?>(
       context,
       MaterialPageRoute(
-        builder: (_) => PasswordlessLoginScreen(username: username),
+        builder: (_) => PasswordlessLoginScreen(
+          username: username,
+          passwordForSync: effectivePassword,
+        ),
       ),
     );
-    if (!mounted || result == null) return;
+    if (!mounted || result == null) {
+      if (showFallbackMessage && mounted) {
+        final fallbackMessage = _syncService.lastErrorMessage;
+        if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
+          _showError(fallbackMessage);
+        }
+      }
+      return false;
+    }
 
     _showSuccess(
       result['sync_unlock_message']?.toString() ??
           'Passwordless sign-in approved.',
     );
     await _completeAuthenticatedSession();
+    return true;
   }
 
   Future<void> _recoverPrimaryDevice() async {

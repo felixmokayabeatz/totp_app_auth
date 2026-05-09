@@ -9,6 +9,7 @@ import '../models/app_notification_item.dart';
 import '../models/device_session_info.dart';
 import '../models/otp_account.dart';
 import '../models/password_entry.dart';
+import '../models/secure_message.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
 import 'secure_storage_service.dart';
@@ -273,6 +274,25 @@ class SyncService {
 
   Future<Box<PasswordEntry>> getPasswordBox() async => await _getPasswordBox();
   Future<String> getCurrentPasswordBoxName() async => await _getPasswordBoxName();
+
+  Future<String> _getSecureMessageBoxName() async {
+    final username =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ??
+            await _secureStorage.read(SecureStorageService.localVaultUserKey);
+    if (username == null || username.isEmpty) return 'secure_messages_default';
+    return 'secure_messages_$username';
+  }
+
+  Future<Box<SecureMessage>> _getSecureMessageBox() async {
+    final boxName = await _getSecureMessageBoxName();
+    if (!Hive.isBoxOpen(boxName)) {
+      await Hive.openBox<SecureMessage>(boxName);
+    }
+    return Hive.box<SecureMessage>(boxName);
+  }
+
+  Future<Box<SecureMessage>> getSecureMessageBox() async =>
+      await _getSecureMessageBox();
 
   String _decodeLegacySecretForMigration(
       String storedSecret, String currentUserId) {
@@ -709,29 +729,7 @@ class SyncService {
         await _storeEncryptionKey(encryptionKey);
         _encryptionKey = encryptionKey;
         await setSyncEnabled(true);
-
-        try {
-          await migrateLegacyLocalAccounts();
-        } catch (e) {
-          debugPrint('Legacy account migration error after login: $e');
-        }
-
-        try {
-          final userBox = await _getUserBox();
-          debugPrint(
-              'User box ${await _getUserBoxName()} has ${userBox.length} accounts');
-        } catch (e) {
-          debugPrint('User box load error after login: $e');
-        }
-
-        try {
-          if (await isSyncEnabled()) {
-            await downloadAndMergeAccounts();
-            await downloadAndMergePasswordEntries();
-          }
-        } catch (e) {
-          debugPrint('Cloud restore error after login: $e');
-        }
+        await _restoreSyncedVaultDataAfterUnlock();
 
         return true;
       }
@@ -1258,10 +1256,37 @@ class SyncService {
       await _storeEncryptionKey(encryptionKey);
       _encryptionKey = encryptionKey;
       await setSyncEnabled(enableSyncByDefault);
+      await _restoreSyncedVaultDataAfterUnlock();
       return;
     }
 
     await setSyncEnabled(false);
+  }
+
+  Future<void> _restoreSyncedVaultDataAfterUnlock() async {
+    try {
+      await migrateLegacyLocalAccounts();
+    } catch (e) {
+      debugPrint('Legacy account migration error after unlock: $e');
+    }
+
+    try {
+      final userBox = await _getUserBox();
+      debugPrint(
+          'User box ${await _getUserBoxName()} has ${userBox.length} accounts');
+    } catch (e) {
+      debugPrint('User box load error after unlock: $e');
+    }
+
+    try {
+      if (await isSyncEnabled()) {
+        await downloadAndMergeAccounts();
+        await downloadAndMergePasswordEntries();
+        await downloadAndMergeSecureMessages();
+      }
+    } catch (e) {
+      debugPrint('Cloud restore error after unlock: $e');
+    }
   }
 
   Future<bool> syncPasswordEntries() async {
@@ -1430,13 +1455,199 @@ class SyncService {
     }
   }
 
-  Future<Map<String, dynamic>?> startPasswordlessLogin(String username) async {
+  Future<void> downloadAndMergeSecureMessages() async {
+    await _updateAuthHeader();
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) return;
+    if (!await _ensureEncryptionKeyAvailable()) return;
+
+    final localBox = await _getSecureMessageBox();
+    final userId = await _getCurrentUserId();
+    final prefs = await SharedPreferences.getInstance();
+    final deviceId = prefs.getString('device_id') ?? '';
+
+    try {
+      final response = await _requestWithRetry((_) => _dio.get(
+            'sync/get-data/',
+            queryParameters: {
+              'data_type': 'secure_messages',
+              'device_id': deviceId,
+            },
+          ));
+
+      final encryptedContent =
+          response.data['encrypted_content']?.toString() ?? '';
+      if (encryptedContent.isEmpty) return;
+
+      final decrypted = EncryptionService.decryptSensitiveSyncPayload(
+        encryptedContent,
+        _encryptionKey!,
+        context: 'secure-messages-sync',
+      );
+      if (decrypted.trim().isEmpty) return;
+
+      final cloudMessages = List<Map<String, dynamic>>.from(
+        (jsonDecode(decrypted) as List).map(
+          (item) => Map<String, dynamic>.from(item),
+        ),
+      );
+
+      for (final rawMessage in cloudMessages) {
+        final id = rawMessage['id']?.toString() ?? '';
+        if (id.isEmpty || localBox.containsKey(id)) continue;
+
+        final message = SecureMessage(
+          id: id,
+          text: rawMessage['text']?.toString() ?? '',
+          createdAt: DateTime.tryParse(
+                rawMessage['created_at']?.toString() ?? '',
+              ) ??
+              DateTime.now(),
+          authorDeviceLabel: rawMessage['author_device_label']?.toString(),
+          userId: userId,
+        );
+        await localBox.put(id, message);
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 404) {
+        debugPrint('downloadAndMergeSecureMessages error: $e');
+      }
+    } catch (e) {
+      debugPrint('downloadAndMergeSecureMessages error: $e');
+    }
+  }
+
+  Future<bool> syncSecureMessages() async {
+    if (!(await isSyncEnabled())) {
+      debugPrint('Secure message sync disabled by user preference');
+      return true;
+    }
+
+    await _updateAuthHeader();
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'Sign in to sync secure texts across devices.';
+      return false;
+    }
+
+    if (!await _ensureEncryptionKeyAvailable()) {
+      _lastErrorMessage =
+          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      return false;
+    }
+
+    final messageBox = await _getSecureMessageBox();
+    final userId = await _getCurrentUserId();
+    final prefs = await SharedPreferences.getInstance();
+    var deviceId = prefs.getString('device_id') ?? '';
+    if (deviceId.isEmpty) {
+      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('device_id', deviceId);
+    }
+
+    try {
+      final mergedMessages = <String, Map<String, dynamic>>{};
+      var cloudVersion = 0;
+
+      try {
+        final downloadResponse = await _requestWithRetry((_) => _dio.get(
+              'sync/get-data/',
+              queryParameters: {
+                'data_type': 'secure_messages',
+                'device_id': deviceId,
+              },
+            ));
+
+        if (downloadResponse.statusCode == 200 &&
+            downloadResponse.data['encrypted_content'] != null) {
+          final encryptedContent =
+              downloadResponse.data['encrypted_content'].toString();
+          if (encryptedContent.isNotEmpty) {
+            final decrypted = EncryptionService.decryptSensitiveSyncPayload(
+              encryptedContent,
+              _encryptionKey!,
+              context: 'secure-messages-sync',
+            );
+            if (decrypted.trim().isNotEmpty) {
+              final List<dynamic> cloudMessages = jsonDecode(decrypted);
+              for (final rawMessage in cloudMessages) {
+                final id = rawMessage['id']?.toString() ?? '';
+                if (id.isEmpty) continue;
+                mergedMessages[id] = Map<String, dynamic>.from(rawMessage);
+              }
+            }
+          }
+          cloudVersion =
+              int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
+        }
+      } on DioException catch (e) {
+        if (e.response?.statusCode != 404) {
+          rethrow;
+        }
+      }
+
+      for (final message in messageBox.values) {
+        mergedMessages[message.id] = {
+          'id': message.id,
+          'text': message.getText(userId),
+          'created_at': message.createdAt.toIso8601String(),
+          'author_device_label': message.authorDeviceLabel,
+        };
+      }
+
+      final payload = mergedMessages.values.toList()
+        ..sort((a, b) => (a['created_at']?.toString() ?? '')
+            .compareTo(b['created_at']?.toString() ?? ''));
+
+      final encrypted = EncryptionService.encryptSensitiveSyncPayload(
+        jsonEncode(payload),
+        _encryptionKey!,
+        context: 'secure-messages-sync',
+      );
+
+      final uploadResponse = await _requestWithRetry((_) => _dio.post(
+            'sync/sync/',
+            data: {
+              'data_type': 'secure_messages',
+              'encrypted_content': encrypted,
+              'version': cloudVersion + 1,
+              'device_id': deviceId,
+              'deleted_accounts': '[]',
+            },
+          ));
+
+      return uploadResponse.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _isSessionRevokedError(e)
+          ? (_extractServerError(e.response?.data) ??
+              'This device session is no longer active.')
+          : _friendlyRequestError(
+              e,
+              'Secure text sync failed. Please try again.',
+            );
+      debugPrint('syncSecureMessages error: $e');
+      return false;
+    } catch (e) {
+      _lastErrorMessage = 'Secure text sync failed. Please try again.';
+      debugPrint('syncSecureMessages error: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> startPasswordlessLogin(
+    String username, {
+    String? password,
+  }) async {
     try {
       _lastErrorMessage = null;
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/passwordless-start/', data: {
         'username': username.trim(),
+        if (password != null && password.isNotEmpty) 'password': password,
         'device_id': deviceId,
         'device_label': deviceLabel,
         'device_kind': _deviceKind(),
@@ -1456,7 +1667,10 @@ class SyncService {
     }
   }
 
-  Future<Map<String, dynamic>?> pollPasswordlessLogin(String requestId) async {
+  Future<Map<String, dynamic>?> pollPasswordlessLogin(
+    String requestId, {
+    String? password,
+  }) async {
     try {
       _lastErrorMessage = null;
       final deviceId = await getOrCreateDeviceId();
@@ -1471,8 +1685,8 @@ class SyncService {
       if (data['success'] == true && data['status'] == 'approved') {
         await _applyAuthenticatedResponse(
           data,
-          password: null,
-          enableSyncByDefault: false,
+          password: password,
+          enableSyncByDefault: password != null && password.isNotEmpty,
         );
       }
       return data;
@@ -2294,7 +2508,10 @@ class SyncService {
     }
   }
 
-  Future<bool> approvePasswordlessRequest(String requestId) async {
+  Future<bool> approvePasswordlessRequest(
+    String requestId, {
+    required String selectedCode,
+  }) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
     final token =
@@ -2308,6 +2525,9 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'passwordless-requests/$requestId/approve/',
+          data: {
+            'selected_code': selectedCode,
+          },
           options: Options(headers: {
             'Authorization': 'Bearer $accessToken',
           }),

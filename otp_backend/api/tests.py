@@ -237,7 +237,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         self.assertEqual(start_response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(start_response.data['success'])
-        self.assertEqual(start_response.data['verification_code'][3], '-')
+        self.assertEqual(len(start_response.data['verification_code']), 3)
         self.assertEqual(start_response.data['primary_device_label'], 'Primary Phone')
 
         request_id = start_response.data['request_id']
@@ -255,6 +255,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         approve_response = self.primary_client.post(
             reverse('passwordless-requests-approve', args=[request_id]),
+            {'selected_code': request_obj.verification_code},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',
@@ -287,6 +288,31 @@ class PasswordlessLoginFlowTests(APITestCase):
         )
         self.assertEqual(request_obj.reviewed_by_session_id, self.primary_session.id)
         self.assertIsNotNone(request_obj.completed_at)
+        self.assertTrue(
+            self.user.app_notifications.filter(
+                notification_type='sign_in',
+            ).exists()
+        )
+
+    def test_passwordless_start_rejects_wrong_password_when_password_is_provided(self):
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {
+                'username': self.user.username,
+                'password': 'wrong-password',
+            },
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data['fallback_to_password'], True)
+        self.assertEqual(response.data['error'], 'Invalid username or password.')
+        self.assertFalse(
+            PasswordlessLoginRequest.objects.filter(user=self.user).exists()
+        )
 
     def test_passwordless_start_falls_back_when_primary_is_not_mobile(self):
         self.primary_session.device_kind = DeviceSession.DEVICE_KIND_DESKTOP
@@ -513,8 +539,11 @@ class AppNotificationTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        notification = self.user.app_notifications.latest('created_at')
-        self.assertEqual(notification.notification_type, 'app_pin_changed')
+        self.assertTrue(
+            self.user.app_notifications.filter(
+                notification_type='app_pin_changed'
+            ).exists()
+        )
 
 
 @override_settings(BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-review-secret')

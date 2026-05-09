@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/device_session_info.dart';
 import '../models/otp_account.dart';
 import '../providers/auth_provider.dart';
 import '../services/otp_service.dart';
@@ -12,11 +14,13 @@ import '../services/sync_service.dart';
 import '../services/profile_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/encryption_service.dart';
+import '../services/app_lock_service.dart';
 import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
+import 'passwords_screen.dart';
 import 'show_qr_screen.dart';
 import 'profile_screen.dart';
 import '../config/app_config.dart';
@@ -36,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen>
   final OTPService _otpService = OTPService();
   final SyncService _syncService = SyncService();
   final ProfileService _profileService = ProfileService();
+  final AppLockService _appLockService = AppLockService();
 
   Map<String, String> currentOTPs = {};
   Map<String, int> timers = {};
@@ -51,6 +56,9 @@ class _HomeScreenState extends State<HomeScreen>
   String? _loadError;
   int _unreadNotificationCount = 0;
   bool _offlineBackupReminderVisible = false;
+  bool _canShowPasswordlessPrompt = false;
+  bool _isShowingPasswordlessPrompt = false;
+  Timer? _passwordlessPollTimer;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
 
@@ -68,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen>
     _loadData();
     _loadSyncStatus();
     _loadUnreadNotificationCount();
+    _initializePasswordlessApprovals();
   }
 
   Future<void> _loadSyncStatus() async {
@@ -184,6 +193,157 @@ class _HomeScreenState extends State<HomeScreen>
       _unreadNotificationCount =
           notifications.where((item) => !item.isRead).length;
     });
+  }
+
+  Future<void> _initializePasswordlessApprovals() async {
+    await _refreshPasswordlessApprovalCapability();
+    _passwordlessPollTimer?.cancel();
+    if (!_canShowPasswordlessPrompt) {
+      return;
+    }
+
+    _passwordlessPollTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => _pollPasswordlessApprovalRequests(),
+    );
+    await _pollPasswordlessApprovalRequests();
+  }
+
+  Future<void> _refreshPasswordlessApprovalCapability() async {
+    if (!mounted ||
+        !await _syncService.isLoggedIn() ||
+        !(Platform.isAndroid || Platform.isIOS)) {
+      if (mounted) {
+        setState(() => _canShowPasswordlessPrompt = false);
+      }
+      return;
+    }
+
+    final sessions = await _syncService.getActiveDeviceSessions();
+    if (!mounted) return;
+    final currentSession = sessions.cast<DeviceSessionInfo?>().firstWhere(
+          (session) => session?.isCurrent == true,
+          orElse: () => null,
+        );
+    final canShow = currentSession != null &&
+        currentSession.isPrimary &&
+        currentSession.deviceKind == 'mobile';
+
+    setState(() => _canShowPasswordlessPrompt = canShow);
+  }
+
+  Future<void> _pollPasswordlessApprovalRequests() async {
+    if (!mounted || !_canShowPasswordlessPrompt || _isShowingPasswordlessPrompt) {
+      return;
+    }
+
+    final requests = await _syncService.getPasswordlessRequests();
+    if (!mounted || requests.isEmpty) return;
+
+    Map<String, dynamic>? pendingRequest;
+    for (final item in requests) {
+      if ((item['status']?.toString() ?? '').toLowerCase() == 'pending') {
+        pendingRequest = item;
+        break;
+      }
+    }
+
+    if (pendingRequest == null) {
+      return;
+    }
+
+    _isShowingPasswordlessPrompt = true;
+    try {
+      await _showPasswordlessPrompt(pendingRequest);
+    } finally {
+      _isShowingPasswordlessPrompt = false;
+    }
+  }
+
+  Future<void> _showPasswordlessPrompt(Map<String, dynamic> item) async {
+    if (!mounted) return;
+
+    final label = item['requester_device_label']?.toString() ?? 'Unknown device';
+    final code = item['verification_code']?.toString() ?? '---';
+    final choices = ((item['verification_choices'] as List?) ?? const [])
+        .map((choice) => choice.toString())
+        .where((choice) => choice.trim().isNotEmpty)
+        .toList();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Passwordless sign-in request'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$label is asking to sign in.',
+              style: TextStyle(
+                color: Theme.of(dialogContext).colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'On the other device, the code is $code. Choose that exact 3-digit code here.',
+            ),
+            if (choices.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final choice in choices)
+                    ElevatedButton(
+                      onPressed: () async {
+                        final unlocked = await _appLockService
+                            .authenticateToUnlock(dialogContext);
+                        if (!dialogContext.mounted || !unlocked) return;
+                        final success = await _syncService.approvePasswordlessRequest(
+                          item['id']?.toString() ?? '',
+                          selectedCode: choice,
+                        );
+                        if (!dialogContext.mounted) return;
+                        Navigator.pop(dialogContext);
+                        _showSnackBar(
+                          success
+                              ? 'Approved $label.'
+                              : (_syncService.lastErrorMessage ??
+                                  'Could not approve that sign-in request.'),
+                          success ? const Color(0xFF10B981) : Colors.red,
+                        );
+                      },
+                      child: Text(choice),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final success = await _syncService
+                  .denyPasswordlessRequest(item['id']?.toString() ?? '');
+              if (!dialogContext.mounted) return;
+              Navigator.pop(dialogContext);
+              _showSnackBar(
+                success
+                    ? 'Denied $label.'
+                    : (_syncService.lastErrorMessage ??
+                        'Could not deny that sign-in request.'),
+                success ? Colors.orange : Colors.red,
+              );
+            },
+            child: const Text('Deny'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _initUserBox() async {
@@ -307,6 +467,12 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         _headerAction(Icons.sync_rounded, _syncData,
             tooltip: 'Sync', loading: _isSyncing),
+        _headerAction(Icons.password_rounded, () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PasswordsScreen()),
+          );
+        }, tooltip: 'Passwords'),
         _headerAction(
           Icons.notifications_none_rounded,
           () async {
@@ -334,6 +500,7 @@ class _HomeScreenState extends State<HomeScreen>
             MaterialPageRoute(builder: (_) => SettingsScreen()),
           );
           await _loadUnreadNotificationCount();
+          await _initializePasswordlessApprovals();
         }, tooltip: 'Settings'),
         _headerAction(
             isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
@@ -1576,6 +1743,7 @@ class _HomeScreenState extends State<HomeScreen>
     await _initUserBox();
     await _loadProfileData();
     await _loadUnreadNotificationCount();
+    await _initializePasswordlessApprovals();
     _updateAllOTPs();
   }
 
@@ -1648,6 +1816,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     _animationController.dispose();
+    _passwordlessPollTimer?.cancel();
     super.dispose();
   }
 }

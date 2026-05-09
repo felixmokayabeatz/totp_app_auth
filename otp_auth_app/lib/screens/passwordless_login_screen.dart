@@ -8,9 +8,11 @@ class PasswordlessLoginScreen extends StatefulWidget {
   const PasswordlessLoginScreen({
     super.key,
     required this.username,
+    this.passwordForSync,
   });
 
   final String username;
+  final String? passwordForSync;
 
   @override
   State<PasswordlessLoginScreen> createState() => _PasswordlessLoginScreenState();
@@ -47,7 +49,10 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   }
 
   Future<void> _startFlow() async {
-    final result = await _syncService.startPasswordlessLogin(widget.username);
+    final result = await _syncService.startPasswordlessLogin(
+      widget.username,
+      password: widget.passwordForSync,
+    );
     if (!mounted) return;
 
     if (result == null) {
@@ -78,7 +83,10 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
     if (requestId == null || requestId.isEmpty || _isPolling) return;
 
     setState(() => _isPolling = true);
-    final result = await _syncService.pollPasswordlessLogin(requestId);
+    final result = await _syncService.pollPasswordlessLogin(
+      requestId,
+      password: widget.passwordForSync,
+    );
     if (!mounted) return;
     setState(() => _isPolling = false);
 
@@ -188,7 +196,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                               _code!,
                               style: TextStyle(
                                 color: _textPrimary,
-                                fontSize: 34,
+                                fontSize: 42,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 3,
                               ),

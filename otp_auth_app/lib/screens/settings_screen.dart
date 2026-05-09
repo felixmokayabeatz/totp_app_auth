@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:file_selector_windows/file_selector_windows.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -28,6 +29,7 @@ import 'notifications_screen.dart';
 import 'passwords_screen.dart';
 import 'passwordless_requests_screen.dart';
 import 'profile_screen.dart';
+import 'secure_self_text_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -525,6 +527,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const PasswordsScreen(),
+                  ),
+                );
+              },
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.chat_bubble_rounded,
+              label: 'Secure Self Text',
+              sub: authProvider.isAuthenticated
+                  ? 'Send live encrypted texts to yourself across your own devices'
+                  : 'Sign in to use your encrypted self-text feed',
+              onTap: () async {
+                if (!await _requireSignedIn(
+                  'Secure self text is available after you sign in.',
+                )) {
+                  return;
+                }
+                if (!mounted) return;
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
+                if (!mounted || !authenticated) return;
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SecureSelfTextScreen(),
                   ),
                 );
               },
@@ -1529,11 +1556,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool isPickingFile = false;
     String? selectedFileName;
     String? errorText;
+    final pastedImportController = TextEditingController();
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: _cardColor,
@@ -1583,11 +1612,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 if (!Platform.isWindows) ...[
                   const SizedBox(height: 12),
                   Text(
-                    'CSV file picking is wired for the Windows app build right now.',
+                    'On phone, paste exported OTP text below. On Windows, you can also pick a CSV file.',
                     style:
                         TextStyle(color: Colors.orange.shade600, fontSize: 12),
                   ),
                 ],
+                const SizedBox(height: 16),
+                TextField(
+                  controller: pastedImportController,
+                  minLines: 5,
+                  maxLines: 8,
+                  decoration: const InputDecoration(
+                    labelText: 'Paste OTP export text',
+                    hintText: 'otpauth links, migration links, CSV, or JSON',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    final entries = OTPImportService().parse(value);
+                    setDialogState(() {
+                      selectedEntries = entries;
+                      selectedFileName = value.trim().isEmpty
+                          ? selectedFileName
+                          : 'Pasted export text';
+                      errorText = value.trim().isEmpty
+                          ? errorText
+                          : (entries.isEmpty
+                              ? 'No valid OTP accounts were found in the pasted text.'
+                              : null);
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: isImporting
+                        ? null
+                        : () async {
+                            final clipboard =
+                                await Clipboard.getData('text/plain');
+                            final value = clipboard?.text ?? '';
+                            pastedImportController.text = value;
+                            final entries = OTPImportService().parse(value);
+                            setDialogState(() {
+                              selectedEntries = entries;
+                              selectedFileName = value.trim().isEmpty
+                                  ? null
+                                  : 'Pasted export text';
+                              errorText = value.trim().isEmpty
+                                  ? null
+                                  : (entries.isEmpty
+                                      ? 'No valid OTP accounts were found in the pasted text.'
+                                      : null);
+                            });
+                          },
+                    icon: const Icon(Icons.paste_rounded),
+                    label: const Text('Paste clipboard'),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: isImporting || isPickingFile || !Platform.isWindows
@@ -1744,9 +1826,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : const Text('Import'),
             ),
           ],
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      pastedImportController.dispose();
+    }
   }
 
   Future<_ImportResult> _importOtpEntries(List<OTPImportEntry> entries) async {

@@ -71,6 +71,20 @@ class EncryptionService {
     );
   }
 
+  static String encryptSecureMessageText(String text, String userId) {
+    final key = generateKey(userId, 'secure_message_local_encryption_salt');
+    return authenticatedEncrypt(text, key, context: 'secure-message-local');
+  }
+
+  static String decryptSecureMessageText(String encryptedText, String userId) {
+    final key = generateKey(userId, 'secure_message_local_encryption_salt');
+    return authenticatedDecrypt(
+      encryptedText,
+      key,
+      context: 'secure-message-local',
+    );
+  }
+
   static String encryptSensitiveSyncPayload(String plainText, String key,
       {required String context}) {
     return authenticatedEncrypt(plainText, key, context: context);

@@ -102,6 +102,8 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
 
 
 class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
+    verification_choices = serializers.SerializerMethodField()
+
     class Meta:
         model = PasswordlessLoginRequest
         fields = [
@@ -109,7 +111,14 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
             'requester_device_label',
             'requester_device_kind',
             'verification_code',
+            'verification_choices',
             'status',
             'expires_at',
             'created_at',
         ]
+
+    def get_verification_choices(self, obj):
+        builder = self.context.get('passwordless_choice_builder')
+        if builder is None:
+            return []
+        return builder(obj)

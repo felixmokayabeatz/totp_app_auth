@@ -10,6 +10,7 @@ import '../services/app_lock_service.dart';
 import '../services/password_import_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
+import 'secure_self_text_screen.dart';
 
 class PasswordsScreen extends StatefulWidget {
   const PasswordsScreen({super.key});
@@ -104,17 +105,47 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   }
 
   Future<void> _importPasswords() async {
-    if (!Platform.isWindows) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password file import is wired for the Windows app build right now.'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.paste_rounded, color: _accent),
+                title: const Text('Paste export text'),
+                subtitle: const Text('Import on phone or desktop from copied CSV, JSON, or exported text'),
+                onTap: () => Navigator.pop(sheetContext, 'paste'),
+              ),
+              if (Platform.isWindows)
+                ListTile(
+                  leading: Icon(Icons.upload_file_rounded, color: _accent),
+                  title: const Text('Import file'),
+                  subtitle: const Text('Choose a CSV or JSON export file from this device'),
+                  onTap: () => Navigator.pop(sheetContext, 'file'),
+                ),
+            ],
+          ),
         ),
-      );
+      ),
+    );
+
+    if (choice == 'file') {
+      await _importPasswordsFromDesktopFile();
       return;
     }
+    if (choice == 'paste') {
+      await _importPasswordsFromText();
+    }
+  }
 
+  Future<void> _importPasswordsFromDesktopFile() async {
     setState(() => _isImporting = true);
     try {
       final file = await FileSelectorWindows().openFile(
@@ -141,18 +172,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       }
 
       final contents = await file.readAsString();
-      final importedEntries =
-          PasswordImportService().parse(contents, fileName: fileName);
-      final result = await _saveImportedPasswordEntries(importedEntries);
-      if (!mounted) return;
-      setState(() => _isImporting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result),
-          backgroundColor: const Color(0xFF10B981),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      await _finishPasswordImport(contents, fileName: fileName);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isImporting = false);
@@ -164,6 +184,97 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _importPasswordsFromText() async {
+    final controller = TextEditingController();
+    setState(() => _isImporting = true);
+    try {
+      final importedText = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: _cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            'Paste password export',
+            style: TextStyle(color: _textPrimary),
+          ),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Paste exported password CSV, JSON, or note data here. This works on phones too.',
+                  style: TextStyle(color: _textSecondary, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  minLines: 8,
+                  maxLines: 14,
+                  decoration: const InputDecoration(
+                    hintText: 'Paste export text here',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final clipboard = await Clipboard.getData('text/plain');
+                controller.text = clipboard?.text ?? controller.text;
+              },
+              child: const Text('Paste clipboard'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted || importedText == null || importedText.trim().isEmpty) {
+        if (mounted) setState(() => _isImporting = false);
+        return;
+      }
+
+      await _finishPasswordImport(importedText, fileName: 'pasted-password-export.txt');
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _finishPasswordImport(
+    String contents, {
+    required String fileName,
+  }) async {
+    final importedEntries =
+        PasswordImportService().parse(contents, fileName: fileName);
+    final result = await _saveImportedPasswordEntries(importedEntries);
+    if (!mounted) return;
+    setState(() => _isImporting = false);
+    final success = !result.toLowerCase().startsWith('could not');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result),
+        backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<String> _saveImportedPasswordEntries(
@@ -872,6 +983,18 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         backgroundColor: _accent,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            tooltip: 'Secure self text',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SecureSelfTextScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.chat_bubble_rounded),
+          ),
           IconButton(
             tooltip: 'Import passwords',
             onPressed: _isImporting ? null : _importPasswords,

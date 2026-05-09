@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.http import HttpResponse
 from datetime import timedelta
+import hashlib
 import json
 import random
 import string
@@ -121,13 +122,39 @@ def get_current_active_device_session(request):
 
 def _format_passwordless_code(raw_code: str) -> str:
     cleaned = ''.join(ch for ch in raw_code if ch.isdigit())
-    if len(cleaned) == 6:
-        return f'{cleaned[:3]}-{cleaned[3:]}'
+    if len(cleaned) >= 3:
+        return cleaned[:3]
     return raw_code
 
 
 def _generate_passwordless_code() -> str:
-    return _format_passwordless_code(''.join(random.choices(string.digits, k=6)))
+    return _format_passwordless_code(''.join(random.choices(string.digits, k=3)))
+
+
+def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[str]:
+    correct = request_obj.verification_code
+    seen = {correct}
+    decoys = []
+    counter = 0
+
+    while len(decoys) < 2:
+        digest = hashlib.sha256(
+            f'{request_obj.id}|{request_obj.verification_code}|{counter}'.encode('utf-8')
+        ).hexdigest()
+        candidate = str(int(digest[:8], 16) % 1000).zfill(3)
+        counter += 1
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        decoys.append(candidate)
+
+    choices = [correct, *decoys]
+    shuffle_seed = int(
+        hashlib.sha256(f'shuffle|{request_obj.id}'.encode('utf-8')).hexdigest()[:8],
+        16,
+    )
+    random.Random(shuffle_seed).shuffle(choices)
+    return choices
 
 
 def _expire_stale_passwordless_requests(user: User | None = None):
@@ -268,6 +295,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='passwordless-start')
     def passwordless_start(self, request):
         username = (request.data.get('username') or '').strip()
+        password = request.data.get('password') or ''
         device_id = get_request_device_id(request)
         device_label = get_request_device_label(request)
         device_kind = get_request_device_kind(request)
@@ -279,6 +307,18 @@ class AuthViewSet(viewsets.GenericViewSet):
             user = User.objects.get(username__iexact=username)
         except User.DoesNotExist:
             return Response({'error': 'No account was found for that username.'}, status=404)
+
+        if password:
+            authenticated_user = authenticate(username=user.username, password=password)
+            if not authenticated_user:
+                return Response(
+                    {
+                        'error': 'Invalid username or password.',
+                        'fallback_to_password': True,
+                    },
+                    status=403,
+                )
+            user = authenticated_user
 
         _expire_stale_passwordless_requests(user)
         primary_session = ensure_primary_session(user)
@@ -367,7 +407,8 @@ class AuthViewSet(viewsets.GenericViewSet):
             return Response({'success': False, 'status': request_obj.status}, status=409)
 
         refresh = RefreshToken.for_user(request_obj.user)
-        attach_session_to_refresh_token(request_obj.user, request, refresh)
+        session = attach_session_to_refresh_token(request_obj.user, request, refresh)
+        create_sign_in_notification(request_obj.user, session.device_label)
         request_obj.status = PasswordlessLoginRequest.STATUS_COMPLETED
         request_obj.completed_at = timezone.now()
         request_obj.save(update_fields=['status', 'completed_at', 'updated_at'])
@@ -1021,7 +1062,14 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()[:20]
-        serializer = self.get_serializer(queryset, many=True)
+        serializer = self.get_serializer(
+            queryset,
+            many=True,
+            context={
+                **self.get_serializer_context(),
+                'passwordless_choice_builder': _build_passwordless_choices,
+            },
+        )
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'], url_path='approve')
@@ -1037,6 +1085,20 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
             login_request.status = PasswordlessLoginRequest.STATUS_EXPIRED
             login_request.save(update_fields=['status', 'updated_at'])
             return Response({'error': 'This sign-in request already expired.'}, status=410)
+
+        selected_code = (request.data.get('selected_code') or '').strip()
+        if not selected_code:
+            return Response(
+                {'error': 'Select the 3-digit code shown on the requesting device.'},
+                status=400,
+            )
+
+        correct_code = login_request.verification_code
+        if selected_code != correct_code:
+            return Response(
+                {'error': 'That code does not match the requesting device.'},
+                status=400,
+            )
 
         login_request.status = PasswordlessLoginRequest.STATUS_APPROVED
         login_request.approved_at = timezone.now()

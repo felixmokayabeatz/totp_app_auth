@@ -128,10 +128,18 @@ def ensure_device_session(
         is_primary=True,
     ).exclude(id=session.id).order_by('-last_seen_at', '-created_at').first()
 
+    other_active_mobile_exists = DeviceSession.objects.filter(
+        user=user,
+        is_active=True,
+        revoked_at__isnull=True,
+        device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+    ).exclude(id=session.id).exists()
+
     if (
         normalized_device_kind == DeviceSession.DEVICE_KIND_MOBILE
         and current_primary is not None
         and current_primary.device_kind != DeviceSession.DEVICE_KIND_MOBILE
+        and not other_active_mobile_exists
         and not session.is_primary
     ):
         current_primary.is_primary = False

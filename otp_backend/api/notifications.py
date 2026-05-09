@@ -103,7 +103,7 @@ def create_passwordless_request_notification(
         ),
         details=(
             f"Approve the passwordless sign-in request for {requester_device_label} "
-            f"only if the 3-3 code matches: {verification_code}."
+            f"only if the 3-digit code matches: {verification_code}."
         ),
         metadata={
             "requester_device_label": requester_device_label,
