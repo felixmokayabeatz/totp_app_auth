@@ -1,13 +1,13 @@
-v1.6.12 (Build 27)
+v1.6.13 (Build 28)
 
-What's new
-- Fix the download speed average to refelct the correct value.
-- Add a direct manual url from the app to download page.
-- Add a cancle button to cancel downloading thr update.
-- Settings now shows release notes for the installed app version.
-- Update screens show both the current version and the latest available version.
-- Update details now show release notes before installing from settings.
-- The phone scan shortcut stays on mobile only.
-- If scanning is not possible, users can switch to manual secret-key entry.
-- Scan confirmation now says "Confirm addition".
-- Scan success now says "Success. Account added." instead of import wording.
+What's New
+- Fixed the download speed average to display the correct value.
+- Added a direct manual download URL within the app.
+- Added a Cancel button to stop update downloads.
+- Settings now display release notes for the currently installed app version.
+- Update screens now show both the current version and the latest available version.
+- Update details now display release notes before installation from Settings.
+- The phone scan shortcut is now available only on mobile devices.
+- Users can now switch to manual secret key entry if scanning is unavailable.
+- The scan confirmation message now reads: “Confirm addition”.
+- The scan success message now reads: “Success. Account added.” instead of using import-related wording.
