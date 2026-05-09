@@ -1,4 +1,4 @@
-v1.6.10 (Build 25)
+v1.6.11 (Build 26)
 
 What's new
 - Settings now shows release notes for the installed app version.
