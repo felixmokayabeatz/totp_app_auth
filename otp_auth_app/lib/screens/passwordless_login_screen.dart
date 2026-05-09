@@ -26,6 +26,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   bool _isPolling = false;
   String? _requestId;
   String? _code;
+  DateTime? _codeExpiresAt;
   String? _primaryDeviceLabel;
   String? _errorMessage;
   String _statusMessage = 'Starting passwordless sign-in...';
@@ -68,6 +69,9 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       _isStarting = false;
       _requestId = result['request_id']?.toString();
       _code = result['verification_code']?.toString();
+      _codeExpiresAt = DateTime.tryParse(
+        result['code_expires_at']?.toString() ?? '',
+      );
       _primaryDeviceLabel = result['primary_device_label']?.toString();
       _statusMessage = result['message']?.toString() ??
           'Approve this sign-in from your primary phone.';
@@ -96,6 +100,13 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
 
     final status = result['status']?.toString() ?? 'pending';
     if (status == 'pending') {
+      setState(() {
+        _code = result['verification_code']?.toString() ?? _code;
+        _codeExpiresAt = DateTime.tryParse(
+              result['code_expires_at']?.toString() ?? '',
+            ) ??
+            _codeExpiresAt;
+      });
       return;
     }
 
@@ -152,9 +163,16 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      _errorMessage ??
-                          _statusMessage,
-                      style: TextStyle(color: _textSecondary, height: 1.45),
+                      _errorMessage ?? _statusMessage,
+                      style: TextStyle(
+                        color: _errorMessage != null
+                            ? Colors.red.shade400
+                            : _textSecondary,
+                        height: 1.45,
+                        fontWeight: _errorMessage != null
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     if (_primaryDeviceLabel != null) ...[
@@ -201,6 +219,17 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                                 letterSpacing: 3,
                               ),
                             ),
+                            if (_codeExpiresAt != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Code changes in about ${_secondsUntilRefresh()}s if not approved.',
+                                style: TextStyle(
+                                  color: _textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -235,5 +264,13 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
         ),
       ),
     );
+  }
+
+  int _secondsUntilRefresh() {
+    final expiresAt = _codeExpiresAt;
+    if (expiresAt == null) return 30;
+    final seconds = expiresAt.difference(DateTime.now()).inSeconds;
+    if (seconds <= 0) return 0;
+    return seconds;
   }
 }

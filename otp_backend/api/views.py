@@ -131,6 +131,11 @@ def _generate_passwordless_code() -> str:
     return _format_passwordless_code(''.join(random.choices(string.digits, k=3)))
 
 
+def _generate_passwordless_seed() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return ''.join(random.choices(alphabet, k=6))
+
+
 def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[str]:
     correct = request_obj.get_verification_code()
     seen = {correct}
@@ -350,7 +355,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             updated_at=timezone.now(),
         )
 
-        verification_code = _generate_passwordless_code()
+        seed = _generate_passwordless_seed()
         request_obj = PasswordlessLoginRequest(
             user=user,
             requester_device_id=device_id,
@@ -358,8 +363,9 @@ class AuthViewSet(viewsets.GenericViewSet):
             requester_device_kind=device_kind,
             expires_at=timezone.now() + timedelta(minutes=3),
         )
-        request_obj.set_verification_code(verification_code)
+        request_obj.set_verification_code(seed)
         request_obj.save()
+        verification_code = request_obj.get_verification_code()
         create_passwordless_request_notification(
             user,
             requester_device_label=request_obj.requester_device_label,
@@ -371,6 +377,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'success': True,
                 'request_id': str(request_obj.id),
                 'verification_code': verification_code,
+                'code_expires_at': request_obj.code_expires_at().isoformat(),
                 'expires_at': request_obj.expires_at.isoformat(),
                 'primary_device_label': primary_session.device_label,
                 'message': 'Approve this sign-in from your primary phone.',
@@ -398,7 +405,12 @@ class AuthViewSet(viewsets.GenericViewSet):
             return Response({'error': 'This sign-in request belongs to a different device.'}, status=403)
 
         if request_obj.status == PasswordlessLoginRequest.STATUS_PENDING:
-            return Response({'success': True, 'status': 'pending'})
+            return Response({
+                'success': True,
+                'status': 'pending',
+                'verification_code': request_obj.get_verification_code(),
+                'code_expires_at': request_obj.code_expires_at().isoformat(),
+            })
         if request_obj.status == PasswordlessLoginRequest.STATUS_DENIED:
             return Response({'success': False, 'status': 'denied', 'error': 'The sign-in request was denied on your primary phone.'}, status=403)
         if request_obj.status == PasswordlessLoginRequest.STATUS_EXPIRED:
