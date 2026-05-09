@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import AppNotification, DeviceSession, EncryptedData
+from .models import AppNotification, DeviceSession, EncryptedData, PasswordlessLoginRequest
 from .notifications import decrypt_notification_payload
 
 class UserSerializer(serializers.ModelSerializer):
@@ -81,6 +81,7 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
             'id',
             'device_id',
             'device_label',
+            'device_kind',
             'ip_address',
             'is_active',
             'is_primary',
@@ -98,3 +99,17 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
         if current_device_id and obj.device_id == current_device_id:
             return True
         return False
+
+
+class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PasswordlessLoginRequest
+        fields = [
+            'id',
+            'requester_device_label',
+            'requester_device_kind',
+            'verification_code',
+            'status',
+            'expires_at',
+            'created_at',
+        ]

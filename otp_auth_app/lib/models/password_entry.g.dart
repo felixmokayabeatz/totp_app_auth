@@ -21,6 +21,7 @@ class PasswordEntryAdapter extends TypeAdapter<PasswordEntry> {
       title: fields[1] as String,
       username: fields[2] as String,
       password: fields[3] as String,
+      note: fields[6] as String?,
       serverIP: fields[4] as String?,
       createdAt: DateTime.fromMillisecondsSinceEpoch(fields[5] as int),
     );
@@ -29,7 +30,7 @@ class PasswordEntryAdapter extends TypeAdapter<PasswordEntry> {
   @override
   void write(BinaryWriter writer, PasswordEntry obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -41,7 +42,9 @@ class PasswordEntryAdapter extends TypeAdapter<PasswordEntry> {
       ..writeByte(4)
       ..write(obj.serverIP ?? '')
       ..writeByte(5)
-      ..write(obj.createdAt.millisecondsSinceEpoch);
+      ..write(obj.createdAt.millisecondsSinceEpoch)
+      ..writeByte(6)
+      ..write(obj.note);
   }
 
   @override

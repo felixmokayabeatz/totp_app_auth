@@ -25,6 +25,8 @@ import 'device_sessions_screen.dart';
 import 'legal_document_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
+import 'passwords_screen.dart';
+import 'passwordless_requests_screen.dart';
 import 'profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -503,6 +505,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: _showImportAccountsDialog,
             ),
             _dividerLine(),
+            _tappableTile(
+              icon: Icons.password_rounded,
+              label: 'Passwords',
+              sub: authProvider.isAuthenticated
+                  ? 'Save encrypted passwords and private notes to your own account vault'
+                  : 'Sign in to use the encrypted passwords and notes vault',
+              onTap: () async {
+                if (!await _requireSignedIn(
+                  'The password vault is available after you sign in.',
+                )) {
+                  return;
+                }
+                if (!mounted) return;
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
+                if (!mounted || !authenticated) return;
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PasswordsScreen(),
+                  ),
+                );
+              },
+            ),
+            _dividerLine(),
 
             _tappableTile(
               icon: Icons.lock_outline_rounded,
@@ -636,6 +663,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const DeviceSessionsScreen(),
+                  ),
+                );
+              },
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.phonelink_lock_rounded,
+              label: 'Sign-in Approvals',
+              sub: 'Approve passwordless sign-ins from your primary phone',
+              onTap: () async {
+                if (!await _requireSignedIn(
+                    'Passwordless sign-in approvals are available after you sign in.')) {
+                  return;
+                }
+                if (!context.mounted) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PasswordlessRequestsScreen(),
                   ),
                 );
               },

@@ -11,6 +11,7 @@ from api.views import (
     AppNotificationViewSet,
     AuthViewSet,
     DeviceSessionViewSet,
+    PasswordlessLoginRequestViewSet,
     SyncViewSet,
     send_delete_otp,
     verify_delete_otp,
@@ -44,6 +45,7 @@ router.register(r'auth', AuthViewSet, basename='auth')
 router.register(r'sync', SyncViewSet, basename='sync')
 router.register(r'notifications', AppNotificationViewSet, basename='notifications')
 router.register(r'device-sessions', DeviceSessionViewSet, basename='device-sessions')
+router.register(r'passwordless-requests', PasswordlessLoginRequestViewSet, basename='passwordless-requests')
 router.register(r'profile', ProfileViewSet, basename='profile')
 
 urlpatterns = [

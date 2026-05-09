@@ -7,6 +7,7 @@ from .models import (
     AccountTombstone,
     DeleteOTPCode,
     BackupCodeSet,
+    PasswordlessLoginRequest,
 )
 
 
@@ -183,6 +184,7 @@ class DeviceSessionAdmin(admin.ModelAdmin):
     list_display = (
         "user",
         "device_label",
+        "device_kind",
         "device_id",
         "is_active",
         "last_seen_at",
@@ -196,6 +198,7 @@ class DeviceSessionAdmin(admin.ModelAdmin):
         "user",
         "device_id",
         "device_label",
+        "device_kind",
         "user_agent",
         "ip_address",
         "is_active",
@@ -203,6 +206,48 @@ class DeviceSessionAdmin(admin.ModelAdmin):
         "updated_at",
         "last_seen_at",
         "revoked_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_list_display_links(self, request, list_display):
+        return ()
+
+
+@admin.register(PasswordlessLoginRequest)
+class PasswordlessLoginRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "requester_device_label",
+        "requester_device_kind",
+        "verification_code",
+        "status",
+        "expires_at",
+        "created_at",
+    )
+    list_filter = ("status", "requester_device_kind", "created_at", "expires_at")
+    search_fields = ("user__username", "user__email", "requester_device_label", "requester_device_id")
+    readonly_fields = (
+        "id",
+        "user",
+        "requester_device_id",
+        "requester_device_label",
+        "requester_device_kind",
+        "verification_code",
+        "status",
+        "expires_at",
+        "approved_at",
+        "completed_at",
+        "reviewed_by_session",
+        "created_at",
+        "updated_at",
     )
 
     def has_add_permission(self, request):

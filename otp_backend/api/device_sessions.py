@@ -40,17 +40,38 @@ def get_request_device_label(request) -> str:
     return build_device_label(provided_label, request.META.get('HTTP_USER_AGENT'))
 
 
+def get_request_device_kind(request) -> str:
+    provided_kind = None
+    if hasattr(request, 'data'):
+        provided_kind = request.data.get('device_kind')
+    if not provided_kind and hasattr(request, 'query_params'):
+        provided_kind = request.query_params.get('device_kind')
+    if not provided_kind:
+        provided_kind = request.headers.get('X-Device-Kind')
+
+    normalized = str(provided_kind or '').strip().lower()
+    if normalized in {
+        DeviceSession.DEVICE_KIND_MOBILE,
+        DeviceSession.DEVICE_KIND_DESKTOP,
+        DeviceSession.DEVICE_KIND_WEB,
+    }:
+        return normalized
+    return DeviceSession.DEVICE_KIND_UNKNOWN
+
+
 def ensure_device_session(
     user: User,
     *,
     device_id: str,
     device_label: str,
+    device_kind: str = DeviceSession.DEVICE_KIND_UNKNOWN,
     user_agent: str = '',
     ip_address: str = '',
 ) -> DeviceSession:
     normalized_device_id = (device_id or '').strip()
     normalized_device_label = device_label.strip() or 'Unknown device'
     now = timezone.now()
+    normalized_device_kind = device_kind or DeviceSession.DEVICE_KIND_UNKNOWN
 
     session = None
     if normalized_device_id:
@@ -72,31 +93,51 @@ def ensure_device_session(
             user=user,
             device_id=normalized_device_id,
             device_label=normalized_device_label,
+            device_kind=normalized_device_kind,
             user_agent=user_agent or '',
             ip_address=ip_address or '',
             is_active=True,
             is_primary=should_be_primary,
             last_seen_at=now,
         )
-        return session
+    else:
+        session.device_label = normalized_device_label
+        session.device_kind = normalized_device_kind or session.device_kind
+        session.user_agent = user_agent or session.user_agent
+        session.ip_address = ip_address or session.ip_address
+        session.is_active = True
+        session.revoked_at = None
+        session.last_seen_at = now
+        session.save(
+            update_fields=[
+                'device_label',
+                'device_kind',
+                'user_agent',
+                'ip_address',
+                'is_active',
+                'revoked_at',
+                'last_seen_at',
+                'updated_at',
+            ]
+        )
 
-    session.device_label = normalized_device_label
-    session.user_agent = user_agent or session.user_agent
-    session.ip_address = ip_address or session.ip_address
-    session.is_active = True
-    session.revoked_at = None
-    session.last_seen_at = now
-    session.save(
-        update_fields=[
-            'device_label',
-            'user_agent',
-            'ip_address',
-            'is_active',
-            'revoked_at',
-            'last_seen_at',
-            'updated_at',
-        ]
-    )
+    current_primary = DeviceSession.objects.filter(
+        user=user,
+        is_active=True,
+        revoked_at__isnull=True,
+        is_primary=True,
+    ).exclude(id=session.id).order_by('-last_seen_at', '-created_at').first()
+
+    if (
+        normalized_device_kind == DeviceSession.DEVICE_KIND_MOBILE
+        and current_primary is not None
+        and current_primary.device_kind != DeviceSession.DEVICE_KIND_MOBILE
+        and not session.is_primary
+    ):
+        current_primary.is_primary = False
+        current_primary.save(update_fields=['is_primary', 'updated_at'])
+        session.is_primary = True
+        session.save(update_fields=['is_primary', 'updated_at'])
 
     if normalized_device_id:
         DeviceSession.objects.filter(
@@ -143,6 +184,7 @@ def attach_session_to_refresh_token(user: User, request, refresh_token):
         user,
         device_id=device_id,
         device_label=device_label,
+        device_kind=get_request_device_kind(request),
         user_agent=request.META.get('HTTP_USER_AGENT', ''),
         ip_address=extract_request_ip(request),
     )

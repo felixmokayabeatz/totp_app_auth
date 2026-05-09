@@ -88,6 +88,30 @@ def create_sign_in_notification(user: User, device_label: str) -> AppNotificatio
     )
 
 
+def create_passwordless_request_notification(
+    user: User,
+    *,
+    requester_device_label: str,
+    verification_code: str,
+) -> AppNotification:
+    return create_notification(
+        user,
+        "passwordless_request",
+        title="New passwordless sign-in request",
+        message=(
+            f"A device named {requester_device_label} is asking to sign in."
+        ),
+        details=(
+            f"Approve the passwordless sign-in request for {requester_device_label} "
+            f"only if the 3-3 code matches: {verification_code}."
+        ),
+        metadata={
+            "requester_device_label": requester_device_label,
+            "verification_code": verification_code,
+        },
+    )
+
+
 def create_password_changed_notification(
     user: User,
     *,

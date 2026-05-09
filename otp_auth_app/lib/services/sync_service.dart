@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/app_notification_item.dart';
 import '../models/device_session_info.dart';
 import '../models/otp_account.dart';
+import '../models/password_entry.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
 import 'secure_storage_service.dart';
@@ -16,6 +17,7 @@ import 'dart:convert';
 import 'dart:io';
 
 class SyncService {
+  static const _passwordDeletedIdsPrefix = 'password_deleted_ids_';
   // ─── Singleton ────────────────────────────────────────────────────────────
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
@@ -253,6 +255,25 @@ class SyncService {
   Future<Box<OTPAccount>> getUserBox() async => await _getUserBox();
   Future<String> getCurrentUserBoxName() async => await _getUserBoxName();
 
+  Future<String> _getPasswordBoxName() async {
+    final username =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ??
+            await _secureStorage.read(SecureStorageService.localVaultUserKey);
+    if (username == null || username.isEmpty) return 'passwords_default';
+    return 'passwords_$username';
+  }
+
+  Future<Box<PasswordEntry>> _getPasswordBox() async {
+    final boxName = await _getPasswordBoxName();
+    if (!Hive.isBoxOpen(boxName)) {
+      await Hive.openBox<PasswordEntry>(boxName);
+    }
+    return Hive.box<PasswordEntry>(boxName);
+  }
+
+  Future<Box<PasswordEntry>> getPasswordBox() async => await _getPasswordBox();
+  Future<String> getCurrentPasswordBoxName() async => await _getPasswordBoxName();
+
   String _decodeLegacySecretForMigration(
       String storedSecret, String currentUserId) {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
@@ -352,6 +373,7 @@ class SyncService {
     }
     _dio.options.headers['X-Device-ID'] = deviceId;
     _dio.options.headers['X-Device-Label'] = deviceLabel;
+    _dio.options.headers['X-Device-Kind'] = _deviceKind();
   }
 
   bool _isSessionRevokedError(DioException error) {
@@ -386,6 +408,7 @@ class SyncService {
           'Content-Type': 'application/json',
           'X-Device-ID': deviceId,
           'X-Device-Label': deviceLabel,
+          'X-Device-Kind': _deviceKind(),
         },
       ));
       final response = await refreshDio.post(
@@ -461,6 +484,33 @@ class SyncService {
     return await _secureStorage.read(SecureStorageService.currentUserKey) ??
         await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
         'default_user';
+  }
+
+  Future<String> _getPasswordDeletedIdsKey() async {
+    final username =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ??
+            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
+            'default_user';
+    return '$_passwordDeletedIdsPrefix$username';
+  }
+
+  Future<Set<String>> _getDeletedPasswordEntryIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = await _getPasswordDeletedIdsKey();
+    final raw = prefs.getStringList(key) ?? const <String>[];
+    return raw.where((id) => id.trim().isNotEmpty).toSet();
+  }
+
+  Future<void> _storeDeletedPasswordEntryIds(Set<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = await _getPasswordDeletedIdsKey();
+    await prefs.setStringList(key, ids.toList()..sort());
+  }
+
+  Future<void> markPasswordEntryDeleted(String entryId) async {
+    final deletedIds = await _getDeletedPasswordEntryIds();
+    deletedIds.add(entryId);
+    await _storeDeletedPasswordEntryIds(deletedIds);
   }
 
   Future<String> getOrCreateDeviceId() async {
@@ -547,6 +597,19 @@ class SyncService {
     return _buildDeviceLabel();
   }
 
+  String _deviceKind() {
+    if (kIsWeb) {
+      return 'web';
+    }
+    if (Platform.isAndroid || Platform.isIOS) {
+      return 'mobile';
+    }
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      return 'desktop';
+    }
+    return 'unknown';
+  }
+
   // ─── Decrypt local secret back to plain for uploading ────────────────────
   Future<String> _decryptSecretForUpload(String storedSecret) async {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
@@ -572,6 +635,7 @@ class SyncService {
         'password': password,
         'device_id': deviceId,
         'device_label': deviceLabel,
+        'device_kind': _deviceKind(),
       });
       if (response.statusCode == 200 || response.statusCode == 201) {
         final canonicalUsername =
@@ -618,6 +682,7 @@ class SyncService {
         'password': password,
         'device_id': deviceId,
         'device_label': deviceLabel,
+        'device_kind': _deviceKind(),
       });
       if (response.statusCode == 200) {
         final canonicalUsername =
@@ -662,6 +727,7 @@ class SyncService {
         try {
           if (await isSyncEnabled()) {
             await downloadAndMergeAccounts();
+            await downloadAndMergePasswordEntries();
           }
         } catch (e) {
           debugPrint('Cloud restore error after login: $e');
@@ -1065,6 +1131,363 @@ class SyncService {
   }
 
   // ─── 2FA / password helpers ───────────────────────────────────────────────
+  Future<void> downloadAndMergePasswordEntries() async {
+    await _updateAuthHeader();
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    if (!await _ensureEncryptionKeyAvailable()) {
+      debugPrint('Encryption key not set - user must log in first');
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    var deviceId = prefs.getString('device_id') ?? '';
+    if (deviceId.isEmpty) {
+      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('device_id', deviceId);
+    }
+
+    try {
+      final response = await _requestWithRetry((_) => _dio.get(
+            'sync/get-data/',
+            queryParameters: {
+              'data_type': 'password_entries',
+              'device_id': deviceId,
+            },
+          ));
+
+      if (response.statusCode != 200 ||
+          response.data['encrypted_content'] == null) {
+        return;
+      }
+
+      final encryptedContent = response.data['encrypted_content'].toString();
+      if (encryptedContent.isEmpty) {
+        debugPrint('Cloud has no password entry data');
+        return;
+      }
+
+      final decrypted = EncryptionService.decryptSensitiveSyncPayload(
+        encryptedContent,
+        _encryptionKey!,
+        context: 'password-entries-sync',
+      );
+      if (decrypted.trim().isEmpty) {
+        return;
+      }
+
+      final localBox = await _getPasswordBox();
+      final userId = await _getCurrentUserId();
+      final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
+      final cloudDeletedIds = cloudDeletedIdsRaw == null ||
+              cloudDeletedIdsRaw.trim().isEmpty
+          ? <String>{}
+          : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+      final localDeletedIds = await _getDeletedPasswordEntryIds();
+      final deletedIds = {...cloudDeletedIds, ...localDeletedIds};
+
+      final List<dynamic> cloudEntries = jsonDecode(decrypted);
+      for (final rawEntry in cloudEntries) {
+        final id = rawEntry['id']?.toString() ?? '';
+        if (id.isEmpty || deletedIds.contains(id)) {
+          continue;
+        }
+
+        final entry = PasswordEntry(
+          id: id,
+          title: rawEntry['title']?.toString() ?? 'Password',
+          username: rawEntry['username']?.toString() ?? '',
+          password: rawEntry['password']?.toString() ?? '',
+          note: rawEntry['note']?.toString(),
+          serverIP: rawEntry['server_ip']?.toString(),
+          createdAt: DateTime.tryParse(
+                rawEntry['created_at']?.toString() ?? '',
+              ) ??
+              DateTime.now(),
+          userId: userId,
+        );
+
+        await localBox.put(id, entry);
+      }
+
+      for (final deletedId in deletedIds) {
+        if (localBox.containsKey(deletedId)) {
+          await localBox.delete(deletedId);
+        }
+      }
+
+      await _storeDeletedPasswordEntryIds(deletedIds);
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 404) {
+        debugPrint('downloadAndMergePasswordEntries error: $e');
+      }
+    } catch (e) {
+      debugPrint('downloadAndMergePasswordEntries error: $e');
+    }
+  }
+
+  Future<void> _applyAuthenticatedResponse(
+    Map<String, dynamic> data, {
+    String? password,
+    bool enableSyncByDefault = true,
+  }) async {
+    final user = data['user'] as Map?;
+    final canonicalUsername = user?['username']?.toString() ?? '';
+    await _secureStorage.write(
+        SecureStorageService.accessTokenKey, data['access']);
+    await _secureStorage.write(
+        SecureStorageService.refreshTokenKey, data['refresh']);
+    await _secureStorage.write(
+        SecureStorageService.currentUserKey, canonicalUsername);
+    await _secureStorage.write(
+        SecureStorageService.localVaultUserKey, canonicalUsername);
+    await _secureStorage.write(
+        SecureStorageService.userEmailKey, user?['email']?.toString() ?? '');
+    await _secureStorage.write(
+        SecureStorageService.userIdKey, user?['id']?.toString() ?? '');
+    OTPService().clearCachedUserId();
+    await _updateAuthHeader();
+
+    if (password != null && password.isNotEmpty) {
+      final encryptionKey = EncryptionService.generateKey(
+          canonicalUsername + password, 'beatzLockKenya2099');
+      await _storeEncryptionKey(encryptionKey);
+      _encryptionKey = encryptionKey;
+      await setSyncEnabled(enableSyncByDefault);
+      return;
+    }
+
+    await setSyncEnabled(false);
+  }
+
+  Future<bool> syncPasswordEntries() async {
+    if (!(await isSyncEnabled())) {
+      debugPrint('Password sync disabled by user preference');
+      return true;
+    }
+
+    await _updateAuthHeader();
+    final prefs = await SharedPreferences.getInstance();
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'Sign in to sync passwords across devices.';
+      return false;
+    }
+
+    if (!await _ensureEncryptionKeyAvailable()) {
+      _lastErrorMessage =
+          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      return false;
+    }
+
+    final passwordBox = await _getPasswordBox();
+    final userId = await _getCurrentUserId();
+    var deviceId = prefs.getString('device_id') ?? '';
+    if (deviceId.isEmpty) {
+      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+      await prefs.setString('device_id', deviceId);
+    }
+
+    try {
+      var cloudVersion = 0;
+      var cloudDeletedIds = <String>{};
+      final cloudEntriesById = <String, Map<String, dynamic>>{};
+
+      try {
+        final downloadResponse = await _requestWithRetry((_) => _dio.get(
+              'sync/get-data/',
+              queryParameters: {
+                'data_type': 'password_entries',
+                'device_id': deviceId,
+              },
+            ));
+
+        if (downloadResponse.statusCode == 200 &&
+            downloadResponse.data['encrypted_content'] != null) {
+          final encryptedContent =
+              downloadResponse.data['encrypted_content'].toString();
+          if (encryptedContent.isNotEmpty) {
+            final decrypted = EncryptionService.decryptSensitiveSyncPayload(
+              encryptedContent,
+              _encryptionKey!,
+              context: 'password-entries-sync',
+            );
+            if (decrypted.trim().isNotEmpty) {
+              final List<dynamic> cloudEntries = jsonDecode(decrypted);
+              for (final rawEntry in cloudEntries) {
+                final id = rawEntry['id']?.toString() ?? '';
+                if (id.isEmpty) continue;
+                cloudEntriesById[id] = Map<String, dynamic>.from(rawEntry);
+              }
+            }
+          }
+
+          cloudVersion =
+              int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
+          final cloudDeletedIdsRaw =
+              downloadResponse.data['deleted_accounts']?.toString();
+          if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
+            cloudDeletedIds =
+                List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+          }
+        }
+      } on DioException catch (e) {
+        if (e.response?.statusCode != 404) {
+          rethrow;
+        }
+      }
+
+      final localDeletedIds = await _getDeletedPasswordEntryIds();
+      final deletedIds = {...cloudDeletedIds, ...localDeletedIds};
+
+      for (final cloudEntry in cloudEntriesById.entries) {
+        if (deletedIds.contains(cloudEntry.key) ||
+            passwordBox.containsKey(cloudEntry.key)) {
+          continue;
+        }
+
+        final value = cloudEntry.value;
+        final entry = PasswordEntry(
+          id: cloudEntry.key,
+          title: value['title']?.toString() ?? 'Password',
+          username: value['username']?.toString() ?? '',
+          password: value['password']?.toString() ?? '',
+          note: value['note']?.toString(),
+          serverIP: value['server_ip']?.toString(),
+          createdAt: DateTime.tryParse(
+                value['created_at']?.toString() ?? '',
+              ) ??
+              DateTime.now(),
+          userId: userId,
+        );
+        await passwordBox.put(entry.id, entry);
+      }
+
+      final finalEntries = <Map<String, dynamic>>[];
+      final currentEntries = passwordBox.values.toList();
+      for (final entry in currentEntries) {
+        if (deletedIds.contains(entry.id)) {
+          if (passwordBox.containsKey(entry.id)) {
+            await passwordBox.delete(entry.id);
+          }
+          continue;
+        }
+
+        finalEntries.add({
+          'id': entry.id,
+          'title': entry.title,
+          'username': entry.username,
+          'password': entry.getPassword(userId),
+          'note': entry.getNote(userId),
+          'server_ip': entry.serverIP,
+          'created_at': entry.createdAt.toIso8601String(),
+        });
+      }
+
+      final encrypted = EncryptionService.encryptSensitiveSyncPayload(
+        jsonEncode(finalEntries),
+        _encryptionKey!,
+        context: 'password-entries-sync',
+      );
+
+      final uploadResponse = await _requestWithRetry((_) => _dio.post(
+            'sync/sync/',
+            data: {
+              'data_type': 'password_entries',
+              'encrypted_content': encrypted,
+              'version': cloudVersion + 1,
+              'device_id': deviceId,
+              'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
+            },
+          ));
+
+      if (uploadResponse.statusCode == 200) {
+        await _storeDeletedPasswordEntryIds(deletedIds);
+        return true;
+      }
+
+      _lastErrorMessage = 'Password sync failed. Please try again.';
+      return false;
+    } on DioException catch (e) {
+      _lastErrorMessage = _isSessionRevokedError(e)
+          ? (_extractServerError(e.response?.data) ??
+              'This device session is no longer active.')
+          : _friendlyRequestError(
+              e,
+              'Password sync failed. Please try again.',
+            );
+      debugPrint('syncPasswordEntries error: $e');
+      return false;
+    } catch (e) {
+      _lastErrorMessage = 'Password sync failed. Please try again.';
+      debugPrint('syncPasswordEntries error: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> startPasswordlessLogin(String username) async {
+    try {
+      _lastErrorMessage = null;
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
+      final response = await _dio.post('auth/passwordless-start/', data: {
+        'username': username.trim(),
+        'device_id': deviceId,
+        'device_label': deviceLabel,
+        'device_kind': _deviceKind(),
+      });
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+      _lastErrorMessage = 'Passwordless sign-in could not be started.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Passwordless sign-in could not be started.';
+      return null;
+    } catch (e) {
+      _lastErrorMessage = 'Passwordless sign-in could not be started.';
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> pollPasswordlessLogin(String requestId) async {
+    try {
+      _lastErrorMessage = null;
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
+      final response = await _dio.post('auth/passwordless-poll/', data: {
+        'request_id': requestId,
+        'device_id': deviceId,
+        'device_label': deviceLabel,
+        'device_kind': _deviceKind(),
+      });
+      final data = Map<String, dynamic>.from(response.data as Map);
+      if (data['success'] == true && data['status'] == 'approved') {
+        await _applyAuthenticatedResponse(
+          data,
+          password: null,
+          enableSyncByDefault: false,
+        );
+      }
+      return data;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Passwordless sign-in could not be completed.';
+      return e.response?.data is Map
+          ? Map<String, dynamic>.from(e.response!.data as Map)
+          : null;
+    } catch (e) {
+      _lastErrorMessage = 'Passwordless sign-in could not be completed.';
+      return null;
+    }
+  }
+
   Future<bool> send2FACode(String username, String password) async {
     try {
       _lastErrorMessage = null;
@@ -1312,6 +1735,7 @@ class SyncService {
         'new_password': newPassword,
         'device_id': deviceId,
         'device_label': deviceLabel,
+        'device_kind': _deviceKind(),
       });
       if (response.data['success'] == true) {
         final canonicalUsername =
@@ -1829,6 +2253,142 @@ class SyncService {
       return false;
     } catch (e) {
       _lastErrorMessage = 'Could not set the primary device.';
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPasswordlessRequests() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to review sign-in requests.';
+      return const [];
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.get(
+          'passwordless-requests/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+      return const [];
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not load passwordless sign-in requests.';
+      return const [];
+    } catch (_) {
+      _lastErrorMessage = 'Could not load passwordless sign-in requests.';
+      return const [];
+    }
+  }
+
+  Future<bool> approvePasswordlessRequest(String requestId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to approve sign-ins.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'passwordless-requests/$requestId/approve/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not approve this sign-in request.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not approve this sign-in request.';
+      return false;
+    }
+  }
+
+  Future<bool> denyPasswordlessRequest(String requestId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to deny sign-ins.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'passwordless-requests/$requestId/deny/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not deny this sign-in request.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not deny this sign-in request.';
+      return false;
+    }
+  }
+
+  Future<bool> recoverPrimaryDevice({
+    required String username,
+    required String password,
+    required String emailCode,
+    required String recoveryCode,
+  }) async {
+    try {
+      _lastErrorMessage = null;
+      final deviceId = await getOrCreateDeviceId();
+      final deviceLabel = await _buildDeviceLabel();
+      final response = await _dio.post('auth/recover-primary-device/', data: {
+        'username': username.trim(),
+        'password': password,
+        'email_code': emailCode.trim(),
+        'recovery_code': recoveryCode.trim(),
+        'device_id': deviceId,
+        'device_label': deviceLabel,
+        'device_kind': _deviceKind(),
+      });
+      final data = Map<String, dynamic>.from(response.data as Map);
+      if (data['success'] == true) {
+        await _applyAuthenticatedResponse(
+          data,
+          password: password,
+          enableSyncByDefault: true,
+        );
+        return true;
+      }
+      return false;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Primary-device recovery failed.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Primary-device recovery failed.';
       return false;
     }
   }

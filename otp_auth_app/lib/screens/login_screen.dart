@@ -3,6 +3,8 @@ import '../services/sync_service.dart';
 import '../services/secure_storage_service.dart';
 import '../providers/auth_provider.dart';
 import 'home_screen.dart';
+import 'passwordless_login_screen.dart';
+import 'recover_primary_device_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -992,6 +994,26 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _startPasswordlessLogin,
+                          icon: const Icon(Icons.phonelink_lock_rounded),
+                          label: const Text('Use passwordless from primary phone'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _isLoading ? null : _recoverPrimaryDevice,
+                          child: Text(
+                            'Lost primary phone? Recover this phone',
+                            style: TextStyle(color: accent),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
                       ],
 
                       // Forgot Password link
@@ -1288,6 +1310,41 @@ class _LoginScreenState extends State<LoginScreen> {
       MaterialPageRoute(builder: (_) => HomeScreen()),
       (route) => false,
     );
+  }
+
+  Future<void> _startPasswordlessLogin() async {
+    final username = _usernameController.text.trim();
+    if (username.isEmpty) {
+      _showError('Enter your username first');
+      return;
+    }
+
+    final result = await Navigator.push<Map<String, dynamic>?>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PasswordlessLoginScreen(username: username),
+      ),
+    );
+    if (!mounted || result == null) return;
+
+    _showSuccess(
+      result['sync_unlock_message']?.toString() ??
+          'Passwordless sign-in approved.',
+    );
+    await _completeAuthenticatedSession();
+  }
+
+  Future<void> _recoverPrimaryDevice() async {
+    final success = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const RecoverPrimaryDeviceScreen(),
+      ),
+    );
+    if (!mounted || success != true) return;
+
+    _showSuccess('This phone is now your primary device.');
+    await _completeAuthenticatedSession();
   }
 
   Future<void> _continueOffline() async {

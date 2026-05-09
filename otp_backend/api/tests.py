@@ -4,7 +4,10 @@ from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from .models import DeviceSession
+from twofa.models import EmailVerification
+
+from .backup_codes import build_backup_code_entries, encrypt_backup_codes
+from .models import BackupCodeSet, DeviceSession, PasswordlessLoginRequest
 from .notifications import create_notification
 
 
@@ -22,18 +25,28 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             user=self.user,
             device_id='primary-device',
             device_label='Primary Device',
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
             is_primary=True,
         )
         self.current_session = DeviceSession.objects.create(
             user=self.user,
             device_id='current-device',
             device_label='Current Device',
+            device_kind=DeviceSession.DEVICE_KIND_DESKTOP,
             is_primary=False,
         )
         self.target_session = DeviceSession.objects.create(
             user=self.user,
             device_id='target-device',
             device_label='Target Device',
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+            is_primary=False,
+        )
+        self.desktop_target_session = DeviceSession.objects.create(
+            user=self.user,
+            device_id='desktop-target-device',
+            device_label='Desktop Target Device',
+            device_kind=DeviceSession.DEVICE_KIND_DESKTOP,
             is_primary=False,
         )
 
@@ -43,6 +56,7 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             format='json',
             HTTP_X_DEVICE_ID='current-device',
             HTTP_X_DEVICE_LABEL='Current Device',
+            HTTP_X_DEVICE_KIND='desktop',
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -66,6 +80,7 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             format='json',
             HTTP_X_DEVICE_ID='primary-device',
             HTTP_X_DEVICE_LABEL='Primary Device',
+            HTTP_X_DEVICE_KIND='mobile',
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -83,6 +98,7 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             format='json',
             HTTP_X_DEVICE_ID='primary-device',
             HTTP_X_DEVICE_LABEL='Primary Device',
+            HTTP_X_DEVICE_KIND='mobile',
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -104,6 +120,7 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             format='json',
             HTTP_X_DEVICE_ID='primary-device',
             HTTP_X_DEVICE_LABEL='Primary Device',
+            HTTP_X_DEVICE_KIND='mobile',
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -121,6 +138,7 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             format='json',
             HTTP_X_DEVICE_ID='current-device',
             HTTP_X_DEVICE_LABEL='Current Device',
+            HTTP_X_DEVICE_KIND='desktop',
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -138,6 +156,7 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             reverse('download_backup_codes'),
             HTTP_X_DEVICE_ID='current-device',
             HTTP_X_DEVICE_LABEL='Current Device',
+            HTTP_X_DEVICE_KIND='desktop',
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -156,10 +175,258 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
             reverse('download_backup_codes'),
             HTTP_X_DEVICE_ID='primary-device',
             HTTP_X_DEVICE_LABEL='Primary Device',
+            HTTP_X_DEVICE_KIND='mobile',
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response['Content-Type'], 'application/pdf')
+
+    def test_primary_device_cannot_move_primary_to_desktop_when_mobile_exists(self):
+        response = self.client.post(
+            reverse(
+                'device-sessions-set-primary',
+                args=[self.desktop_target_session.id],
+            ),
+            {'password': 'testpass123'},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-device',
+            HTTP_X_DEVICE_LABEL='Primary Device',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data['error'],
+            'Choose a phone as your primary device so passwordless approvals can stay on mobile.',
+        )
+
+        self.primary_session.refresh_from_db()
+        self.desktop_target_session.refresh_from_db()
+
+        self.assertTrue(self.primary_session.is_primary)
+        self.assertFalse(self.desktop_target_session.is_primary)
+
+
+class PasswordlessLoginFlowTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='pwless-user',
+            email='pwless@example.com',
+            password='testpass123',
+        )
+        self.primary_session = DeviceSession.objects.create(
+            user=self.user,
+            device_id='primary-phone',
+            device_label='Primary Phone',
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+            is_primary=True,
+        )
+        self.primary_client = APIClient()
+        self.primary_client.force_authenticate(user=self.user)
+        self.request_client = APIClient()
+
+    def test_passwordless_request_can_be_started_approved_and_completed(self):
+        start_response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(start_response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(start_response.data['success'])
+        self.assertEqual(start_response.data['verification_code'][3], '-')
+        self.assertEqual(start_response.data['primary_device_label'], 'Primary Phone')
+
+        request_id = start_response.data['request_id']
+        request_obj = PasswordlessLoginRequest.objects.get(id=request_id)
+        self.assertEqual(
+            request_obj.status,
+            PasswordlessLoginRequest.STATUS_PENDING,
+        )
+        self.assertEqual(request_obj.requester_device_kind, DeviceSession.DEVICE_KIND_DESKTOP)
+        self.assertTrue(
+            self.user.app_notifications.filter(
+                notification_type='passwordless_request',
+            ).exists()
+        )
+
+        approve_response = self.primary_client.post(
+            reverse('passwordless-requests-approve', args=[request_id]),
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(approve_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(approve_response.data, {'success': True})
+
+        poll_response = self.request_client.post(
+            reverse('auth-passwordless-poll'),
+            {'request_id': request_id},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(poll_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(poll_response.data['success'])
+        self.assertEqual(poll_response.data['status'], 'approved')
+        self.assertEqual(poll_response.data['requires_password_for_sync'], True)
+        self.assertIn('access', poll_response.data)
+        self.assertIn('refresh', poll_response.data)
+
+        request_obj.refresh_from_db()
+        self.assertEqual(
+            request_obj.status,
+            PasswordlessLoginRequest.STATUS_COMPLETED,
+        )
+        self.assertEqual(request_obj.reviewed_by_session_id, self.primary_session.id)
+        self.assertIsNotNone(request_obj.completed_at)
+
+    def test_passwordless_start_falls_back_when_primary_is_not_mobile(self):
+        self.primary_session.device_kind = DeviceSession.DEVICE_KIND_DESKTOP
+        self.primary_session.save(update_fields=['device_kind', 'updated_at'])
+
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data['fallback_to_password'], True)
+        self.assertIn('phone', response.data['error'].lower())
+
+    def test_only_primary_phone_can_approve_passwordless_request(self):
+        start_response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        request_id = start_response.data['request_id']
+
+        other_client = APIClient()
+        other_client.force_authenticate(user=self.user)
+        DeviceSession.objects.create(
+            user=self.user,
+            device_id='desktop-reviewer',
+            device_label='Desktop Reviewer',
+            device_kind=DeviceSession.DEVICE_KIND_DESKTOP,
+            is_primary=False,
+        )
+
+        response = other_client.post(
+            reverse('passwordless-requests-approve', args=[request_id]),
+            format='json',
+            HTTP_X_DEVICE_ID='desktop-reviewer',
+            HTTP_X_DEVICE_LABEL='Desktop Reviewer',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            response.data['error'],
+            'Only your current primary device can approve passwordless sign-ins.',
+        )
+
+
+class PrimaryDeviceRecoveryTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='recover-user',
+            email='recover@example.com',
+            password='testpass123',
+        )
+        self.old_primary_session = DeviceSession.objects.create(
+            user=self.user,
+            device_id='old-primary-phone',
+            device_label='Old Primary Phone',
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+            is_primary=True,
+        )
+        self.recovery_code = 'ABCD1234EF'
+        BackupCodeSet.objects.create(
+            user=self.user,
+            encrypted_codes=encrypt_backup_codes(
+                build_backup_code_entries([self.recovery_code])
+            ),
+        )
+        EmailVerification.objects.create(
+            user=self.user,
+            code='123456',
+            is_used=False,
+        )
+        self.client = APIClient()
+
+    def test_recover_primary_device_requires_phone_and_rotates_primary(self):
+        response = self.client.post(
+            reverse('auth-recover-primary-device'),
+            {
+                'username': self.user.username,
+                'password': 'testpass123',
+                'email_code': '123456',
+                'recovery_code': self.recovery_code,
+                'device_id': 'new-primary-phone',
+                'device_label': 'New Primary Phone',
+                'device_kind': 'mobile',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['remaining_codes'], 0)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+
+        self.old_primary_session.refresh_from_db()
+        new_primary = DeviceSession.objects.get(
+            user=self.user,
+            device_id='new-primary-phone',
+        )
+        verification = EmailVerification.objects.get(user=self.user, code='123456')
+
+        self.assertFalse(self.old_primary_session.is_primary)
+        self.assertTrue(new_primary.is_primary)
+        self.assertEqual(new_primary.device_kind, DeviceSession.DEVICE_KIND_MOBILE)
+        self.assertTrue(verification.is_used)
+        self.assertTrue(
+            self.user.app_notifications.filter(
+                notification_type='recovery_code_used',
+            ).exists()
+        )
+
+    def test_recover_primary_device_rejects_desktop_target(self):
+        response = self.client.post(
+            reverse('auth-recover-primary-device'),
+            {
+                'username': self.user.username,
+                'password': 'testpass123',
+                'email_code': '123456',
+                'recovery_code': self.recovery_code,
+                'device_id': 'desktop-target',
+                'device_label': 'Desktop Target',
+                'device_kind': 'desktop',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data['error'],
+            'Primary-device recovery must finish on a phone so your primary device stays mobile.',
+        )
 
 
 class AppNotificationTests(APITestCase):

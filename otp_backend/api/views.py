@@ -15,6 +15,7 @@ from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from django.conf import settings
 from django.http import HttpResponse
+from datetime import timedelta
 import json
 import random
 import string
@@ -39,6 +40,7 @@ from .models import (
     AccountTombstone,
     DeleteOTPCode,
     BackupCodeSet,
+    PasswordlessLoginRequest,
 )
 from .notifications import (
     build_device_label,
@@ -46,7 +48,9 @@ from .notifications import (
     create_app_pin_changed_notification,
     create_app_review_reply_notification,
     create_daily_active_devices_notification,
+    create_passwordless_request_notification,
     create_password_changed_notification,
+    create_recovery_code_used_notification,
     create_recovery_codes_generated_notification,
     create_sign_in_notification,
 )
@@ -56,11 +60,13 @@ from .device_sessions import (
     ensure_device_session,
     extract_request_ip,
     get_request_device_id,
+    get_request_device_kind,
     get_request_device_label,
 )
 from .serializers import (
     AppNotificationSerializer,
     DeviceSessionSerializer,
+    PasswordlessLoginRequestSerializer,
     UserSerializer,
     EncryptedDataSerializer,
     RegisterSerializer,
@@ -72,6 +78,8 @@ from twofa.email_templates import (
     get_recovery_codes_generated_email_text,
     send_transactional_email,
 )
+from twofa.models import EmailVerification
+from twofa.views import _consume_recovery_code
 
 # ===================
 # LOGGING SETUP
@@ -109,6 +117,30 @@ def get_current_active_device_session(request):
         is_active=True,
         revoked_at__isnull=True,
     ).order_by('-last_seen_at', '-created_at').first()
+
+
+def _format_passwordless_code(raw_code: str) -> str:
+    cleaned = ''.join(ch for ch in raw_code if ch.isdigit())
+    if len(cleaned) == 6:
+        return f'{cleaned[:3]}-{cleaned[3:]}'
+    return raw_code
+
+
+def _generate_passwordless_code() -> str:
+    return _format_passwordless_code(''.join(random.choices(string.digits, k=6)))
+
+
+def _expire_stale_passwordless_requests(user: User | None = None):
+    queryset = PasswordlessLoginRequest.objects.filter(
+        status=PasswordlessLoginRequest.STATUS_PENDING,
+        expires_at__lt=timezone.now(),
+    )
+    if user is not None:
+        queryset = queryset.filter(user=user)
+    queryset.update(
+        status=PasswordlessLoginRequest.STATUS_EXPIRED,
+        updated_at=timezone.now(),
+    )
 
 
 # ===================
@@ -232,6 +264,212 @@ class AuthViewSet(viewsets.GenericViewSet):
             debug_print(f"[AUTH] Traceback:\n{error_details}")
             logger.error("Login processing failed.\n%s", error_details)
             return Response({'error': 'Login failed'}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='passwordless-start')
+    def passwordless_start(self, request):
+        username = (request.data.get('username') or '').strip()
+        device_id = get_request_device_id(request)
+        device_label = get_request_device_label(request)
+        device_kind = get_request_device_kind(request)
+
+        if not username:
+            return Response({'error': 'Username is required.'}, status=400)
+
+        try:
+            user = User.objects.get(username__iexact=username)
+        except User.DoesNotExist:
+            return Response({'error': 'No account was found for that username.'}, status=404)
+
+        _expire_stale_passwordless_requests(user)
+        primary_session = ensure_primary_session(user)
+        if primary_session is None or not primary_session.is_active:
+            return Response(
+                {
+                    'error': 'Passwordless sign-in is not available for this account yet. Use your normal password sign-in on this device.',
+                    'fallback_to_password': True,
+                },
+                status=409,
+            )
+
+        if primary_session.device_kind != DeviceSession.DEVICE_KIND_MOBILE:
+            return Response(
+                {
+                    'error': 'Passwordless sign-in needs a phone set as the active primary device. Use your normal password sign-in or move primary to a phone first.',
+                    'fallback_to_password': True,
+                    'primary_device_label': primary_session.device_label,
+                },
+                status=409,
+            )
+
+        PasswordlessLoginRequest.objects.filter(
+            user=user,
+            requester_device_id=device_id,
+            status=PasswordlessLoginRequest.STATUS_PENDING,
+        ).update(
+            status=PasswordlessLoginRequest.STATUS_EXPIRED,
+            updated_at=timezone.now(),
+        )
+
+        request_obj = PasswordlessLoginRequest.objects.create(
+            user=user,
+            requester_device_id=device_id,
+            requester_device_label=device_label,
+            requester_device_kind=device_kind,
+            verification_code=_generate_passwordless_code(),
+            expires_at=timezone.now() + timedelta(minutes=3),
+        )
+        create_passwordless_request_notification(
+            user,
+            requester_device_label=request_obj.requester_device_label,
+            verification_code=request_obj.verification_code,
+        )
+
+        return Response(
+            {
+                'success': True,
+                'request_id': str(request_obj.id),
+                'verification_code': request_obj.verification_code,
+                'expires_at': request_obj.expires_at.isoformat(),
+                'primary_device_label': primary_session.device_label,
+                'message': 'Approve this sign-in from your primary phone.',
+            },
+            status=201,
+        )
+
+    @action(detail=False, methods=['post'], url_path='passwordless-poll')
+    def passwordless_poll(self, request):
+        request_id = (request.data.get('request_id') or '').strip()
+        device_id = get_request_device_id(request)
+
+        if not request_id:
+            return Response({'error': 'request_id is required.'}, status=400)
+
+        try:
+            request_obj = PasswordlessLoginRequest.objects.select_related('user').get(id=request_id)
+        except PasswordlessLoginRequest.DoesNotExist:
+            return Response({'error': 'Passwordless sign-in request not found.'}, status=404)
+
+        _expire_stale_passwordless_requests(request_obj.user)
+        request_obj.refresh_from_db()
+
+        if request_obj.requester_device_id and device_id and request_obj.requester_device_id != device_id:
+            return Response({'error': 'This sign-in request belongs to a different device.'}, status=403)
+
+        if request_obj.status == PasswordlessLoginRequest.STATUS_PENDING:
+            return Response({'success': True, 'status': 'pending'})
+        if request_obj.status == PasswordlessLoginRequest.STATUS_DENIED:
+            return Response({'success': False, 'status': 'denied', 'error': 'The sign-in request was denied on your primary phone.'}, status=403)
+        if request_obj.status == PasswordlessLoginRequest.STATUS_EXPIRED:
+            return Response({'success': False, 'status': 'expired', 'error': 'The sign-in request expired. Start again from the login screen.'}, status=410)
+        if request_obj.status == PasswordlessLoginRequest.STATUS_COMPLETED:
+            return Response({'success': False, 'status': 'completed', 'error': 'This sign-in request was already used.'}, status=409)
+        if request_obj.status != PasswordlessLoginRequest.STATUS_APPROVED:
+            return Response({'success': False, 'status': request_obj.status}, status=409)
+
+        refresh = RefreshToken.for_user(request_obj.user)
+        attach_session_to_refresh_token(request_obj.user, request, refresh)
+        request_obj.status = PasswordlessLoginRequest.STATUS_COMPLETED
+        request_obj.completed_at = timezone.now()
+        request_obj.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+        return Response(
+            {
+                'success': True,
+                'status': 'approved',
+                'message': 'Passwordless sign-in approved.',
+                'requires_password_for_sync': True,
+                'sync_unlock_message': 'To unlock encrypted vault sync on this new device, sign in once with your account password here later.',
+                'user': UserSerializer(request_obj.user).data,
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+            }
+        )
+
+    @action(detail=False, methods=['post'], url_path='recover-primary-device')
+    def recover_primary_device(self, request):
+        username = (request.data.get('username') or '').strip()
+        password = request.data.get('password') or ''
+        email_code = (request.data.get('email_code') or '').strip()
+        recovery_code = (request.data.get('recovery_code') or '').strip()
+
+        if not username or not password or not email_code or not recovery_code:
+            return Response(
+                {'error': 'Username, password, email code, and recovery code are required.'},
+                status=400,
+            )
+
+        try:
+            user_obj = User.objects.get(username__iexact=username)
+        except User.DoesNotExist:
+            return Response({'error': 'No account was found for that username.'}, status=404)
+
+        user = authenticate(username=user_obj.username, password=password)
+        if not user:
+            return Response({'error': 'Account password is incorrect.'}, status=403)
+
+        verification = EmailVerification.objects.filter(
+            user=user,
+            code=email_code,
+            is_used=False,
+        ).order_by('-created_at').first()
+        if verification is None or not verification.is_valid():
+            return Response({'error': 'The email verification code is invalid or expired.'}, status=400)
+
+        session = ensure_device_session(
+            user,
+            device_id=get_request_device_id(request),
+            device_label=get_request_device_label(request),
+            device_kind=get_request_device_kind(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            ip_address=extract_request_ip(request),
+        )
+
+        if session.device_kind != DeviceSession.DEVICE_KIND_MOBILE:
+            return Response(
+                {
+                    'error': 'Primary-device recovery must finish on a phone so your primary device stays mobile.',
+                },
+                status=400,
+            )
+
+        consumed, result = _consume_recovery_code(user, recovery_code)
+        if not consumed:
+            return Response({'error': result}, status=400)
+
+        verification.is_used = True
+        verification.save(update_fields=['is_used'])
+
+        DeviceSession.objects.filter(
+            user=user,
+            is_active=True,
+            revoked_at__isnull=True,
+            is_primary=True,
+        ).exclude(id=session.id).update(
+            is_primary=False,
+            updated_at=timezone.now(),
+        )
+        if not session.is_primary:
+            session.is_primary = True
+            session.save(update_fields=['is_primary', 'updated_at'])
+
+        refresh = RefreshToken.for_user(user)
+        refresh['session_id'] = str(session.id)
+        create_recovery_code_used_notification(
+            user,
+            purpose='recover your primary device',
+            device_label=session.device_label,
+        )
+
+        return Response(
+            {
+                'success': True,
+                'message': 'This phone is now your primary device.',
+                'remaining_codes': result['remaining_codes'],
+                'user': UserSerializer(user).data,
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+            }
+        )
     
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def change_password(self, request):
@@ -710,7 +948,7 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
                     {'error': 'older_than_days must be 0 or greater.'},
                     status=400,
                 )
-            cutoff = timezone.now() - timezone.timedelta(days=days)
+            cutoff = timezone.now() - timedelta(days=days)
             queryset = queryset.filter(created_at__lt=cutoff)
 
         deleted_count, _ = queryset.delete()
@@ -745,6 +983,81 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'success': True}, status=201)
 
         return Response({'error': 'Unsupported notification event'}, status=400)
+
+
+class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PasswordlessLoginRequestSerializer
+
+    def get_queryset(self):
+        _expire_stale_passwordless_requests(self.request.user)
+        return PasswordlessLoginRequest.objects.filter(
+            user=self.request.user,
+        ).exclude(
+            status=PasswordlessLoginRequest.STATUS_COMPLETED,
+        ).order_by('-created_at')
+
+    def _ensure_primary_mobile_session(self):
+        current_session = get_current_active_device_session(self.request)
+        if current_session is None:
+            return None, Response(
+                {'error': 'This device could not be verified for passwordless approvals.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not current_session.is_primary:
+            return None, Response(
+                {'error': 'Only your current primary device can approve passwordless sign-ins.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if current_session.device_kind != DeviceSession.DEVICE_KIND_MOBILE:
+            return None, Response(
+                {'error': 'Passwordless approvals must be completed from your primary phone.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return current_session, None
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()[:20]
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve(self, request, pk=None):
+        current_session, error_response = self._ensure_primary_mobile_session()
+        if error_response is not None:
+            return error_response
+
+        login_request = self.get_object()
+        if login_request.status != PasswordlessLoginRequest.STATUS_PENDING:
+            return Response({'error': 'This sign-in request is no longer pending.'}, status=409)
+        if login_request.expires_at <= timezone.now():
+            login_request.status = PasswordlessLoginRequest.STATUS_EXPIRED
+            login_request.save(update_fields=['status', 'updated_at'])
+            return Response({'error': 'This sign-in request already expired.'}, status=410)
+
+        login_request.status = PasswordlessLoginRequest.STATUS_APPROVED
+        login_request.approved_at = timezone.now()
+        login_request.reviewed_by_session = current_session
+        login_request.save(update_fields=['status', 'approved_at', 'reviewed_by_session', 'updated_at'])
+        return Response({'success': True})
+
+    @action(detail=True, methods=['post'], url_path='deny')
+    def deny(self, request, pk=None):
+        current_session, error_response = self._ensure_primary_mobile_session()
+        if error_response is not None:
+            return error_response
+
+        login_request = self.get_object()
+        if login_request.status != PasswordlessLoginRequest.STATUS_PENDING:
+            return Response({'error': 'This sign-in request is no longer pending.'}, status=409)
+
+        login_request.status = PasswordlessLoginRequest.STATUS_DENIED
+        login_request.reviewed_by_session = current_session
+        login_request.save(update_fields=['status', 'reviewed_by_session', 'updated_at'])
+        return Response({'success': True})
 
 
 @api_view(['POST'])
@@ -814,12 +1127,14 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         session = get_current_active_device_session(self.request)
         if session is not None:
             session.device_label = get_request_device_label(self.request)
+            session.device_kind = get_request_device_kind(self.request)
             session.user_agent = self.request.META.get('HTTP_USER_AGENT', '') or session.user_agent
             session.ip_address = extract_request_ip(self.request) or session.ip_address
             session.last_seen_at = timezone.now()
             session.save(
                 update_fields=[
                     'device_label',
+                    'device_kind',
                     'user_agent',
                     'ip_address',
                     'last_seen_at',
@@ -850,6 +1165,7 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
             self.request.user,
             device_id=current_device_id,
             device_label=get_request_device_label(self.request),
+            device_kind=get_request_device_kind(self.request),
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
             ip_address=extract_request_ip(self.request),
         )
@@ -953,6 +1269,20 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(
                 {'error': 'Account password is incorrect.'},
                 status=status.HTTP_403_FORBIDDEN,
+            )
+
+        has_active_mobile_session = DeviceSession.objects.filter(
+            user=request.user,
+            is_active=True,
+            revoked_at__isnull=True,
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+        ).exists()
+        if has_active_mobile_session and session.device_kind != DeviceSession.DEVICE_KIND_MOBILE:
+            return Response(
+                {
+                    'error': 'Choose a phone as your primary device so passwordless approvals can stay on mobile.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         DeviceSession.objects.filter(
