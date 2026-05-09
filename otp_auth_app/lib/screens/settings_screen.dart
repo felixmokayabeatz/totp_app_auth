@@ -244,6 +244,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
 
+      if (result.wasCancelled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+
       final opened = await _appUpdateService.openUpdate(info);
       if (!mounted) return;
 
@@ -340,9 +353,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String get _updateProgressDescription {
     if (_isAndroidUpdateDownload) {
-      return 'Downloading the APK to your Downloads folder. Open it from Downloads after the transfer finishes to install the update.';
+      return 'Downloading the APK to your Downloads folder. The rate shown is the average transfer speed. Open it from Downloads after the transfer finishes to install the update.';
     }
-    return 'Downloading the update. When it finishes, BeatzLock will ask for one more OK before the app closes and the update begins.';
+    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will ask for one more OK before the app closes and the update begins.';
   }
 
   String _backupCodeStatusSubtitle() {
@@ -3086,7 +3099,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(width: 12),
                     Flexible(
                       child: Text(
-                        progress?.speedLabel ?? 'Speed: Calculating...',
+                        progress?.speedLabel ?? 'Rate: Calculating...',
                         textAlign: TextAlign.right,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3103,7 +3116,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 LinearProgressIndicator(value: progress?.ratio),
                 const SizedBox(height: 10),
                 Text(
-                  progress?.sizeLabel ?? 'Downloaded: 0 MB',
+                  progress?.etaLabel ?? 'ETA: Calculating...',
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  progress?.sizeLabel ?? 'Downloaded: 0 MiB',
                   style: TextStyle(
                     color: _textSecondary,
                     fontSize: 12,
@@ -3114,6 +3136,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             );
           },
         ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _appUpdateService.cancelUpdateDownload();
+              Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Cancel'),
+          ),
+        ],
       ),
     );
   }

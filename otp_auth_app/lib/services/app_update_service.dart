@@ -28,6 +28,7 @@ class AppUpdateService {
   final Dio _dio;
   AppUpdateInfo? _cachedUpdateInfo;
   String? _lastErrorMessage;
+  CancelToken? _activeDownloadCancelToken;
   String? _pendingLauncherExecutable;
   List<String>? _pendingLauncherArguments;
 
@@ -44,6 +45,12 @@ class AppUpdateService {
     if (Platform.isMacOS) return 'macos';
     if (Platform.isIOS) return 'ios';
     return '';
+  }
+
+  bool get isUpdateDownloadInProgress => _activeDownloadCancelToken != null;
+
+  void cancelUpdateDownload() {
+    _activeDownloadCancelToken?.cancel('User cancelled update download.');
   }
 
   Future<AppUpdateInfo?> checkForUpdate() async {
@@ -180,10 +187,13 @@ class AppUpdateService {
       );
     }
 
+    final cancelToken = CancelToken();
+    _activeDownloadCancelToken = cancelToken;
     try {
       final installerPath = await _downloadInstaller(
         info,
         downloadUri,
+        cancelToken: cancelToken,
         onReceiveProgress: onReceiveProgress,
       );
       if (Platform.isAndroid) {
@@ -207,6 +217,13 @@ class AppUpdateService {
         requiresAppExit: true,
       );
     } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        return const AppSelfUpdateResult(
+          started: false,
+          message: 'Update download cancelled.',
+          wasCancelled: true,
+        );
+      }
       return AppSelfUpdateResult(
         started: false,
         message: _friendlyUpdateError(e),
@@ -216,12 +233,17 @@ class AppUpdateService {
         started: false,
         message: 'Could not start the self-updater: $e',
       );
+    } finally {
+      if (identical(_activeDownloadCancelToken, cancelToken)) {
+        _activeDownloadCancelToken = null;
+      }
     }
   }
 
   Future<String> _downloadInstaller(
     AppUpdateInfo info,
     Uri downloadUri, {
+    required CancelToken cancelToken,
     void Function(AppDownloadProgress progress)? onReceiveProgress,
   }) async {
     final tempDir = await getTemporaryDirectory();
@@ -236,43 +258,51 @@ class AppUpdateService {
     final fileName =
         'beatzlock_${info.latestVersion}_${info.latestBuildNumber}$extension';
     final filePath = '${updateDir.path}${Platform.pathSeparator}$fileName';
-    DateTime? lastProgressAt;
-    int lastReceivedBytes = 0;
-    double? smoothedBytesPerSecond;
+    final startedAt = DateTime.now();
 
-    await _dio.download(
-      downloadUri.toString(),
-      filePath,
-      onReceiveProgress: (received, total) {
-        final now = DateTime.now();
-        final previousProgressAt = lastProgressAt;
-        if (previousProgressAt != null) {
-          final seconds =
-              now.difference(previousProgressAt).inMilliseconds / 1000;
-          final bytesDelta = received - lastReceivedBytes;
-          if (seconds > 0 && bytesDelta >= 0) {
-            final instantBytesPerSecond = bytesDelta / seconds;
-            smoothedBytesPerSecond = smoothedBytesPerSecond == null
-                ? instantBytesPerSecond
-                : (smoothedBytesPerSecond! * 0.7) +
-                    (instantBytesPerSecond * 0.3);
-          }
+    try {
+      await _dio.download(
+        downloadUri.toString(),
+        filePath,
+        cancelToken: cancelToken,
+        onReceiveProgress: (received, total) {
+          final elapsedSeconds =
+              DateTime.now().difference(startedAt).inMilliseconds / 1000;
+          final averageBytesPerSecond =
+              elapsedSeconds > 0 ? received / elapsedSeconds : null;
+          final secondsRemaining =
+              (averageBytesPerSecond != null &&
+                  averageBytesPerSecond > 0 &&
+                  total > 0 &&
+                  received <= total)
+              ? (total - received) / averageBytesPerSecond
+              : null;
+
+          onReceiveProgress?.call(
+            AppDownloadProgress(
+              receivedBytes: received,
+              totalBytes: total,
+              bytesPerSecond: averageBytesPerSecond,
+              secondsRemaining: secondsRemaining,
+            ),
+          );
+        },
+        options: Options(
+          followRedirects: true,
+          responseType: ResponseType.bytes,
+        ),
+      );
+    } on DioException {
+      try {
+        final partialFile = File(filePath);
+        if (await partialFile.exists()) {
+          await partialFile.delete();
         }
-        lastProgressAt = now;
-        lastReceivedBytes = received;
-        onReceiveProgress?.call(
-          AppDownloadProgress(
-            receivedBytes: received,
-            totalBytes: total,
-            bytesPerSecond: smoothedBytesPerSecond,
-          ),
-        );
-      },
-      options: Options(
-        followRedirects: true,
-        responseType: ResponseType.bytes,
-      ),
-    );
+      } catch (_) {
+        // Ignore cleanup failures for partially downloaded installers.
+      }
+      rethrow;
+    }
 
     return filePath;
   }
@@ -521,11 +551,13 @@ class AppSelfUpdateResult {
     required this.started,
     required this.message,
     this.requiresAppExit = false,
+    this.wasCancelled = false,
   });
 
   final bool started;
   final String message;
   final bool requiresAppExit;
+  final bool wasCancelled;
 }
 
 class AppDownloadProgress {
@@ -533,11 +565,13 @@ class AppDownloadProgress {
     required this.receivedBytes,
     required this.totalBytes,
     required this.bytesPerSecond,
+    required this.secondsRemaining,
   });
 
   final int receivedBytes;
   final int totalBytes;
   final double? bytesPerSecond;
+  final double? secondsRemaining;
 
   bool get hasTotal => totalBytes > 0;
 
@@ -553,22 +587,38 @@ class AppDownloadProgress {
   }
 
   String get sizeLabel {
-    if (!hasTotal) return 'Downloaded: ${_formatMegabytes(receivedBytes)}';
-    return 'Downloaded: ${_formatMegabytes(receivedBytes)} / ${_formatMegabytes(totalBytes)}';
+    if (!hasTotal) return 'Downloaded: ${_formatMebibytes(receivedBytes)}';
+    return 'Downloaded: ${_formatMebibytes(receivedBytes)} / ${_formatMebibytes(totalBytes)}';
   }
 
   String get speedLabel {
     final speed = bytesPerSecond;
-    if (speed == null || speed <= 0) return 'Speed: Calculating...';
-    if (speed >= 1024 * 1024) return 'Speed: ${_formatMegabytes(speed)}/s';
-    return 'Speed: ${(speed / 1024).toStringAsFixed(0)} KB/s';
+    if (speed == null || speed <= 0) return 'Rate: Calculating...';
+    if (speed >= 1024 * 1024) return 'Rate: ${_formatMebibytes(speed)}/s avg';
+    return 'Rate: ${(speed / 1024).toStringAsFixed(0)} KiB/s avg';
   }
 
-  static String _formatMegabytes(num bytes) {
-    if (bytes <= 0) return '0 MB';
-    final megabytes = bytes / (1024 * 1024);
-    if (megabytes < 0.1) return '<0.1 MB';
-    if (megabytes >= 100) return '${megabytes.toStringAsFixed(0)} MB';
-    return '${megabytes.toStringAsFixed(1)} MB';
+  String get etaLabel {
+    final seconds = secondsRemaining;
+    if (seconds == null || seconds.isNaN || seconds.isInfinite || seconds <= 0) {
+      return 'ETA: Calculating...';
+    }
+    if (seconds >= 3600) {
+      final hours = seconds / 3600;
+      return 'ETA: ${hours.toStringAsFixed(1)} h';
+    }
+    if (seconds >= 60) {
+      final minutes = seconds / 60;
+      return 'ETA: ${minutes.toStringAsFixed(1)} min';
+    }
+    return 'ETA: ${seconds.toStringAsFixed(0)} s';
+  }
+
+  static String _formatMebibytes(num bytes) {
+    if (bytes <= 0) return '0 MiB';
+    final mebibytes = bytes / (1024 * 1024);
+    if (mebibytes < 0.1) return '<0.1 MiB';
+    if (mebibytes >= 100) return '${mebibytes.toStringAsFixed(0)} MiB';
+    return '${mebibytes.toStringAsFixed(1)} MiB';
   }
 }
