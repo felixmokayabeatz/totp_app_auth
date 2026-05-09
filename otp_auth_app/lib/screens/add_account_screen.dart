@@ -325,8 +325,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         'default_user';
     final syncService = SyncService();
     final userBox = await syncService.getUserBox();
-    final shouldSync =
-        await syncService.isLoggedIn() && await syncService.isSyncEnabled();
+    final isSignedIn = await syncService.isLoggedIn();
+    final shouldSync = isSignedIn && await syncService.isSyncEnabled();
     var importedCount = 0;
     var skippedCount = 0;
 
@@ -349,6 +349,17 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       );
       await userBox.put(account.id, account);
       importedCount++;
+
+      if (isSignedIn) {
+        try {
+          await syncService.logAccountAddedNotification(
+            serviceName: entry.service,
+            accountLabel: entry.accountLabel,
+          );
+        } catch (e) {
+          debugPrint('Scanned account notification log error: $e');
+        }
+      }
     }
 
     if (shouldSync) {
