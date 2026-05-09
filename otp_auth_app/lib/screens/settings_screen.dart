@@ -215,9 +215,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (!mounted || continueUpdate != true) return;
 
           try {
+            unawaited(_showInstallingUpdateDialog());
+            await Future<void>.delayed(const Duration(milliseconds: 300));
             await _appUpdateService.launchPreparedUpdateAndExit();
           } catch (e) {
             if (!mounted) return;
+            if (Navigator.of(context, rootNavigator: true).canPop()) {
+              Navigator.of(context, rootNavigator: true).pop();
+            }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Could not start the update after closing: $e'),
@@ -3182,6 +3187,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('OK'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showInstallingUpdateDialog() {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.sync_rounded, color: _accent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Installing Update',
+                style: TextStyle(color: _textPrimary, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: _accent,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'BeatzLock is closing so the update can install and restart the app.',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

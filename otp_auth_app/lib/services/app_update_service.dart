@@ -213,7 +213,7 @@ class AppUpdateService {
       return const AppSelfUpdateResult(
         started: true,
         message:
-            'Update is ready. Click OK to close BeatzLock and finish installing it.',
+            'Update is ready. Click OK to install and restart BeatzLock.',
         requiresAppExit: true,
       );
     } on DioException catch (e) {
@@ -402,19 +402,14 @@ class AppUpdateService {
 
   Future<void> _prepareDesktopUpdate(String installerPath) async {
     if (Platform.isWindows) {
-      final scriptPath = await _writeWindowsUpdaterScript(
-        installerPath,
-        appPid: pid,
-      );
-      _pendingLauncherExecutable = 'powershell.exe';
+      _pendingLauncherExecutable = installerPath;
       _pendingLauncherArguments = [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        scriptPath,
+        '/SP-',
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/NORESTART',
+        '/CLOSEAPPLICATIONS',
+        '/RESTARTAPPLICATIONS',
       ];
       return;
     }
@@ -424,8 +419,8 @@ class AppUpdateService {
         installerPath,
         appPid: pid,
       );
-      _pendingLauncherExecutable = 'sh';
-      _pendingLauncherArguments = [scriptPath];
+      _pendingLauncherExecutable = scriptPath;
+      _pendingLauncherArguments = const [];
       return;
     }
 
@@ -442,35 +437,6 @@ class AppUpdateService {
     if (Platform.isWindows) return '.exe';
     if (Platform.isAndroid) return '.apk';
     return '.deb';
-  }
-
-  Future<String> _writeWindowsUpdaterScript(
-    String installerPath, {
-    required int appPid,
-  }) async {
-    final tempDir = await getTemporaryDirectory();
-    final script = File(
-      '${tempDir.path}${Platform.pathSeparator}beatzlock_update.ps1',
-    );
-    final escapedInstallerPath = installerPath.replaceAll("'", "''");
-    await script.writeAsString('''
-\$appPid = $appPid
-\$installerPath = '$escapedInstallerPath'
-
-while (Get-Process -Id \$appPid -ErrorAction SilentlyContinue) {
-  Start-Sleep -Seconds 1
-}
-
-Start-Process -FilePath \$installerPath -ArgumentList @(
-  '/SP-',
-  '/VERYSILENT',
-  '/SUPPRESSMSGBOXES',
-  '/NORESTART',
-  '/CLOSEAPPLICATIONS',
-  '/RESTARTAPPLICATIONS'
-)
-''');
-    return script.path;
   }
 
   Future<String> _writeLinuxUpdaterScript(
