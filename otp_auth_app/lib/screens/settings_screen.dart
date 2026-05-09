@@ -665,7 +665,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.article_outlined,
               label: 'Release Notes',
-              sub: 'See what changed in this installed version',
+              sub: 'See what changed in the current installed version',
               onTap: _showInstalledReleaseNotes,
             ),
             _dividerLine(),
@@ -2837,18 +2837,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showInstalledReleaseNotes() {
-    const releaseNotes = '''
-v1.6.10 (Build 25)
+    return _showInstalledReleaseNotesDialog();
+  }
 
-What's new
-- Settings now shows release notes for the installed app version.
-- Update screens show both the current version and the latest available version.
-- Update details now show release notes before installing from settings.
-- The phone scan shortcut stays on mobile only.
-- If scanning is not possible, users can switch to manual secret-key entry.
-- Scan confirmation now says "Confirm addition".
-- Scan success now says "Success. Account added." instead of import wording.
-''';
+  Future<void> _showInstalledReleaseNotesDialog() async {
+    final result = await _appUpdateService.getInstalledReleaseNotes();
+    if (!mounted) return;
 
     return showDialog<void>(
       context: context,
@@ -2871,13 +2865,41 @@ What's new
           constraints: const BoxConstraints(maxWidth: 460, maxHeight: 420),
           child: Scrollbar(
             child: SingleChildScrollView(
-              child: Text(
-                releaseNotes.trim(),
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 13,
-                  height: 1.4,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _dividerColor),
+                    ),
+                    child: Text(
+                      'Current installed version: ${result.versionLabel}',
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    result.notes.trim(),
+                    style: TextStyle(
+                      color: _textSecondary,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

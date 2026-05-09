@@ -101,6 +101,66 @@ class AppUpdateService {
     return launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<InstalledReleaseNotesResult> getInstalledReleaseNotes() async {
+    final platform = currentPlatform;
+    final packageInfo = await PackageInfo.fromPlatform();
+    final version = packageInfo.version.trim();
+    final buildNumber = packageInfo.buildNumber.trim();
+    final versionLabel =
+        buildNumber.isEmpty ? version : '$version (Build $buildNumber)';
+
+    if (platform.isEmpty) {
+      return InstalledReleaseNotesResult(
+        versionLabel: versionLabel,
+        notes: 'Release notes are not available for this platform.',
+      );
+    }
+
+    try {
+      final updateInfo = await checkForUpdate();
+      final currentBuild = int.tryParse(buildNumber) ?? 0;
+      if (updateInfo != null &&
+          updateInfo.latestVersion == version &&
+          updateInfo.latestBuildNumber == currentBuild &&
+          updateInfo.releaseNotes.trim().isNotEmpty) {
+        return InstalledReleaseNotesResult(
+          versionLabel: versionLabel,
+          notes: updateInfo.releaseNotes.trim(),
+        );
+      }
+
+      final appId = await _findReleaseNotesAppId(
+        version: version,
+        buildNumber: buildNumber,
+      );
+      if (appId == null) {
+        return InstalledReleaseNotesResult(
+          versionLabel: versionLabel,
+          notes:
+              'Release notes for the current installed version could not be found right now.',
+        );
+      }
+
+      final response = await _dio.getUri(
+        Uri.parse('${AppConfig.beatzLockAppsBaseUrl}release-notes/$appId/'),
+      );
+      final notes =
+          response.data is Map ? response.data['notes']?.toString().trim() : '';
+      return InstalledReleaseNotesResult(
+        versionLabel: versionLabel,
+        notes: (notes == null || notes.isEmpty)
+            ? 'No release notes are available for the current installed version.'
+            : notes,
+      );
+    } catch (_) {
+      return InstalledReleaseNotesResult(
+        versionLabel: versionLabel,
+        notes:
+            'Release notes for the current installed version could not be loaded right now.',
+      );
+    }
+  }
+
   Future<AppSelfUpdateResult> installUpdate(
     AppUpdateInfo info, {
     void Function(AppDownloadProgress progress)? onReceiveProgress,
@@ -266,6 +326,50 @@ class AppUpdateService {
     return savedPath;
   }
 
+  Future<int?> _findReleaseNotesAppId({
+    required String version,
+    required String buildNumber,
+  }) async {
+    final pageUris = [
+      Uri.parse('${AppConfig.beatzLockAppsBaseUrl}downloads/'),
+      Uri.parse('${AppConfig.beatzLockAppsBaseUrl}downloads/archive/'),
+    ];
+
+    for (final uri in pageUris) {
+      final response = await _dio.getUri(
+        uri,
+        options: Options(responseType: ResponseType.plain),
+      );
+      final html = response.data?.toString() ?? '';
+      final appId = _extractReleaseNotesAppId(
+        html,
+        version: version,
+        buildNumber: buildNumber,
+      );
+      if (appId != null) {
+        return appId;
+      }
+    }
+
+    return null;
+  }
+
+  int? _extractReleaseNotesAppId(
+    String html, {
+    required String version,
+    required String buildNumber,
+  }) {
+    final pattern = RegExp(r"openNotes\('([^']*)','([^']*)',(\d+)\)");
+    for (final match in pattern.allMatches(html)) {
+      final entryVersion = (match.group(1) ?? '').replaceAll(r"\'", "'").trim();
+      final entryBuild = (match.group(2) ?? '').replaceAll(r"\'", "'").trim();
+      if (entryVersion == version && entryBuild == buildNumber) {
+        return int.tryParse(match.group(3) ?? '');
+      }
+    }
+    return null;
+  }
+
   Future<void> _prepareDesktopUpdate(String installerPath) async {
     if (Platform.isWindows) {
       final scriptPath = await _writeWindowsUpdaterScript(
@@ -400,6 +504,16 @@ fi
         return 'Update check was cancelled.';
     }
   }
+}
+
+class InstalledReleaseNotesResult {
+  const InstalledReleaseNotesResult({
+    required this.versionLabel,
+    required this.notes,
+  });
+
+  final String versionLabel;
+  final String notes;
 }
 
 class AppSelfUpdateResult {
