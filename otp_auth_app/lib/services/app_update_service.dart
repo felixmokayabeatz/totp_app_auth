@@ -100,9 +100,14 @@ class AppUpdateService {
   }
 
   Future<bool> openUpdate(AppUpdateInfo info) async {
-    if (!info.canDownload) return false;
+    final uri = Uri.tryParse(_manualDownloadPageUrl(info));
+    if (uri == null) return false;
 
-    final uri = Uri.tryParse(info.preferredOpenUrl);
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<bool> openManualDownloadPage([AppUpdateInfo? info]) async {
+    final uri = Uri.tryParse(_manualDownloadPageUrl(info));
     if (uri == null) return false;
 
     return launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -212,8 +217,7 @@ class AppUpdateService {
       await _prepareDesktopUpdate(installerPath);
       return const AppSelfUpdateResult(
         started: true,
-        message:
-            'Update is ready. Click OK to install and restart BeatzLock.',
+        message: 'Update is ready. Click OK to install and restart BeatzLock.',
         requiresAppExit: true,
       );
     } on DioException catch (e) {
@@ -270,8 +274,7 @@ class AppUpdateService {
               DateTime.now().difference(startedAt).inMilliseconds / 1000;
           final averageBytesPerSecond =
               elapsedSeconds > 0 ? received / elapsedSeconds : null;
-          final secondsRemaining =
-              (averageBytesPerSecond != null &&
+          final secondsRemaining = (averageBytesPerSecond != null &&
                   averageBytesPerSecond > 0 &&
                   total > 0 &&
                   received <= total)
@@ -439,6 +442,12 @@ class AppUpdateService {
     return '.deb';
   }
 
+  String _manualDownloadPageUrl([AppUpdateInfo? info]) {
+    final pageUrl = info?.manualDownloadPageUrl ?? '';
+    if (pageUrl.isNotEmpty) return pageUrl;
+    return AppConfig.manualDownloadUrl;
+  }
+
   Future<String> _writeLinuxUpdaterScript(
     String installerPath, {
     required int appPid,
@@ -566,7 +575,10 @@ class AppDownloadProgress {
 
   String get etaLabel {
     final seconds = secondsRemaining;
-    if (seconds == null || seconds.isNaN || seconds.isInfinite || seconds <= 0) {
+    if (seconds == null ||
+        seconds.isNaN ||
+        seconds.isInfinite ||
+        seconds <= 0) {
       return 'ETA: Calculating...';
     }
     if (seconds >= 3600) {

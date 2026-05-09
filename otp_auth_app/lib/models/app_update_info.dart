@@ -32,8 +32,7 @@ class AppUpdateInfo {
 
   String get currentLabel => '$currentVersion (Build $currentBuildNumber)';
 
-  String get preferredOpenUrl =>
-      downloadUrl.trim().isNotEmpty ? downloadUrl : downloadsPageUrl;
+  String get manualDownloadPageUrl => downloadsPageUrl.trim();
 
   factory AppUpdateInfo.fromJson(Map<String, dynamic> json) {
     return AppUpdateInfo(

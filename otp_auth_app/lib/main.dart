@@ -289,7 +289,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       final opened = await _appUpdateService.openUpdate(info);
       if (!opened) {
-        debugPrint('Failed to open update URL: ${info.preferredOpenUrl}');
+        debugPrint('Failed to open manual update download page.');
       }
     } finally {
       if (mounted) {

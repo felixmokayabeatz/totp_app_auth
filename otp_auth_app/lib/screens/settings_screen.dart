@@ -674,6 +674,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _dividerLine(),
             ],
             _tappableTile(
+              icon: Icons.open_in_browser_rounded,
+              label: 'Manual Download',
+              sub: 'Open the downloads page and choose your installer',
+              onTap: _openManualDownloadPage,
+            ),
+            _dividerLine(),
+            _tappableTile(
               icon: Icons.info_outline_rounded,
               label: 'Version',
               sub: 'Current app version',
@@ -1231,6 +1238,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _openManualDownloadPage() async {
+    final opened = await _appUpdateService.openManualDownloadPage(_updateInfo);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          opened
+              ? 'Opening the manual download page.'
+              : 'Could not open the manual download page.',
+        ),
+        backgroundColor: opened ? _accent : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }

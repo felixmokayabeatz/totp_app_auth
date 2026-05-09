@@ -88,4 +88,6 @@ class AppConfig {
   static String get myRatingApiUrl => '${beatzLockAppsBaseUrl}api/ratings/me/';
 
   static String get rateAppUrl => '${beatzLockAppsBaseUrl}rate/';
+
+  static String get manualDownloadUrl => '${beatzLockAppsBaseUrl}downloads/';
 }
