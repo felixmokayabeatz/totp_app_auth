@@ -250,5 +250,33 @@
     "build_number": "24",
     "artifact_version": "1.6.9_24",
     "host_platform": "Windows"
+  },
+  {
+    "sequence": 19,
+    "platform": "windows",
+    "artifact_type": "installer",
+    "file": "beatzlock_1.6.10_25_x64.exe",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.6.10_25\\beatzlock_1.6.10_25_x64.exe",
+    "relative_path": "final_builds/windows/1.6.10_25/beatzlock_1.6.10_25_x64.exe",
+    "is_directory": false,
+    "timestamp": "2026-05-09T00:39:00",
+    "version": "1.6.10+25",
+    "build_number": "25",
+    "artifact_version": "1.6.10_25",
+    "host_platform": "Windows"
+  },
+  {
+    "sequence": 20,
+    "platform": "windows",
+    "artifact_type": "installer",
+    "file": "beatzlock_1.6.11_26_x64.exe",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.6.11_26\\beatzlock_1.6.11_26_x64.exe",
+    "relative_path": "final_builds/windows/1.6.11_26/beatzlock_1.6.11_26_x64.exe",
+    "is_directory": false,
+    "timestamp": "2026-05-09T08:55:06",
+    "version": "1.6.11+26",
+    "build_number": "26",
+    "artifact_version": "1.6.11_26",
+    "host_platform": "Windows"
   }
 ]
