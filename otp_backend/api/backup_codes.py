@@ -430,7 +430,7 @@ def build_backup_codes_pdf(
         text(margin + 18, block_y + 18, code, size=24, font="F2", color=heading_color)
         block_y -= block_height + 16
 
-    note_y = 110
+    note_y = 58
     rect(margin, note_y, page_width - (margin * 2), 86, fill=note_fill, stroke=note_stroke)
     text(margin + 18, note_y + 58, "Important", size=13, font="F2", color=note_heading)
     multiline(
