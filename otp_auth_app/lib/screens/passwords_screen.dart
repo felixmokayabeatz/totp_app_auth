@@ -30,7 +30,9 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   bool _isLoading = true;
   bool _isSyncing = false;
   bool _isImporting = false;
+  bool _isSelectionMode = false;
   String _searchQuery = '';
+  final Set<String> _selectedEntryIds = <String>{};
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
@@ -227,6 +229,30 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   }) async {
     final importedEntries =
         PasswordImportService().parse(contents, fileName: fileName);
+    if (importedEntries.isEmpty) {
+      if (!mounted) return;
+      setState(() => _isImporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No supported password items were found in that export.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await _confirmImportBeforeSaving(
+      fileName: fileName,
+      entryCount: importedEntries.length,
+    );
+    if (!mounted || confirmed != true) {
+      if (mounted) {
+        setState(() => _isImporting = false);
+      }
+      return;
+    }
+
     final result = await _saveImportedPasswordEntries(importedEntries);
     if (!mounted) return;
     setState(() => _isImporting = false);
@@ -236,6 +262,78 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         content: Text(result),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<bool?> _confirmImportBeforeSaving({
+    required String fileName,
+    required int entryCount,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        backgroundColor: _cardColor,
+        title: Text(
+          'Confirm import',
+          style: TextStyle(color: _textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Import $entryCount secure item${entryCount == 1 ? '' : 's'} from this file?',
+              style: TextStyle(
+                color: _textSecondary,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: _isDark ? 0.14 : 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _accent.withValues(alpha: 0.16),
+                ),
+              ),
+              child: Text(
+                fileName,
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Imported items will be saved into your encrypted vault. Duplicates can still be skipped.',
+              style: TextStyle(
+                color: _textSecondary,
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Import now'),
+          ),
+        ],
       ),
     );
   }
@@ -387,6 +485,200 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$day/$month/$year $hour:$minute';
+  }
+
+  List<PasswordEntry> _sortedEntries(Iterable<PasswordEntry> values) {
+    final entries = values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return entries;
+  }
+
+  List<PasswordEntry> _filteredEntriesFrom(List<PasswordEntry> entries) {
+    return entries.where((entry) {
+      if (_searchQuery.isEmpty) return true;
+      final context = _contextLabel(entry).toLowerCase();
+      return entry.title.toLowerCase().contains(_searchQuery) ||
+          entry.username.toLowerCase().contains(_searchQuery) ||
+          context.contains(_searchQuery);
+    }).toList();
+  }
+
+  void _toggleSelectionMode([bool? enabled]) {
+    if (!mounted) return;
+    setState(() {
+      _isSelectionMode = enabled ?? !_isSelectionMode;
+      if (!_isSelectionMode) {
+        _selectedEntryIds.clear();
+      }
+    });
+  }
+
+  void _toggleEntrySelection(String entryId) {
+    if (!mounted) return;
+    setState(() {
+      _isSelectionMode = true;
+      if (_selectedEntryIds.contains(entryId)) {
+        _selectedEntryIds.remove(entryId);
+      } else {
+        _selectedEntryIds.add(entryId);
+      }
+      if (_selectedEntryIds.isEmpty) {
+        _isSelectionMode = false;
+      }
+    });
+  }
+
+  void _toggleSelectAllVisible(List<PasswordEntry> entries) {
+    if (!mounted) return;
+    final visibleIds = entries.map((entry) => entry.id).toSet();
+    setState(() {
+      _isSelectionMode = true;
+      final allVisibleSelected = visibleIds.isNotEmpty &&
+          visibleIds.every((entryId) => _selectedEntryIds.contains(entryId));
+      if (allVisibleSelected) {
+        _selectedEntryIds.removeAll(visibleIds);
+      } else {
+        _selectedEntryIds.addAll(visibleIds);
+      }
+      if (_selectedEntryIds.isEmpty) {
+        _isSelectionMode = false;
+      }
+    });
+  }
+
+  Future<void> _deleteEntries(
+    List<PasswordEntry> entries, {
+    required bool deleteAll,
+  }) async {
+    if (entries.isEmpty) return;
+
+    final confirmationController = TextEditingController();
+    var acknowledged = false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final requiresPhrase = deleteAll;
+          final validPhrase =
+              confirmationController.text.trim().toUpperCase() == 'DELETE ALL';
+          final canDelete =
+              acknowledged && (!requiresPhrase || validPhrase);
+
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            backgroundColor: _cardColor,
+            title: Text(
+              deleteAll ? 'Delete all secure items' : 'Delete selected items',
+              style: TextStyle(color: _textPrimary),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  deleteAll
+                      ? 'This will remove all ${entries.length} secure item${entries.length == 1 ? '' : 's'} from this vault and sync that deletion to your other devices.'
+                      : 'This will remove ${entries.length} selected secure item${entries.length == 1 ? '' : 's'} from this vault and sync that deletion to your other devices.',
+                  style: TextStyle(
+                    color: _textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                CheckboxListTile(
+                  value: acknowledged,
+                  contentPadding: EdgeInsets.zero,
+                  activeColor: _accent,
+                  title: Text(
+                    'I understand this cannot be undone from the app.',
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: (value) {
+                    setDialogState(() => acknowledged = value ?? false);
+                  },
+                ),
+                if (deleteAll) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Type DELETE ALL to confirm.',
+                    style: TextStyle(
+                      color: _textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: confirmationController,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: const InputDecoration(
+                      hintText: 'DELETE ALL',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: canDelete
+                    ? () => Navigator.pop(dialogContext, true)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(deleteAll ? 'Delete everything' : 'Delete selected'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    confirmationController.dispose();
+
+    if (confirmed != true) return;
+
+    final box = _passwordBox ?? await _syncService.getPasswordBox();
+    final ids = entries.map((entry) => entry.id).toList(growable: false);
+    await box.deleteAll(ids);
+    for (final id in ids) {
+      await _syncService.markPasswordEntryDeleted(id);
+    }
+    if (await _syncService.isLoggedIn() && await _syncService.isSyncEnabled()) {
+      await _syncService.syncPasswordEntries();
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _selectedEntryIds.removeAll(ids);
+      if (_selectedEntryIds.isEmpty) {
+        _isSelectionMode = false;
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          deleteAll
+              ? 'All secure items deleted.'
+              : '${ids.length} secure item${ids.length == 1 ? '' : 's'} deleted.',
+        ),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Widget _buildInfoChip({
@@ -900,7 +1192,11 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     );
   }
 
-  Widget _buildEntryCard(PasswordEntry entry) {
+  Widget _buildEntryCard(
+    PasswordEntry entry, {
+    required bool selectionMode,
+    required bool isSelected,
+  }) {
     final contextLabel = _contextLabel(entry);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -917,9 +1213,12 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: _isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : _accent.withValues(alpha: 0.08),
+          color: isSelected
+              ? _accent.withValues(alpha: 0.85)
+              : _isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : _accent.withValues(alpha: 0.08),
+          width: isSelected ? 1.6 : 1,
         ),
         boxShadow: [
           BoxShadow(
@@ -929,14 +1228,30 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onLongPress: () => _toggleEntrySelection(entry.id),
+          onTap: selectionMode ? () => _toggleEntrySelection(entry.id) : null,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (selectionMode) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12, top: 10),
+                    child: Checkbox(
+                      value: isSelected,
+                      activeColor: _accent,
+                      onChanged: (_) => _toggleEntrySelection(entry.id),
+                    ),
+                  ),
+                ],
                 Container(
                   width: 58,
                   height: 58,
@@ -999,19 +1314,38 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      _showEntryDialog(existing: entry);
-                    } else if (value == 'delete') {
-                      _deleteEntry(entry);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
-                ),
+                if (selectionMode)
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? _accent.withValues(alpha: _isDark ? 0.22 : 0.14)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isSelected
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: isSelected ? _accent : _textSecondary,
+                      size: 22,
+                    ),
+                  )
+                else
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _showEntryDialog(existing: entry);
+                      } else if (value == 'delete') {
+                        _deleteEntry(entry);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -1089,7 +1423,9 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Reveal to unlock the saved password or encrypted note for ${_entryInitial(entry)}.',
+                      selectionMode
+                          ? 'Tap cards to pick several items, then use the top bar to delete them safely.'
+                          : 'Reveal to unlock the saved password or encrypted note for ${_entryInitial(entry)}.',
                       style: TextStyle(
                         color: _textSecondary,
                         height: 1.35,
@@ -1106,7 +1442,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 if (entry.username.trim().isNotEmpty)
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _copyUsername(entry),
+                      onPressed: selectionMode ? null : () => _copyUsername(entry),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         side: BorderSide(
@@ -1124,7 +1460,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton.icon(
-                    onPressed: () => _showPasswordSheet(entry),
+                    onPressed: selectionMode ? null : () => _showPasswordSheet(entry),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       foregroundColor: Colors.white,
@@ -1135,7 +1471,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                       ),
                     ),
                     icon: const Icon(Icons.visibility_rounded),
-                    label: const Text('Reveal'),
+                    label: Text(selectionMode ? 'Selected' : 'Reveal'),
                   ),
                 ),
               ],
@@ -1145,7 +1481,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
               children: [
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: () => _copyPassword(entry),
+                    onPressed: selectionMode ? null : () => _copyPassword(entry),
                     style: TextButton.styleFrom(
                       foregroundColor: _textPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1159,7 +1495,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 ),
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: () => _copyNote(entry),
+                    onPressed: selectionMode ? null : () => _copyNote(entry),
                     style: TextButton.styleFrom(
                       foregroundColor: _textPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1176,19 +1512,28 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
           ],
         ),
       ),
+      ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final box = _passwordBox;
+    final sortedEntries =
+        box == null ? <PasswordEntry>[] : _sortedEntries(box.values);
+    final filteredEntries = _filteredEntriesFrom(sortedEntries);
+    final allVisibleSelected = filteredEntries.isNotEmpty &&
+        filteredEntries.every((entry) => _selectedEntryIds.contains(entry.id));
 
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: AppBar(
-        title: const Text(
-          'Passwords & Notes',
-          style: TextStyle(
+        title: Text(
+          _isSelectionMode
+              ? '${_selectedEntryIds.length} selected'
+              : 'Passwords & Notes',
+          style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w700,
           ),
@@ -1196,23 +1541,92 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         backgroundColor: _accent,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            tooltip: 'Secure self text',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SecureSelfTextScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.chat_bubble_rounded),
-          ),
-          if (_canImportPasswords)
+          if (_isSelectionMode) ...[
             IconButton(
-              tooltip: 'Import passwords',
-              onPressed: _isImporting ? null : _importPasswords,
-              icon: _isImporting
+              tooltip:
+                  allVisibleSelected ? 'Clear visible selection' : 'Select all visible',
+              onPressed: filteredEntries.isEmpty
+                  ? null
+                  : () => _toggleSelectAllVisible(filteredEntries),
+              icon: Icon(
+                allVisibleSelected
+                    ? Icons.deselect_rounded
+                    : Icons.select_all_rounded,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Delete selected',
+              onPressed: _selectedEntryIds.isEmpty
+                  ? null
+                  : () => _deleteEntries(
+                        sortedEntries
+                            .where(
+                              (entry) => _selectedEntryIds.contains(entry.id),
+                            )
+                            .toList(),
+                        deleteAll: false,
+                      ),
+              icon: const Icon(Icons.delete_sweep_rounded),
+            ),
+            IconButton(
+              tooltip: 'Close selection',
+              onPressed: () => _toggleSelectionMode(false),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ] else ...[
+            IconButton(
+              tooltip: 'Secure self text',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SecureSelfTextScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.chat_bubble_rounded),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Vault actions',
+              onSelected: (value) {
+                if (value == 'select' && filteredEntries.isNotEmpty) {
+                  _toggleSelectionMode(true);
+                } else if (value == 'delete_all' && sortedEntries.isNotEmpty) {
+                  _deleteEntries(sortedEntries, deleteAll: true);
+                }
+              },
+              itemBuilder: (context) => [
+                if (filteredEntries.isNotEmpty)
+                  const PopupMenuItem(
+                    value: 'select',
+                    child: Text('Select multiple'),
+                  ),
+                if (sortedEntries.isNotEmpty)
+                  const PopupMenuItem(
+                    value: 'delete_all',
+                    child: Text('Delete all'),
+                  ),
+              ],
+            ),
+            if (_canImportPasswords)
+              IconButton(
+                tooltip: 'Import passwords',
+                onPressed: _isImporting ? null : _importPasswords,
+                icon: _isImporting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.upload_file_rounded),
+              ),
+            IconButton(
+              tooltip: 'Sync now',
+              onPressed: _isSyncing ? null : _syncNow,
+              icon: _isSyncing
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -1221,31 +1635,20 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.upload_file_rounded),
+                  : const Icon(Icons.sync_rounded),
             ),
-          IconButton(
-            tooltip: 'Sync now',
-            onPressed: _isSyncing ? null : _syncNow,
-            icon: _isSyncing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.sync_rounded),
-          ),
+          ],
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showEntryDialog(),
-        backgroundColor: _accent,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add'),
-      ),
+      floatingActionButton: _isSelectionMode
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _showEntryDialog(),
+              backgroundColor: _accent,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add'),
+            ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : box == null
@@ -1260,20 +1663,13 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                   child: ValueListenableBuilder(
                     valueListenable: box.listenable(),
                     builder: (context, Box<PasswordEntry> passwordBox, _) {
-                      final entries = passwordBox.values.toList()
-                        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+                      final entries = _sortedEntries(passwordBox.values);
 
                       if (entries.isEmpty) {
                         return ListView(children: [_buildEmptyState()]);
                       }
 
-                      final filteredEntries = entries.where((entry) {
-                        if (_searchQuery.isEmpty) return true;
-                        final context = _contextLabel(entry).toLowerCase();
-                        return entry.title.toLowerCase().contains(_searchQuery) ||
-                            entry.username.toLowerCase().contains(_searchQuery) ||
-                            context.contains(_searchQuery);
-                      }).toList();
+                      final filteredEntries = _filteredEntriesFrom(entries);
 
                       return ListView(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
@@ -1429,7 +1825,12 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                                 ),
                               ),
                             ),
-                          for (final entry in filteredEntries) _buildEntryCard(entry),
+                          for (final entry in filteredEntries)
+                            _buildEntryCard(
+                              entry,
+                              selectionMode: _isSelectionMode,
+                              isSelected: _selectedEntryIds.contains(entry.id),
+                            ),
                         ],
                       );
                     },
