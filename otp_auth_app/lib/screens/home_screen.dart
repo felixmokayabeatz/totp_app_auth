@@ -692,13 +692,13 @@ class _HomeScreenState extends State<HomeScreen>
                 ? const Color(0xFF1E1E32)
                 : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Recovery PDF approval'),
+        title: const Text('Recovery Codes PDF Approval'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$label wants this primary device to generate and save the recovery PDF.',
+              '$label wants this primary device to generate and save the Recovery Codes PDF.',
               style: TextStyle(
                 color: Theme.of(dialogContext).colorScheme.onSurface,
                 fontWeight: FontWeight.w700,
@@ -706,7 +706,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              'Approve this only if you started the request. BeatzLock will generate the required recovery PDF and save it to this device Downloads folder.',
+              'Approve this only if you started the request. BeatzLock will generate the required Recovery Codes PDF and save it to this device Downloads folder.',
               style: TextStyle(
                 color: Theme.of(dialogContext)
                     .colorScheme
@@ -741,23 +741,26 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
       _showSnackBar(
         denied
-            ? 'Denied the recovery PDF request from $label.'
+            ? 'Denied the Recovery Codes PDF request from $label.'
             : (_syncService.lastErrorMessage ??
-                'Could not deny that recovery PDF request.'),
+                'Could not deny that Recovery Codes PDF request.'),
         denied ? Colors.orange : Colors.red,
       );
       return;
     }
 
-    final savedPath = await _syncService.approveBackupCodeGenerationRequest(
-      requestId,
-      preferDarkTheme: Theme.of(context).brightness == Brightness.dark,
+    final savedPath = await _runWithBlockingProgress<String?>(
+      message: 'Saving Recovery Codes PDF to Downloads...',
+      action: () => _syncService.approveBackupCodeGenerationRequest(
+        requestId,
+        preferDarkTheme: Theme.of(context).brightness == Brightness.dark,
+      ),
     );
     if (!mounted) return;
     if (savedPath == null) {
       _showSnackBar(
         _syncService.lastErrorMessage ??
-            'Could not save the recovery PDF on this device.',
+            'Could not save the Recovery Codes PDF on this device.',
         Colors.red,
       );
       return;
@@ -787,7 +790,7 @@ class _HomeScreenState extends State<HomeScreen>
             Icon(Icons.picture_as_pdf_rounded, color: _accent),
             const SizedBox(width: 10),
             Text(
-              'Recovery PDF Saved',
+              'Recovery Codes PDF Saved',
               style: TextStyle(color: textPrimary),
             ),
           ],
@@ -797,7 +800,7 @@ class _HomeScreenState extends State<HomeScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Your BeatzLock recovery PDF was saved successfully.',
+              'Your BeatzLock Recovery Codes PDF was saved successfully.',
               style: TextStyle(color: textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 14),
@@ -881,13 +884,13 @@ class _HomeScreenState extends State<HomeScreen>
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(22),
                 ),
-                title: const Text('Recovery PDF required'),
+                title: const Text('Recovery Codes PDF Required'),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'You must save your recovery PDF and store it somewhere safe. It is required for account recovery if you ever lose access to your primary device.',
+                      'You must save your Recovery Codes PDF and store it somewhere safe. It is required for account recovery if you ever lose access to your primary device.',
                       style: TextStyle(
                         color: textColor,
                         fontWeight: FontWeight.w700,
@@ -897,10 +900,10 @@ class _HomeScreenState extends State<HomeScreen>
                     const SizedBox(height: 12),
                     Text(
                       isPrimary
-                          ? 'This is your primary device, so you need to save the recovery PDF here before continuing.'
+                          ? 'This is your primary device, so you need to save the Recovery Codes PDF here before continuing.'
                           : hasPendingRequest
-                              ? 'A recovery PDF request is already waiting on $primaryLabel.'
-                              : '$primaryLabel is your primary device. Send a request there so it can generate and save the recovery PDF.',
+                              ? 'A Recovery Codes PDF request is already waiting on $primaryLabel.'
+                              : '$primaryLabel is your primary device. Send a request there so it can generate and save the Recovery Codes PDF.',
                       style: TextStyle(
                         color: mutedColor,
                         height: 1.35,
@@ -932,14 +935,17 @@ class _HomeScreenState extends State<HomeScreen>
               await _appLockService.authenticateToUnlock(context);
           if (!mounted || !unlocked) return;
 
-          final savedPath = await _syncService.downloadBackupCodesPdf(
-            preferDarkTheme: Theme.of(context).brightness == Brightness.dark,
+          final savedPath = await _runWithBlockingProgress<String?>(
+            message: 'Saving Recovery Codes PDF to Downloads...',
+            action: () => _syncService.downloadBackupCodesPdf(
+              preferDarkTheme: Theme.of(context).brightness == Brightness.dark,
+            ),
           );
           if (!mounted) return;
           if (savedPath == null) {
             _showSnackBar(
               _syncService.lastErrorMessage ??
-                  'Could not save the recovery PDF right now.',
+                  'Could not save the Recovery Codes PDF right now.',
               Colors.red,
             );
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -960,7 +966,7 @@ class _HomeScreenState extends State<HomeScreen>
           if (requestedPrimaryLabel == null) {
             _showSnackBar(
               _syncService.lastErrorMessage ??
-                  'Could not send the recovery PDF request.',
+                  'Could not send the Recovery Codes PDF request.',
               Colors.red,
             );
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -970,7 +976,7 @@ class _HomeScreenState extends State<HomeScreen>
           }
 
           _showSnackBar(
-            'Sent a recovery PDF request to $requestedPrimaryLabel. Finish the save there to continue.',
+            'Sent a Recovery Codes PDF request to $requestedPrimaryLabel. Finish the save there to continue.',
             const Color(0xFF10B981),
           );
         }
@@ -2978,6 +2984,62 @@ class _HomeScreenState extends State<HomeScreen>
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
+  }
+
+  Future<T> _runWithBlockingProgress<T>({
+    required String message,
+    required Future<T> Function() action,
+  }) async {
+    var progressShown = false;
+    if (mounted) {
+      progressShown = true;
+      unawaited(
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => PopScope(
+            canPop: false,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor:
+                  Theme.of(dialogContext).brightness == Brightness.dark
+                      ? const Color(0xFF1E1E32)
+                      : Colors.white,
+              content: Row(
+                children: [
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2.8),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: TextStyle(
+                        color: Theme.of(dialogContext).colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
+
+    try {
+      return await action();
+    } finally {
+      if (mounted && progressShown) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
   }
 
   @override

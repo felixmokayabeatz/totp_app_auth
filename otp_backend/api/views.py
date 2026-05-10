@@ -1589,7 +1589,7 @@ class BackupCodeGenerationRequestViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(
                 {
                     'error': (
-                        'This is already your primary device. Save the recovery PDF here directly.'
+                        'This is already your primary device. Save the Recovery Codes PDF here directly.'
                     ),
                 },
                 status=status.HTTP_409_CONFLICT,
