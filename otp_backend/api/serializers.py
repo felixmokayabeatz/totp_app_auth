@@ -99,11 +99,14 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
     def get_is_current(self, obj):
         current_session_id = self.context.get('current_session_id')
         current_device_id = self.context.get('current_device_id')
+        current_device_fingerprint = self.context.get('current_device_fingerprint')
 
-        if current_session_id and str(obj.id) == str(current_session_id):
-            return True
-        if current_device_id and obj.device_id == current_device_id:
-            return True
+        if current_session_id:
+            return str(obj.id) == str(current_session_id)
+        if current_device_fingerprint and getattr(obj, 'device_fingerprint', ''):
+            return obj.device_fingerprint == current_device_fingerprint
+        if current_device_id:
+            return obj.device_id == current_device_id
         return False
 
 

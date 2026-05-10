@@ -104,6 +104,16 @@ def debug_print(*args, **kwargs):
 def get_current_active_device_session(request):
     auth = getattr(request, 'auth', None)
     session_id = auth.get('session_id') if hasattr(auth, 'get') else None
+    device_id = get_request_device_id(request)
+    device_fingerprint = get_request_device_fingerprint(request)
+
+    request_identity_session = None
+    if device_id or device_fingerprint:
+        request_identity_session = find_active_device_session(
+            request.user,
+            device_id=device_id,
+            device_fingerprint=device_fingerprint,
+        )
 
     if session_id:
         session = DeviceSession.objects.filter(
@@ -112,19 +122,15 @@ def get_current_active_device_session(request):
             is_active=True,
             revoked_at__isnull=True,
         ).first()
+        if (
+            request_identity_session is not None
+            and str(request_identity_session.id) != str(session_id)
+        ):
+            return request_identity_session
         if session is not None:
             return session
 
-    device_id = get_request_device_id(request)
-    device_fingerprint = get_request_device_fingerprint(request)
-    if not device_id and not device_fingerprint:
-        return None
-
-    return find_active_device_session(
-        request.user,
-        device_id=device_id,
-        device_fingerprint=device_fingerprint,
-    )
+    return request_identity_session
 
 
 def _format_passwordless_code(raw_code: str) -> str:
@@ -1517,6 +1523,19 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
     def _ensure_current_session(self):
         session = get_current_active_device_session(self.request)
         if session is not None:
+            current_device_id = get_request_device_id(self.request)
+            current_device_fingerprint = get_request_device_fingerprint(self.request)
+            if current_device_id or current_device_fingerprint:
+                return ensure_device_session(
+                    self.request.user,
+                    device_id=current_device_id,
+                    device_fingerprint=current_device_fingerprint,
+                    device_label=get_request_device_label(self.request),
+                    device_kind=get_request_device_kind(self.request),
+                    user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
+                    ip_address=extract_request_ip(self.request),
+                )
+
             session.device_label = get_request_device_label(self.request)
             session.device_kind = get_request_device_kind(self.request)
             session.user_agent = self.request.META.get('HTTP_USER_AGENT', '') or session.user_agent
@@ -1535,7 +1554,8 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
             return session
 
         current_device_id = get_request_device_id(self.request)
-        if not current_device_id:
+        current_device_fingerprint = get_request_device_fingerprint(self.request)
+        if not current_device_id and not current_device_fingerprint:
             return None
 
         had_revoked_session = DeviceSession.objects.filter(
@@ -1555,7 +1575,7 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         return ensure_device_session(
             self.request.user,
             device_id=current_device_id,
-            device_fingerprint=get_request_device_fingerprint(self.request),
+            device_fingerprint=current_device_fingerprint,
             device_label=get_request_device_label(self.request),
             device_kind=get_request_device_kind(self.request),
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),
@@ -1577,6 +1597,7 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
                 **self.get_serializer_context(),
                 'current_session_id': str(current_session.id) if current_session else request.auth.get('session_id'),
                 'current_device_id': get_request_device_id(request),
+                'current_device_fingerprint': get_request_device_fingerprint(request),
             },
         )
         return Response(serializer.data)
