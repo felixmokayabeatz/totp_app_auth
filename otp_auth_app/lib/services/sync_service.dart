@@ -2202,6 +2202,82 @@ class SyncService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getBackupCodeGenerationRequests() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage =
+          'You need to be signed in to review backup-code requests.';
+      return const [];
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.get(
+          'backup-code-requests/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+      return const [];
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not load backup-code requests.';
+      return const [];
+    } catch (_) {
+      _lastErrorMessage = 'Could not load backup-code requests.';
+      return const [];
+    }
+  }
+
+  Future<String?> createBackupCodeGenerationRequest() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage =
+          'You need to be signed in to request backup-code download.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'backup-code-requests/start/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        return data['primary_device_label']?.toString();
+      }
+      _lastErrorMessage = 'Could not send the backup-code request.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not send the backup-code request.';
+      return null;
+    } catch (_) {
+      _lastErrorMessage = 'Could not send the backup-code request.';
+      return null;
+    }
+  }
+
   Future<Directory> _resolveBackupCodesDirectory() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       return await getDownloadsDirectory() ??
@@ -2296,6 +2372,92 @@ class SyncService {
     } catch (e) {
       _lastErrorMessage = 'Unable to save backup codes on this device.';
       return null;
+    }
+  }
+
+  Future<String?> approveBackupCodeGenerationRequest(
+    String requestId, {
+    bool preferDarkTheme = false,
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage =
+          'You need to be signed in to approve backup-code requests.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'backup-code-requests/$requestId/approve/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+            'X-PDF-Theme': preferDarkTheme ? 'dark' : 'light',
+          }),
+          queryParameters: {
+            'pdf_theme': preferDarkTheme ? 'dark' : 'light',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        final encoded = data['pdf_base64']?.toString() ?? '';
+        final fileName = data['file_name']?.toString() ?? '';
+        if (encoded.isEmpty || fileName.isEmpty) {
+          _lastErrorMessage = 'Backup-code PDF payload was incomplete.';
+          return null;
+        }
+
+        final bytes = base64Decode(encoded);
+        return await _saveBackupCodesPdf(fileName: fileName, bytes: bytes);
+      }
+
+      _lastErrorMessage = 'Could not approve this backup-code request.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not approve this backup-code request.';
+      return null;
+    } catch (_) {
+      _lastErrorMessage = 'Could not save backup codes on this device.';
+      return null;
+    }
+  }
+
+  Future<bool> denyBackupCodeGenerationRequest(String requestId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage =
+          'You need to be signed in to deny backup-code requests.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'backup-code-requests/$requestId/deny/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not deny this backup-code request.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not deny this backup-code request.';
+      return false;
     }
   }
 

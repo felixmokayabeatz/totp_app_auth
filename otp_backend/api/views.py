@@ -1,3 +1,4 @@
+import base64
 from rest_framework import viewsets, status
 from rest_framework.decorators import (
     action,
@@ -35,6 +36,7 @@ from .backup_codes import (
 )
 from .models import (
     AppNotification,
+    BackupCodeGenerationRequest,
     BulkAccountDeleteRequest,
     DeviceSession,
     EncryptedData,
@@ -50,6 +52,7 @@ from .notifications import (
     create_accounts_imported_notification,
     create_app_pin_changed_notification,
     create_app_review_reply_notification,
+    create_backup_code_request_notification,
     create_bulk_delete_request_notification,
     create_daily_active_devices_notification,
     create_passwords_imported_notification,
@@ -72,6 +75,7 @@ from .device_sessions import (
 )
 from .serializers import (
     AppNotificationSerializer,
+    BackupCodeGenerationRequestSerializer,
     BulkAccountDeleteRequestSerializer,
     DeviceSessionSerializer,
     PasswordlessLoginRequestSerializer,
@@ -212,6 +216,58 @@ def _expire_stale_bulk_delete_requests(user: User | None = None):
         status=BulkAccountDeleteRequest.STATUS_EXPIRED,
         updated_at=timezone.now(),
     )
+
+
+def _expire_stale_backup_code_generation_requests(user: User | None = None):
+    queryset = BackupCodeGenerationRequest.objects.filter(
+        status=BackupCodeGenerationRequest.STATUS_PENDING,
+        expires_at__lt=timezone.now(),
+    )
+    if user is not None:
+        queryset = queryset.filter(user=user)
+    queryset.update(
+        status=BackupCodeGenerationRequest.STATUS_EXPIRED,
+        updated_at=timezone.now(),
+    )
+
+
+def _build_backup_code_pdf_payload(*, user: User, current_session: DeviceSession, pdf_theme: str):
+    codes = generate_backup_codes()
+    entries = build_backup_code_entries(codes)
+    encrypted_codes = encrypt_backup_codes(entries)
+
+    code_set = BackupCodeSet.objects.filter(user=user).first()
+    if code_set is None:
+        code_set = BackupCodeSet.objects.create(
+            user=user,
+            encrypted_codes=encrypted_codes,
+            last_used_at=None,
+        )
+    else:
+        code_set.encrypted_codes = encrypted_codes
+        code_set.last_used_at = None
+        code_set.save(update_fields=['encrypted_codes', 'last_used_at', 'updated_at'])
+    debug_print("[BACKUP CODES] Generated fresh backup codes and invalidated previous ones")
+
+    generated_at = timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p %Z')
+    pdf_bytes = build_backup_codes_pdf(
+        email=user.email or user.username,
+        account_name='BeatzLock Authenticator',
+        codes=codes,
+        generated_at=generated_at,
+        generated_from=current_session.device_label or 'Primary device',
+        theme=pdf_theme,
+    )
+
+    safe_username = ''.join(
+        char for char in user.username if char.isalnum() or char in ('-', '_')
+    ) or 'user'
+    filename = f"beatzlock_backup_codes_{safe_username}.pdf"
+    return {
+        'pdf_bytes': pdf_bytes,
+        'file_name': filename,
+        'generated_at': generated_at,
+    }
 
 
 def _apply_account_tombstones(user: User, account_ids: list[str]) -> int:
@@ -1470,6 +1526,207 @@ class BulkAccountDeleteRequestViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'success': True})
 
 
+class BackupCodeGenerationRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = BackupCodeGenerationRequestSerializer
+
+    def get_queryset(self):
+        _expire_stale_backup_code_generation_requests(self.request.user)
+        return BackupCodeGenerationRequest.objects.filter(
+            user=self.request.user,
+        ).order_by('-created_at')
+
+    def _ensure_primary_session(self):
+        current_session = get_current_active_device_session(self.request)
+        if current_session is None:
+            return None, Response(
+                {'error': 'This device could not be verified for backup-code approvals.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not current_session.is_primary:
+            return None, Response(
+                {'error': 'Only your current primary device can save backup-code PDFs.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return current_session, None
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()[:50]
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], url_path='start')
+    def start(self, request):
+        primary_session = ensure_primary_session(request.user)
+        current_session = get_current_active_device_session(request)
+        if primary_session is None:
+            return Response(
+                {
+                    'error': (
+                        'Backup-code download needs an active primary device. '
+                        'Open BeatzLock on your primary device first.'
+                    ),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        code_set = BackupCodeSet.objects.filter(user=request.user).first()
+        if code_set is not None and code_set.encrypted_codes:
+            return Response(
+                {'error': 'Recovery codes already exist for this account.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if current_session is None:
+            return Response(
+                {'error': 'This device could not be verified for a primary-device request.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if current_session.is_primary:
+            return Response(
+                {
+                    'error': (
+                        'This is already your primary device. Save the recovery PDF here directly.'
+                    ),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        existing_pending = BackupCodeGenerationRequest.objects.filter(
+            user=request.user,
+            status=BackupCodeGenerationRequest.STATUS_PENDING,
+            requester_device_id=get_request_device_id(request),
+        ).order_by('-created_at').first()
+        if existing_pending is not None:
+            return Response(
+                {
+                    'success': True,
+                    'request_id': str(existing_pending.id),
+                    'primary_device_label': primary_session.device_label,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        request_obj = BackupCodeGenerationRequest.objects.create(
+            user=request.user,
+            requester_device_id=get_request_device_id(request),
+            requester_device_label=get_request_device_label(request),
+            requester_device_kind=get_request_device_kind(request),
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+
+        create_backup_code_request_notification(
+            request.user,
+            requester_device_label=request_obj.requester_device_label,
+        )
+
+        return Response(
+            {
+                'success': True,
+                'request_id': str(request_obj.id),
+                'primary_device_label': primary_session.device_label,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve(self, request, pk=None):
+        current_session, error_response = self._ensure_primary_session()
+        if error_response is not None:
+            return error_response
+
+        request_obj = self.get_object()
+        if request_obj.status != BackupCodeGenerationRequest.STATUS_PENDING:
+            return Response(
+                {'error': 'This backup-code request is no longer pending.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if request_obj.expires_at <= timezone.now():
+            request_obj.status = BackupCodeGenerationRequest.STATUS_EXPIRED
+            request_obj.save(update_fields=['status', 'updated_at'])
+            return Response(
+                {'error': 'This backup-code request already expired.'},
+                status=status.HTTP_410_GONE,
+            )
+
+        payload = _build_backup_code_pdf_payload(
+            user=request.user,
+            current_session=current_session,
+            pdf_theme=get_request_pdf_theme(request),
+        )
+        generated_at = payload['generated_at']
+        pdf_bytes = payload['pdf_bytes']
+        file_name = payload['file_name']
+
+        request_obj.status = BackupCodeGenerationRequest.STATUS_COMPLETED
+        request_obj.approved_at = timezone.now()
+        request_obj.completed_at = timezone.now()
+        request_obj.reviewed_by_session = current_session
+        request_obj.save(
+            update_fields=[
+                'status',
+                'approved_at',
+                'completed_at',
+                'reviewed_by_session',
+                'updated_at',
+            ]
+        )
+
+        if request.user.email:
+            html_content = get_recovery_codes_generated_email_template(
+                request.user.username,
+                generated_at=generated_at,
+                device_label=current_session.device_label or '',
+            )
+            send_transactional_email(
+                subject='New recovery codes generated - BeatzLock Authenticator',
+                recipient=request.user.email,
+                text_content=get_recovery_codes_generated_email_text(
+                    request.user.username,
+                    generated_at=generated_at,
+                    device_label=current_session.device_label or '',
+                ),
+                html_content=html_content,
+                fail_silently=True,
+            )
+
+        create_recovery_codes_generated_notification(
+            request.user,
+            device_label=current_session.device_label,
+            generated_at=generated_at,
+        )
+
+        return Response(
+            {
+                'success': True,
+                'file_name': file_name,
+                'pdf_base64': base64.b64encode(pdf_bytes).decode('ascii'),
+                'generated_at': generated_at,
+            }
+        )
+
+    @action(detail=True, methods=['post'], url_path='deny')
+    def deny(self, request, pk=None):
+        current_session, error_response = self._ensure_primary_session()
+        if error_response is not None:
+            return error_response
+
+        request_obj = self.get_object()
+        if request_obj.status != BackupCodeGenerationRequest.STATUS_PENDING:
+            return Response(
+                {'error': 'This backup-code request is no longer pending.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        request_obj.status = BackupCodeGenerationRequest.STATUS_DENIED
+        request_obj.reviewed_by_session = current_session
+        request_obj.save(update_fields=['status', 'reviewed_by_session', 'updated_at'])
+        return Response({'success': True})
+
+
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -2035,38 +2292,14 @@ def download_backup_codes(request):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        codes = generate_backup_codes()
-        entries = build_backup_code_entries(codes)
-        encrypted_codes = encrypt_backup_codes(entries)
-
-        code_set = BackupCodeSet.objects.filter(user=user).first()
-        if code_set is None:
-            code_set = BackupCodeSet.objects.create(
-                user=user,
-                encrypted_codes=encrypted_codes,
-                last_used_at=None,
-            )
-        else:
-            code_set.encrypted_codes = encrypted_codes
-            code_set.last_used_at = None
-            code_set.save(update_fields=['encrypted_codes', 'last_used_at', 'updated_at'])
-        debug_print("[BACKUP CODES] Generated fresh backup codes and invalidated previous ones")
-
-        generated_at = timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p %Z')
-
-        pdf_bytes = build_backup_codes_pdf(
-            email=user.email or user.username,
-            account_name='BeatzLock Authenticator',
-            codes=codes,
-            generated_at=generated_at,
-            generated_from=current_session.device_label or 'Primary device',
-            theme=get_request_pdf_theme(request),
+        payload = _build_backup_code_pdf_payload(
+            user=user,
+            current_session=current_session,
+            pdf_theme=get_request_pdf_theme(request),
         )
-
-        safe_username = ''.join(
-            char for char in user.username if char.isalnum() or char in ('-', '_')
-        ) or 'user'
-        filename = f"beatzlock_backup_codes_{safe_username}.pdf"
+        generated_at = payload['generated_at']
+        pdf_bytes = payload['pdf_bytes']
+        filename = payload['file_name']
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         response['Content-Length'] = str(len(pdf_bytes))
@@ -2114,13 +2347,26 @@ def get_backup_code_status(request):
     user = request.user
 
     try:
+        _expire_stale_backup_code_generation_requests(user)
         code_set = BackupCodeSet.objects.filter(user=user).first()
+        current_session = get_current_active_device_session(request)
+        primary_session = ensure_primary_session(user)
+        pending_request = BackupCodeGenerationRequest.objects.filter(
+            user=user,
+            status=BackupCodeGenerationRequest.STATUS_PENDING,
+            requester_device_id=get_request_device_id(request),
+        ).order_by('-created_at').first()
+
         if code_set is None or not code_set.encrypted_codes:
             return Response({
                 'has_codes': False,
                 'remaining_codes': 0,
                 'total_codes': 3,
                 'last_used_at': None,
+                'is_primary_device': current_session.is_primary if current_session else False,
+                'primary_device_label': primary_session.device_label if primary_session else '',
+                'pending_request_exists': pending_request is not None,
+                'pending_request_status': pending_request.status if pending_request is not None else '',
             })
 
         entries = normalize_backup_code_entries(
@@ -2132,6 +2378,10 @@ def get_backup_code_status(request):
             'total_codes': len(entries),
             'last_used_at': code_set.last_used_at.isoformat()
             if code_set.last_used_at else None,
+            'is_primary_device': current_session.is_primary if current_session else False,
+            'primary_device_label': primary_session.device_label if primary_session else '',
+            'pending_request_exists': pending_request is not None,
+            'pending_request_status': pending_request.status if pending_request is not None else '',
         })
     except Exception as e:
         error_details = traceback.format_exc()

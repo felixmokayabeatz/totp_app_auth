@@ -4,6 +4,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
     AppNotification,
+    BackupCodeGenerationRequest,
     BulkAccountDeleteRequest,
     DeviceSession,
     EncryptedData,
@@ -150,6 +151,22 @@ class BulkAccountDeleteRequestSerializer(serializers.ModelSerializer):
             'requested_count',
             'range_start_date',
             'range_end_date',
+            'status',
+            'expires_at',
+            'created_at',
+            'updated_at',
+            'approved_at',
+            'completed_at',
+        ]
+
+
+class BackupCodeGenerationRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BackupCodeGenerationRequest
+        fields = [
+            'id',
+            'requester_device_label',
+            'requester_device_kind',
             'status',
             'expires_at',
             'created_at',

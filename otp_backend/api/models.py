@@ -334,3 +334,56 @@ class BulkAccountDeleteRequest(models.Model):
             f"{self.user.username} - bulk delete {self.status} - "
             f"{self.requester_device_label}"
         )
+
+
+class BackupCodeGenerationRequest(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_DENIED = 'denied'
+    STATUS_COMPLETED = 'completed'
+    STATUS_EXPIRED = 'expired'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_DENIED, 'Denied'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_EXPIRED, 'Expired'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='backup_code_generation_requests',
+    )
+    requester_device_id = models.CharField(max_length=255, blank=True, default='')
+    requester_device_label = models.CharField(max_length=120, blank=True, default='Unknown device')
+    requester_device_kind = models.CharField(
+        max_length=20,
+        choices=DeviceSession.DEVICE_KIND_CHOICES,
+        default=DeviceSession.DEVICE_KIND_UNKNOWN,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+    expires_at = models.DateTimeField()
+    approved_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by_session = models.ForeignKey(
+        DeviceSession,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='reviewed_backup_code_generation_requests',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return (
+            f"{self.user.username} - backup codes {self.status} - "
+            f"{self.requester_device_label}"
+        )

@@ -40,6 +40,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'passwords_imported': 'Password imports',
     'passwordless_request': 'Passwordless approvals',
     'bulk_delete_request': 'OTP delete approvals',
+    'backup_code_request': 'Recovery PDF requests',
     'app_review_reply': 'Review replies',
     'active_devices_daily': 'Active-device summaries',
   };
@@ -119,6 +120,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.phonelink_lock_rounded;
       case 'bulk_delete_request':
         return Icons.delete_sweep_rounded;
+      case 'backup_code_request':
+        return Icons.download_for_offline_rounded;
       case 'app_review_reply':
         return Icons.rate_review_rounded;
       default:

@@ -10,6 +10,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from api.views import (
     AppNotificationViewSet,
     AuthViewSet,
+    BackupCodeGenerationRequestViewSet,
     BulkAccountDeleteRequestViewSet,
     DeviceSessionViewSet,
     PasswordlessLoginRequestViewSet,
@@ -48,6 +49,7 @@ router.register(r'notifications', AppNotificationViewSet, basename='notification
 router.register(r'device-sessions', DeviceSessionViewSet, basename='device-sessions')
 router.register(r'passwordless-requests', PasswordlessLoginRequestViewSet, basename='passwordless-requests')
 router.register(r'bulk-delete-requests', BulkAccountDeleteRequestViewSet, basename='bulk-delete-requests')
+router.register(r'backup-code-requests', BackupCodeGenerationRequestViewSet, basename='backup-code-requests')
 router.register(r'profile', ProfileViewSet, basename='profile')
 
 urlpatterns = [

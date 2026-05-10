@@ -62,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _canShowPasswordlessPrompt = false;
   bool _canShowBulkDeletePrompt = false;
   bool _isShowingApprovalPrompt = false;
+  bool _isShowingBackupCodeRequirementDialog = false;
   Timer? _passwordlessPollTimer;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
@@ -109,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
       await _showOfflineBackupReminderIfNeeded();
+      await _checkBackupCodeRequirement();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -245,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _pollPrimaryApprovalRequests() async {
     await _pollPasswordlessApprovalRequests();
     await _pollBulkDeleteApprovalRequests();
+    await _pollBackupCodeGenerationRequests();
   }
 
   Future<void> _pollPasswordlessApprovalRequests() async {
@@ -300,6 +303,34 @@ class _HomeScreenState extends State<HomeScreen>
     _isShowingApprovalPrompt = true;
     try {
       await _showBulkDeleteApprovalPrompt(pendingRequest);
+    } finally {
+      _isShowingApprovalPrompt = false;
+    }
+  }
+
+  Future<void> _pollBackupCodeGenerationRequests() async {
+    if (!mounted || !_canShowBulkDeletePrompt || _isShowingApprovalPrompt) {
+      return;
+    }
+
+    final requests = await _syncService.getBackupCodeGenerationRequests();
+    if (!mounted || requests.isEmpty) return;
+
+    Map<String, dynamic>? pendingRequest;
+    for (final item in requests) {
+      if ((item['status']?.toString() ?? '').toLowerCase() == 'pending') {
+        pendingRequest = item;
+        break;
+      }
+    }
+
+    if (pendingRequest == null) {
+      return;
+    }
+
+    _isShowingApprovalPrompt = true;
+    try {
+      await _showBackupCodeGenerationApprovalPrompt(pendingRequest);
     } finally {
       _isShowingApprovalPrompt = false;
     }
@@ -641,6 +672,311 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
+  Future<void> _showBackupCodeGenerationApprovalPrompt(
+    Map<String, dynamic> item,
+  ) async {
+    if (!mounted) return;
+
+    final requestId = item['id']?.toString() ?? '';
+    if (requestId.isEmpty) return;
+
+    final label =
+        item['requester_device_label']?.toString() ?? 'Unknown device';
+
+    final approved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor:
+            Theme.of(dialogContext).brightness == Brightness.dark
+                ? const Color(0xFF1E1E32)
+                : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Recovery PDF request'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$label asked this primary device to save the recovery-codes PDF.',
+              style: TextStyle(
+                color: Theme.of(dialogContext).colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Approve this to generate the required recovery PDF and save it to this device downloads folder.',
+              style: TextStyle(
+                color: Theme.of(dialogContext)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.78),
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Deny'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Save PDF'),
+          ),
+        ],
+      ),
+    );
+
+    if (approved == null) return;
+
+    final unlocked = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !unlocked) return;
+
+    if (!approved) {
+      final denied =
+          await _syncService.denyBackupCodeGenerationRequest(requestId);
+      if (!mounted) return;
+      _showSnackBar(
+        denied
+            ? 'Denied recovery PDF request from $label.'
+            : (_syncService.lastErrorMessage ??
+                'Could not deny that recovery PDF request.'),
+        denied ? Colors.orange : Colors.red,
+      );
+      return;
+    }
+
+    final savedPath = await _syncService.approveBackupCodeGenerationRequest(
+      requestId,
+      preferDarkTheme: Theme.of(context).brightness == Brightness.dark,
+    );
+    if (!mounted) return;
+    if (savedPath == null) {
+      _showSnackBar(
+        _syncService.lastErrorMessage ??
+            'Could not save the recovery PDF on this device.',
+        Colors.red,
+      );
+      return;
+    }
+
+    await _loadUnreadNotificationCount();
+    await _showBackupCodesSavedDialog(savedPath);
+  }
+
+  Future<void> _showBackupCodesSavedDialog(String savedPath) async {
+    if (!mounted) return;
+
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
+    final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
+    final textSecondary =
+        isDark ? Colors.white70 : theme.colorScheme.onSurfaceVariant;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.picture_as_pdf_rounded, color: _accent),
+            const SizedBox(width: 10),
+            Text(
+              'Recovery PDF Saved',
+              style: TextStyle(color: textPrimary),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'The BeatzLock recovery PDF was saved successfully.',
+              style: TextStyle(color: textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              savedPath,
+              style: TextStyle(
+                color: textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _checkBackupCodeRequirement() async {
+    if (!mounted || _isShowingApprovalPrompt || _isShowingBackupCodeRequirementDialog) {
+      return;
+    }
+
+    if (!await _syncService.isLoggedIn()) {
+      return;
+    }
+
+    final status = await _syncService.getBackupCodeStatus();
+    if (!mounted || status == null) return;
+    if (status['has_codes'] == true) return;
+
+    final isPrimary = status['is_primary_device'] == true;
+    final hasPendingRequest = status['pending_request_exists'] == true;
+    if (isPrimary) {
+      final requests = await _syncService.getBackupCodeGenerationRequests();
+      if (!mounted) return;
+      final hasPendingPrimaryRequest = requests.any(
+        (item) => (item['status']?.toString() ?? '').toLowerCase() == 'pending',
+      );
+      if (hasPendingPrimaryRequest) {
+        return;
+      }
+    }
+    final primaryLabel =
+        (status['primary_device_label']?.toString().trim() ?? '').isEmpty
+            ? 'your primary device'
+            : status['primary_device_label'].toString().trim();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted ||
+          _isShowingApprovalPrompt ||
+          _isShowingBackupCodeRequirementDialog) {
+        return;
+      }
+
+      _isShowingBackupCodeRequirementDialog = true;
+      try {
+        final action = await showDialog<String>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            final theme = Theme.of(dialogContext);
+            final isDark = theme.brightness == Brightness.dark;
+            final surfaceColor =
+                isDark ? const Color(0xFF1E1E32) : Colors.white;
+            final textColor = theme.colorScheme.onSurface;
+            final mutedColor = theme.colorScheme.onSurfaceVariant;
+
+            return AlertDialog(
+              backgroundColor: surfaceColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+              ),
+              title: const Text('Recovery PDF required'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'You must save your recovery-codes PDF and keep it somewhere safe. It is required for account recovery if you lose access to your primary device.',
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w700,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    isPrimary
+                        ? 'This device is your primary device, so you can save the PDF here now.'
+                        : hasPendingRequest
+                            ? 'A request to save the PDF is already waiting on $primaryLabel.'
+                            : 'Only $primaryLabel can save the PDF directly. You can send a request there now.',
+                    style: TextStyle(
+                      color: mutedColor,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, 'later'),
+                  child: const Text('Later'),
+                ),
+                if (!isPrimary && !hasPendingRequest)
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, 'request'),
+                    child: const Text('Send request'),
+                  ),
+                if (isPrimary)
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, 'download'),
+                    child: const Text('Save PDF now'),
+                  ),
+                if (!isPrimary && hasPendingRequest)
+                  FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, 'close'),
+                    child: const Text('Close'),
+                  ),
+              ],
+            );
+          },
+        );
+
+        if (!mounted) return;
+
+        if (action == 'download') {
+          final unlocked =
+              await _appLockService.authenticateToUnlock(context);
+          if (!mounted || !unlocked) return;
+
+          final savedPath = await _syncService.downloadBackupCodesPdf(
+            preferDarkTheme: Theme.of(context).brightness == Brightness.dark,
+          );
+          if (!mounted) return;
+          if (savedPath == null) {
+            _showSnackBar(
+              _syncService.lastErrorMessage ??
+                  'Could not save the recovery PDF right now.',
+              Colors.red,
+            );
+            return;
+          }
+
+          await _loadUnreadNotificationCount();
+          await _showBackupCodesSavedDialog(savedPath);
+          return;
+        }
+
+        if (action == 'request') {
+          final requestedPrimaryLabel =
+              await _syncService.createBackupCodeGenerationRequest();
+          if (!mounted) return;
+          if (requestedPrimaryLabel == null) {
+            _showSnackBar(
+              _syncService.lastErrorMessage ??
+                  'Could not send the recovery PDF request.',
+              Colors.red,
+            );
+            return;
+          }
+
+          _showSnackBar(
+            'Sent a recovery PDF request to $requestedPrimaryLabel.',
+            const Color(0xFF10B981),
+          );
+        }
+      } finally {
+        _isShowingBackupCodeRequirementDialog = false;
+      }
+    });
+  }
+
   Future<void> _initUserBox() async {
     _userBox = await _syncService.getUserBox();
     debugPrint(
@@ -803,6 +1139,7 @@ class _HomeScreenState extends State<HomeScreen>
           );
           await _loadUnreadNotificationCount();
           await _initializePasswordlessApprovals();
+          await _checkBackupCodeRequirement();
         }, tooltip: 'Settings'),
         _headerAction(
             isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
@@ -2570,6 +2907,7 @@ class _HomeScreenState extends State<HomeScreen>
     await _loadProfileData();
     await _loadUnreadNotificationCount();
     await _initializePasswordlessApprovals();
+    await _checkBackupCodeRequirement();
     _updateAllOTPs();
   }
 

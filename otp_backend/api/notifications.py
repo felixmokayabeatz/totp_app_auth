@@ -143,6 +143,28 @@ def create_bulk_delete_request_notification(
     )
 
 
+def create_backup_code_request_notification(
+    user: User,
+    *,
+    requester_device_label: str,
+) -> AppNotification:
+    return create_notification(
+        user,
+        "backup_code_request",
+        title="Backup codes requested",
+        message=(
+            f"{requester_device_label} asked your primary device to save the recovery-codes PDF."
+        ),
+        details=(
+            "Open BeatzLock on your primary device and approve the backup-code "
+            "download so the recovery PDF is saved safely."
+        ),
+        metadata={
+            "requester_device_label": requester_device_label,
+        },
+    )
+
+
 def create_password_changed_notification(
     user: User,
     *,

@@ -122,6 +122,31 @@ class DeleteOTPCodeAdmin(admin.ModelAdmin):
         return ()
 
 
+# @admin.register(BackupCodeSet)
+# class BackupCodeSetAdmin(admin.ModelAdmin):
+#     list_display = (
+#         "user",
+#         "created_at",
+#         "updated_at",
+#         "last_used_at",
+#     )
+#     search_fields = ("user__username", "user__email")
+#     readonly_fields = ("user", "encrypted_codes", "created_at", "updated_at", "last_used_at")
+
+#     def has_add_permission(self, request):
+#         return False
+
+#     def has_change_permission(self, request, obj=None):
+#         return False
+
+#     def has_delete_permission(self, request, obj=None):
+#         return False
+
+#     def get_list_display_links(self, request, list_display):
+#         return ()
+
+from django.contrib import admin
+
 @admin.register(BackupCodeSet)
 class BackupCodeSetAdmin(admin.ModelAdmin):
     list_display = (
@@ -130,21 +155,24 @@ class BackupCodeSetAdmin(admin.ModelAdmin):
         "updated_at",
         "last_used_at",
     )
-    search_fields = ("user__username", "user__email")
-    readonly_fields = ("user", "encrypted_codes", "created_at", "updated_at", "last_used_at")
 
+    search_fields = (
+        "user__username",
+        "user__email",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "last_used_at",
+    )
+
+    # Optional: make rows clickable
+    list_display_links = ("user",)
+
+    # Optional: prevent creating manually
     def has_add_permission(self, request):
         return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    def get_list_display_links(self, request, list_display):
-        return ()
-
 
 @admin.register(AppNotification)
 class AppNotificationAdmin(admin.ModelAdmin):
