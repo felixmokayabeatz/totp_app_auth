@@ -196,6 +196,71 @@ def create_account_added_notification(
     )
 
 
+def create_accounts_imported_notification(
+    user: User,
+    *,
+    imported_count: int,
+    skipped_count: int = 0,
+    source_label: str | None = None,
+) -> AppNotification:
+    source = source_label.strip() if source_label else ""
+    source_suffix = f" from {source}" if source else ""
+    message = (
+        f"Imported {imported_count} OTP account{'s' if imported_count != 1 else ''}{source_suffix}."
+    )
+    details = (
+        f"{imported_count} OTP account{'s were' if imported_count != 1 else ' was'} "
+        f"imported into your BeatzLock vault{source_suffix}."
+    )
+    if skipped_count > 0:
+        details = (
+            f"{details} {skipped_count} duplicate"
+            f"{'s were' if skipped_count != 1 else ' was'} skipped."
+        )
+
+    return create_notification(
+        user,
+        "accounts_imported",
+        title="Accounts imported",
+        message=message,
+        details=details,
+        metadata={
+            "imported_count": imported_count,
+            "skipped_count": skipped_count,
+            "source_label": source or None,
+        },
+    )
+
+
+def create_passwords_imported_notification(
+    user: User,
+    *,
+    imported_count: int,
+    source_label: str | None = None,
+) -> AppNotification:
+    source = source_label.strip() if source_label else ""
+    source_suffix = f" from {source}" if source else ""
+    message = (
+        f"Imported {imported_count} secure item{'s' if imported_count != 1 else ''}{source_suffix}."
+    )
+    details = (
+        f"{imported_count} secure password item{'s were' if imported_count != 1 else ' was'} "
+        f"imported into your encrypted vault{source_suffix}."
+    )
+
+    return create_notification(
+        user,
+        "passwords_imported",
+        title="Passwords imported",
+        message=message,
+        details=details,
+        metadata={
+            "imported_count": imported_count,
+            "source_label": source or None,
+        },
+    )
+
+
 def create_app_pin_changed_notification(
     user: User,
     *,

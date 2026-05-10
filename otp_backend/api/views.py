@@ -46,9 +46,11 @@ from .models import (
 from .notifications import (
     build_device_label,
     create_account_added_notification,
+    create_accounts_imported_notification,
     create_app_pin_changed_notification,
     create_app_review_reply_notification,
     create_daily_active_devices_notification,
+    create_passwords_imported_notification,
     create_passwordless_request_notification,
     create_password_changed_notification,
     create_recovery_code_used_notification,
@@ -1033,6 +1035,40 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             create_app_pin_changed_notification(
                 request.user,
                 device_label=device_label,
+            )
+            return Response({'success': True}, status=201)
+
+        if event_type == 'accounts_imported':
+            try:
+                imported_count = int(request.data.get('imported_count') or 0)
+                skipped_count = int(request.data.get('skipped_count') or 0)
+            except (TypeError, ValueError):
+                return Response({'error': 'imported_count must be a number'}, status=400)
+
+            if imported_count <= 0:
+                return Response({'error': 'imported_count must be greater than 0'}, status=400)
+
+            create_accounts_imported_notification(
+                request.user,
+                imported_count=imported_count,
+                skipped_count=max(0, skipped_count),
+                source_label=(request.data.get('source_label') or '').strip() or None,
+            )
+            return Response({'success': True}, status=201)
+
+        if event_type == 'passwords_imported':
+            try:
+                imported_count = int(request.data.get('imported_count') or 0)
+            except (TypeError, ValueError):
+                return Response({'error': 'imported_count must be a number'}, status=400)
+
+            if imported_count <= 0:
+                return Response({'error': 'imported_count must be greater than 0'}, status=400)
+
+            create_passwords_imported_notification(
+                request.user,
+                imported_count=imported_count,
+                source_label=(request.data.get('source_label') or '').strip() or None,
             )
             return Response({'success': True}, status=201)
 

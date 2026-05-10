@@ -35,7 +35,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'recovery_code_used': 'Recovery-code use',
     'recovery_codes_generated': 'Recovery-code PDFs',
     'account_added': 'Account additions',
+    'accounts_imported': 'Account imports',
     'app_pin_changed': 'App PIN changes',
+    'passwords_imported': 'Password imports',
     'passwordless_request': 'Passwordless approvals',
     'app_review_reply': 'Review replies',
     'active_devices_daily': 'Active-device summaries',
@@ -106,8 +108,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.picture_as_pdf_rounded;
       case 'account_added':
         return Icons.add_circle_outline_rounded;
+      case 'accounts_imported':
+        return Icons.playlist_add_check_circle_rounded;
       case 'app_pin_changed':
         return Icons.pin_rounded;
+      case 'passwords_imported':
+        return Icons.password_rounded;
       case 'passwordless_request':
         return Icons.phonelink_lock_rounded;
       case 'app_review_reply':

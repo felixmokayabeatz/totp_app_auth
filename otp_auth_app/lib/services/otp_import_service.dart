@@ -16,19 +16,30 @@ class OTPImportEntry {
 }
 
 class OTPImportService {
-  List<OTPImportEntry> parseCsv(String input) {
-    return _dedupe(_parseDelimitedRows(input, forcedDelimiter: ','));
+  List<OTPImportEntry> parseCsv(
+    String input, {
+    bool preserveDuplicates = false,
+  }) {
+    final entries = _parseDelimitedRows(input, forcedDelimiter: ',');
+    return preserveDuplicates ? entries : _dedupe(entries);
   }
 
-  List<OTPImportEntry> parse(String input) {
+  List<OTPImportEntry> parse(
+    String input, {
+    bool preserveDuplicates = false,
+  }) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return const [];
 
     final jsonEntries = _parseJson(trimmed);
-    if (jsonEntries.isNotEmpty) return jsonEntries;
+    if (jsonEntries.isNotEmpty) {
+      return preserveDuplicates ? jsonEntries : _dedupe(jsonEntries);
+    }
 
     final tableEntries = _parseDelimitedRows(trimmed);
-    if (tableEntries.isNotEmpty) return _dedupe(tableEntries);
+    if (tableEntries.isNotEmpty) {
+      return preserveDuplicates ? tableEntries : _dedupe(tableEntries);
+    }
 
     final entries = <OTPImportEntry>[];
     final uriMatches = RegExp(
@@ -40,7 +51,7 @@ class OTPImportService {
         (trimmed.startsWith('otpauth://') ||
             trimmed.startsWith('otpauth-migration://'))) {
       entries.addAll(_parseUri(trimmed));
-      return _dedupe(entries);
+      return preserveDuplicates ? entries : _dedupe(entries);
     }
 
     for (final match in uriMatches) {
@@ -48,43 +59,62 @@ class OTPImportService {
       entries.addAll(_parseUri(rawUri));
     }
 
-    return _dedupe(entries);
+    return preserveDuplicates ? entries : _dedupe(entries);
   }
 
   List<OTPImportEntry> _parseDelimitedRows(
     String input, {
     String? forcedDelimiter,
   }) {
-    final lines = input
-        .split(RegExp(r'\r?\n'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
-    if (lines.isEmpty) return const [];
-
     final delimiter = forcedDelimiter ?? _detectDelimiter(input);
-    final rows = lines
-        .map((line) => _splitDelimitedLine(line, delimiter))
-        .where((row) => row.length >= 2)
+    final rows = _parseDelimitedRecords(input, delimiter)
+        .map((row) => row.map((cell) => cell.trim()).toList())
+        .where((row) => row.any((cell) => cell.isNotEmpty))
         .toList();
     if (rows.isEmpty) return const [];
 
-    final firstRow = rows.first.map((cell) => cell.toLowerCase()).toList();
-    final hasHeader = firstRow.any((cell) => _secretHeaders.contains(cell));
+    final firstRow = rows.first.map(_normalizeHeader).toList();
+    if (_looksLikePasswordExportHeader(firstRow)) {
+      return const [];
+    }
+    final hasHeader = firstRow.any(
+      (cell) =>
+          _secretHeaders.contains(cell) ||
+          _serviceHeaders.contains(cell) ||
+          _accountHeaders.contains(cell) ||
+          _uriHeaders.contains(cell),
+    );
     final dataRows = hasHeader ? rows.skip(1).toList() : rows;
 
     int? serviceIndex;
     int? accountIndex;
     int? secretIndex;
+    int? issuerIndex;
+    int? uriIndex;
 
     if (hasHeader) {
       serviceIndex = _findHeaderIndex(firstRow, _serviceHeaders);
       accountIndex = _findHeaderIndex(firstRow, _accountHeaders);
       secretIndex = _findHeaderIndex(firstRow, _secretHeaders);
+      issuerIndex = _findHeaderIndex(firstRow, _issuerHeaders);
+      uriIndex = _findHeaderIndex(firstRow, _uriHeaders);
     }
 
     final entries = <OTPImportEntry>[];
     for (final row in dataRows) {
+      if (row.every((cell) => cell.trim().isEmpty)) {
+        continue;
+      }
+
+      final uriEntries = _extractUriEntries(
+        row,
+        uriIndex: uriIndex,
+      );
+      if (uriEntries.isNotEmpty) {
+        entries.addAll(uriEntries);
+        continue;
+      }
+
       final resolvedSecretIndex = secretIndex ??
           row.indexWhere((cell) => _isBase32Secret(_cleanSecret(cell)));
       if (resolvedSecretIndex < 0 || resolvedSecretIndex >= row.length) {
@@ -95,6 +125,7 @@ class OTPImportService {
       if (!_isBase32Secret(secret)) continue;
 
       final service = _readCell(row, serviceIndex) ??
+          _readCell(row, issuerIndex) ??
           (resolvedSecretIndex == 0 ? null : row.first.trim());
       if (service == null || service.trim().isEmpty) continue;
 
@@ -124,6 +155,8 @@ class OTPImportService {
     'site',
     'name',
     'account name',
+    'provider',
+    'company',
   };
 
   static const Set<String> _accountHeaders = {
@@ -133,6 +166,9 @@ class OTPImportService {
     'label',
     'account label',
     'login',
+    'user',
+    'user name',
+    'account_name',
   };
 
   static const Set<String> _secretHeaders = {
@@ -141,6 +177,54 @@ class OTPImportService {
     'otp secret',
     'totp secret',
     'key',
+    'token',
+    'shared secret',
+    'twofa secret',
+    'authenticator key',
+  };
+
+  static const Set<String> _issuerHeaders = {
+    'issuer',
+    'service',
+    'service name',
+    'provider',
+    'app',
+    'site',
+    'name',
+  };
+
+  static const Set<String> _uriHeaders = {
+    'uri',
+    'url',
+    'otpauth',
+    'otpauth url',
+    'otpauth_url',
+    'otp uri',
+    'otp url',
+    'migration uri',
+    'qr data',
+    'qr_data',
+  };
+
+  static const Set<String> _passwordExportHeaders = {
+    'password',
+    'login password',
+    'login_password',
+    'website',
+    'login uri',
+    'login_uri',
+    'login url',
+    'login_url',
+    'vault',
+    'vault name',
+    'vault_name',
+    'folder',
+    'notes',
+    'note',
+    'type',
+    'username',
+    'user name',
+    'login_username',
   };
 
   String _detectDelimiter(String input) {
@@ -152,24 +236,33 @@ class OTPImportService {
     return ',';
   }
 
-  List<String> _splitDelimitedLine(String line, String delimiter) {
+  List<List<String>> _parseDelimitedRecords(String input, String delimiter) {
+    final records = <List<String>>[];
     final cells = <String>[];
     final current = StringBuffer();
     var inQuotes = false;
     var index = 0;
 
-    while (index < line.length) {
-      final char = line[index];
+    while (index < input.length) {
+      final char = input[index];
       if (char == '"') {
-        final nextIsQuote = index + 1 < line.length && line[index + 1] == '"';
+        final nextIsQuote = index + 1 < input.length && input[index + 1] == '"';
         if (inQuotes && nextIsQuote) {
           current.write('"');
           index += 2;
           continue;
         }
         inQuotes = !inQuotes;
+      } else if (!inQuotes && (char == '\n' || char == '\r')) {
+        cells.add(current.toString());
+        current.clear();
+        if (char == '\r' && index + 1 < input.length && input[index + 1] == '\n') {
+          index++;
+        }
+        records.add(List<String>.from(cells));
+        cells.clear();
       } else if (char == delimiter && !inQuotes) {
-        cells.add(current.toString().trim());
+        cells.add(current.toString());
         current.clear();
       } else {
         current.write(char);
@@ -177,17 +270,25 @@ class OTPImportService {
       index++;
     }
 
-    cells.add(current.toString().trim());
-    return cells;
+    if (current.isNotEmpty || cells.isNotEmpty) {
+      cells.add(current.toString());
+      records.add(List<String>.from(cells));
+    }
+
+    return records;
   }
 
   int? _findHeaderIndex(List<String> row, Set<String> candidates) {
     for (var index = 0; index < row.length; index++) {
-      if (candidates.contains(row[index].trim())) {
+      if (candidates.contains(_normalizeHeader(row[index]))) {
         return index;
       }
     }
     return null;
+  }
+
+  String _normalizeHeader(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'[_\s]+'), ' ');
   }
 
   String? _readCell(List<String> row, int? index) {
@@ -210,6 +311,58 @@ class OTPImportService {
     return null;
   }
 
+  bool _looksLikePasswordExportHeader(List<String> headers) {
+    if (headers.isEmpty) return false;
+    var passwordSignals = 0;
+    for (final header in headers) {
+      if (_passwordExportHeaders.contains(header)) {
+        passwordSignals++;
+      }
+    }
+    return passwordSignals >= 2;
+  }
+
+  List<OTPImportEntry> _extractUriEntries(
+    List<String> row, {
+    int? uriIndex,
+  }) {
+    final candidates = <String>[];
+    if (uriIndex != null && uriIndex >= 0 && uriIndex < row.length) {
+      final direct = row[uriIndex].trim();
+      if (direct.isNotEmpty) {
+        candidates.add(direct);
+      }
+    }
+    for (final cell in row) {
+      final value = cell.trim();
+      if (value.isEmpty) continue;
+      if (value.toLowerCase().contains('otpauth://') ||
+          value.toLowerCase().contains('otpauth-migration://')) {
+        candidates.add(value);
+      }
+    }
+
+    final entries = <OTPImportEntry>[];
+    for (final candidate in candidates) {
+      final trimmed = candidate.trim();
+      if (trimmed.isEmpty) continue;
+      if (trimmed.startsWith('otpauth://') ||
+          trimmed.startsWith('otpauth-migration://')) {
+        entries.addAll(_parseUri(trimmed));
+        continue;
+      }
+      final matches = RegExp(
+        r'(otpauth(?:-migration)?://[^\s]+)',
+        caseSensitive: false,
+      ).allMatches(trimmed);
+      for (final match in matches) {
+        final rawUri = _trimUri(match.group(1) ?? '');
+        entries.addAll(_parseUri(rawUri));
+      }
+    }
+    return entries;
+  }
+
   List<OTPImportEntry> _parseJson(String input) {
     try {
       final decoded = jsonDecode(input);
@@ -219,25 +372,82 @@ class OTPImportService {
               ? decoded['accounts'] as List
               : const [];
 
-      return rawItems.whereType<Map>().map((item) {
-        final secret = item['secret']?.toString() ?? '';
-        final service = item['service']?.toString() ??
-            item['issuer']?.toString() ??
-            item['name']?.toString() ??
-            '';
-        return OTPImportEntry(
-          service: service.trim(),
-          secret: _cleanSecret(secret),
-          issuer: item['issuer']?.toString(),
-          accountLabel: item['account_label']?.toString() ??
-              item['accountLabel']?.toString(),
-        );
-      }).where((entry) {
-        return entry.service.isNotEmpty && _isBase32Secret(entry.secret);
-      }).toList();
+      return rawItems
+          .whereType<Map>()
+          .expand(_entriesFromJsonItem)
+          .where((entry) => entry.service.isNotEmpty && _isBase32Secret(entry.secret))
+          .toList();
     } catch (_) {
       return const [];
     }
+  }
+
+  List<OTPImportEntry> _entriesFromJsonItem(Map<dynamic, dynamic> item) {
+    final normalized = item.map(
+      (key, value) => MapEntry(_normalizeHeader(key.toString()), value),
+    );
+
+    final uriValue = _firstNonEmpty([
+      normalized['uri'],
+      normalized['otpauth'],
+      normalized['otpauth url'],
+      normalized['otpauth_url'],
+      normalized['otp uri'],
+      normalized['otp url'],
+      normalized['migration uri'],
+    ]);
+    if (uriValue != null &&
+        (uriValue.contains('otpauth://') ||
+            uriValue.contains('otpauth-migration://'))) {
+      return _parseUri(uriValue.trim());
+    }
+
+    if (_looksLikePasswordExportJson(normalized)) {
+      return const [];
+    }
+
+    final secret = _cleanSecret(_firstNonEmpty([
+          normalized['secret'],
+          normalized['secret key'],
+          normalized['otp secret'],
+          normalized['totp secret'],
+          normalized['totp_secret'],
+        ]) ??
+        '');
+    final service = _firstNonEmpty([
+      normalized['service'],
+      normalized['issuer'],
+      normalized['name'],
+      normalized['account name'],
+    ]);
+
+    if (service == null || service.trim().isEmpty || !_isBase32Secret(secret)) {
+      return const [];
+    }
+
+    return [
+      OTPImportEntry(
+        service: service.trim(),
+        secret: secret,
+        issuer: _firstNonEmpty([normalized['issuer']]),
+        accountLabel: _firstNonEmpty([
+          normalized['account label'],
+          normalized['account_label'],
+          normalized['label'],
+        ]),
+      ),
+    ];
+  }
+
+  bool _looksLikePasswordExportJson(Map<String, dynamic> normalized) {
+    var signals = 0;
+    for (final key in _passwordExportHeaders) {
+      final value = normalized[key];
+      if (value == null) continue;
+      if (value is String && value.trim().isEmpty) continue;
+      signals++;
+    }
+    return signals >= 2;
   }
 
   List<OTPImportEntry> _parseUri(String rawUri) {
@@ -460,7 +670,13 @@ class OTPImportService {
   }
 
   String _cleanSecret(String value) {
-    return value.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+    return value
+        .trim()
+        .replaceAll('"', '')
+        .replaceAll("'", '')
+        .replaceAll('-', '')
+        .replaceAll(RegExp(r'\s+'), '')
+        .toUpperCase();
   }
 
   bool _isBase32Secret(String value) {
@@ -469,6 +685,17 @@ class OTPImportService {
 
   String _trimUri(String value) {
     return value.replaceAll(RegExp(r'[\]\),.;]+$'), '');
+  }
+
+  String? _firstNonEmpty(List<dynamic> values) {
+    for (final value in values) {
+      if (value == null) continue;
+      final stringValue = value.toString().trim();
+      if (stringValue.isNotEmpty) {
+        return stringValue;
+      }
+    }
+    return null;
   }
 
   List<OTPImportEntry> _dedupe(List<OTPImportEntry> entries) {

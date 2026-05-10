@@ -2474,6 +2474,74 @@ class SyncService {
     }
   }
 
+  Future<bool> logAccountsImportedNotification({
+    required int importedCount,
+    int skippedCount = 0,
+    String? sourceLabel,
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'notifications/log-event/',
+          data: {
+            'event_type': 'accounts_imported',
+            'imported_count': importedCount,
+            'skipped_count': skippedCount,
+            'source_label': sourceLabel,
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> logPasswordsImportedNotification({
+    required int importedCount,
+    String? sourceLabel,
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'notifications/log-event/',
+          data: {
+            'event_type': 'passwords_imported',
+            'imported_count': importedCount,
+            'source_label': sourceLabel,
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<List<DeviceSessionInfo>> getActiveDeviceSessions() async {
     await _updateAuthHeader();
     _lastErrorMessage = null;

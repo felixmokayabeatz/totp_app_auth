@@ -602,6 +602,11 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         _headerAction(Icons.sync_rounded, _syncData,
             tooltip: 'Sync', loading: _isSyncing),
+        _headerAction(
+          Icons.delete_sweep_rounded,
+          _showBulkDeleteByDateDialog,
+          tooltip: 'Delete OTP accounts by date',
+        ),
         _headerAction(Icons.password_rounded, () async {
           final unlocked = await _appLockService.authenticateToUnlock(context);
           if (!mounted || !unlocked) return;
@@ -1399,6 +1404,371 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  DateTime _dateOnly(DateTime value) {
+    final local = value.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
+
+  String _formatAbsoluteDate(DateTime date) {
+    final local = date.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
+  }
+
+  List<OTPAccount> _accountsInDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    final box = _userBox;
+    if (box == null) return const [];
+
+    final start = _dateOnly(startDate);
+    final end = _dateOnly(endDate);
+    return box.values.where((account) {
+      final created = _dateOnly(account.createdAt);
+      return !created.isBefore(start) && !created.isAfter(end);
+    }).toList();
+  }
+
+  Future<void> _showBulkDeleteByDateDialog() async {
+    final box = _userBox;
+    if (box == null || box.isEmpty) {
+      _showSnackBar('No OTP accounts to delete right now.', Colors.orange);
+      return;
+    }
+
+    final isLoggedIn = await _syncService.isLoggedIn();
+    if (!mounted) return;
+
+    final now = DateTime.now();
+    var startDate = DateTime(now.year, now.month, now.day);
+    var endDate = DateTime(now.year, now.month, now.day);
+    var deleteEverywhere = false;
+
+    Future<DateTime?> pickDate(DateTime initialDate) {
+      return showDatePicker(
+        context: context,
+        initialDate: initialDate,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(now.year + 1, 12, 31),
+      );
+    }
+
+    final result = await showDialog<_BulkDeleteDateResult>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final start = _dateOnly(startDate);
+          final end = _dateOnly(endDate);
+          final validRange = !end.isBefore(start);
+          final matchCount =
+              validRange ? _accountsInDateRange(start, end).length : 0;
+
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                ? const Color(0xFF1E1E32)
+                : Colors.white,
+            title: const Text('Delete OTP Accounts By Date'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Choose a date range. Every OTP account added within that range will be selected for deletion.',
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final picked = await pickDate(startDate);
+                            if (picked == null) return;
+                            setDialogState(() => startDate = picked);
+                          },
+                          icon: const Icon(Icons.calendar_today_rounded),
+                          label: Text(_formatAbsoluteDate(startDate)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final picked = await pickDate(endDate);
+                            if (picked == null) return;
+                            setDialogState(() => endDate = picked);
+                          },
+                          icon: const Icon(Icons.event_available_rounded),
+                          label: Text(_formatAbsoluteDate(endDate)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ActionChip(
+                        label: const Text('Today'),
+                        onPressed: () {
+                          final today = DateTime(now.year, now.month, now.day);
+                          setDialogState(() {
+                            startDate = today;
+                            endDate = today;
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        label: const Text('Last 7 days'),
+                        onPressed: () {
+                          final today = DateTime(now.year, now.month, now.day);
+                          setDialogState(() {
+                            startDate =
+                                today.subtract(const Duration(days: 6));
+                            endDate = today;
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        label: const Text('Last 30 days'),
+                        onPressed: () {
+                          final today = DateTime(now.year, now.month, now.day);
+                          setDialogState(() {
+                            startDate =
+                                today.subtract(const Duration(days: 29));
+                            endDate = today;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  if (isLoggedIn)
+                    SwitchListTile(
+                      value: deleteEverywhere,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Delete everywhere'),
+                      subtitle: const Text(
+                        'Turn this on to remove the matching OTP accounts from all synced devices too.',
+                      ),
+                      onChanged: (value) {
+                        setDialogState(() => deleteEverywhere = value);
+                      },
+                    )
+                  else
+                    const Text(
+                      'Sign in if you want bulk deletion to remove OTP accounts everywhere. Offline mode can only delete them on this device.',
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    !validRange
+                        ? 'Choose an end date on or after the start date.'
+                        : '$matchCount OTP account${matchCount == 1 ? '' : 's'} match this range.',
+                    style: TextStyle(
+                      color: !validRange
+                          ? Colors.red
+                          : Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white70
+                              : Colors.grey.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: validRange && matchCount > 0
+                    ? () => Navigator.pop(
+                          dialogContext,
+                          _BulkDeleteDateResult(
+                            startDate: start,
+                            endDate: end,
+                            deleteEverywhere: deleteEverywhere,
+                          ),
+                        )
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      deleteEverywhere ? Colors.red : Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(
+                  deleteEverywhere ? 'Review permanent delete' : 'Delete local',
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (result == null) return;
+
+    final matches = _accountsInDateRange(result.startDate, result.endDate);
+    if (matches.isEmpty) {
+      _showSnackBar('No OTP accounts matched that date range.', Colors.orange);
+      return;
+    }
+
+    final confirmed = await _showBulkDeleteConfirmationDialog(
+      count: matches.length,
+      startDate: result.startDate,
+      endDate: result.endDate,
+      deleteEverywhere: result.deleteEverywhere,
+    );
+    if (!confirmed) return;
+
+    var deletedCount = 0;
+    var failedCount = 0;
+
+    if (result.deleteEverywhere) {
+      if (!await _syncService.isLoggedIn()) {
+        if (!mounted) return;
+        _showSnackBar(
+          'Sign in first to delete synced OTP accounts everywhere.',
+          Colors.orange,
+        );
+        return;
+      }
+
+      for (final account in matches) {
+        final ok = await _syncService.deleteAccountEverywhere(account.id);
+        if (ok) {
+          deletedCount++;
+          currentOTPs.remove(account.id);
+          timers.remove(account.id);
+          blurredCodes.remove(account.id);
+        } else {
+          failedCount++;
+        }
+      }
+    } else {
+      for (final account in matches) {
+        await _syncService.deleteAccountLocalOnly(account.id);
+        deletedCount++;
+        currentOTPs.remove(account.id);
+        timers.remove(account.id);
+        blurredCodes.remove(account.id);
+      }
+    }
+
+    await _initUserBox();
+    _updateAllOTPs();
+    if (!mounted) return;
+
+    setState(() {});
+    if (failedCount == 0) {
+      _showSnackBar(
+        result.deleteEverywhere
+            ? 'Deleted $deletedCount OTP account${deletedCount == 1 ? '' : 's'} everywhere.'
+            : 'Deleted $deletedCount OTP account${deletedCount == 1 ? '' : 's'} on this device.',
+        result.deleteEverywhere ? Colors.red : Colors.orange,
+      );
+    } else {
+      _showSnackBar(
+        'Deleted $deletedCount OTP account${deletedCount == 1 ? '' : 's'}, but $failedCount failed.',
+        Colors.orange,
+      );
+    }
+  }
+
+  Future<bool> _showBulkDeleteConfirmationDialog({
+    required int count,
+    required DateTime startDate,
+    required DateTime endDate,
+    required bool deleteEverywhere,
+  }) async {
+    var confirmationText = '';
+
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => StatefulBuilder(
+            builder: (dialogContext, setDialogState) {
+              final canDelete =
+                  confirmationText.trim().toUpperCase() == 'DELETE';
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                backgroundColor: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF1E1E32)
+                    : Colors.white,
+                title: Row(
+                  children: [
+                    Icon(
+                      deleteEverywhere
+                          ? Icons.warning_amber_rounded
+                          : Icons.delete_sweep_rounded,
+                      color: deleteEverywhere ? Colors.red : Colors.orange,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      deleteEverywhere
+                          ? 'Permanent OTP Deletion'
+                          : 'Delete OTP Accounts',
+                    ),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      deleteEverywhere
+                          ? 'This will permanently delete $count OTP account${count == 1 ? '' : 's'} added between ${_formatAbsoluteDate(startDate)} and ${_formatAbsoluteDate(endDate)} from all synced devices.'
+                          : 'This will delete $count OTP account${count == 1 ? '' : 's'} added between ${_formatAbsoluteDate(startDate)} and ${_formatAbsoluteDate(endDate)} from this device only.',
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Type DELETE to confirm.'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      onChanged: (value) {
+                        setDialogState(() => confirmationText = value);
+                      },
+                      decoration: const InputDecoration(
+                        hintText: 'DELETE',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: canDelete
+                        ? () => Navigator.pop(dialogContext, true)
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          deleteEverywhere ? Colors.red : Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(
+                      deleteEverywhere ? 'Delete everywhere' : 'Delete local',
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ) ??
+        false;
+  }
+
   String? _accountSubtitle(OTPAccount account) {
     final label = account.accountLabel?.trim();
     if (label != null && label.isNotEmpty) {
@@ -1575,8 +1945,7 @@ class _HomeScreenState extends State<HomeScreen>
       Color cardColor,
       Color textPrimary,
       Color textSecondary) async {
-    final TextEditingController confirmController = TextEditingController();
-    bool canDelete = false;
+    var confirmationText = '';
 
     return await showDialog<bool>(
           context: context,
@@ -1635,20 +2004,21 @@ class _HomeScreenState extends State<HomeScreen>
                     'Type "DELETE" below to confirm:',
                     style: TextStyle(color: textSecondary, fontSize: 12),
                   ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: confirmController,
-                    onChanged: (value) {
-                      setState(() {
-                        canDelete = value.toUpperCase() == 'DELETE';
-                      });
-                    },
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: canDelete ? Colors.red : textPrimary,
-                    ),
+                   const SizedBox(height: 8),
+                   TextField(
+                     onChanged: (value) {
+                       setState(() {
+                         confirmationText = value;
+                       });
+                     },
+                     textAlign: TextAlign.center,
+                     style: TextStyle(
+                       fontSize: 18,
+                       fontWeight: FontWeight.bold,
+                       color: confirmationText.trim().toUpperCase() == 'DELETE'
+                           ? Colors.red
+                           : textPrimary,
+                     ),
                     decoration: InputDecoration(
                       hintText: 'Type DELETE here',
                       hintStyle: TextStyle(color: textSecondary, fontSize: 14),
@@ -1670,15 +2040,13 @@ class _HomeScreenState extends State<HomeScreen>
               actions: [
                 TextButton(
                   onPressed: () {
-                    confirmController.dispose();
                     Navigator.pop(context, false);
                   },
                   child: Text('Cancel', style: TextStyle(color: textSecondary)),
                 ),
                 ElevatedButton(
-                  onPressed: canDelete
+                  onPressed: confirmationText.trim().toUpperCase() == 'DELETE'
                       ? () {
-                          confirmController.dispose();
                           Navigator.pop(context, true);
                         }
                       : null,
@@ -1956,4 +2324,16 @@ class _HomeScreenState extends State<HomeScreen>
     _passwordlessPollTimer?.cancel();
     super.dispose();
   }
+}
+
+class _BulkDeleteDateResult {
+  const _BulkDeleteDateResult({
+    required this.startDate,
+    required this.endDate,
+    required this.deleteEverywhere,
+  });
+
+  final DateTime startDate;
+  final DateTime endDate;
+  final bool deleteEverywhere;
 }

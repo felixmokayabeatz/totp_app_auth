@@ -500,10 +500,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _dividerLine(),
             _tappableTile(
               icon: Icons.download_rounded,
-              label: 'Import Accounts',
+              label: 'Import OTP Accounts',
               sub:
                   'Import CSV, otpauth links, or Google Authenticator QR exports',
               onTap: _showImportAccountsDialog,
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.upload_file_rounded,
+              label: 'Import Passwords',
+              sub:
+                  'Import CSV or JSON password exports into your encrypted password vault only',
+              onTap: () async {
+                if (!await _requireSignedIn(
+                  'Password import is available after you sign in.',
+                )) {
+                  return;
+                }
+                if (!context.mounted) return;
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
+                if (!context.mounted || !authenticated) return;
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PasswordsScreen(
+                      openImportOnStart: true,
+                    ),
+                  ),
+                );
+              },
             ),
             _dividerLine(),
             _tappableTile(
@@ -1564,7 +1590,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: _cardColor,
-          title: Text('Import Accounts', style: TextStyle(color: _textPrimary)),
+          title:
+              Text('Import OTP Accounts', style: TextStyle(color: _textPrimary)),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -1635,8 +1662,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     return;
                                   }
 
-                                  final entries =
-                                      OTPImportService().parse(file.content);
+                                  final entries = OTPImportService().parse(
+                                    file.content,
+                                    preserveDuplicates: true,
+                                  );
                                   setDialogState(() {
                                     selectedEntries = entries;
                                     selectedFileName = file.fileName;
@@ -1737,7 +1766,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         errorText = null;
                       });
 
-                      final result = await _importOtpEntries(selectedEntries);
+                      final result = await _importOtpEntries(
+                        selectedEntries,
+                        sourceLabel: selectedFileName,
+                      );
                       if (!dialogContext.mounted) return;
                       Navigator.pop(dialogContext);
                       if (!mounted) return;
@@ -1776,23 +1808,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<_ImportResult> _importOtpEntries(List<OTPImportEntry> entries) async {
+  Future<_ImportResult> _importOtpEntries(
+    List<OTPImportEntry> entries, {
+    String? sourceLabel,
+  }) async {
     final storage = SecureStorageService();
     final userId = await storage.read(SecureStorageService.currentUserKey) ??
         await storage.read(SecureStorageService.localVaultUserKey) ??
         'default_user';
     final userBox = await _syncService.getUserBox();
     final isSignedIn = await _syncService.isLoggedIn();
+    final existingKeys = userBox.values
+        .map((account) => _otpIdentityKey(account.service, account.accountLabel))
+        .toSet();
     var importedCount = 0;
     var skippedCount = 0;
 
     for (final entry in entries) {
-      final duplicate = userBox.values.any((account) {
-        return account.service.toLowerCase() == entry.service.toLowerCase() &&
-            (account.accountLabel ?? '').toLowerCase() ==
-                (entry.accountLabel ?? '').toLowerCase();
-      });
-      if (duplicate) {
+      final identityKey = _otpIdentityKey(entry.service, entry.accountLabel);
+      if (existingKeys.contains(identityKey)) {
         skippedCount++;
         continue;
       }
@@ -1808,15 +1842,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       await userBox.put(account.id, account);
       importedCount++;
+    }
 
-      if (isSignedIn) {
-        try {
-          await _syncService.logAccountAddedNotification(
-            serviceName: entry.service,
-            accountLabel: entry.accountLabel,
-          );
-        } catch (_) {}
-      }
+    if (isSignedIn && importedCount > 0) {
+      try {
+        await _syncService.logAccountsImportedNotification(
+          importedCount: importedCount,
+          skippedCount: skippedCount,
+          sourceLabel: sourceLabel,
+        );
+      } catch (_) {}
     }
 
     if (importedCount > 0 && isSignedIn && await _syncService.isSyncEnabled()) {
@@ -1827,6 +1862,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? 'No new accounts imported.'
         : 'Imported $importedCount account${importedCount == 1 ? '' : 's'}${skippedCount > 0 ? ', skipped $skippedCount duplicate${skippedCount == 1 ? '' : 's'}' : ''}.';
     return _ImportResult(importedCount, skippedCount, message);
+  }
+
+  String _otpIdentityKey(String service, String? accountLabel) {
+    return [
+      service.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
+      (accountLabel ?? '')
+          .trim()
+          .toLowerCase()
+          .replaceAll(RegExp(r'\s+'), ' '),
+    ].join('|');
   }
 
   Future<void> _downloadBackupCodes() async {

@@ -207,15 +207,8 @@ class MainActivity : FlutterFragmentActivity() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
-            putExtra(
-                Intent.EXTRA_MIME_TYPES,
-                arrayOf(
-                    "text/csv",
-                    "application/json",
-                    "text/plain",
-                    "application/octet-stream"
-                )
-            )
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         documentPickerLauncher.launch(intent)
     }

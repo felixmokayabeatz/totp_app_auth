@@ -732,6 +732,43 @@ class AppNotificationTests(APITestCase):
             ).exists()
         )
 
+    def test_log_accounts_imported_notification_creates_summary(self):
+        response = self.client.post(
+            reverse('notifications-log-event'),
+            {
+                'event_type': 'accounts_imported',
+                'imported_count': 71,
+                'skipped_count': 4,
+                'source_label': 'totp-export.csv',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            self.user.app_notifications.filter(
+                notification_type='accounts_imported'
+            ).exists()
+        )
+
+    def test_log_passwords_imported_notification_creates_summary(self):
+        response = self.client.post(
+            reverse('notifications-log-event'),
+            {
+                'event_type': 'passwords_imported',
+                'imported_count': 12,
+                'source_label': 'passwords.json',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            self.user.app_notifications.filter(
+                notification_type='passwords_imported'
+            ).exists()
+        )
+
 
 @override_settings(BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-review-secret')
 class ExternalReviewReplyNotificationTests(APITestCase):

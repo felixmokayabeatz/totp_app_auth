@@ -235,7 +235,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           return;
         }
 
-        await _saveImportedEntries(importedEntries);
+        await _saveImportedEntries(
+          importedEntries,
+          sourceLabel: 'scanned QR',
+        );
       } else {
         // Not a valid OTP auth QR code
         if (mounted) {
@@ -296,7 +299,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         return;
       }
 
-      final importedEntries = OTPImportService().parse(pickedFile.content);
+      final importedEntries = OTPImportService().parse(
+        pickedFile.content,
+        preserveDuplicates: true,
+      );
       if (importedEntries.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -313,7 +319,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
       final confirmed = await _confirmScannedEntries(importedEntries);
       if (confirmed == true) {
-        await _saveImportedEntries(importedEntries);
+        await _saveImportedEntries(
+          importedEntries,
+          sourceLabel: pickedFile.fileName,
+        );
       }
     } catch (_) {
       if (!mounted) return;
@@ -393,7 +402,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     return '${entry.service} - $label';
   }
 
-  Future<void> _saveImportedEntries(List<OTPImportEntry> entries) async {
+  Future<void> _saveImportedEntries(
+    List<OTPImportEntry> entries, {
+    String? sourceLabel,
+  }) async {
     final userId = await SecureStorageService()
             .read(SecureStorageService.currentUserKey) ??
         await SecureStorageService()
@@ -403,13 +415,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     final userBox = await syncService.getUserBox();
     final isSignedIn = await syncService.isLoggedIn();
     final shouldSync = isSignedIn && await syncService.isSyncEnabled();
+    final existingKeys = userBox.values
+        .map((account) => _accountIdentityKey(account.service, account.accountLabel))
+        .toSet();
     var importedCount = 0;
     var skippedCount = 0;
 
     for (final entry in entries) {
-      final duplicate = _hasDuplicateAccount(
-          userBox.values, entry.service, entry.accountLabel);
-      if (duplicate) {
+      final identityKey = _accountIdentityKey(entry.service, entry.accountLabel);
+      if (existingKeys.contains(identityKey)) {
         skippedCount++;
         continue;
       }
@@ -425,16 +439,17 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       );
       await userBox.put(account.id, account);
       importedCount++;
+    }
 
-      if (isSignedIn) {
-        try {
-          await syncService.logAccountAddedNotification(
-            serviceName: entry.service,
-            accountLabel: entry.accountLabel,
-          );
-        } catch (e) {
-          debugPrint('Scanned account notification log error: $e');
-        }
+    if (isSignedIn && importedCount > 0) {
+      try {
+        await syncService.logAccountsImportedNotification(
+          importedCount: importedCount,
+          skippedCount: skippedCount,
+          sourceLabel: sourceLabel,
+        );
+      } catch (e) {
+        debugPrint('Imported accounts notification log error: $e');
       }
     }
 
@@ -741,14 +756,19 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     String service,
     String? accountLabel,
   ) {
-    final normalizedService = _normalizeComparableText(service);
-    final normalizedLabel = _normalizeComparableText(accountLabel ?? '');
+    final identityKey = _accountIdentityKey(service, accountLabel);
 
     return accounts.any((account) {
-      return _normalizeComparableText(account.service) == normalizedService &&
-          _normalizeComparableText(account.accountLabel ?? '') ==
-              normalizedLabel;
+      return _accountIdentityKey(account.service, account.accountLabel) ==
+          identityKey;
     });
+  }
+
+  String _accountIdentityKey(String service, String? accountLabel) {
+    return [
+      _normalizeComparableText(service),
+      _normalizeComparableText(accountLabel ?? ''),
+    ].join('|');
   }
 
   String _normalizeComparableText(String value) {

@@ -14,7 +14,12 @@ import '../widgets/account_logo_badge.dart';
 import 'secure_self_text_screen.dart';
 
 class PasswordsScreen extends StatefulWidget {
-  const PasswordsScreen({super.key});
+  const PasswordsScreen({
+    super.key,
+    this.openImportOnStart = false,
+  });
+
+  final bool openImportOnStart;
 
   @override
   State<PasswordsScreen> createState() => _PasswordsScreenState();
@@ -52,6 +57,12 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       });
     });
     _loadVault();
+    if (widget.openImportOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _importPasswords();
+      });
+    }
   }
 
   @override
@@ -256,7 +267,10 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       return;
     }
 
-    final result = await _saveImportedPasswordEntries(importedEntries);
+    final result = await _saveImportedPasswordEntries(
+      importedEntries,
+      sourceLabel: fileName,
+    );
     if (!mounted) return;
     setState(() => _isImporting = false);
     final success = !result.toLowerCase().startsWith('could not');
@@ -342,7 +356,9 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   }
 
   Future<String> _saveImportedPasswordEntries(
-      List<PasswordImportEntry> entries) async {
+    List<PasswordImportEntry> entries, {
+    String? sourceLabel,
+  }) async {
     if (entries.isEmpty) {
       return 'No supported password items were found in that export.';
     }
@@ -372,6 +388,15 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         await _syncService.isLoggedIn() &&
         await _syncService.isSyncEnabled()) {
       await _syncService.syncPasswordEntries();
+    }
+
+    if (importedCount > 0 && await _syncService.isLoggedIn()) {
+      try {
+        await _syncService.logPasswordsImportedNotification(
+          importedCount: importedCount,
+          sourceLabel: sourceLabel,
+        );
+      } catch (_) {}
     }
 
     if (importedCount == 0) {
@@ -536,16 +561,15 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   }) async {
     if (entries.isEmpty) return;
 
-    final confirmationController = TextEditingController();
     var acknowledged = false;
+    var confirmationText = '';
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           final requiresPhrase = deleteAll;
-          final validPhrase =
-              confirmationController.text.trim().toUpperCase() == 'DELETE ALL';
+          final validPhrase = confirmationText.trim().toUpperCase() == 'DELETE ALL';
           final canDelete = acknowledged && (!requiresPhrase || validPhrase);
 
           return AlertDialog(
@@ -599,8 +623,9 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: confirmationController,
-                    onChanged: (_) => setDialogState(() {}),
+                    onChanged: (value) {
+                      setDialogState(() => confirmationText = value);
+                    },
                     decoration: const InputDecoration(
                       hintText: 'DELETE ALL',
                       border: OutlineInputBorder(),
@@ -629,8 +654,6 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         },
       ),
     );
-
-    confirmationController.dispose();
 
     if (confirmed != true) return;
 
