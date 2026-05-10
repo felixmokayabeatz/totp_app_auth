@@ -143,14 +143,40 @@ def _unfilter_png_scanlines(raw: bytes, width: int, height: int, bytes_per_pixel
 @lru_cache(maxsize=1)
 def _load_pdf_logo() -> dict[str, object]:
     logo_path = (
-        Path(__file__).resolve().parents[2]
-        / "otp_auth_app"
-        / "web"
-        / "favicon.png"
+        Path(__file__).resolve().parents[1]
+        / "static"
+        / "favicon"
+        / "app_icon.ico"
     )
     data = logo_path.read_bytes()
-    if data[:8] != b"\x89PNG\r\n\x1a\n":
-        raise ValueError("Unsupported logo format")
+
+    reserved, icon_type, count = struct.unpack("<HHH", data[:6])
+    if reserved != 0 or icon_type != 1 or count <= 0:
+        raise ValueError("Unsupported ICO logo format")
+
+    chosen_payload = None
+    chosen_score = -1
+    for index in range(count):
+        entry_offset = 6 + (index * 16)
+        width, height, _, _, _, _, size, offset = struct.unpack(
+            "<BBBBHHII",
+            data[entry_offset:entry_offset + 16],
+        )
+        actual_width = width or 256
+        actual_height = height or 256
+        payload = data[offset:offset + size]
+        if payload[:8] != b"\x89PNG\r\n\x1a\n":
+            continue
+
+        score = min(actual_width, 128) * min(actual_height, 128)
+        if score > chosen_score:
+            chosen_score = score
+            chosen_payload = payload
+
+    if chosen_payload is None:
+        raise ValueError("No PNG payload found in ICO logo")
+
+    data = chosen_payload
 
     offset = 8
     width = height = 0
@@ -223,6 +249,7 @@ def build_backup_codes_pdf(
     generated_at_display = (generated_at or "Just now").strip()
     generated_from_display = (generated_from or "Primary device").strip()
     logo = _load_pdf_logo()
+    title_text = "BeatzLock Authenticator"
 
     def esc(value: str) -> str:
         return (
@@ -281,6 +308,10 @@ def build_backup_codes_pdf(
             f"q {width:.2f} 0 0 {height:.2f} {x:.2f} {y_pos:.2f} cm /{name} Do Q"
         )
 
+    def estimated_text_width(value: str, size: int, *, weight: str = "regular") -> float:
+        factor = 0.60 if weight == "bold" else 0.53
+        return len(value) * size * factor
+
     def flatten_logo_rgb_stream() -> bytes:
         hero_bg_rgb = tuple(int(channel * 255) for channel in hero_bg)
         width = int(logo["width"])
@@ -304,14 +335,23 @@ def build_backup_codes_pdf(
         return zlib.compress(b"".join(b"\x00" + row for row in rows))
 
     rect(0, 0, page_width, page_height, fill=page_bg)
-    rect(0, page_height - 190, page_width, 190, fill=hero_bg)
-    rect(margin, page_height - 212, page_width - (margin * 2), 4, fill=hero_accent)
-    logo_size = 34
-    image(margin, y - 6, logo_size, logo_size, "ImLogo")
-    text(margin + logo_size + 14, y, "BeatzLock Auth", size=28, font="F2", color=hero_title)
+    rect(0, page_height - 220, page_width, 220, fill=hero_bg)
+    rect(margin, page_height - 242, page_width - (margin * 2), 4, fill=hero_accent)
+    logo_size = 48
+    logo_x = (page_width - logo_size) / 2
+    image(logo_x, y - 14, logo_size, logo_size, "ImLogo")
+    y -= 64
+    text(
+        (page_width - estimated_text_width(title_text, 28, weight="bold")) / 2,
+        y,
+        title_text,
+        size=28,
+        font="F2",
+        color=hero_title,
+    )
     y -= 34
     text(
-        margin,
+        (page_width - estimated_text_width("Backup recovery codes", 16, weight="bold")) / 2,
         y,
         "Backup recovery codes",
         size=16,
@@ -334,7 +374,7 @@ def build_backup_codes_pdf(
     rect(margin, y, info_width, card_height, fill=card_fill, stroke=card_stroke)
     rect(margin + info_width + 16, y, info_width, card_height, fill=card_fill, stroke=card_stroke)
     text(margin + 18, y + 108, "Account", size=11, font="F2", color=label_color)
-    text(margin + 18, y + 84, account_name, size=18, font="F2", color=heading_color)
+    text(margin + 18, y + 84, title_text, size=18, font="F2", color=heading_color)
     text(margin + 18, y + 54, "Generated", size=11, font="F2", color=label_color)
     for index, line in enumerate(bounded_lines(generated_at_display, width_chars=28, max_lines=2)):
         text(

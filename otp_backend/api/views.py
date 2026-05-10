@@ -2056,7 +2056,7 @@ def download_backup_codes(request):
 
         pdf_bytes = build_backup_codes_pdf(
             email=user.email or user.username,
-            account_name='BeatzLock Auth',
+            account_name='BeatzLock Authenticator',
             codes=codes,
             generated_at=generated_at,
             generated_from=current_session.device_label or 'Primary device',
