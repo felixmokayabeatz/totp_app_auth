@@ -28,6 +28,9 @@ class PasswordEntry {
   @HiveField(6)
   String? encryptedNote;
 
+  @HiveField(7)
+  DateTime updatedAt;
+
   String? _plainPassword;
   String? _plainNote;
 
@@ -39,9 +42,11 @@ class PasswordEntry {
     String? note,
     this.serverIP,
     required this.createdAt,
+    DateTime? updatedAt,
     String? userId,
   })  : encryptedPassword = '',
-        encryptedNote = null {
+        encryptedNote = null,
+        updatedAt = updatedAt ?? createdAt {
     if (userId != null && userId.isNotEmpty) {
       setPassword(password, userId);
       setNote(note, userId);
@@ -57,6 +62,7 @@ class PasswordEntry {
     _plainPassword = password;
     encryptedPassword =
         EncryptionService.encryptPasswordEntrySecret(password, userId);
+    touch();
   }
 
   String getPassword(String userId) {
@@ -79,6 +85,7 @@ class PasswordEntry {
     if (normalized.isEmpty) {
       encryptedNote = null;
       _plainNote = null;
+      touch();
       return;
     }
 
@@ -87,6 +94,7 @@ class PasswordEntry {
       normalized,
       userId,
     );
+    touch();
   }
 
   String? getNote(String userId) {
@@ -107,4 +115,8 @@ class PasswordEntry {
 
   String get password => encryptedPassword;
   String? get note => encryptedNote;
+
+  void touch() {
+    updatedAt = DateTime.now();
+  }
 }

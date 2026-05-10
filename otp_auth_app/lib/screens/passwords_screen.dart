@@ -515,6 +515,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         note: _buildImportedEncryptedNote(imported),
         serverIP: imported.url,
         createdAt: imported.createdAt ?? DateTime.now(),
+        updatedAt: imported.modifiedAt ?? imported.createdAt ?? DateTime.now(),
         userId: userId,
       );
       await box.put(entry.id, entry);
@@ -1040,6 +1041,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                             ? null
                             : serverController.text.trim(),
                         createdAt: existing?.createdAt ?? DateTime.now(),
+                        updatedAt: DateTime.now(),
                         userId: userId,
                       );
                       await box.put(entry.id, entry);

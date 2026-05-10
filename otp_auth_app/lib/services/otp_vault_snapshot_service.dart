@@ -108,6 +108,7 @@ class OtpVaultSnapshotService {
             'encrypted_note': entry.encryptedNote,
             'server_ip': entry.serverIP,
             'created_at': entry.createdAt.toIso8601String(),
+            'updated_at': entry.updatedAt.toIso8601String(),
           },
         )
         .toList(growable: false);
@@ -217,6 +218,9 @@ class OtpVaultSnapshotService {
         password: entry['encrypted_password']?.toString() ?? '',
         serverIP: entry['server_ip']?.toString(),
         createdAt: createdAt,
+        updatedAt:
+            DateTime.tryParse(entry['updated_at']?.toString() ?? '') ??
+                createdAt,
       );
       final encryptedNote = entry['encrypted_note']?.toString();
       restored.encryptedNote =

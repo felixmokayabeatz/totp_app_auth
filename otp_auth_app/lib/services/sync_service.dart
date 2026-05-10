@@ -1340,6 +1340,19 @@ class SyncService {
           continue;
         }
 
+        final cloudUpdatedAt = DateTime.tryParse(
+              rawEntry['updated_at']?.toString() ?? '',
+            ) ??
+            DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
+            DateTime.now();
+
+        final existing = localBox.get(id);
+        if (existing != null) {
+          if (!cloudUpdatedAt.isAfter(existing.updatedAt)) {
+            continue;
+          }
+        }
+
         final entry = PasswordEntry(
           id: id,
           title: rawEntry['title']?.toString() ?? 'Password',
@@ -1351,6 +1364,7 @@ class SyncService {
                 rawEntry['created_at']?.toString() ?? '',
               ) ??
               DateTime.now(),
+          updatedAt: cloudUpdatedAt,
           userId: userId,
         );
 
@@ -1735,6 +1749,7 @@ class SyncService {
           'note': entry.getNote(userId),
           'server_ip': entry.serverIP,
           'created_at': entry.createdAt.toIso8601String(),
+          'updated_at': entry.updatedAt.toIso8601String(),
         };
       }).toList(growable: false);
 
@@ -1847,12 +1862,20 @@ class SyncService {
       final deletedIds = {...cloudDeletedIds, ...localDeletedIds};
 
       for (final cloudEntry in cloudEntriesById.entries) {
-        if (deletedIds.contains(cloudEntry.key) ||
-            passwordBox.containsKey(cloudEntry.key)) {
+        if (deletedIds.contains(cloudEntry.key)) {
           continue;
         }
 
         final value = cloudEntry.value;
+        final cloudUpdatedAt = DateTime.tryParse(
+              value['updated_at']?.toString() ?? '',
+            ) ??
+            DateTime.tryParse(value['created_at']?.toString() ?? '') ??
+            DateTime.now();
+        final existing = passwordBox.get(cloudEntry.key);
+        if (existing != null && !cloudUpdatedAt.isAfter(existing.updatedAt)) {
+          continue;
+        }
         final entry = PasswordEntry(
           id: cloudEntry.key,
           title: value['title']?.toString() ?? 'Password',
@@ -1864,6 +1887,7 @@ class SyncService {
                 value['created_at']?.toString() ?? '',
               ) ??
               DateTime.now(),
+          updatedAt: cloudUpdatedAt,
           userId: userId,
         );
         await passwordBox.put(entry.id, entry);
@@ -1887,6 +1911,7 @@ class SyncService {
           'note': entry.getNote(userId),
           'server_ip': entry.serverIP,
           'created_at': entry.createdAt.toIso8601String(),
+          'updated_at': entry.updatedAt.toIso8601String(),
         });
       }
 
