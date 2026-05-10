@@ -692,13 +692,13 @@ class _HomeScreenState extends State<HomeScreen>
                 ? const Color(0xFF1E1E32)
                 : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Recovery PDF request'),
+        title: const Text('Recovery PDF approval'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$label asked this primary device to save the recovery-codes PDF.',
+              '$label wants this primary device to generate and save the recovery PDF.',
               style: TextStyle(
                 color: Theme.of(dialogContext).colorScheme.onSurface,
                 fontWeight: FontWeight.w700,
@@ -706,7 +706,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              'Approve this to generate the required recovery PDF and save it to this device downloads folder.',
+              'Approve this only if you started the request. BeatzLock will generate the required recovery PDF and save it to this device Downloads folder.',
               style: TextStyle(
                 color: Theme.of(dialogContext)
                     .colorScheme
@@ -741,7 +741,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
       _showSnackBar(
         denied
-            ? 'Denied recovery PDF request from $label.'
+            ? 'Denied the recovery PDF request from $label.'
             : (_syncService.lastErrorMessage ??
                 'Could not deny that recovery PDF request.'),
         denied ? Colors.orange : Colors.red,
@@ -797,7 +797,7 @@ class _HomeScreenState extends State<HomeScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'The BeatzLock recovery PDF was saved successfully.',
+              'Your BeatzLock recovery PDF was saved successfully.',
               style: TextStyle(color: textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 14),
@@ -836,6 +836,9 @@ class _HomeScreenState extends State<HomeScreen>
 
     final isPrimary = status['is_primary_device'] == true;
     final hasPendingRequest = status['pending_request_exists'] == true;
+    if (!isPrimary && hasPendingRequest) {
+      return;
+    }
     if (isPrimary) {
       final requests = await _syncService.getBackupCodeGenerationRequests();
       if (!mounted) return;
@@ -871,59 +874,53 @@ class _HomeScreenState extends State<HomeScreen>
             final textColor = theme.colorScheme.onSurface;
             final mutedColor = theme.colorScheme.onSurfaceVariant;
 
-            return AlertDialog(
-              backgroundColor: surfaceColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(22),
-              ),
-              title: const Text('Recovery PDF required'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'You must save your recovery-codes PDF and keep it somewhere safe. It is required for account recovery if you lose access to your primary device.',
-                    style: TextStyle(
-                      color: textColor,
-                      fontWeight: FontWeight.w700,
-                      height: 1.35,
+            return PopScope(
+              canPop: false,
+              child: AlertDialog(
+                backgroundColor: surfaceColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                title: const Text('Recovery PDF required'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'You must save your recovery PDF and store it somewhere safe. It is required for account recovery if you ever lose access to your primary device.',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    isPrimary
-                        ? 'This device is your primary device, so you can save the PDF here now.'
-                        : hasPendingRequest
-                            ? 'A request to save the PDF is already waiting on $primaryLabel.'
-                            : 'Only $primaryLabel can save the PDF directly. You can send a request there now.',
-                    style: TextStyle(
-                      color: mutedColor,
-                      height: 1.35,
+                    const SizedBox(height: 12),
+                    Text(
+                      isPrimary
+                          ? 'This is your primary device, so you need to save the recovery PDF here before continuing.'
+                          : hasPendingRequest
+                              ? 'A recovery PDF request is already waiting on $primaryLabel.'
+                              : '$primaryLabel is your primary device. Send a request there so it can generate and save the recovery PDF.',
+                      style: TextStyle(
+                        color: mutedColor,
+                        height: 1.35,
+                      ),
                     ),
-                  ),
+                  ],
+                ),
+                actions: [
+                  if (!isPrimary && !hasPendingRequest)
+                    FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext, 'request'),
+                      child: const Text('Send request'),
+                    ),
+                  if (isPrimary)
+                    FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext, 'download'),
+                      child: const Text('Save PDF now'),
+                    ),
                 ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, 'later'),
-                  child: const Text('Later'),
-                ),
-                if (!isPrimary && !hasPendingRequest)
-                  FilledButton(
-                    onPressed: () => Navigator.pop(dialogContext, 'request'),
-                    child: const Text('Send request'),
-                  ),
-                if (isPrimary)
-                  FilledButton(
-                    onPressed: () => Navigator.pop(dialogContext, 'download'),
-                    child: const Text('Save PDF now'),
-                  ),
-                if (!isPrimary && hasPendingRequest)
-                  FilledButton(
-                    onPressed: () => Navigator.pop(dialogContext, 'close'),
-                    child: const Text('Close'),
-                  ),
-              ],
             );
           },
         );
@@ -945,6 +942,9 @@ class _HomeScreenState extends State<HomeScreen>
                   'Could not save the recovery PDF right now.',
               Colors.red,
             );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _checkBackupCodeRequirement();
+            });
             return;
           }
 
@@ -963,11 +963,14 @@ class _HomeScreenState extends State<HomeScreen>
                   'Could not send the recovery PDF request.',
               Colors.red,
             );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _checkBackupCodeRequirement();
+            });
             return;
           }
 
           _showSnackBar(
-            'Sent a recovery PDF request to $requestedPrimaryLabel.',
+            'Sent a recovery PDF request to $requestedPrimaryLabel. Finish the save there to continue.',
             const Color(0xFF10B981),
           );
         }
