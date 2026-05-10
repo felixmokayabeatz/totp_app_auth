@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:file_selector_windows/file_selector_windows.dart';
 
 import '../models/password_entry.dart';
 import '../services/app_lock_service.dart';
@@ -21,6 +22,8 @@ class PasswordsScreen extends StatefulWidget {
 }
 
 class _PasswordsScreenState extends State<PasswordsScreen> {
+  static const MethodChannel _filePickerChannel =
+      MethodChannel('com.beatzlock.otp/file_picker');
   final SyncService _syncService = SyncService();
   final AppLockService _appLockService = AppLockService();
   final SecureStorageService _secureStorage = SecureStorageService();
@@ -140,20 +143,13 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   Future<void> _importPasswordsFromFile() async {
     setState(() => _isImporting = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['csv', 'json'],
-        allowMultiple: false,
-        withData: true,
-      );
-      if (!mounted || result == null || result.files.isEmpty) {
+      final importFile = await _pickImportFile();
+      if (!mounted || importFile == null) {
         if (mounted) setState(() => _isImporting = false);
         return;
       }
 
-      final file = result.files.single;
-      final fileName = file.name;
-      final lower = fileName.toLowerCase();
+      final lower = importFile.fileName.toLowerCase();
       if (!lower.endsWith('.csv') && !lower.endsWith('.json')) {
         if (!mounted) return;
         setState(() => _isImporting = false);
@@ -167,16 +163,10 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         return;
       }
 
-      String contents;
-      if (file.bytes != null) {
-        contents = utf8.decode(file.bytes!, allowMalformed: true);
-      } else if (file.path != null && file.path!.isNotEmpty) {
-        contents = await File(file.path!).readAsString();
-      } else {
-        throw Exception('The selected file could not be read.');
-      }
-
-      await _finishPasswordImport(contents, fileName: fileName);
+      await _finishPasswordImport(
+        importFile.contents,
+        fileName: importFile.fileName,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isImporting = false);
@@ -188,6 +178,51 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         ),
       );
     }
+  }
+
+  Future<_PickedImportFile?> _pickImportFile() async {
+    if (Platform.isWindows) {
+      final file = await FileSelectorWindows().openFile(
+        confirmButtonText: 'Import passwords',
+      );
+      if (file == null) {
+        return null;
+      }
+
+      return _PickedImportFile(
+        fileName: file.name,
+        contents: await file.readAsString(),
+      );
+    }
+
+    if (Platform.isAndroid) {
+      final payload = await _filePickerChannel.invokeMethod<dynamic>(
+        'pickPasswordImportFile',
+      );
+      if (payload == null) {
+        return null;
+      }
+
+      final fileMap = Map<String, dynamic>.from(payload as Map);
+      final fileName =
+          fileMap['fileName']?.toString().trim().isNotEmpty == true
+              ? fileMap['fileName'].toString().trim()
+              : 'password-import';
+      final rawBytes = fileMap['bytes'];
+      if (rawBytes is! Uint8List && rawBytes is! List) {
+        throw Exception('The selected file could not be read.');
+      }
+
+      final bytes = rawBytes is Uint8List
+          ? rawBytes
+          : Uint8List.fromList(List<int>.from(rawBytes as List));
+      return _PickedImportFile(
+        fileName: fileName,
+        contents: utf8.decode(bytes, allowMalformed: true),
+      );
+    }
+
+    throw Exception('Password file import is not available on this device yet.');
   }
 
   Future<void> _finishPasswordImport(
@@ -1063,4 +1098,14 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 ),
     );
   }
+}
+
+class _PickedImportFile {
+  const _PickedImportFile({
+    required this.fileName,
+    required this.contents,
+  });
+
+  final String fileName;
+  final String contents;
 }

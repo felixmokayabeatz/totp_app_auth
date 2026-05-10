@@ -1,9 +1,13 @@
 package com.beatzlock.otp
 
+import android.app.Activity
 import android.content.ContentValues
+import android.content.Intent
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
+import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -11,6 +15,40 @@ import java.io.File
 import java.io.FileOutputStream
 
 class MainActivity : FlutterFragmentActivity() {
+    private var pendingDocumentPickerResult: MethodChannel.Result? = null
+
+    private val documentPickerLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { activityResult ->
+            val result = pendingDocumentPickerResult
+            pendingDocumentPickerResult = null
+
+            if (result == null) {
+                return@registerForActivityResult
+            }
+
+            if (activityResult.resultCode != Activity.RESULT_OK) {
+                result.success(null)
+                return@registerForActivityResult
+            }
+
+            val uri = activityResult.data?.data
+            if (uri == null) {
+                result.success(null)
+                return@registerForActivityResult
+            }
+
+            try {
+                val payload = readPickedDocument(uri)
+                result.success(payload)
+            } catch (error: Exception) {
+                result.error(
+                    "DOCUMENT_PICK_FAILED",
+                    error.message ?: "Unable to read the selected file.",
+                    null
+                )
+            }
+        }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -62,6 +100,37 @@ class MainActivity : FlutterFragmentActivity() {
                         result.error(
                             "DOWNLOAD_SAVE_FAILED",
                             error.message ?: "Unable to save file to Downloads.",
+                            null
+                        )
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.beatzlock.otp/file_picker"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pickPasswordImportFile" -> {
+                    if (pendingDocumentPickerResult != null) {
+                        result.error(
+                            "PICKER_BUSY",
+                            "A file picker is already open.",
+                            null
+                        )
+                        return@setMethodCallHandler
+                    }
+
+                    pendingDocumentPickerResult = result
+                    try {
+                        openDocumentPicker()
+                    } catch (error: Exception) {
+                        pendingDocumentPickerResult = null
+                        result.error(
+                            "DOCUMENT_PICK_FAILED",
+                            error.message ?: "Unable to open the document picker.",
                             null
                         )
                     }
@@ -131,5 +200,54 @@ class MainActivity : FlutterFragmentActivity() {
             output.write(bytes)
         }
         return file.absolutePath
+    }
+
+    private fun openDocumentPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf(
+                    "text/csv",
+                    "application/json",
+                    "text/plain",
+                    "application/octet-stream"
+                )
+            )
+        }
+        documentPickerLauncher.launch(intent)
+    }
+
+    private fun readPickedDocument(uri: android.net.Uri): Map<String, Any> {
+        val fileName = queryDisplayName(uri) ?: "password-import"
+        val mimeType = contentResolver.getType(uri) ?: ""
+        val bytes = contentResolver.openInputStream(uri)?.use { input ->
+            input.readBytes()
+        } ?: throw IllegalStateException("Could not read the selected file.")
+
+        return mapOf(
+            "fileName" to fileName,
+            "mimeType" to mimeType,
+            "bytes" to bytes
+        )
+    }
+
+    private fun queryDisplayName(uri: android.net.Uri): String? {
+        contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) {
+                    return cursor.getString(index)
+                }
+            }
+        }
+        return null
     }
 }

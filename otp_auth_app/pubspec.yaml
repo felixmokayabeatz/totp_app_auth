@@ -26,7 +26,6 @@ dependencies:
   path_provider: ^2.1.2
   http_parser: ^4.0.2
   file_selector_windows: ^0.9.3+5
-  file_picker: ^8.1.2
   local_auth: ^2.1.6
   package_info_plus: ^8.0.2
   url_launcher: ^6.3.1
