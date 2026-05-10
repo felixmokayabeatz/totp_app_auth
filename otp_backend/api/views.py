@@ -35,6 +35,7 @@ from .backup_codes import (
 )
 from .models import (
     AppNotification,
+    BulkAccountDeleteRequest,
     DeviceSession,
     EncryptedData,
     SyncLog,
@@ -49,6 +50,7 @@ from .notifications import (
     create_accounts_imported_notification,
     create_app_pin_changed_notification,
     create_app_review_reply_notification,
+    create_bulk_delete_request_notification,
     create_daily_active_devices_notification,
     create_passwords_imported_notification,
     create_passwordless_request_notification,
@@ -62,12 +64,15 @@ from .device_sessions import (
     ensure_primary_session,
     ensure_device_session,
     extract_request_ip,
+    find_active_device_session,
     get_request_device_id,
+    get_request_device_fingerprint,
     get_request_device_kind,
     get_request_device_label,
 )
 from .serializers import (
     AppNotificationSerializer,
+    BulkAccountDeleteRequestSerializer,
     DeviceSessionSerializer,
     PasswordlessLoginRequestSerializer,
     UserSerializer,
@@ -111,15 +116,15 @@ def get_current_active_device_session(request):
             return session
 
     device_id = get_request_device_id(request)
-    if not device_id:
+    device_fingerprint = get_request_device_fingerprint(request)
+    if not device_id and not device_fingerprint:
         return None
 
-    return DeviceSession.objects.filter(
-        user=request.user,
+    return find_active_device_session(
+        request.user,
         device_id=device_id,
-        is_active=True,
-        revoked_at__isnull=True,
-    ).order_by('-last_seen_at', '-created_at').first()
+        device_fingerprint=device_fingerprint,
+    )
 
 
 def _format_passwordless_code(raw_code: str) -> str:
@@ -175,6 +180,64 @@ def _expire_stale_passwordless_requests(user: User | None = None):
         status=PasswordlessLoginRequest.STATUS_EXPIRED,
         updated_at=timezone.now(),
     )
+
+
+def _expire_stale_bulk_delete_requests(user: User | None = None):
+    queryset = BulkAccountDeleteRequest.objects.filter(
+        status=BulkAccountDeleteRequest.STATUS_PENDING,
+        expires_at__lt=timezone.now(),
+    )
+    if user is not None:
+        queryset = queryset.filter(user=user)
+    queryset.update(
+        status=BulkAccountDeleteRequest.STATUS_EXPIRED,
+        updated_at=timezone.now(),
+    )
+
+
+def _apply_account_tombstones(user: User, account_ids: list[str]) -> int:
+    normalized_ids = []
+    seen = set()
+    for account_id in account_ids:
+        raw_id = str(account_id or '').strip()
+        if not raw_id or raw_id in seen:
+            continue
+        seen.add(raw_id)
+        normalized_ids.append(raw_id)
+
+    if not normalized_ids:
+        return 0
+
+    AccountTombstone.objects.bulk_create(
+        [
+            AccountTombstone(user=user, account_id=account_id)
+            for account_id in normalized_ids
+        ],
+        ignore_conflicts=True,
+    )
+
+    encrypted_data = EncryptedData.objects.filter(
+        user=user,
+        data_type='otp_accounts',
+    ).first()
+    if encrypted_data is not None:
+        try:
+            deleted_accounts = json.loads(encrypted_data.deleted_accounts) if encrypted_data.deleted_accounts else []
+        except Exception:
+            deleted_accounts = []
+        deleted_set = {str(item) for item in deleted_accounts}
+        changed = False
+        for account_id in normalized_ids:
+            if account_id in deleted_set:
+                continue
+            deleted_accounts.append(account_id)
+            deleted_set.add(account_id)
+            changed = True
+        if changed:
+            encrypted_data.deleted_accounts = json.dumps(deleted_accounts)
+            encrypted_data.save(update_fields=['deleted_accounts', 'updated_at'])
+
+    return len(normalized_ids)
 
 
 # ===================
@@ -474,6 +537,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         session = ensure_device_session(
             user,
             device_id=get_request_device_id(request),
+            device_fingerprint=get_request_device_fingerprint(request),
             device_label=get_request_device_label(request),
             device_kind=get_request_device_kind(request),
             user_agent=request.META.get('HTTP_USER_AGENT', ''),
@@ -1197,6 +1261,196 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'success': True, 'cleared_count': cleared_count})
 
 
+class BulkAccountDeleteRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = BulkAccountDeleteRequestSerializer
+
+    def get_queryset(self):
+        _expire_stale_bulk_delete_requests(self.request.user)
+        return BulkAccountDeleteRequest.objects.filter(
+            user=self.request.user,
+        ).order_by('-created_at')
+
+    def _ensure_primary_session(self):
+        current_session = get_current_active_device_session(self.request)
+        if current_session is None:
+            return None, Response(
+                {'error': 'This device could not be verified for primary approvals.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not current_session.is_primary:
+            return None, Response(
+                {'error': 'Only your current primary device can approve OTP delete requests.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return current_session, None
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()[:50]
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], url_path='start')
+    def start(self, request):
+        current_session = get_current_active_device_session(request)
+        primary_session = ensure_primary_session(request.user)
+        if primary_session is None:
+            return Response(
+                {
+                    'error': (
+                        'OTP delete approval needs an active primary device. '
+                        'Open BeatzLock on your primary device first.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        account_ids = request.data.get('account_ids')
+        if not isinstance(account_ids, list):
+            return Response({'error': 'account_ids must be a list.'}, status=400)
+
+        normalized_ids = []
+        seen = set()
+        for item in account_ids:
+            account_id = str(item or '').strip()
+            if not account_id or account_id in seen:
+                continue
+            seen.add(account_id)
+            normalized_ids.append(account_id)
+
+        if not normalized_ids:
+            return Response({'error': 'Choose at least one account.'}, status=400)
+
+        try:
+            start_date = timezone.datetime.fromisoformat(
+                str(request.data.get('range_start_date') or '')
+            ).date()
+            end_date = timezone.datetime.fromisoformat(
+                str(request.data.get('range_end_date') or '')
+            ).date()
+        except Exception:
+            return Response(
+                {'error': 'range_start_date and range_end_date must be ISO dates.'},
+                status=400,
+            )
+
+        if end_date < start_date:
+            return Response(
+                {'error': 'End date must be on or after the start date.'},
+                status=400,
+            )
+
+        if current_session is not None and current_session.is_primary:
+            return Response(
+                {
+                    'error': (
+                        'Open the local confirmation flow on this primary device '
+                        'instead of sending a remote approval request.'
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        existing_pending = BulkAccountDeleteRequest.objects.filter(
+            user=request.user,
+            status=BulkAccountDeleteRequest.STATUS_PENDING,
+        ).exists()
+        if existing_pending:
+            return Response(
+                {'error': 'A delete approval request is already pending.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        request_obj = BulkAccountDeleteRequest.objects.create(
+            user=request.user,
+            requester_device_id=get_request_device_id(request),
+            requester_device_label=get_request_device_label(request),
+            requester_device_kind=get_request_device_kind(request),
+            requested_count=len(normalized_ids),
+            range_start_date=start_date,
+            range_end_date=end_date,
+            account_ids=json.dumps(normalized_ids),
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
+
+        create_bulk_delete_request_notification(
+            request.user,
+            requester_device_label=request_obj.requester_device_label,
+            requested_count=request_obj.requested_count,
+            range_start_date=request_obj.range_start_date.isoformat(),
+            range_end_date=request_obj.range_end_date.isoformat(),
+        )
+
+        return Response(
+            {
+                'success': True,
+                'request_id': str(request_obj.id),
+                'primary_device_label': primary_session.device_label,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve(self, request, pk=None):
+        current_session, error_response = self._ensure_primary_session()
+        if error_response is not None:
+            return error_response
+
+        delete_request = self.get_object()
+        if delete_request.status != BulkAccountDeleteRequest.STATUS_PENDING:
+            return Response(
+                {'error': 'This delete request is no longer pending.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if delete_request.expires_at <= timezone.now():
+            delete_request.status = BulkAccountDeleteRequest.STATUS_EXPIRED
+            delete_request.save(update_fields=['status', 'updated_at'])
+            return Response({'error': 'This delete request already expired.'}, status=410)
+
+        try:
+            account_ids = json.loads(delete_request.account_ids or '[]')
+        except Exception:
+            account_ids = []
+        deleted_count = _apply_account_tombstones(request.user, account_ids)
+
+        delete_request.status = BulkAccountDeleteRequest.STATUS_COMPLETED
+        delete_request.approved_at = timezone.now()
+        delete_request.completed_at = timezone.now()
+        delete_request.reviewed_by_session = current_session
+        delete_request.save(
+            update_fields=[
+                'status',
+                'approved_at',
+                'completed_at',
+                'reviewed_by_session',
+                'updated_at',
+            ]
+        )
+        return Response({'success': True, 'deleted_count': deleted_count})
+
+    @action(detail=True, methods=['post'], url_path='deny')
+    def deny(self, request, pk=None):
+        current_session, error_response = self._ensure_primary_session()
+        if error_response is not None:
+            return error_response
+
+        delete_request = self.get_object()
+        if delete_request.status != BulkAccountDeleteRequest.STATUS_PENDING:
+            return Response(
+                {'error': 'This delete request is no longer pending.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        delete_request.status = BulkAccountDeleteRequest.STATUS_DENIED
+        delete_request.reviewed_by_session = current_session
+        delete_request.save(
+            update_fields=['status', 'reviewed_by_session', 'updated_at']
+        )
+        return Response({'success': True})
+
+
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -1301,6 +1555,7 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         return ensure_device_session(
             self.request.user,
             device_id=current_device_id,
+            device_fingerprint=get_request_device_fingerprint(self.request),
             device_label=get_request_device_label(self.request),
             device_kind=get_request_device_kind(self.request),
             user_agent=self.request.META.get('HTTP_USER_AGENT', ''),

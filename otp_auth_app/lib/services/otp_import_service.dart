@@ -208,13 +208,23 @@ class OTPImportService {
 
   static const Set<String> _passwordExportHeaders = {
     'password',
+    'passcode',
     'login password',
     'login_password',
+    'login username',
+    'login email',
+    'login_email',
     'website',
+    'site name',
+    'site_name',
+    'origin',
     'login uri',
     'login_uri',
     'login url',
     'login_url',
+    'urls',
+    'additional urls',
+    'additional_urls',
     'vault',
     'vault name',
     'vault_name',
@@ -222,6 +232,8 @@ class OTPImportService {
     'notes',
     'note',
     'type',
+    'item type',
+    'item_type',
     'username',
     'user name',
     'login_username',
@@ -314,12 +326,19 @@ class OTPImportService {
   bool _looksLikePasswordExportHeader(List<String> headers) {
     if (headers.isEmpty) return false;
     var passwordSignals = 0;
+    var otpSignals = 0;
     for (final header in headers) {
       if (_passwordExportHeaders.contains(header)) {
         passwordSignals++;
       }
+      if (_secretHeaders.contains(header) || _uriHeaders.contains(header)) {
+        otpSignals++;
+      }
     }
-    return passwordSignals >= 2;
+    if (passwordSignals >= 2) {
+      return true;
+    }
+    return passwordSignals >= 1 && otpSignals == 0;
   }
 
   List<OTPImportEntry> _extractUriEntries(

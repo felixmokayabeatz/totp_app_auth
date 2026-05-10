@@ -110,6 +110,39 @@ def create_passwordless_request_notification(
     )
 
 
+def create_bulk_delete_request_notification(
+    user: User,
+    *,
+    requester_device_label: str,
+    requested_count: int,
+    range_start_date: str,
+    range_end_date: str,
+) -> AppNotification:
+    message = (
+        f"{requester_device_label} wants to delete "
+        f"{requested_count} OTP account{'s' if requested_count != 1 else ''} everywhere."
+    )
+    details = (
+        f"{requester_device_label} requested a cross-device OTP vault deletion for "
+        f"{requested_count} account{'s' if requested_count != 1 else ''} "
+        f"from {range_start_date} to {range_end_date}. Approve it only if you "
+        "started that action yourself."
+    )
+    return create_notification(
+        user,
+        "bulk_delete_request",
+        title="OTP delete approval request",
+        message=message,
+        details=details,
+        metadata={
+            "requester_device_label": requester_device_label,
+            "requested_count": requested_count,
+            "range_start_date": range_start_date,
+            "range_end_date": range_end_date,
+        },
+    )
+
+
 def create_password_changed_notification(
     user: User,
     *,

@@ -39,6 +39,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'app_pin_changed': 'App PIN changes',
     'passwords_imported': 'Password imports',
     'passwordless_request': 'Passwordless approvals',
+    'bulk_delete_request': 'OTP delete approvals',
     'app_review_reply': 'Review replies',
     'active_devices_daily': 'Active-device summaries',
   };
@@ -116,6 +117,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.password_rounded;
       case 'passwordless_request':
         return Icons.phonelink_lock_rounded;
+      case 'bulk_delete_request':
+        return Icons.delete_sweep_rounded;
       case 'app_review_reply':
         return Icons.rate_review_rounded;
       default:

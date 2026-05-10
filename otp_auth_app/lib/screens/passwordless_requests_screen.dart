@@ -488,6 +488,21 @@ class _PasswordlessRequestsScreenState
                     '${_prettyStatus(item)}: ${_formatTimestamp(_statusTimestamp(item))}',
                     style: TextStyle(color: _textSecondary, fontSize: 12),
                   ),
+                if (!isPending && _canManageLogs) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isActing ? null : () => _deleteLog(item),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Delete encrypted log'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade400,
+                        side: BorderSide(color: Colors.red.shade300),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -564,15 +579,32 @@ class _PasswordlessRequestsScreenState
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              _canManageLogs
-                  ? 'These sign-in approval logs stay encrypted. This primary phone can delete individual history items or clear old logs.'
-                  : 'These sign-in approval logs stay encrypted. You can review them here, but only the current primary phone can delete or clear them.',
-              style: TextStyle(
-                color: _textSecondary,
-                fontSize: 12,
-                height: 1.4,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _canManageLogs
+                      ? 'These sign-in approval logs stay encrypted. This primary phone can delete individual history items or clear old logs.'
+                      : 'These sign-in approval logs stay encrypted. You can review them here, but only the current primary phone can delete or clear them.',
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+                if (_canManageLogs && _removableLogCount > 0) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _isActing ? null : _clearLogs,
+                    icon: const Icon(Icons.delete_sweep_rounded),
+                    label: const Text('Clear encrypted logs'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade400,
+                      side: BorderSide(color: Colors.red.shade300),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -591,14 +623,6 @@ class _PasswordlessRequestsScreenState
         ),
         backgroundColor: _accent,
         foregroundColor: Colors.white,
-        actions: [
-          if (_canManageLogs)
-            IconButton(
-              onPressed: _isActing || _removableLogCount == 0 ? null : _clearLogs,
-              tooltip: 'Clear encrypted logs',
-              icon: const Icon(Icons.delete_sweep_rounded),
-            ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

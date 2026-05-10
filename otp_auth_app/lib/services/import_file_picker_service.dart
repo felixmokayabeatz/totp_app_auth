@@ -22,20 +22,36 @@ class ImportFilePickerService {
       MethodChannel('com.beatzlock.otp/file_picker');
 
   bool get canPickOtpImportFile => Platform.isAndroid || Platform.isWindows;
+  bool get canPickPasswordImportFile =>
+      Platform.isAndroid || Platform.isWindows;
 
   Future<PickedImportFile?> pickOtpImportFile() async {
     if (Platform.isAndroid) {
-      return _pickAndroidImportFile();
+      return _pickAndroidImportFile('pickImportFile');
     }
     if (Platform.isWindows) {
-      return _pickWindowsImportFile();
+      return _pickWindowsImportFile(
+        confirmButtonText: 'Choose Import File',
+      );
     }
     return null;
   }
 
-  Future<PickedImportFile?> _pickAndroidImportFile() async {
+  Future<PickedImportFile?> pickPasswordImportFile() async {
+    if (Platform.isAndroid) {
+      return _pickAndroidImportFile('pickPasswordImportFile');
+    }
+    if (Platform.isWindows) {
+      return _pickWindowsImportFile(
+        confirmButtonText: 'Import passwords',
+      );
+    }
+    return null;
+  }
+
+  Future<PickedImportFile?> _pickAndroidImportFile(String methodName) async {
     final payload =
-        await _channel.invokeMapMethod<String, dynamic>('pickImportFile');
+        await _channel.invokeMapMethod<String, dynamic>(methodName);
     if (payload == null) return null;
 
     final fileName = payload['fileName']?.toString().trim();
@@ -48,9 +64,11 @@ class ImportFilePickerService {
     );
   }
 
-  Future<PickedImportFile?> _pickWindowsImportFile() async {
+  Future<PickedImportFile?> _pickWindowsImportFile({
+    required String confirmButtonText,
+  }) async {
     final file = await FileSelectorWindows().openFile(
-      confirmButtonText: 'Choose Import File',
+      confirmButtonText: confirmButtonText,
     );
     if (file == null) return null;
 

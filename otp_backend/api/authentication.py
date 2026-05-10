@@ -5,6 +5,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
 from .models import DeviceSession
+from .device_sessions import find_active_device_session, get_request_device_fingerprint
 
 
 class DeviceSessionJWTAuthentication(JWTAuthentication):
@@ -17,13 +18,13 @@ class DeviceSessionJWTAuthentication(JWTAuthentication):
         session_id = validated_token.get('session_id')
         if not session_id:
             device_id = request.headers.get('X-Device-ID', '').strip()
-            if device_id:
-                active_session = DeviceSession.objects.filter(
-                    user=user,
+            device_fingerprint = get_request_device_fingerprint(request)
+            if device_id or device_fingerprint:
+                active_session = find_active_device_session(
+                    user,
                     device_id=device_id,
-                    is_active=True,
-                    revoked_at__isnull=True,
-                ).order_by('-last_seen_at', '-created_at').first()
+                    device_fingerprint=device_fingerprint,
+                )
 
                 if active_session is not None:
                     now = timezone.now()

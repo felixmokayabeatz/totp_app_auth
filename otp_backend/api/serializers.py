@@ -2,7 +2,13 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import AppNotification, DeviceSession, EncryptedData, PasswordlessLoginRequest
+from .models import (
+    AppNotification,
+    BulkAccountDeleteRequest,
+    DeviceSession,
+    EncryptedData,
+    PasswordlessLoginRequest,
+)
 from .notifications import decrypt_notification_payload
 
 class UserSerializer(serializers.ModelSerializer):
@@ -129,3 +135,22 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
 
     def get_code_expires_at(self, obj):
         return obj.code_expires_at().isoformat()
+
+
+class BulkAccountDeleteRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BulkAccountDeleteRequest
+        fields = [
+            'id',
+            'requester_device_label',
+            'requester_device_kind',
+            'requested_count',
+            'range_start_date',
+            'range_end_date',
+            'status',
+            'expires_at',
+            'created_at',
+            'updated_at',
+            'approved_at',
+            'completed_at',
+        ]

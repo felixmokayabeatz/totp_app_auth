@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -36,9 +37,12 @@ class SyncService {
   late Dio _dio;
   static const MethodChannel _storageChannel =
       MethodChannel('com.beatzlock.otp/storage');
+  static const MethodChannel _deviceIdentityChannel =
+      MethodChannel('com.beatzlock.otp/device_identity');
   Future<bool>? _refreshTokenFuture;
   String? _encryptionKey;
   String? _lastErrorMessage;
+  String? _cachedMobileDeviceFingerprint;
   final SecureStorageService _secureStorage = SecureStorageService();
 
   String? get lastErrorMessage => _lastErrorMessage;
@@ -389,6 +393,7 @@ class SyncService {
         await _secureStorage.read(SecureStorageService.accessTokenKey);
     final deviceId = await getOrCreateDeviceId();
     final deviceLabel = await _buildDeviceLabel();
+    final deviceFingerprint = await _getStableMobileDeviceFingerprint();
     if (token != null && token.isNotEmpty) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
     } else {
@@ -397,6 +402,11 @@ class SyncService {
     _dio.options.headers['X-Device-ID'] = deviceId;
     _dio.options.headers['X-Device-Label'] = deviceLabel;
     _dio.options.headers['X-Device-Kind'] = _deviceKind();
+    if (deviceFingerprint != null && deviceFingerprint.isNotEmpty) {
+      _dio.options.headers['X-Device-Fingerprint'] = deviceFingerprint;
+    } else {
+      _dio.options.headers.remove('X-Device-Fingerprint');
+    }
   }
 
   bool _isSessionRevokedError(DioException error) {
@@ -423,6 +433,7 @@ class SyncService {
     try {
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
+      final deviceFingerprint = await _getStableMobileDeviceFingerprint();
       final refreshDio = Dio(BaseOptions(
         baseUrl: AppConfig.apiUrl,
         connectTimeout: const Duration(seconds: 30),
@@ -432,6 +443,8 @@ class SyncService {
           'X-Device-ID': deviceId,
           'X-Device-Label': deviceLabel,
           'X-Device-Kind': _deviceKind(),
+          if (deviceFingerprint != null && deviceFingerprint.isNotEmpty)
+            'X-Device-Fingerprint': deviceFingerprint,
         },
       ));
       final response = await refreshDio.post(
@@ -593,6 +606,16 @@ class SyncService {
   }
 
   Future<String> getOrCreateDeviceId() async {
+    final mobileFingerprint = await _getStableMobileDeviceFingerprint();
+    if (mobileFingerprint != null && mobileFingerprint.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      final savedDeviceId = prefs.getString('device_id') ?? '';
+      if (savedDeviceId != mobileFingerprint) {
+        await prefs.setString('device_id', mobileFingerprint);
+      }
+      return mobileFingerprint;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     var deviceId = prefs.getString('device_id') ?? '';
     if (deviceId.isEmpty) {
@@ -600,6 +623,32 @@ class SyncService {
       await prefs.setString('device_id', deviceId);
     }
     return deviceId;
+  }
+
+  Future<String?> _getStableMobileDeviceFingerprint() async {
+    if (_cachedMobileDeviceFingerprint != null) {
+      return _cachedMobileDeviceFingerprint;
+    }
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) {
+      return null;
+    }
+
+    try {
+      final rawId =
+          await _deviceIdentityChannel.invokeMethod<String>('getStableDeviceId');
+      final cleaned = rawId?.trim() ?? '';
+      if (cleaned.isEmpty) {
+        return null;
+      }
+
+      final hashed = sha256
+          .convert(utf8.encode('beatzlock-device-v1|$cleaned'))
+          .toString();
+      _cachedMobileDeviceFingerprint = 'mob_$hashed';
+      return _cachedMobileDeviceFingerprint;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String?> _friendlyMobileDeviceName() async {
@@ -706,6 +755,7 @@ class SyncService {
   Future<bool> register(String username, String email, String password) async {
     try {
       _lastErrorMessage = null;
+      await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/register/', data: {
@@ -754,6 +804,7 @@ class SyncService {
   Future<bool> login(String username, String password) async {
     try {
       _lastErrorMessage = null;
+      await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/login/', data: {
@@ -1762,6 +1813,7 @@ class SyncService {
   }) async {
     try {
       _lastErrorMessage = null;
+      await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/passwordless-start/', data: {
@@ -1792,6 +1844,7 @@ class SyncService {
   }) async {
     try {
       _lastErrorMessage = null;
+      await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/passwordless-poll/', data: {
@@ -2019,6 +2072,7 @@ class SyncService {
       String username, String password, String recoveryCode) async {
     try {
       _lastErrorMessage = null;
+      await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('recovery-code/login/', data: {
@@ -2060,6 +2114,7 @@ class SyncService {
       String email, String recoveryCode, String newPassword) async {
     try {
       _lastErrorMessage = null;
+      await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('recovery-code/reset-password/', data: {
@@ -2827,6 +2882,167 @@ class SyncService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getBulkDeleteRequests() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage =
+          'You need to be signed in to review delete requests.';
+      return const [];
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.get(
+          'bulk-delete-requests/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+      return const [];
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not load OTP delete requests.';
+      return const [];
+    } catch (_) {
+      _lastErrorMessage = 'Could not load OTP delete requests.';
+      return const [];
+    }
+  }
+
+  Future<String?> createBulkDeleteRequest({
+    required List<String> accountIds,
+    required DateTime rangeStartDate,
+    required DateTime rangeEndDate,
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to request cloud deletion.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'bulk-delete-requests/start/',
+          data: {
+            'account_ids': accountIds,
+            'range_start_date': DateTime(
+              rangeStartDate.year,
+              rangeStartDate.month,
+              rangeStartDate.day,
+            ).toIso8601String(),
+            'range_end_date': DateTime(
+              rangeEndDate.year,
+              rangeEndDate.month,
+              rangeEndDate.day,
+            ).toIso8601String(),
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        return data['primary_device_label']?.toString();
+      }
+      _lastErrorMessage = 'Could not send the delete request.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not send the delete request.';
+      return null;
+    } catch (_) {
+      _lastErrorMessage = 'Could not send the delete request.';
+      return null;
+    }
+  }
+
+  Future<int?> approveBulkDeleteRequest(String requestId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to approve delete requests.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'bulk-delete-requests/$requestId/approve/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        return int.tryParse(
+              response.data['deleted_count']?.toString() ?? '0',
+            ) ??
+            0;
+      }
+      _lastErrorMessage = 'Could not approve this delete request.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not approve this delete request.';
+      return null;
+    } catch (_) {
+      _lastErrorMessage = 'Could not approve this delete request.';
+      return null;
+    }
+  }
+
+  Future<bool> denyBulkDeleteRequest(String requestId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to deny delete requests.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'bulk-delete-requests/$requestId/deny/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not deny this delete request.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not deny this delete request.';
+      return false;
+    }
+  }
+
   Future<bool> recoverPrimaryDevice({
     required String username,
     required String password,
@@ -2835,6 +3051,7 @@ class SyncService {
   }) async {
     try {
       _lastErrorMessage = null;
+      await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post('auth/recover-primary-device/', data: {

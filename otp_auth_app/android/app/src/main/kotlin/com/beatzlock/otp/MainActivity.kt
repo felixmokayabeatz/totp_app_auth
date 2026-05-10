@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -132,6 +133,30 @@ class MainActivity : FlutterFragmentActivity() {
                         result.error(
                             "DOCUMENT_PICK_FAILED",
                             error.message ?: "Unable to open the document picker.",
+                            null
+                        )
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.beatzlock.otp/device_identity"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getStableDeviceId" -> {
+                    try {
+                        val androidId = Settings.Secure.getString(
+                            contentResolver,
+                            Settings.Secure.ANDROID_ID
+                        )
+                        result.success(androidId ?: "")
+                    } catch (error: Exception) {
+                        result.error(
+                            "DEVICE_IDENTITY_FAILED",
+                            error.message ?: "Unable to read Android device identity.",
                             null
                         )
                     }

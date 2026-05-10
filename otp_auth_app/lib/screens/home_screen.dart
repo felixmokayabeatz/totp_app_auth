@@ -15,6 +15,7 @@ import '../services/profile_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/encryption_service.dart';
 import '../services/app_lock_service.dart';
+import '../services/otp_vault_snapshot_service.dart';
 import '../providers/theme_provider.dart';
 import 'add_account_screen.dart';
 import 'settings_screen.dart';
@@ -41,6 +42,8 @@ class _HomeScreenState extends State<HomeScreen>
   final SyncService _syncService = SyncService();
   final ProfileService _profileService = ProfileService();
   final AppLockService _appLockService = AppLockService();
+  final OtpVaultSnapshotService _vaultSnapshotService =
+      OtpVaultSnapshotService();
 
   Map<String, String> currentOTPs = {};
   Map<String, int> timers = {};
@@ -57,7 +60,8 @@ class _HomeScreenState extends State<HomeScreen>
   int _unreadNotificationCount = 0;
   bool _offlineBackupReminderVisible = false;
   bool _canShowPasswordlessPrompt = false;
-  bool _isShowingPasswordlessPrompt = false;
+  bool _canShowBulkDeletePrompt = false;
+  bool _isShowingApprovalPrompt = false;
   Timer? _passwordlessPollTimer;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
@@ -94,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen>
         await _syncService.downloadAndMergeAccounts();
         await _initUserBox();
       }
+      await _vaultSnapshotService.captureDailySnapshotIfNeeded();
       _startTimer();
       _updateAllOTPs();
       await _loadUnreadNotificationCount();
@@ -198,23 +203,24 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _initializePasswordlessApprovals() async {
     await _refreshPasswordlessApprovalCapability();
     _passwordlessPollTimer?.cancel();
-    if (!_canShowPasswordlessPrompt) {
+    if (!_canShowPasswordlessPrompt && !_canShowBulkDeletePrompt) {
       return;
     }
 
     _passwordlessPollTimer = Timer.periodic(
       const Duration(milliseconds: 500),
-      (_) => _pollPasswordlessApprovalRequests(),
+      (_) => _pollPrimaryApprovalRequests(),
     );
-    await _pollPasswordlessApprovalRequests();
+    await _pollPrimaryApprovalRequests();
   }
 
   Future<void> _refreshPasswordlessApprovalCapability() async {
-    if (!mounted ||
-        !await _syncService.isLoggedIn() ||
-        !(Platform.isAndroid || Platform.isIOS)) {
+    if (!mounted || !await _syncService.isLoggedIn()) {
       if (mounted) {
-        setState(() => _canShowPasswordlessPrompt = false);
+        setState(() {
+          _canShowPasswordlessPrompt = false;
+          _canShowBulkDeletePrompt = false;
+        });
       }
       return;
     }
@@ -225,17 +231,26 @@ class _HomeScreenState extends State<HomeScreen>
           (session) => session?.isCurrent == true,
           orElse: () => null,
         );
-    final canShow = currentSession != null &&
-        currentSession.isPrimary &&
-        currentSession.deviceKind == 'mobile';
+    final canShowBulkDelete = currentSession != null && currentSession.isPrimary;
+    final canShowPasswordless = canShowBulkDelete &&
+        (Platform.isAndroid || Platform.isIOS) &&
+        currentSession!.deviceKind == 'mobile';
 
-    setState(() => _canShowPasswordlessPrompt = canShow);
+    setState(() {
+      _canShowPasswordlessPrompt = canShowPasswordless;
+      _canShowBulkDeletePrompt = canShowBulkDelete;
+    });
+  }
+
+  Future<void> _pollPrimaryApprovalRequests() async {
+    await _pollPasswordlessApprovalRequests();
+    await _pollBulkDeleteApprovalRequests();
   }
 
   Future<void> _pollPasswordlessApprovalRequests() async {
     if (!mounted ||
         !_canShowPasswordlessPrompt ||
-        _isShowingPasswordlessPrompt) {
+        _isShowingApprovalPrompt) {
       return;
     }
 
@@ -254,11 +269,39 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    _isShowingPasswordlessPrompt = true;
+    _isShowingApprovalPrompt = true;
     try {
       await _showPasswordlessPrompt(pendingRequest);
     } finally {
-      _isShowingPasswordlessPrompt = false;
+      _isShowingApprovalPrompt = false;
+    }
+  }
+
+  Future<void> _pollBulkDeleteApprovalRequests() async {
+    if (!mounted || !_canShowBulkDeletePrompt || _isShowingApprovalPrompt) {
+      return;
+    }
+
+    final requests = await _syncService.getBulkDeleteRequests();
+    if (!mounted || requests.isEmpty) return;
+
+    Map<String, dynamic>? pendingRequest;
+    for (final item in requests) {
+      if ((item['status']?.toString() ?? '').toLowerCase() == 'pending') {
+        pendingRequest = item;
+        break;
+      }
+    }
+
+    if (pendingRequest == null) {
+      return;
+    }
+
+    _isShowingApprovalPrompt = true;
+    try {
+      await _showBulkDeleteApprovalPrompt(pendingRequest);
+    } finally {
+      _isShowingApprovalPrompt = false;
     }
   }
 
@@ -479,6 +522,123 @@ class _HomeScreenState extends State<HomeScreen>
     );
     dialogClosed = true;
     dialogRefreshTimer?.cancel();
+  }
+
+  Future<void> _showBulkDeleteApprovalPrompt(Map<String, dynamic> item) async {
+    if (!mounted) return;
+
+    final requestId = item['id']?.toString() ?? '';
+    if (requestId.isEmpty) return;
+
+    final label =
+        item['requester_device_label']?.toString() ?? 'Unknown device';
+    final requestedCount =
+        int.tryParse(item['requested_count']?.toString() ?? '0') ?? 0;
+    final startDate = DateTime.tryParse(
+      item['range_start_date']?.toString() ?? '',
+    );
+    final endDate = DateTime.tryParse(
+      item['range_end_date']?.toString() ?? '',
+    );
+
+    final approved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor:
+            Theme.of(dialogContext).brightness == Brightness.dark
+                ? const Color(0xFF1E1E32)
+                : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('OTP delete approval request'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$label wants to delete '
+              '$requestedCount OTP account${requestedCount == 1 ? '' : 's'} '
+              'everywhere.',
+              style: TextStyle(
+                color: Theme.of(dialogContext).colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Date range: ${_formatAbsoluteDate(startDate ?? DateTime.now())} '
+              'to ${_formatAbsoluteDate(endDate ?? DateTime.now())}',
+              style: TextStyle(
+                color: Theme.of(dialogContext)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.78),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Approve this only if you started the delete request yourself.',
+              style: TextStyle(
+                color: Theme.of(dialogContext)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.78),
+                height: 1.35,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Deny'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
+
+    if (approved == null) return;
+
+    final unlocked = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !unlocked) return;
+
+    if (!approved) {
+      final denied = await _syncService.denyBulkDeleteRequest(requestId);
+      if (!mounted) return;
+      _showSnackBar(
+        denied
+            ? 'Denied delete request from $label.'
+            : (_syncService.lastErrorMessage ??
+                'Could not deny that delete request.'),
+        denied ? Colors.orange : Colors.red,
+      );
+      return;
+    }
+
+    final deletedCount = await _syncService.approveBulkDeleteRequest(requestId);
+    if (!mounted) return;
+    if (deletedCount == null) {
+      _showSnackBar(
+        _syncService.lastErrorMessage ??
+            'Could not approve that delete request.',
+        Colors.red,
+      );
+      return;
+    }
+
+    await _syncService.downloadAndMergeAccounts();
+    await _initUserBox();
+    _updateAllOTPs();
+    if (!mounted) return;
+    setState(() {});
+    _showSnackBar(
+      'Approved and deleted $deletedCount OTP account${deletedCount == 1 ? '' : 's'} everywhere.',
+      Colors.red,
+    );
   }
 
   Future<void> _initUserBox() async {
@@ -1431,6 +1591,139 @@ class _HomeScreenState extends State<HomeScreen>
     }).toList();
   }
 
+  Future<DeviceSessionInfo?> _currentSessionInfo() async {
+    final sessions = await _syncService.getActiveDeviceSessions();
+    for (final session in sessions) {
+      if (session.isCurrent) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  Future<bool> _confirmBulkDeleteEverywhereWithOtp({
+    required int count,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final username = await SecureStorageService()
+            .read(SecureStorageService.currentUserKey) ??
+        '';
+    if (username.isEmpty) {
+      _showSnackBar('Sign in first to verify this cloud deletion.', Colors.red);
+      return false;
+    }
+
+    final otpSent = await _syncService.sendDeleteOtp(username);
+    if (!mounted) return false;
+    if (!otpSent) {
+      _showSnackBar(
+        _syncService.lastErrorMessage ??
+            'Failed to send the verification code.',
+        Colors.red,
+      );
+      return false;
+    }
+
+    final otpController = TextEditingController();
+    final verified = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor:
+            Theme.of(dialogContext).brightness == Brightness.dark
+                ? const Color(0xFF1E1E32)
+                : Colors.white,
+        title: const Text('Confirm OTP deletion'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.email_outlined, size: 48, color: Colors.red),
+            const SizedBox(height: 12),
+            Text(
+              'A 6-digit code was sent to your email. Enter it to delete '
+              '$count OTP account${count == 1 ? '' : 's'} everywhere for '
+              '${_formatAbsoluteDate(startDate)} to ${_formatAbsoluteDate(endDate)}.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(dialogContext).brightness == Brightness.dark
+                    ? Colors.white12
+                    : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+              ),
+              child: TextField(
+                controller: otpController,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 24,
+                  letterSpacing: 4,
+                  fontWeight: FontWeight.bold,
+                ),
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  hintText: '000000',
+                  hintStyle: TextStyle(fontSize: 18, letterSpacing: 2),
+                  border: InputBorder.none,
+                  counterText: '',
+                  contentPadding: EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              otpController.dispose();
+              Navigator.pop(dialogContext, false);
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final code = otpController.text.trim();
+              if (code.length != 6) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter the 6-digit code.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              final ok = await _syncService.verifyDeleteOtp(username, code);
+              if (!dialogContext.mounted) return;
+              otpController.dispose();
+              Navigator.pop(dialogContext, ok);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return false;
+    if (verified != true) {
+      _showSnackBar('Invalid code or deletion cancelled.', Colors.red);
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _showBulkDeleteByDateDialog() async {
     final box = _userBox;
     if (box == null || box.isEmpty) {
@@ -1620,6 +1913,34 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
+    if (result.deleteEverywhere) {
+      if (!await _syncService.isLoggedIn()) {
+        if (!mounted) return;
+        _showSnackBar(
+          'Sign in first to delete synced OTP accounts everywhere.',
+          Colors.orange,
+        );
+        return;
+      }
+
+      final currentSession = await _currentSessionInfo();
+      if (!mounted) return;
+      if (currentSession == null) {
+        _showSnackBar(
+          'This device could not be verified for cloud deletion.',
+          Colors.red,
+        );
+        return;
+      }
+      if (!currentSession.isPrimary) {
+        _showSnackBar(
+          'Deleting multiple OTP accounts everywhere is only available from your primary device.',
+          Colors.orange,
+        );
+        return;
+      }
+    }
+
     final confirmed = await _showBulkDeleteConfirmationDialog(
       count: matches.length,
       startDate: result.startDate,
@@ -1632,15 +1953,14 @@ class _HomeScreenState extends State<HomeScreen>
     var failedCount = 0;
 
     if (result.deleteEverywhere) {
-      if (!await _syncService.isLoggedIn()) {
-        if (!mounted) return;
-        _showSnackBar(
-          'Sign in first to delete synced OTP accounts everywhere.',
-          Colors.orange,
-        );
-        return;
-      }
+      final verified = await _confirmBulkDeleteEverywhereWithOtp(
+        count: matches.length,
+        startDate: result.startDate,
+        endDate: result.endDate,
+      );
+      if (!verified) return;
 
+      await _vaultSnapshotService.captureSnapshot(reason: 'pre_bulk_delete');
       for (final account in matches) {
         final ok = await _syncService.deleteAccountEverywhere(account.id);
         if (ok) {
@@ -1653,6 +1973,7 @@ class _HomeScreenState extends State<HomeScreen>
         }
       }
     } else {
+      await _vaultSnapshotService.captureSnapshot(reason: 'pre_bulk_delete');
       for (final account in matches) {
         await _syncService.deleteAccountLocalOnly(account.id);
         deletedCount++;

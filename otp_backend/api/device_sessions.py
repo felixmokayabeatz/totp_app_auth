@@ -28,6 +28,20 @@ def get_request_device_id(request) -> str:
     return ''
 
 
+def get_request_device_fingerprint(request) -> str:
+    sources = []
+    if hasattr(request, 'data'):
+        sources.append(request.data.get('device_fingerprint'))
+    if hasattr(request, 'query_params'):
+        sources.append(request.query_params.get('device_fingerprint'))
+    sources.append(request.headers.get('X-Device-Fingerprint'))
+
+    for value in sources:
+        if value and str(value).strip():
+            return str(value).strip()
+    return ''
+
+
 def get_request_device_label(request) -> str:
     provided_label = None
     if hasattr(request, 'data'):
@@ -59,28 +73,84 @@ def get_request_device_kind(request) -> str:
     return DeviceSession.DEVICE_KIND_UNKNOWN
 
 
+def find_active_device_session(
+    user: User,
+    *,
+    device_id: str = '',
+    device_fingerprint: str = '',
+) -> DeviceSession | None:
+    normalized_device_id = (device_id or '').strip()
+    normalized_device_fingerprint = (device_fingerprint or '').strip()
+
+    if normalized_device_id:
+        session = DeviceSession.objects.filter(
+            user=user,
+            device_id=normalized_device_id,
+            is_active=True,
+            revoked_at__isnull=True,
+        ).order_by('-last_seen_at', '-created_at').first()
+        if session is not None:
+            return session
+
+    if normalized_device_fingerprint:
+        return DeviceSession.objects.filter(
+            user=user,
+            device_fingerprint=normalized_device_fingerprint,
+            is_active=True,
+            revoked_at__isnull=True,
+        ).order_by('-last_seen_at', '-created_at').first()
+
+    return None
+
+
 def ensure_device_session(
     user: User,
     *,
     device_id: str,
+    device_fingerprint: str = '',
     device_label: str,
     device_kind: str = DeviceSession.DEVICE_KIND_UNKNOWN,
     user_agent: str = '',
     ip_address: str = '',
 ) -> DeviceSession:
     normalized_device_id = (device_id or '').strip()
+    normalized_device_fingerprint = (device_fingerprint or '').strip()
     normalized_device_label = device_label.strip() or 'Unknown device'
     now = timezone.now()
     normalized_device_kind = device_kind or DeviceSession.DEVICE_KIND_UNKNOWN
 
-    session = None
-    if normalized_device_id:
-        session = (
-            DeviceSession.objects
-            .filter(user=user, device_id=normalized_device_id)
-            .order_by('-last_seen_at', '-created_at')
-            .first()
-        )
+    session = find_active_device_session(
+        user,
+        device_id=normalized_device_id,
+        device_fingerprint=normalized_device_fingerprint,
+    )
+
+    if (
+        session is None
+        and normalized_device_kind == DeviceSession.DEVICE_KIND_MOBILE
+        and normalized_device_label
+        and normalized_device_label != 'Unknown device'
+    ):
+        same_label_sessions = DeviceSession.objects.filter(
+            user=user,
+            is_active=True,
+            revoked_at__isnull=True,
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+            device_label=normalized_device_label,
+        ).order_by('-is_primary', '-last_seen_at', '-created_at')
+
+        if user_agent.strip():
+            same_label_user_agent = same_label_sessions.filter(user_agent=user_agent.strip())
+            if same_label_user_agent.count() == 1:
+                session = same_label_user_agent.first()
+
+        if session is None:
+            same_label_primary = same_label_sessions.filter(is_primary=True)
+            if same_label_primary.count() == 1:
+                session = same_label_primary.first()
+
+        if session is None and same_label_sessions.count() == 1:
+            session = same_label_sessions.first()
 
     if session is None:
         should_be_primary = not DeviceSession.objects.filter(
@@ -92,6 +162,7 @@ def ensure_device_session(
         session = DeviceSession.objects.create(
             user=user,
             device_id=normalized_device_id,
+            device_fingerprint=normalized_device_fingerprint,
             device_label=normalized_device_label,
             device_kind=normalized_device_kind,
             user_agent=user_agent or '',
@@ -101,6 +172,10 @@ def ensure_device_session(
             last_seen_at=now,
         )
     else:
+        if normalized_device_id:
+            session.device_id = normalized_device_id
+        if normalized_device_fingerprint:
+            session.device_fingerprint = normalized_device_fingerprint
         session.device_label = normalized_device_label
         session.device_kind = normalized_device_kind or session.device_kind
         session.user_agent = user_agent or session.user_agent
@@ -110,6 +185,8 @@ def ensure_device_session(
         session.last_seen_at = now
         session.save(
             update_fields=[
+                'device_id',
+                'device_fingerprint',
                 'device_label',
                 'device_kind',
                 'user_agent',
@@ -187,10 +264,12 @@ def ensure_primary_session(user: User) -> DeviceSession | None:
 
 def attach_session_to_refresh_token(user: User, request, refresh_token):
     device_id = get_request_device_id(request)
+    device_fingerprint = get_request_device_fingerprint(request)
     device_label = get_request_device_label(request)
     session = ensure_device_session(
         user,
         device_id=device_id,
+        device_fingerprint=device_fingerprint,
         device_label=device_label,
         device_kind=get_request_device_kind(request),
         user_agent=request.META.get('HTTP_USER_AGENT', ''),

@@ -127,6 +127,12 @@ class DeviceSession(models.Model):
         related_name='device_sessions',
     )
     device_id = models.CharField(max_length=255, blank=True, default='', db_index=True)
+    device_fingerprint = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        db_index=True,
+    )
     device_label = models.CharField(max_length=120, blank=True, default='Unknown device')
     user_agent = models.TextField(blank=True, default='')
     ip_address = models.CharField(max_length=128, blank=True, default='')
@@ -269,3 +275,62 @@ class PasswordlessLoginRequest(models.Model):
                 )
             return raw_code in valid_codes
         return stored_value == raw_code
+
+
+class BulkAccountDeleteRequest(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_APPROVED = 'approved'
+    STATUS_DENIED = 'denied'
+    STATUS_COMPLETED = 'completed'
+    STATUS_EXPIRED = 'expired'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_APPROVED, 'Approved'),
+        (STATUS_DENIED, 'Denied'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_EXPIRED, 'Expired'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='bulk_account_delete_requests',
+    )
+    requester_device_id = models.CharField(max_length=255, blank=True, default='')
+    requester_device_label = models.CharField(max_length=120, blank=True, default='Unknown device')
+    requester_device_kind = models.CharField(
+        max_length=20,
+        choices=DeviceSession.DEVICE_KIND_CHOICES,
+        default=DeviceSession.DEVICE_KIND_UNKNOWN,
+    )
+    requested_count = models.IntegerField(default=0)
+    range_start_date = models.DateField()
+    range_end_date = models.DateField()
+    account_ids = models.TextField(default='[]')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+    expires_at = models.DateTimeField()
+    approved_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by_session = models.ForeignKey(
+        DeviceSession,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='reviewed_bulk_delete_requests',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return (
+            f"{self.user.username} - bulk delete {self.status} - "
+            f"{self.requester_device_label}"
+        )

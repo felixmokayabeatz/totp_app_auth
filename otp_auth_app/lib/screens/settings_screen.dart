@@ -18,6 +18,7 @@ import '../services/import_file_picker_service.dart';
 import '../services/sync_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
+import '../services/otp_vault_snapshot_service.dart';
 import '../services/profile_service.dart';
 import '../services/secure_storage_service.dart';
 import 'add_account_screen.dart';
@@ -28,6 +29,7 @@ import 'notifications_screen.dart';
 import 'passwords_screen.dart';
 import 'passwordless_requests_screen.dart';
 import 'profile_screen.dart';
+import 'recover_primary_device_screen.dart';
 import 'secure_self_text_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -43,6 +45,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final AppUpdateService _appUpdateService = AppUpdateService();
   final AppRatingService _appRatingService = AppRatingService();
   final ProfileService _profileService = ProfileService();
+  final OtpVaultSnapshotService _otpVaultSnapshotService =
+      OtpVaultSnapshotService();
 
   bool _isSyncing = false;
   bool _isCheckingForUpdates = false;
@@ -415,6 +419,185 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${parsed.year}-$month-$day $hour:$minute';
   }
 
+  String _formatSnapshotDate(DateTime value) {
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day $hour:$minute';
+  }
+
+  Future<void> _showOtpRestorePoints() async {
+    await _otpVaultSnapshotService.captureDailySnapshotIfNeeded();
+    final snapshots = await _otpVaultSnapshotService.getSnapshots();
+    if (!mounted) return;
+
+    if (snapshots.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('No OTP restore points are available yet.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Text('OTP Restore Points', style: TextStyle(color: _textPrimary)),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'BeatzLock keeps automatic local OTP vault snapshots about every 24 hours and retains a small history across recent days and longer-term restore points.',
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                for (final snapshot in snapshots) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: _isDark ? Colors.white10 : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _dividerColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _formatSnapshotDate(snapshot.createdAt),
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${snapshot.accountCount} OTP account${snapshot.accountCount == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            color: _textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              Navigator.pop(dialogContext);
+                              await _restoreOtpSnapshot(snapshot);
+                            },
+                            icon: const Icon(Icons.restore_rounded),
+                            label: const Text('Restore'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _restoreOtpSnapshot(OtpVaultSnapshotInfo snapshot) async {
+    final authenticated = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !authenticated) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Text('Restore OTP Snapshot', style: TextStyle(color: _textPrimary)),
+        content: Text(
+          'Restore your OTP vault to ${_formatSnapshotDate(snapshot.createdAt)}? '
+          'A fresh safety snapshot will be created first before the restore runs.',
+          style: TextStyle(
+            color: _textSecondary,
+            fontSize: 13,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final result = await _otpVaultSnapshotService.restoreSnapshot(snapshot.id);
+    if (!mounted) return;
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not restore that OTP snapshot.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final syncEnabled = await _syncService.isLoggedIn() &&
+        await _syncService.isSyncEnabled();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          syncEnabled
+              ? 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}. Sync manually if you want that restored state everywhere.'
+              : 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
+        ),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
@@ -496,6 +679,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : () => _requireSignedIn(
                         'Recovery codes are available after you sign in.',
                       ),
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.restore_rounded,
+              label: 'OTP Restore Points',
+              sub: 'Restore your OTP vault from recent automatic snapshots',
+              onTap: _showOtpRestorePoints,
             ),
             _dividerLine(),
             _tappableTile(
@@ -715,6 +905,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const DeviceSessionsScreen(),
+                  ),
+                );
+              },
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.workspace_premium_rounded,
+              label: 'Make This Device Primary',
+              sub:
+                  'Use app PIN plus password, email code, and recovery code to move primary protection here',
+              onTap: () async {
+                if (!await _requireSignedIn(
+                  'Primary-device recovery is available after you sign in.',
+                )) {
+                  return;
+                }
+                if (!context.mounted) return;
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
+                if (!context.mounted || !authenticated) return;
+                final changed = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const RecoverPrimaryDeviceScreen(),
+                  ),
+                );
+                if (!context.mounted || changed != true) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('This device is now your primary device.'),
+                    backgroundColor: const Color(0xFF10B981),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 );
               },
@@ -1341,6 +1566,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openManualDownloadPage() async {
+    final confirmed = await _confirmExternalBrowserLaunch(
+      title: 'Open Browser?',
+      message:
+          'This will open the BeatzLock manual download page in your browser so you can choose and download an installer.',
+      continueLabel: 'Open Browser',
+    );
+    if (confirmed != true || !mounted) return;
+
     final opened = await _appUpdateService.openManualDownloadPage(_updateInfo);
     if (!mounted) return;
 
@@ -1354,6 +1587,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: opened ? _accent : Colors.red,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Future<bool?> _confirmExternalBrowserLaunch({
+    required String title,
+    required String message,
+    required String continueLabel,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        backgroundColor: _cardColor,
+        title: Text(title, style: TextStyle(color: _textPrimary)),
+        content: Text(
+          message,
+          style: TextStyle(color: _textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accent,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(continueLabel),
+          ),
+        ],
       ),
     );
   }
@@ -2047,6 +2313,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (confirm != true) return;
 
+      await _otpVaultSnapshotService.captureSnapshot(reason: 'pre_delete_all');
       await _syncService.deleteAllLocalOnly();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -2198,6 +2465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    await _otpVaultSnapshotService.captureSnapshot(reason: 'pre_delete_all');
     final ok = await _syncService.deleteAllEverywhere();
     if (!mounted) return;
     if (ok) {

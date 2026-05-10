@@ -1,12 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:file_selector_windows/file_selector_windows.dart';
 
+import '../models/device_session_info.dart';
 import '../models/password_entry.dart';
 import '../services/app_lock_service.dart';
+import '../services/import_file_picker_service.dart';
 import '../services/password_import_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
@@ -29,6 +28,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   final SyncService _syncService = SyncService();
   final AppLockService _appLockService = AppLockService();
   final SecureStorageService _secureStorage = SecureStorageService();
+  final ImportFilePickerService _importFilePicker = ImportFilePickerService();
   final TextEditingController _searchController = TextEditingController();
 
   Box<PasswordEntry>? _passwordBox;
@@ -45,7 +45,150 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
-  bool get _canImportPasswords => Platform.isWindows;
+  bool get _canImportPasswords => _importFilePicker.canPickPasswordImportFile;
+
+  Future<DeviceSessionInfo?> _currentSessionInfo() async {
+    final sessions = await _syncService.getActiveDeviceSessions();
+    for (final session in sessions) {
+      if (session.isCurrent) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  Future<bool> _verifyDeleteOtpForPrimaryAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) async {
+    final username = await _secureStorage.read(
+          SecureStorageService.currentUserKey,
+        ) ??
+        '';
+    if (username.isEmpty) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sign in first to verify this deletion.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
+
+    final otpSent = await _syncService.sendDeleteOtp(username);
+    if (!mounted) return false;
+    if (!otpSent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _syncService.lastErrorMessage ??
+                'Failed to send the verification code.',
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
+
+    final otpController = TextEditingController();
+    final verified = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Text(title, style: TextStyle(color: _textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.email_outlined, size: 48, color: Colors.red),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 18),
+            Container(
+              decoration: BoxDecoration(
+                color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+              ),
+              child: TextField(
+                controller: otpController,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 24,
+                  letterSpacing: 4,
+                  fontWeight: FontWeight.bold,
+                ),
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  hintText: '000000',
+                  hintStyle: TextStyle(fontSize: 18, letterSpacing: 2),
+                  border: InputBorder.none,
+                  counterText: '',
+                  contentPadding: EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              otpController.dispose();
+              Navigator.pop(dialogContext, false);
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final code = otpController.text.trim();
+              if (code.length != 6) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter the 6-digit code.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              final ok = await _syncService.verifyDeleteOtp(username, code);
+              if (!dialogContext.mounted) return;
+              otpController.dispose();
+              Navigator.pop(dialogContext, ok);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return false;
+    if (verified != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid code or deletion cancelled.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
+
+    return true;
+  }
 
   @override
   void initState() {
@@ -138,7 +281,9 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     if (!_canImportPasswords) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Password import is desktop-only right now.'),
+          content: Text(
+            'Password import is available on Android and Windows only right now.',
+          ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -201,7 +346,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       }
 
       await _finishPasswordImport(
-        importFile.contents,
+        importFile.content,
         fileName: importFile.fileName,
       );
     } catch (e) {
@@ -217,23 +362,13 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     }
   }
 
-  Future<_PickedImportFile?> _pickImportFile() async {
-    if (Platform.isWindows) {
-      final file = await FileSelectorWindows().openFile(
-        confirmButtonText: 'Import passwords',
-      );
-      if (file == null) {
-        return null;
-      }
-
-      return _PickedImportFile(
-        fileName: file.name,
-        contents: await file.readAsString(),
-      );
+  Future<PickedImportFile?> _pickImportFile() async {
+    final file = await _importFilePicker.pickPasswordImportFile();
+    if (file != null) {
+      return file;
     }
 
-    throw Exception(
-        'Password file import is not available on this device yet.');
+    throw Exception('Password file import is not available on this device.');
   }
 
   Future<void> _finishPasswordImport(
@@ -561,6 +696,37 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   }) async {
     if (entries.isEmpty) return;
 
+    if (deleteAll) {
+      if (!await _syncService.isLoggedIn()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sign in first to delete your whole password vault everywhere.',
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      final currentSession = await _currentSessionInfo();
+      if (!mounted) return;
+      if (currentSession == null || !currentSession.isPrimary) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Deleting the whole password vault is only available from your primary device.',
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
     var acknowledged = false;
     var confirmationText = '';
 
@@ -656,6 +822,16 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     );
 
     if (confirmed != true) return;
+
+    if (deleteAll) {
+      final otpVerified = await _verifyDeleteOtpForPrimaryAction(
+        title: 'Confirm Vault Deletion',
+        message:
+            'A 6-digit code was sent to your email. Enter it to delete every secure item in this password vault.',
+        confirmLabel: 'Delete Everything',
+      );
+      if (!otpVerified) return;
+    }
 
     final box = _passwordBox ?? await _syncService.getPasswordBox();
     final ids = entries.map((entry) => entry.id).toList(growable: false);
@@ -1795,9 +1971,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
-                                        _canImportPasswords
-                                            ? 'Reveal and copy actions still ask for unlock again. Desktop can import CSV and JSON exports into this encrypted vault.'
-                                            : 'Reveal and copy actions still ask for unlock again. Password import is desktop-only for now while the phone flow stays disabled.',
+                                        'Reveal and copy actions still ask for unlock again. CSV and JSON password exports import into this encrypted vault on Android and Windows.',
                                         style: TextStyle(
                                           color: _textSecondary,
                                           height: 1.45,
@@ -1809,39 +1983,6 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                               ],
                             ),
                           ),
-                          if (!_canImportPasswords)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 14),
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Colors.orange
-                                    .withValues(alpha: _isDark ? 0.16 : 0.10),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: Colors.orange.withValues(alpha: 0.18),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.desktop_windows_rounded,
-                                    color: Colors.orange,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      'CSV and JSON password import is available on desktop only right now.',
-                                      style: TextStyle(
-                                        color: _textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                           TextField(
                             controller: _searchController,
                             decoration: InputDecoration(
@@ -1906,14 +2047,4 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 ),
     );
   }
-}
-
-class _PickedImportFile {
-  const _PickedImportFile({
-    required this.fileName,
-    required this.contents,
-  });
-
-  final String fileName;
-  final String contents;
 }
