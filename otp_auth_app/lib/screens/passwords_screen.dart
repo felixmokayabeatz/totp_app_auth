@@ -992,146 +992,175 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: _cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              entry.title,
-              style: TextStyle(
-                color: _textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+      builder: (sheetContext) {
+        final mediaQuery = MediaQuery.of(sheetContext);
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              28 + mediaQuery.viewInsets.bottom,
             ),
-            if (entry.username.trim().isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                entry.username,
-                style: TextStyle(color: _textSecondary),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: mediaQuery.size.height * 0.82,
               ),
-            ],
-            if ((entry.serverIP ?? '').trim().isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                entry.serverIP!,
-                style: TextStyle(color: _textSecondary, fontSize: 12),
-              ),
-            ],
-            if (hasPassword) ...[
-              const SizedBox(height: 18),
-              Text(
-                'Password',
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              SelectableText(
-                password,
-                style: TextStyle(
-                  color: _textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  height: 1.35,
-                ),
-              ),
-            ],
-            if (hasNote) ...[
-              const SizedBox(height: 18),
-              Text(
-                'Private note',
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              SelectableText(
-                note,
-                style: TextStyle(
-                  color: _textPrimary,
-                  fontSize: 15,
-                  height: 1.5,
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                if (hasPassword)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        await Clipboard.setData(ClipboardData(text: password));
-                        if (sheetContext.mounted) {
-                          Navigator.pop(sheetContext);
-                        }
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Password copied.'),
-                            backgroundColor: Color(0xFF10B981),
-                            behavior: SnackBarBehavior.floating,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            entry.title,
+                            style: TextStyle(
+                              color: _textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.copy_rounded),
-                      label: const Text('Copy password'),
+                          if (entry.username.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              entry.username,
+                              style: TextStyle(color: _textSecondary),
+                            ),
+                          ],
+                          if ((entry.serverIP ?? '').trim().isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              entry.serverIP!,
+                              style:
+                                  TextStyle(color: _textSecondary, fontSize: 12),
+                            ),
+                          ],
+                          if (hasPassword) ...[
+                            const SizedBox(height: 18),
+                            Text(
+                              'Password',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                              password,
+                              style: TextStyle(
+                                color: _textPrimary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                          if (hasNote) ...[
+                            const SizedBox(height: 18),
+                            Text(
+                              'Private note',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(
+                              note,
+                              style: TextStyle(
+                                color: _textPrimary,
+                                fontSize: 15,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                if (hasPassword && hasNote) const SizedBox(width: 10),
-                if (hasNote)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        await Clipboard.setData(ClipboardData(text: note));
-                        if (sheetContext.mounted) {
-                          Navigator.pop(sheetContext);
-                        }
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Secure note copied.'),
-                            backgroundColor: Color(0xFF10B981),
-                            behavior: SnackBarBehavior.floating,
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      if (hasPassword)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              await Clipboard.setData(
+                                ClipboardData(text: password),
+                              );
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Password copied.'),
+                                  backgroundColor: Color(0xFF10B981),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.copy_rounded),
+                            label: const Text('Copy password'),
                           ),
-                        );
+                        ),
+                      if (hasPassword && hasNote) const SizedBox(width: 10),
+                      if (hasNote)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              await Clipboard.setData(ClipboardData(text: note));
+                              if (sheetContext.mounted) {
+                                Navigator.pop(sheetContext);
+                              }
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Secure note copied.'),
+                                  backgroundColor: Color(0xFF10B981),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.notes_rounded),
+                            label: Text(hasPassword ? 'Copy note' : 'Copy'),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _showEntryDialog(existing: entry);
                       },
-                      icon: const Icon(Icons.notes_rounded),
-                      label: Text(hasPassword ? 'Copy note' : 'Copy'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accent,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.edit_rounded),
+                      label: const Text('Edit'),
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  _showEntryDialog(existing: entry);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.edit_rounded),
-                label: const Text('Edit'),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

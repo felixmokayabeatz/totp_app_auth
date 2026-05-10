@@ -21,6 +21,7 @@ class AccountLogoBadge extends StatelessWidget {
       fallbackColor: Theme.of(context).colorScheme.primary,
     );
     final domain = _resolveLogoDomain(service, issuer);
+    final useRemoteLogo = domain != null && _shouldUseRemoteLogo(domain);
 
     return Container(
       width: size,
@@ -30,7 +31,7 @@ class AccountLogoBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * 0.28),
       ),
       alignment: Alignment.center,
-      child: domain != null
+      child: useRemoteLogo
           ? Padding(
               padding: EdgeInsets.all(size * 0.16),
               child: ClipRRect(
@@ -92,6 +93,16 @@ class AccountLogoBadge extends StatelessWidget {
       }
     }
     return null;
+  }
+
+  bool _shouldUseRemoteLogo(String domain) {
+    final normalized = domain.trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+    if (normalized == 'localhost') return false;
+    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(normalized)) {
+      return false;
+    }
+    return _knownDomains.values.contains(normalized);
   }
 
   String _faviconUrl(String domain) {
