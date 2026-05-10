@@ -8,7 +8,10 @@ from datetime import timedelta
 import hashlib
 import uuid
 
-from .passwordless_crypto import decrypt_passwordless_code
+from .passwordless_crypto import (
+    decrypt_passwordless_code,
+    encrypt_passwordless_code,
+)
 
 
 class EncryptedData(models.Model):
@@ -201,8 +204,10 @@ class PasswordlessLoginRequest(models.Model):
     def _looks_like_legacy_raw_code(self) -> bool:
         return self.verification_code.isdigit() and len(self.verification_code) == 3
 
-    def _looks_like_seed(self) -> bool:
-        return 1 <= len(self.verification_code) <= 7 and not self._looks_like_legacy_raw_code()
+    def _looks_like_seed(self, value: str) -> bool:
+        return 1 <= len(value) <= 7 and not (
+            value.isdigit() and len(value) == 3
+        )
 
     def _timeslot_for(self, at_time=None) -> int:
         current_time = at_time or timezone.now()
@@ -216,41 +221,51 @@ class PasswordlessLoginRequest(models.Model):
         slot = self._timeslot_for(at_time)
         return self.created_at + timedelta(seconds=(slot + 1) * 30)
 
-    def _derive_seeded_code(self, slot: int) -> str:
+    def _derive_seeded_code(self, slot: int, *, seed: str) -> str:
         digest = hashlib.sha256(
-            f"beatzlock-passwordless|{settings.SECRET_KEY}|{self.id}|{self.verification_code}|{slot}".encode(
+            f"beatzlock-passwordless|{settings.SECRET_KEY}|{self.id}|{seed}|{slot}".encode(
                 "utf-8"
             )
         ).hexdigest()
         return str(int(digest[:8], 16) % 1000).zfill(3)
 
     def set_verification_code(self, raw_code: str) -> None:
-        self.verification_code = raw_code
+        self.verification_code = encrypt_passwordless_code(raw_code)
 
-    def get_verification_code(self) -> str:
+    def _raw_verification_value(self) -> str:
         if not self.verification_code:
             return ''
-        if self._looks_like_legacy_raw_code():
+        if self._looks_like_legacy_raw_code() or self._looks_like_seed(self.verification_code):
             return self.verification_code
-        if self._looks_like_seed():
-            return self._derive_seeded_code(self._timeslot_for())
         try:
             return decrypt_passwordless_code(self.verification_code)
         except Exception:
             return ''
 
+    def get_verification_code(self) -> str:
+        raw_value = self._raw_verification_value()
+        if not raw_value:
+            return ''
+        if raw_value.isdigit() and len(raw_value) == 3:
+            return raw_value
+        if self._looks_like_seed(raw_value):
+            return self._derive_seeded_code(self._timeslot_for(), seed=raw_value)
+        return raw_value
+
     def matches_verification_code(self, raw_code: str) -> bool:
         if not raw_code:
             return False
-        if self._looks_like_legacy_raw_code():
-            return self.verification_code == raw_code
-        if self._looks_like_seed():
-            current_slot = self._timeslot_for()
-            valid_codes = {self._derive_seeded_code(current_slot)}
-            if current_slot > 0:
-                valid_codes.add(self._derive_seeded_code(current_slot - 1))
-            return raw_code in valid_codes
-        try:
-            return decrypt_passwordless_code(self.verification_code) == raw_code
-        except Exception:
+        stored_value = self._raw_verification_value()
+        if not stored_value:
             return False
+        if stored_value.isdigit() and len(stored_value) == 3:
+            return stored_value == raw_code
+        if self._looks_like_seed(stored_value):
+            current_slot = self._timeslot_for()
+            valid_codes = {self._derive_seeded_code(current_slot, seed=stored_value)}
+            if current_slot > 0:
+                valid_codes.add(
+                    self._derive_seeded_code(current_slot - 1, seed=stored_value)
+                )
+            return raw_code in valid_codes
+        return stored_value == raw_code

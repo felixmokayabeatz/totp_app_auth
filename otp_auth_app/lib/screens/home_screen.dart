@@ -269,7 +269,6 @@ class _HomeScreenState extends State<HomeScreen>
     Map<String, dynamic> currentItem = Map<String, dynamic>.from(item);
     String label =
         currentItem['requester_device_label']?.toString() ?? 'Unknown device';
-    String code = currentItem['verification_code']?.toString() ?? '---';
     List<String> choices =
         ((currentItem['verification_choices'] as List?) ?? const [])
             .map((choice) => choice.toString())
@@ -324,7 +323,6 @@ class _HomeScreenState extends State<HomeScreen>
 
       currentItem = refreshedItem;
       label = currentItem['requester_device_label']?.toString() ?? label;
-      code = currentItem['verification_code']?.toString() ?? code;
       choices = ((currentItem['verification_choices'] as List?) ?? const [])
           .map((choice) => choice.toString())
           .where((choice) => choice.trim().isNotEmpty)
@@ -415,7 +413,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'On the other device, the code is $code. Choose that exact 3-digit code here, then tap Accept.',
+                  'Choose the exact 3-digit code shown on $label, then tap Accept.',
                   style: TextStyle(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     height: 1.35,
@@ -605,6 +603,8 @@ class _HomeScreenState extends State<HomeScreen>
         _headerAction(Icons.sync_rounded, _syncData,
             tooltip: 'Sync', loading: _isSyncing),
         _headerAction(Icons.password_rounded, () async {
+          final unlocked = await _appLockService.authenticateToUnlock(context);
+          if (!mounted || !unlocked) return;
           await Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PasswordsScreen()),

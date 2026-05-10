@@ -8,7 +8,7 @@ from twofa.models import EmailVerification
 
 from .backup_codes import build_backup_code_entries, encrypt_backup_codes
 from .models import BackupCodeSet, DeviceSession, PasswordlessLoginRequest
-from .notifications import create_notification
+from .notifications import create_notification, decrypt_notification_payload
 
 
 class DeviceSessionPrimaryChangeTests(APITestCase):
@@ -372,6 +372,185 @@ class PasswordlessLoginFlowTests(APITestCase):
         self.assertEqual(
             response.data['error'],
             'Only your current primary device can approve passwordless sign-ins.',
+        )
+
+    def test_passwordless_request_list_keeps_completed_logs_without_code(self):
+        start_response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        request_id = start_response.data['request_id']
+        request_obj = PasswordlessLoginRequest.objects.get(id=request_id)
+
+        self.primary_client.post(
+            reverse('passwordless-requests-approve', args=[request_id]),
+            {'selected_code': request_obj.get_verification_code()},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+        self.request_client.post(
+            reverse('auth-passwordless-poll'),
+            {'request_id': request_id},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        response = self.primary_client.get(
+            reverse('passwordless-requests-list'),
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['status'], 'completed')
+        self.assertNotIn('verification_code', response.data[0])
+        self.assertIn('created_at', response.data[0])
+        self.assertIn('updated_at', response.data[0])
+        self.assertIn('completed_at', response.data[0])
+
+    def test_passwordless_request_notification_hides_verification_code(self):
+        start_response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        self.assertEqual(start_response.status_code, status.HTTP_201_CREATED)
+
+        notification = self.user.app_notifications.get(
+            notification_type='passwordless_request',
+        )
+        payload = decrypt_notification_payload(notification.encrypted_payload)
+
+        self.assertNotIn(start_response.data['verification_code'], payload['details'])
+        self.assertNotIn('verification_code', payload.get('metadata', {}))
+
+    def test_only_primary_phone_can_delete_or_clear_passwordless_logs(self):
+        start_response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        request_id = start_response.data['request_id']
+        request_obj = PasswordlessLoginRequest.objects.get(id=request_id)
+
+        self.primary_client.post(
+            reverse('passwordless-requests-approve', args=[request_id]),
+            {'selected_code': request_obj.get_verification_code()},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+        self.request_client.post(
+            reverse('auth-passwordless-poll'),
+            {'request_id': request_id},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        other_client = APIClient()
+        other_client.force_authenticate(user=self.user)
+        DeviceSession.objects.create(
+            user=self.user,
+            device_id='desktop-reviewer',
+            device_label='Desktop Reviewer',
+            device_kind=DeviceSession.DEVICE_KIND_DESKTOP,
+            is_primary=False,
+        )
+
+        delete_response = other_client.post(
+            reverse('passwordless-requests-delete-log', args=[request_id]),
+            format='json',
+            HTTP_X_DEVICE_ID='desktop-reviewer',
+            HTTP_X_DEVICE_LABEL='Desktop Reviewer',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        clear_response = other_client.post(
+            reverse('passwordless-requests-clear-logs'),
+            format='json',
+            HTTP_X_DEVICE_ID='desktop-reviewer',
+            HTTP_X_DEVICE_LABEL='Desktop Reviewer',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        self.assertEqual(clear_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_clear_logs_preserves_pending_requests(self):
+        completed_start = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        completed_id = completed_start.data['request_id']
+        completed_request = PasswordlessLoginRequest.objects.get(id=completed_id)
+
+        self.primary_client.post(
+            reverse('passwordless-requests-approve', args=[completed_id]),
+            {'selected_code': completed_request.get_verification_code()},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+        self.request_client.post(
+            reverse('auth-passwordless-poll'),
+            {'request_id': completed_id},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        pending_start = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-02',
+            HTTP_X_DEVICE_LABEL='Travel Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        pending_id = pending_start.data['request_id']
+
+        clear_response = self.primary_client.post(
+            reverse('passwordless-requests-clear-logs'),
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(clear_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(clear_response.data['cleared_count'], 1)
+        self.assertFalse(
+            PasswordlessLoginRequest.objects.filter(id=completed_id).exists()
+        )
+        self.assertTrue(
+            PasswordlessLoginRequest.objects.filter(
+                id=pending_id,
+                status=PasswordlessLoginRequest.STATUS_PENDING,
+            ).exists()
         )
 
 

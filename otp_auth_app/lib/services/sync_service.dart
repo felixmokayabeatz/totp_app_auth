@@ -2694,6 +2694,71 @@ class SyncService {
     }
   }
 
+  Future<bool> deletePasswordlessRequestLog(String requestId) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to manage sign-in logs.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'passwordless-requests/$requestId/delete-log/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not delete this sign-in log.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not delete this sign-in log.';
+      return false;
+    }
+  }
+
+  Future<int?> clearPasswordlessRequestLogs() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to manage sign-in logs.';
+      return null;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'passwordless-requests/clear-logs/',
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if (response.statusCode == 200 && response.data is Map) {
+        return int.tryParse(response.data['cleared_count']?.toString() ?? '0') ??
+            0;
+      }
+      _lastErrorMessage = 'Could not clear the sign-in logs.';
+      return null;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not clear the sign-in logs.';
+      return null;
+    } catch (_) {
+      _lastErrorMessage = 'Could not clear the sign-in logs.';
+      return null;
+    }
+  }
+
   Future<bool> recoverPrimaryDevice({
     required String username,
     required String password,

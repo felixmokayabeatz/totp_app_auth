@@ -92,7 +92,6 @@ def create_passwordless_request_notification(
     user: User,
     *,
     requester_device_label: str,
-    verification_code: str,
 ) -> AppNotification:
     return create_notification(
         user,
@@ -103,11 +102,10 @@ def create_passwordless_request_notification(
         ),
         details=(
             f"Approve the passwordless sign-in request for {requester_device_label} "
-            f"only if the 3-digit code matches: {verification_code}."
+            "only if the 3-digit code matches what you see on that device."
         ),
         metadata={
             "requester_device_label": requester_device_label,
-            "verification_code": verification_code,
         },
     )
 

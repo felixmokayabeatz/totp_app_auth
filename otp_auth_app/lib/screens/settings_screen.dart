@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:file_selector_windows/file_selector_windows.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,6 +14,7 @@ import '../models/app_update_info.dart';
 import '../services/app_rating_service.dart';
 import '../models/otp_account.dart';
 import '../services/app_update_service.dart';
+import '../services/import_file_picker_service.dart';
 import '../services/sync_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
@@ -1556,190 +1555,132 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool isPickingFile = false;
     String? selectedFileName;
     String? errorText;
-    final pastedImportController = TextEditingController();
+    final filePicker = ImportFilePickerService();
 
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => StatefulBuilder(
-          builder: (dialogContext, setDialogState) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            backgroundColor: _cardColor,
-            title:
-                Text('Import Accounts', style: TextStyle(color: _textPrimary)),
-            content: SizedBox(
-              width: 420,
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title: Text('Import Accounts', style: TextStyle(color: _textPrimary)),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Scan Google Authenticator transfer QR codes, or choose a CSV export with columns such as Service, Account, Secret.',
+                    'Scan a Google Authenticator transfer QR, or choose a CSV, JSON, TXT, or otpauth export file.',
                     style: TextStyle(color: _textSecondary, fontSize: 13),
                   ),
                   if (Platform.isAndroid || Platform.isIOS) ...[
                     const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: isImporting
-                          ? null
-                          : () async {
-                              Navigator.pop(dialogContext);
-                              final imported = await Navigator.push<bool>(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const AddAccountScreen(
-                                      startScanning: true),
-                                ),
-                              );
-                              if (imported == true && mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content:
-                                        const Text('Success. Account added.'),
-                                    backgroundColor: const Color(0xFF10B981),
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: isImporting
+                            ? null
+                            : () async {
+                                Navigator.pop(dialogContext);
+                                final imported = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const AddAccountScreen(
+                                      startScanning: true,
                                     ),
                                   ),
                                 );
-                              }
-                            },
-                      icon: const Icon(Icons.qr_code_scanner_rounded),
-                      label: const Text('Scan transfer QR'),
+                                if (imported == true && mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content:
+                                          const Text('Success. Account added.'),
+                                      backgroundColor: const Color(0xFF10B981),
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                        icon: const Icon(Icons.qr_code_scanner_rounded),
+                        label: const Text('Scan transfer QR'),
+                      ),
                     ),
                   ],
-                  if (!Platform.isWindows) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'On phone, paste exported OTP text below. On Windows, you can also pick a CSV file.',
-                      style: TextStyle(
-                          color: Colors.orange.shade600, fontSize: 12),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: pastedImportController,
-                    minLines: 5,
-                    maxLines: 8,
-                    decoration: const InputDecoration(
-                      labelText: 'Paste OTP export text',
-                      hintText: 'otpauth links, migration links, CSV, or JSON',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) {
-                      final entries = OTPImportService().parse(value);
-                      setDialogState(() {
-                        selectedEntries = entries;
-                        selectedFileName = value.trim().isEmpty
-                            ? selectedFileName
-                            : 'Pasted export text';
-                        errorText = value.trim().isEmpty
-                            ? errorText
-                            : (entries.isEmpty
-                                ? 'No valid OTP accounts were found in the pasted text.'
-                                : null);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: isImporting
-                          ? null
-                          : () async {
-                              final clipboard =
-                                  await Clipboard.getData('text/plain');
-                              final value = clipboard?.text ?? '';
-                              pastedImportController.text = value;
-                              final entries = OTPImportService().parse(value);
-                              setDialogState(() {
-                                selectedEntries = entries;
-                                selectedFileName = value.trim().isEmpty
-                                    ? null
-                                    : 'Pasted export text';
-                                errorText = value.trim().isEmpty
-                                    ? null
-                                    : (entries.isEmpty
-                                        ? 'No valid OTP accounts were found in the pasted text.'
-                                        : null);
-                              });
-                            },
-                      icon: const Icon(Icons.paste_rounded),
-                      label: const Text('Paste clipboard'),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: isImporting ||
-                            isPickingFile ||
-                            !Platform.isWindows
-                        ? null
-                        : () async {
-                            setDialogState(() {
-                              isPickingFile = true;
-                              errorText = null;
-                            });
-
-                            try {
-                              final file = await FileSelectorWindows().openFile(
-                                confirmButtonText: 'Import CSV',
-                              );
-                              if (!dialogContext.mounted) return;
-
-                              if (file == null) {
-                                setDialogState(() => isPickingFile = false);
-                                return;
-                              }
-
-                              final fileName = file.name;
-                              if (!fileName.toLowerCase().endsWith('.csv')) {
+                  const SizedBox(height: 12),
+                  if (filePicker.canPickOtpImportFile)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: isImporting || isPickingFile
+                            ? null
+                            : () async {
                                 setDialogState(() {
-                                  selectedEntries = const [];
-                                  selectedFileName = null;
-                                  isPickingFile = false;
-                                  errorText = 'Choose a .csv file.';
+                                  isPickingFile = true;
+                                  errorText = null;
                                 });
-                                return;
-                              }
 
-                              final contents = await file.readAsString();
-                              final entries =
-                                  OTPImportService().parseCsv(contents);
-                              setDialogState(() {
-                                selectedEntries = entries;
-                                selectedFileName = fileName;
-                                isPickingFile = false;
-                                errorText = entries.isEmpty
-                                    ? 'No valid TOTP accounts were found in this CSV file.'
-                                    : null;
-                              });
-                            } catch (_) {
-                              if (!dialogContext.mounted) return;
-                              setDialogState(() {
-                                selectedEntries = const [];
-                                selectedFileName = null;
-                                isPickingFile = false;
-                                errorText = 'Could not read that CSV file.';
-                              });
-                            }
-                          },
-                    icon: isPickingFile
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _accent,
-                            ),
-                          )
-                        : const Icon(Icons.upload_file_rounded),
-                    label: Text(selectedFileName == null
-                        ? 'Choose CSV File'
-                        : 'Change CSV File'),
-                  ),
+                                try {
+                                  final file =
+                                      await filePicker.pickOtpImportFile();
+                                  if (!dialogContext.mounted) return;
+
+                                  if (file == null) {
+                                    setDialogState(() => isPickingFile = false);
+                                    return;
+                                  }
+
+                                  final entries =
+                                      OTPImportService().parse(file.content);
+                                  setDialogState(() {
+                                    selectedEntries = entries;
+                                    selectedFileName = file.fileName;
+                                    isPickingFile = false;
+                                    errorText = entries.isEmpty
+                                        ? 'No valid OTP accounts were found in ${file.fileName}.'
+                                        : null;
+                                  });
+                                } catch (_) {
+                                  if (!dialogContext.mounted) return;
+                                  setDialogState(() {
+                                    selectedEntries = const [];
+                                    selectedFileName = null;
+                                    isPickingFile = false;
+                                    errorText =
+                                        'Could not read that import file.';
+                                  });
+                                }
+                              },
+                        icon: isPickingFile
+                            ? SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: _accent,
+                                ),
+                              )
+                            : const Icon(Icons.upload_file_rounded),
+                        label: Text(
+                          selectedFileName == null
+                              ? 'Choose Import File'
+                              : 'Change Import File',
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      'File import is available on Android and Windows right now.',
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 12,
+                      ),
+                    ),
                   if (selectedFileName != null) ...[
                     const SizedBox(height: 12),
                     Container(
@@ -1781,61 +1722,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed:
-                    isImporting ? null : () => Navigator.pop(dialogContext),
-                child: Text('Cancel', style: TextStyle(color: _textSecondary)),
-              ),
-              ElevatedButton(
-                onPressed: isImporting || selectedEntries.isEmpty
-                    ? null
-                    : () async {
-                        setDialogState(() {
-                          isImporting = true;
-                          errorText = null;
-                        });
-
-                        final result = await _importOtpEntries(selectedEntries);
-                        if (!dialogContext.mounted) return;
-                        Navigator.pop(dialogContext);
-                        if (!mounted) return;
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(result.message),
-                            backgroundColor: result.importedCount > 0
-                                ? const Color(0xFF10B981)
-                                : Colors.orange,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        );
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                ),
-                child: isImporting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Import'),
-              ),
-            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: isImporting ? null : () => Navigator.pop(dialogContext),
+              child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: isImporting || selectedEntries.isEmpty
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        isImporting = true;
+                        errorText = null;
+                      });
+
+                      final result = await _importOtpEntries(selectedEntries);
+                      if (!dialogContext.mounted) return;
+                      Navigator.pop(dialogContext);
+                      if (!mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(result.message),
+                          backgroundColor: result.importedCount > 0
+                              ? const Color(0xFF10B981)
+                              : Colors.orange,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: isImporting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Import'),
+            ),
+          ],
         ),
-      );
-    } finally {
-      pastedImportController.dispose();
-    }
+      ),
+    );
   }
 
   Future<_ImportResult> _importOtpEntries(List<OTPImportEntry> entries) async {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/device_session_info.dart';
 import '../services/app_lock_service.dart';
 import '../services/sync_service.dart';
 
@@ -21,6 +22,7 @@ class _PasswordlessRequestsScreenState
 
   bool _isLoading = true;
   bool _isActing = false;
+  bool _canManageLogs = false;
   List<Map<String, dynamic>> _requests = const [];
   final Map<String, String> _selectedCodes = {};
 
@@ -29,11 +31,12 @@ class _PasswordlessRequestsScreenState
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
+  int get _removableLogCount => _requests.where((item) => !_isPending(item)).length;
 
   @override
   void initState() {
     super.initState();
-    _loadRequests();
+    _refreshPage(includeAccessState: true);
     _refreshTimer = Timer.periodic(
       const Duration(milliseconds: 500),
       (_) => _loadRequests(),
@@ -44,6 +47,31 @@ class _PasswordlessRequestsScreenState
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _refreshPage({bool includeAccessState = false}) async {
+    if (includeAccessState) {
+      await _loadAccessState();
+    }
+    await _loadRequests();
+  }
+
+  Future<void> _loadAccessState() async {
+    final sessions = await _syncService.getActiveDeviceSessions();
+    if (!mounted) return;
+
+    DeviceSessionInfo? currentSession;
+    for (final session in sessions) {
+      if (session.isCurrent) {
+        currentSession = session;
+        break;
+      }
+    }
+
+    setState(() {
+      _canManageLogs = currentSession?.isPrimary == true &&
+          currentSession?.deviceKind == 'mobile';
+    });
   }
 
   Future<void> _loadRequests() async {
@@ -59,9 +87,8 @@ class _PasswordlessRequestsScreenState
           .removeWhere((requestId, _) => !requestIds.contains(requestId));
       for (final item in requests) {
         final requestId = item['id']?.toString() ?? '';
-        if (requestId.isEmpty) {
-          continue;
-        }
+        if (requestId.isEmpty) continue;
+
         final choices = ((item['verification_choices'] as List?) ?? const [])
             .map((choice) => choice.toString())
             .where((choice) => choice.trim().isNotEmpty)
@@ -75,11 +102,15 @@ class _PasswordlessRequestsScreenState
     });
   }
 
+  bool _isPending(Map<String, dynamic> item) =>
+      (item['status']?.toString() ?? 'pending').toLowerCase() == 'pending';
+
   String _prettyStatus(Map<String, dynamic> item) {
-    final status = (item['status']?.toString() ?? 'pending').toLowerCase();
-    switch (status) {
+    switch ((item['status']?.toString() ?? 'pending').toLowerCase()) {
       case 'approved':
         return 'Approved';
+      case 'completed':
+        return 'Completed';
       case 'denied':
         return 'Denied';
       case 'expired':
@@ -87,6 +118,39 @@ class _PasswordlessRequestsScreenState
       default:
         return 'Pending';
     }
+  }
+
+  DateTime? _parseTimestamp(dynamic rawValue) {
+    if (rawValue == null) return null;
+    return DateTime.tryParse(rawValue.toString());
+  }
+
+  DateTime? _statusTimestamp(Map<String, dynamic> item) {
+    final status = (item['status']?.toString() ?? 'pending').toLowerCase();
+    switch (status) {
+      case 'approved':
+        return _parseTimestamp(item['approved_at']) ??
+            _parseTimestamp(item['updated_at']);
+      case 'completed':
+        return _parseTimestamp(item['completed_at']) ??
+            _parseTimestamp(item['approved_at']) ??
+            _parseTimestamp(item['updated_at']);
+      case 'denied':
+      case 'expired':
+        return _parseTimestamp(item['updated_at']);
+      default:
+        return _parseTimestamp(item['created_at']);
+    }
+  }
+
+  String _formatTimestamp(DateTime? value) {
+    if (value == null) return 'Unavailable';
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day $hour:$minute';
   }
 
   Future<void> _handleRequest(
@@ -125,7 +189,125 @@ class _PasswordlessRequestsScreenState
 
     if (success) {
       _selectedCodes.remove(requestId);
-      await _loadRequests();
+      await _refreshPage();
+    }
+  }
+
+  Future<void> _deleteLog(Map<String, dynamic> item) async {
+    final requestId = item['id']?.toString() ?? '';
+    final label =
+        item['requester_device_label']?.toString() ?? 'Unknown device';
+    if (requestId.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Delete Sign-in Log', style: TextStyle(color: _textPrimary)),
+        content: Text(
+          'Delete the encrypted sign-in approval log for $label?',
+          style: TextStyle(color: _textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final unlocked = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !unlocked) return;
+
+    setState(() => _isActing = true);
+    final success = await _syncService.deletePasswordlessRequestLog(requestId);
+    if (!mounted) return;
+    setState(() => _isActing = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Encrypted sign-in log deleted.'
+              : (_syncService.lastErrorMessage ??
+                  'Could not delete this sign-in log.'),
+        ),
+        backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    if (success) {
+      await _refreshPage();
+    }
+  }
+
+  Future<void> _clearLogs() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Clear Sign-in Logs', style: TextStyle(color: _textPrimary)),
+        content: Text(
+          'Clear all encrypted sign-in approval logs while keeping any still-pending requests?',
+          style: TextStyle(color: _textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Clear Logs'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final unlocked = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !unlocked) return;
+
+    setState(() => _isActing = true);
+    final clearedCount = await _syncService.clearPasswordlessRequestLogs();
+    if (!mounted) return;
+    setState(() => _isActing = false);
+
+    final success = clearedCount != null;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Cleared $clearedCount encrypted sign-in log${clearedCount == 1 ? '' : 's'}.'
+              : (_syncService.lastErrorMessage ??
+                  'Could not clear the sign-in logs.'),
+        ),
+        backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    if (success) {
+      await _refreshPage();
     }
   }
 
@@ -196,7 +378,9 @@ class _PasswordlessRequestsScreenState
     final label =
         item['requester_device_label']?.toString() ?? 'Unknown device';
     final kind = item['requester_device_kind']?.toString() ?? 'unknown';
-    final code = item['verification_code']?.toString() ?? '---';
+    final kindLabel = kind.isEmpty
+        ? 'Unknown'
+        : '${kind[0].toUpperCase()}${kind.substring(1)}';
     final selectedCode = _selectedCodes[requestId];
     final choices = ((item['verification_choices'] as List?) ?? const [])
         .map((choice) => choice.toString())
@@ -214,30 +398,49 @@ class _PasswordlessRequestsScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: _textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Type: $kindLabel',
+                      style: TextStyle(color: _textSecondary, fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
-              Text(
-                _prettyStatus(item),
-                style: TextStyle(
-                  color: isPending ? _accent : _textSecondary,
-                  fontWeight: FontWeight.w700,
-                ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _prettyStatus(item),
+                    style: TextStyle(
+                      color: isPending ? _accent : _textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (!isPending && _canManageLogs)
+                    IconButton(
+                      onPressed: _isActing ? null : () => _deleteLog(item),
+                      tooltip: 'Delete encrypted log',
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      color: Colors.red.shade400,
+                    ),
+                ],
               ),
             ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Type: ${kind[0].toUpperCase()}${kind.substring(1)}',
-            style: TextStyle(color: _textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 12),
           Container(
@@ -253,30 +456,38 @@ class _PasswordlessRequestsScreenState
               children: [
                 Row(
                   children: [
-                    Icon(Icons.password_rounded, color: _accent),
+                    Icon(
+                      isPending
+                          ? Icons.phonelink_lock_rounded
+                          : Icons.lock_clock_rounded,
+                      color: _accent,
+                    ),
                     const SizedBox(width: 10),
-                    Text(
-                      code,
-                      style: TextStyle(
-                        color: _textPrimary,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2,
+                    Expanded(
+                      child: Text(
+                        isPending
+                            ? 'Choose the exact 3-digit code shown on $label.'
+                            : 'Encrypted sign-in log',
+                        style: TextStyle(
+                          color: _textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                if (isPending && choices.isNotEmpty) ...[
-                  const SizedBox(height: 12),
+                const SizedBox(height: 12),
+                Text(
+                  'Requested: ${_formatTimestamp(_parseTimestamp(item['created_at']))}',
+                  style: TextStyle(color: _textSecondary, fontSize: 12),
+                ),
+                if (!isPending)
                   Text(
-                    'Choose the exact 3-digit code shown on $label',
-                    style: TextStyle(
-                      color: _textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    '${_prettyStatus(item)}: ${_formatTimestamp(_statusTimestamp(item))}',
+                    style: TextStyle(color: _textSecondary, fontSize: 12),
                   ),
-                ],
               ],
             ),
           ),
@@ -336,6 +547,39 @@ class _PasswordlessRequestsScreenState
     );
   }
 
+  Widget _buildAccessHint() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _isDark ? Colors.white10 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            _canManageLogs ? Icons.lock_rounded : Icons.visibility_rounded,
+            color: _accent,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _canManageLogs
+                  ? 'These sign-in approval logs stay encrypted. This primary phone can delete individual history items or clear old logs.'
+                  : 'These sign-in approval logs stay encrypted. You can review them here, but only the current primary phone can delete or clear them.',
+              style: TextStyle(
+                color: _textSecondary,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -347,23 +591,33 @@ class _PasswordlessRequestsScreenState
         ),
         backgroundColor: _accent,
         foregroundColor: Colors.white,
+        actions: [
+          if (_canManageLogs)
+            IconButton(
+              onPressed: _isActing || _removableLogCount == 0 ? null : _clearLogs,
+              tooltip: 'Clear encrypted logs',
+              icon: const Icon(Icons.delete_sweep_rounded),
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _loadRequests,
+              onRefresh: () => _refreshPage(includeAccessState: true),
               child: _requests.isEmpty
                   ? ListView(
+                      padding: const EdgeInsets.all(16),
                       children: [
+                        _buildAccessHint(),
                         Padding(
-                          padding: const EdgeInsets.all(28),
+                          padding: const EdgeInsets.all(12),
                           child: Column(
                             children: [
                               Icon(Icons.phonelink_lock_rounded,
                                   size: 52, color: _accent),
                               const SizedBox(height: 16),
                               Text(
-                                'No sign-in requests right now',
+                                'No sign-in approvals yet',
                                 style: TextStyle(
                                   color: _textPrimary,
                                   fontSize: 18,
@@ -372,10 +626,12 @@ class _PasswordlessRequestsScreenState
                               ),
                               const SizedBox(height: 10),
                               Text(
-                                'When another device asks to sign in passwordlessly, approve it here from your primary phone.',
+                                'When another device asks to sign in passwordlessly, pending requests and encrypted approval history will appear here.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                    color: _textSecondary, height: 1.45),
+                                  color: _textSecondary,
+                                  height: 1.45,
+                                ),
                               ),
                             ],
                           ),
@@ -385,6 +641,7 @@ class _PasswordlessRequestsScreenState
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        _buildAccessHint(),
                         for (final item in _requests) _buildRequestCard(item),
                       ],
                     ),

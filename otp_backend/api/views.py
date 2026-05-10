@@ -369,7 +369,6 @@ class AuthViewSet(viewsets.GenericViewSet):
         create_passwordless_request_notification(
             user,
             requester_device_label=request_obj.requester_device_label,
-            verification_code=verification_code,
         )
 
         return Response(
@@ -1048,8 +1047,6 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
         _expire_stale_passwordless_requests(self.request.user)
         return PasswordlessLoginRequest.objects.filter(
             user=self.request.user,
-        ).exclude(
-            status=PasswordlessLoginRequest.STATUS_COMPLETED,
         ).order_by('-created_at')
 
     def _ensure_primary_mobile_session(self):
@@ -1075,7 +1072,7 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
         return current_session, None
 
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()[:20]
+        queryset = self.get_queryset()[:50]
         serializer = self.get_serializer(
             queryset,
             many=True,
@@ -1133,6 +1130,35 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
         login_request.reviewed_by_session = current_session
         login_request.save(update_fields=['status', 'reviewed_by_session', 'updated_at'])
         return Response({'success': True})
+
+    @action(detail=True, methods=['post'], url_path='delete-log')
+    def delete_log(self, request, pk=None):
+        _, error_response = self._ensure_primary_mobile_session()
+        if error_response is not None:
+            return error_response
+
+        login_request = self.get_object()
+        if login_request.status == PasswordlessLoginRequest.STATUS_PENDING:
+            return Response(
+                {'error': 'Pending sign-in requests cannot be deleted.'},
+                status=409,
+            )
+
+        login_request.delete()
+        return Response({'success': True})
+
+    @action(detail=False, methods=['post'], url_path='clear-logs')
+    def clear_logs(self, request):
+        _, error_response = self._ensure_primary_mobile_session()
+        if error_response is not None:
+            return error_response
+
+        queryset = self.get_queryset().exclude(
+            status=PasswordlessLoginRequest.STATUS_PENDING,
+        )
+        cleared_count = queryset.count()
+        queryset.delete()
+        return Response({'success': True, 'cleared_count': cleared_count})
 
 
 @api_view(['POST'])

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../models/otp_account.dart';
+import '../services/import_file_picker_service.dart';
 import '../services/otp_import_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/sync_service.dart';
@@ -55,7 +55,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 4),
             child: TextButton.icon(
-              onPressed: _importOtpExportText,
+              onPressed: _importOtpFile,
               icon: const Icon(
                 Icons.upload_file_rounded,
                 color: Colors.white,
@@ -272,67 +272,38 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     }
   }
 
-  Future<void> _importOtpExportText() async {
+  Future<void> _importOtpFile() async {
     await _stopScanner();
-    if (!mounted) return;
-    final controller = TextEditingController();
-    try {
-      final rawText = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Import OTP export text'),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Paste OTP export text, otpauth links, migration links, CSV, or JSON here. This works on phones too.',
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  minLines: 8,
-                  maxLines: 14,
-                  decoration: const InputDecoration(
-                    hintText: 'Paste exported OTP data here',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
+    final filePicker = ImportFilePickerService();
+    if (!filePicker.canPickOtpImportFile) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'OTP file import is available on Android and Windows right now.',
             ),
+            behavior: SnackBarBehavior.floating,
           ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                final clipboard = await Clipboard.getData('text/plain');
-                controller.text = clipboard?.text ?? controller.text;
-              },
-              child: const Text('Paste clipboard'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text),
-              child: const Text('Import'),
-            ),
-          ],
-        ),
-      );
+        );
+      }
+      await _restartScanner();
+      return;
+    }
 
-      if (!mounted || rawText == null || rawText.trim().isEmpty) {
+    try {
+      final pickedFile = await filePicker.pickOtpImportFile();
+      if (!mounted || pickedFile == null) {
         return;
       }
 
-      final importedEntries = OTPImportService().parse(rawText);
+      final importedEntries = OTPImportService().parse(pickedFile.content);
       if (importedEntries.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(
-                'No supported OTP accounts were found in that pasted export.'),
+            content: Text(
+              'No supported OTP accounts were found in ${pickedFile.fileName}.',
+            ),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
           ),
@@ -344,8 +315,16 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       if (confirmed == true) {
         await _saveImportedEntries(importedEntries);
       }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not read that import file.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
-      controller.dispose();
       await _restartScanner();
     }
   }

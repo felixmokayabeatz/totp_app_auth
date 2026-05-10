@@ -102,7 +102,6 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
 
 
 class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
-    verification_code = serializers.SerializerMethodField()
     code_expires_at = serializers.SerializerMethodField()
     verification_choices = serializers.SerializerMethodField()
 
@@ -112,12 +111,14 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
             'id',
             'requester_device_label',
             'requester_device_kind',
-            'verification_code',
             'code_expires_at',
             'verification_choices',
             'status',
             'expires_at',
             'created_at',
+            'updated_at',
+            'approved_at',
+            'completed_at',
         ]
 
     def get_verification_choices(self, obj):
@@ -125,9 +126,6 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
         if builder is None:
             return []
         return builder(obj)
-
-    def get_verification_code(self, obj):
-        return obj.get_verification_code()
 
     def get_code_expires_at(self, obj):
         return obj.code_expires_at().isoformat()

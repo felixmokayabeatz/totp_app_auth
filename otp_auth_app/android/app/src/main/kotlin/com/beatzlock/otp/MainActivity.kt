@@ -113,6 +113,7 @@ class MainActivity : FlutterFragmentActivity() {
             "com.beatzlock.otp/file_picker"
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+                "pickImportFile",
                 "pickPasswordImportFile" -> {
                     if (pendingDocumentPickerResult != null) {
                         result.error(
