@@ -252,12 +252,13 @@ def _recovery_codes_generated_context(
     generated_at: str = '',
     device_label: str = '',
 ):
-    device_phrase = (
-        f'from your primary device {device_label}'
+    location_phrase = (
+        f'Primary device: {device_label}'
         if device_label
-        else 'from your primary device'
+        else 'Primary device'
     )
-    time_phrase = f' at {generated_at}' if generated_at else ''
+    if generated_at:
+        location_phrase = f'{location_phrase} on {generated_at}'
     return _base_context(
         username,
         preheader='A fresh set of BeatzLock recovery codes was generated for your account.',
@@ -271,7 +272,7 @@ def _recovery_codes_generated_context(
             },
             {
                 'label': 'Generated from',
-                'body': f'{device_phrase}{time_phrase}.',
+                'body': f'{location_phrase}.',
             },
         ],
         notice={

@@ -3,7 +3,11 @@ import hashlib
 import json
 import secrets
 import string
+import struct
+import zlib
+from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 from textwrap import wrap
 
 from cryptography.fernet import Fernet
@@ -86,6 +90,118 @@ def remaining_backup_codes(entries: list[dict[str, str | None]]) -> int:
     return sum(1 for entry in entries if not entry.get("used_at"))
 
 
+def _paeth_predictor(a: int, b: int, c: int) -> int:
+    p = a + b - c
+    pa = abs(p - a)
+    pb = abs(p - b)
+    pc = abs(p - c)
+    if pa <= pb and pa <= pc:
+        return a
+    if pb <= pc:
+        return b
+    return c
+
+
+def _unfilter_png_scanlines(raw: bytes, width: int, height: int, bytes_per_pixel: int) -> bytes:
+    stride = width * bytes_per_pixel
+    rows: list[bytes] = []
+    offset = 0
+
+    for _ in range(height):
+        filter_type = raw[offset]
+        offset += 1
+        scanline = bytearray(raw[offset:offset + stride])
+        offset += stride
+        previous = rows[-1] if rows else bytes(stride)
+
+        if filter_type == 1:
+            for i in range(stride):
+                left = scanline[i - bytes_per_pixel] if i >= bytes_per_pixel else 0
+                scanline[i] = (scanline[i] + left) & 0xFF
+        elif filter_type == 2:
+            for i in range(stride):
+                scanline[i] = (scanline[i] + previous[i]) & 0xFF
+        elif filter_type == 3:
+            for i in range(stride):
+                left = scanline[i - bytes_per_pixel] if i >= bytes_per_pixel else 0
+                up = previous[i]
+                scanline[i] = (scanline[i] + ((left + up) // 2)) & 0xFF
+        elif filter_type == 4:
+            for i in range(stride):
+                left = scanline[i - bytes_per_pixel] if i >= bytes_per_pixel else 0
+                up = previous[i]
+                up_left = previous[i - bytes_per_pixel] if i >= bytes_per_pixel else 0
+                scanline[i] = (scanline[i] + _paeth_predictor(left, up, up_left)) & 0xFF
+        elif filter_type != 0:
+            raise ValueError("Unsupported PNG filter type")
+
+        rows.append(bytes(scanline))
+
+    return b"".join(rows)
+
+
+@lru_cache(maxsize=1)
+def _load_pdf_logo() -> dict[str, object]:
+    logo_path = (
+        Path(__file__).resolve().parents[2]
+        / "otp_auth_app"
+        / "web"
+        / "favicon.png"
+    )
+    data = logo_path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("Unsupported logo format")
+
+    offset = 8
+    width = height = 0
+    bit_depth = color_type = interlace = 0
+    idat_parts: list[bytes] = []
+
+    while offset < len(data):
+        chunk_length = struct.unpack(">I", data[offset:offset + 4])[0]
+        chunk_type = data[offset + 4:offset + 8]
+        chunk_data = data[offset + 8:offset + 8 + chunk_length]
+        offset += chunk_length + 12
+
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type, _, _, interlace = struct.unpack(
+                ">IIBBBBB",
+                chunk_data,
+            )
+        elif chunk_type == b"IDAT":
+            idat_parts.append(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+
+    if bit_depth != 8 or color_type != 6 or interlace != 0:
+        raise ValueError("Unsupported logo PNG color profile")
+
+    decompressed = zlib.decompress(b"".join(idat_parts))
+    pixels = _unfilter_png_scanlines(decompressed, width, height, 4)
+
+    rgb_rows = []
+    alpha_rows = []
+    for row_index in range(height):
+        row = pixels[row_index * width * 4:(row_index + 1) * width * 4]
+        rgb_row = bytearray()
+        alpha_row = bytearray()
+        for pixel_index in range(0, len(row), 4):
+            rgb_row.extend(row[pixel_index:pixel_index + 3])
+            alpha_row.append(row[pixel_index + 3])
+        rgb_rows.append(bytes(rgb_row))
+        alpha_rows.append(bytes(alpha_row))
+
+    rgb_stream = zlib.compress(b"".join(b"\x00" + row for row in rgb_rows))
+    alpha_stream = zlib.compress(b"".join(b"\x00" + row for row in alpha_rows))
+
+    return {
+        "width": width,
+        "height": height,
+        "rgb_stream": rgb_stream,
+        "alpha_stream": alpha_stream,
+    }
+
+
 def build_backup_codes_pdf(
     *,
     email: str,
@@ -122,6 +238,7 @@ def build_backup_codes_pdf(
     footer_color = (0.57, 0.63, 0.74) if is_dark else (0.47, 0.51, 0.60)
     generated_at_display = (generated_at or "Just now").strip()
     generated_from_display = (generated_from or "Primary device").strip()
+    logo = _load_pdf_logo()
 
     def esc(value: str) -> str:
         return (
@@ -175,10 +292,17 @@ def build_backup_codes_pdf(
             trimmed[-1] = f"{last}..."
         return trimmed
 
+    def image(x: float, y_pos: float, width: float, height: float, name: str) -> None:
+        commands.append(
+            f"q {width:.2f} 0 0 {height:.2f} {x:.2f} {y_pos:.2f} cm /{name} Do Q"
+        )
+
     rect(0, 0, page_width, page_height, fill=page_bg)
     rect(0, page_height - 190, page_width, 190, fill=hero_bg)
     rect(margin, page_height - 212, page_width - (margin * 2), 4, fill=hero_accent)
-    text(margin, y, "BeatzLock Auth", size=28, font="F2", color=hero_title)
+    logo_size = 34
+    image(margin, y - 6, logo_size, logo_size, "ImLogo")
+    text(margin + logo_size + 14, y, "BeatzLock Auth", size=28, font="F2", color=hero_title)
     y -= 34
     text(
         margin,
@@ -193,12 +317,12 @@ def build_backup_codes_pdf(
         margin,
         y,
         "Keep this PDF somewhere safe. Each code can help you get back into your account if you lose access to your device or your normal sign-in method.",
-        width_chars=52,
+        width_chars=76,
         size=11,
         color=hero_body,
     )
 
-    y = page_height - 290
+    y -= 34
     card_height = 138
     info_width = (page_width - (margin * 2) - 16) / 2
     rect(margin, y, info_width, card_height, fill=card_fill, stroke=card_stroke)
@@ -275,16 +399,34 @@ def build_backup_codes_pdf(
     text(margin, 48, "Generated by BeatzLock Auth", size=10, color=footer_color)
 
     stream = "\n".join(commands).encode("latin-1", "replace")
+    rgb_stream = logo["rgb_stream"]
+    alpha_stream = logo["alpha_stream"]
+    logo_width = logo["width"]
+    logo_height = logo["height"]
+
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         (
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] "
-            "/Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>"
+            "/Resources << /Font << /F1 4 0 R /F2 5 0 R >> "
+            "/XObject << /ImLogo 7 0 R >> >> /Contents 6 0 R >>"
         ).encode("ascii"),
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
         f"<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream",
+        (
+            f"<< /Type /XObject /Subtype /Image /Width {logo_width} /Height {logo_height} "
+            f"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode "
+            f"/DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns {logo_width} >> "
+            f"/SMask 8 0 R /Length {len(rgb_stream)} >>\nstream\n"
+        ).encode("ascii") + rgb_stream + b"\nendstream",
+        (
+            f"<< /Type /XObject /Subtype /Image /Width {logo_width} /Height {logo_height} "
+            f"/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode "
+            f"/DecodeParms << /Predictor 15 /Colors 1 /BitsPerComponent 8 /Columns {logo_width} >> "
+            f"/Length {len(alpha_stream)} >>\nstream\n"
+        ).encode("ascii") + alpha_stream + b"\nendstream",
     ]
 
     buffer = BytesIO()
