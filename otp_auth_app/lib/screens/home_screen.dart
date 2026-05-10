@@ -203,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     _passwordlessPollTimer = Timer.periodic(
-      const Duration(seconds: 4),
+      const Duration(milliseconds: 500),
       (_) => _pollPasswordlessApprovalRequests(),
     );
     await _pollPasswordlessApprovalRequests();
@@ -263,19 +263,87 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _showPasswordlessPrompt(Map<String, dynamic> item) async {
     if (!mounted) return;
 
-    final label = item['requester_device_label']?.toString() ?? 'Unknown device';
-    final code = item['verification_code']?.toString() ?? '---';
-    final choices = ((item['verification_choices'] as List?) ?? const [])
-        .map((choice) => choice.toString())
-        .where((choice) => choice.trim().isNotEmpty)
-        .toList();
+    final requestId = item['id']?.toString() ?? '';
+    Map<String, dynamic> currentItem = Map<String, dynamic>.from(item);
+    String label =
+        currentItem['requester_device_label']?.toString() ?? 'Unknown device';
+    String code = currentItem['verification_code']?.toString() ?? '---';
+    List<String> choices =
+        ((currentItem['verification_choices'] as List?) ?? const [])
+            .map((choice) => choice.toString())
+            .where((choice) => choice.trim().isNotEmpty)
+            .toList();
     String? selectedCode;
+    Timer? dialogRefreshTimer;
+    BuildContext? activeDialogContext;
+    StateSetter? dialogSetState;
+    var dialogClosed = false;
+
+    Future<void> refreshDialogData() async {
+      if (!mounted || dialogClosed || requestId.isEmpty) {
+        return;
+      }
+
+      final requests = await _syncService.getPasswordlessRequests();
+      if (!mounted || dialogClosed) {
+        return;
+      }
+
+      Map<String, dynamic>? refreshedItem;
+      for (final request in requests) {
+        if (request['id']?.toString() == requestId) {
+          refreshedItem = Map<String, dynamic>.from(request);
+          break;
+        }
+      }
+
+      if (refreshedItem == null) {
+        return;
+      }
+
+      final status =
+          (refreshedItem['status']?.toString() ?? 'pending').toLowerCase();
+      if (status != 'pending') {
+        dialogRefreshTimer?.cancel();
+        dialogClosed = true;
+        final dialogContext = activeDialogContext;
+        if (dialogContext != null && dialogContext.mounted) {
+          Navigator.pop(dialogContext);
+        }
+        if (!mounted) return;
+        _showSnackBar(
+          status == 'expired'
+              ? '$label sign-in request expired.'
+              : '$label sign-in request is no longer pending.',
+          Colors.orange,
+        );
+        return;
+      }
+
+      currentItem = refreshedItem;
+      label = currentItem['requester_device_label']?.toString() ?? label;
+      code = currentItem['verification_code']?.toString() ?? code;
+      choices = ((currentItem['verification_choices'] as List?) ?? const [])
+          .map((choice) => choice.toString())
+          .where((choice) => choice.trim().isNotEmpty)
+          .toList();
+      if (selectedCode != null && !choices.contains(selectedCode)) {
+        selectedCode = null;
+      }
+      dialogSetState?.call(() {});
+    }
 
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
+          activeDialogContext = dialogContext;
+          dialogSetState = setDialogState;
+          dialogRefreshTimer ??= Timer.periodic(
+            const Duration(milliseconds: 500),
+            (_) => refreshDialogData(),
+          );
           final theme = Theme.of(dialogContext);
           final isDark = theme.brightness == Brightness.dark;
           final surfaceColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
@@ -355,8 +423,9 @@ class _HomeScreenState extends State<HomeScreen>
               TextButton(
                 onPressed: () async {
                   final success = await _syncService
-                      .denyPasswordlessRequest(item['id']?.toString() ?? '');
+                      .denyPasswordlessRequest(requestId);
                   if (!dialogContext.mounted) return;
+                  dialogClosed = true;
                   Navigator.pop(dialogContext);
                   _showSnackBar(
                     success
@@ -377,10 +446,11 @@ class _HomeScreenState extends State<HomeScreen>
                         if (!dialogContext.mounted || !unlocked) return;
                         final success =
                             await _syncService.approvePasswordlessRequest(
-                          item['id']?.toString() ?? '',
+                          requestId,
                           selectedCode: selectedCode!,
                         );
                         if (!dialogContext.mounted) return;
+                        dialogClosed = true;
                         Navigator.pop(dialogContext);
                         _showSnackBar(
                           success
@@ -401,6 +471,8 @@ class _HomeScreenState extends State<HomeScreen>
         },
       ),
     );
+    dialogClosed = true;
+    dialogRefreshTimer?.cancel();
   }
 
   Future<void> _initUserBox() async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/app_lock_service.dart';
@@ -14,6 +16,7 @@ class PasswordlessRequestsScreen extends StatefulWidget {
 class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen> {
   final SyncService _syncService = SyncService();
   final AppLockService _appLockService = AppLockService();
+  Timer? _refreshTimer;
 
   bool _isLoading = true;
   bool _isActing = false;
@@ -30,6 +33,16 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
   void initState() {
     super.initState();
     _loadRequests();
+    _refreshTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _loadRequests(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadRequests() async {
@@ -42,6 +55,20 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
           .where((id) => id.isNotEmpty)
           .toSet();
       _selectedCodes.removeWhere((requestId, _) => !requestIds.contains(requestId));
+      for (final item in requests) {
+        final requestId = item['id']?.toString() ?? '';
+        if (requestId.isEmpty) {
+          continue;
+        }
+        final choices = ((item['verification_choices'] as List?) ?? const [])
+            .map((choice) => choice.toString())
+            .where((choice) => choice.trim().isNotEmpty)
+            .toSet();
+        final selectedCode = _selectedCodes[requestId];
+        if (selectedCode != null && !choices.contains(selectedCode)) {
+          _selectedCodes.remove(requestId);
+        }
+      }
       _isLoading = false;
     });
   }
