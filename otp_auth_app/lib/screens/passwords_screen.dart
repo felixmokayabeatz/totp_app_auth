@@ -1,6 +1,7 @@
 import 'dart:io';
+import 'dart:convert';
 
-import 'package:file_selector_windows/file_selector_windows.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -105,7 +106,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   }
 
   Future<void> _importPasswords() async {
-    final choice = await showModalBottomSheet<String>(
+    final proceed = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: _cardColor,
       shape: const RoundedRectangleBorder(
@@ -118,44 +119,39 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(Icons.paste_rounded, color: _accent),
-                title: const Text('Paste export text'),
-                subtitle: const Text('Import on phone or desktop from copied CSV, JSON, or exported text'),
-                onTap: () => Navigator.pop(sheetContext, 'paste'),
-              ),
-              if (Platform.isWindows)
-                ListTile(
-                  leading: Icon(Icons.upload_file_rounded, color: _accent),
-                  title: const Text('Import file'),
-                  subtitle: const Text('Choose a CSV or JSON export file from this device'),
-                  onTap: () => Navigator.pop(sheetContext, 'file'),
+                leading: Icon(Icons.upload_file_rounded, color: _accent),
+                title: const Text('Import CSV or JSON'),
+                subtitle: const Text(
+                  'Choose a password export file from Proton Pass, browsers, or other managers. Paste import is disabled.',
                 ),
+                onTap: () => Navigator.pop(sheetContext, true),
+              ),
             ],
           ),
         ),
       ),
     );
 
-    if (choice == 'file') {
-      await _importPasswordsFromDesktopFile();
-      return;
-    }
-    if (choice == 'paste') {
-      await _importPasswordsFromText();
+    if (proceed == true) {
+      await _importPasswordsFromFile();
     }
   }
 
-  Future<void> _importPasswordsFromDesktopFile() async {
+  Future<void> _importPasswordsFromFile() async {
     setState(() => _isImporting = true);
     try {
-      final file = await FileSelectorWindows().openFile(
-        confirmButtonText: 'Import passwords',
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['csv', 'json'],
+        allowMultiple: false,
+        withData: true,
       );
-      if (!mounted || file == null) {
+      if (!mounted || result == null || result.files.isEmpty) {
         if (mounted) setState(() => _isImporting = false);
         return;
       }
 
+      final file = result.files.single;
       final fileName = file.name;
       final lower = fileName.toLowerCase();
       if (!lower.endsWith('.csv') && !lower.endsWith('.json')) {
@@ -171,7 +167,15 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         return;
       }
 
-      final contents = await file.readAsString();
+      String contents;
+      if (file.bytes != null) {
+        contents = utf8.decode(file.bytes!, allowMalformed: true);
+      } else if (file.path != null && file.path!.isNotEmpty) {
+        contents = await File(file.path!).readAsString();
+      } else {
+        throw Exception('The selected file could not be read.');
+      }
+
       await _finishPasswordImport(contents, fileName: fileName);
     } catch (e) {
       if (!mounted) return;
@@ -183,78 +187,6 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-    }
-  }
-
-  Future<void> _importPasswordsFromText() async {
-    final controller = TextEditingController();
-    setState(() => _isImporting = true);
-    try {
-      final importedText = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          backgroundColor: _cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Text(
-            'Paste password export',
-            style: TextStyle(color: _textPrimary),
-          ),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Paste exported password CSV, JSON, or note data here. This works on phones too.',
-                  style: TextStyle(color: _textSecondary, height: 1.4),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  minLines: 8,
-                  maxLines: 14,
-                  decoration: const InputDecoration(
-                    hintText: 'Paste export text here',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                final clipboard = await Clipboard.getData('text/plain');
-                controller.text = clipboard?.text ?? controller.text;
-              },
-              child: const Text('Paste clipboard'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Import'),
-            ),
-          ],
-        ),
-      );
-
-      if (!mounted || importedText == null || importedText.trim().isEmpty) {
-        if (mounted) setState(() => _isImporting = false);
-        return;
-      }
-
-      await _finishPasswordImport(importedText, fileName: 'pasted-password-export.txt');
-    } finally {
-      controller.dispose();
     }
   }
 
@@ -289,10 +221,11 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     var skippedCount = 0;
 
     for (final imported in entries) {
+      final importedUsername = _importedUsername(imported);
       final duplicate = box.values.any((entry) {
         final sameTitle = entry.title.toLowerCase() == imported.title.toLowerCase();
         final sameUsername =
-            (entry.username ?? '').toLowerCase() == (imported.username ?? '').toLowerCase();
+            entry.username.toLowerCase() == importedUsername.toLowerCase();
         final sameContext =
             (entry.serverIP ?? '').toLowerCase() == (imported.url ?? '').toLowerCase();
         return sameTitle && sameUsername && sameContext;
@@ -305,11 +238,11 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       final entry = PasswordEntry(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         title: imported.title,
-        username: imported.username ?? '',
+        username: importedUsername,
         password: imported.password ?? '',
-        note: imported.note,
+        note: _buildImportedEncryptedNote(imported),
         serverIP: imported.url,
-        createdAt: DateTime.now(),
+        createdAt: imported.createdAt ?? DateTime.now(),
         userId: userId,
       );
       await box.put(entry.id, entry);
@@ -333,6 +266,57 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     }
 
     return 'Imported $importedCount secure item${importedCount == 1 ? '' : 's'} and skipped $skippedCount duplicate${skippedCount == 1 ? '' : 's'}.';
+  }
+
+  String _importedUsername(PasswordImportEntry entry) {
+    final username = entry.username?.trim() ?? '';
+    if (username.isNotEmpty) {
+      return username;
+    }
+    return entry.email?.trim() ?? '';
+  }
+
+  String? _buildImportedEncryptedNote(PasswordImportEntry entry) {
+    final sections = <String>[];
+    final rawNote = entry.note?.trim() ?? '';
+    if (rawNote.isNotEmpty) {
+      sections.add(rawNote);
+    }
+
+    final metadata = <String>[];
+    final normalizedUsername = _importedUsername(entry).trim().toLowerCase();
+    final email = entry.email?.trim() ?? '';
+    if (email.isNotEmpty && email.toLowerCase() != normalizedUsername) {
+      metadata.add('Email: $email');
+    }
+    if ((entry.totp?.trim() ?? '').isNotEmpty) {
+      metadata.add('TOTP: ${entry.totp!.trim()}');
+    }
+    if ((entry.vault?.trim() ?? '').isNotEmpty) {
+      metadata.add('Vault: ${entry.vault!.trim()}');
+    }
+    if ((entry.type?.trim() ?? '').isNotEmpty) {
+      metadata.add('Type: ${entry.type!.trim()}');
+    }
+    if (entry.createdAt != null) {
+      metadata.add('Created: ${entry.createdAt!.toIso8601String()}');
+    }
+    if (entry.modifiedAt != null) {
+      metadata.add('Modified: ${entry.modifiedAt!.toIso8601String()}');
+    }
+
+    if (metadata.isNotEmpty) {
+      if (sections.isNotEmpty) {
+        sections.add('');
+      }
+      sections.add('Imported metadata');
+      sections.addAll(metadata);
+    }
+
+    if (sections.isEmpty) {
+      return null;
+    }
+    return sections.join('\n');
   }
 
   String _entryTypeLabel(PasswordEntry entry, String userId) {

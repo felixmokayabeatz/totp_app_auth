@@ -3,17 +3,29 @@ import 'dart:convert';
 class PasswordImportEntry {
   const PasswordImportEntry({
     required this.title,
+    this.type,
+    this.email,
     this.username,
     this.password,
     this.note,
+    this.totp,
     this.url,
+    this.createdAt,
+    this.modifiedAt,
+    this.vault,
   });
 
   final String title;
+  final String? type;
+  final String? email;
   final String? username;
   final String? password;
   final String? note;
+  final String? totp;
   final String? url;
+  final DateTime? createdAt;
+  final DateTime? modifiedAt;
+  final String? vault;
 }
 
 class PasswordImportService {
@@ -22,7 +34,9 @@ class PasswordImportService {
     if (trimmed.isEmpty) return const [];
 
     final lowerFileName = (fileName ?? '').toLowerCase();
-    if (lowerFileName.endsWith('.json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    if (lowerFileName.endsWith('.json') ||
+        trimmed.startsWith('{') ||
+        trimmed.startsWith('[')) {
       final jsonEntries = _parseJson(trimmed);
       if (jsonEntries.isNotEmpty) return _dedupe(jsonEntries);
     }
@@ -83,12 +97,21 @@ class PasswordImportService {
       normalized['itemname'],
       normalized['display_name'],
     ]);
+    final type = _firstNonEmpty([
+      normalized['type'],
+      normalized['item_type'],
+      normalized['category'],
+    ]);
+    final email = _firstNonEmpty([
+      normalized['email'],
+      normalized['login_email'],
+    ]);
     final username = _firstNonEmpty([
       normalized['username'],
       normalized['login_username'],
-      normalized['email'],
       normalized['account'],
       normalized['login'],
+      normalized['email'],
     ]);
     final password = _firstNonEmpty([
       normalized['password'],
@@ -102,6 +125,12 @@ class PasswordImportService {
       normalized['details'],
       normalized['description'],
     ]);
+    final totp = _firstNonEmpty([
+      normalized['totp'],
+      normalized['otp'],
+      normalized['one_time_password'],
+      normalized['totp_secret'],
+    ]);
     final url = _firstUrl([
       normalized['url'],
       normalized['urls'],
@@ -110,6 +139,19 @@ class PasswordImportService {
       normalized['login_uri'],
       normalized['login_url'],
     ]);
+    final createdAt = _parseDateTimeValue(
+      normalized['createtime'] ?? normalized['created_at'],
+    );
+    final modifiedAt = _parseDateTimeValue(
+      normalized['modifytime'] ??
+          normalized['modified_at'] ??
+          normalized['updated_at'],
+    );
+    final vault = _firstNonEmpty([
+      normalized['vault'],
+      normalized['vault_name'],
+      normalized['folder'],
+    ]);
 
     final resolvedTitle =
         (title?.trim().isNotEmpty == true) ? title!.trim() : _titleFromUrl(url);
@@ -117,16 +159,24 @@ class PasswordImportService {
       return null;
     }
 
-    if ((password ?? '').trim().isEmpty && (note ?? '').trim().isEmpty) {
+    if ((password ?? '').trim().isEmpty &&
+        (note ?? '').trim().isEmpty &&
+        (totp ?? '').trim().isEmpty) {
       return null;
     }
 
     return PasswordImportEntry(
       title: resolvedTitle,
+      type: _normalizeOptional(type),
+      email: _normalizeOptional(email),
       username: _normalizeOptional(username),
       password: _normalizeOptional(password),
       note: _normalizeOptional(note),
+      totp: _normalizeOptional(totp),
       url: _normalizeOptional(url),
+      createdAt: createdAt,
+      modifiedAt: modifiedAt,
+      vault: _normalizeOptional(vault),
     );
   }
 
@@ -138,7 +188,8 @@ class PasswordImportService {
     if (lines.isEmpty) return const [];
 
     final delimiter = _detectDelimiter(input);
-    final rows = lines.map((line) => _splitDelimitedLine(line, delimiter)).toList();
+    final rows =
+        lines.map((line) => _splitDelimitedLine(line, delimiter)).toList();
     if (rows.isEmpty) return const [];
 
     final headers = rows.first.map((cell) => cell.trim().toLowerCase()).toList();
@@ -153,6 +204,15 @@ class PasswordImportService {
       'label',
       'account',
       'site name',
+    });
+    final typeIndex = _findHeaderIndex(headers, {
+      'type',
+      'item type',
+    });
+    final emailIndex = _findHeaderIndex(headers, {
+      'email',
+      'login email',
+      'login_email',
     });
     final usernameIndex = _findHeaderIndex(headers, {
       'username',
@@ -173,6 +233,12 @@ class PasswordImportService {
       'comments',
       'description',
     });
+    final totpIndex = _findHeaderIndex(headers, {
+      'totp',
+      'otp',
+      'one_time_password',
+      'totp_secret',
+    });
     final urlIndex = _findHeaderIndex(headers, {
       'url',
       'urls',
@@ -182,9 +248,21 @@ class PasswordImportService {
       'login_uri',
       'login url',
     });
-    final typeIndex = _findHeaderIndex(headers, {
-      'type',
-      'item type',
+    final createTimeIndex = _findHeaderIndex(headers, {
+      'createtime',
+      'created_at',
+      'created time',
+    });
+    final modifyTimeIndex = _findHeaderIndex(headers, {
+      'modifytime',
+      'modified_at',
+      'updated_at',
+      'modified time',
+    });
+    final vaultIndex = _findHeaderIndex(headers, {
+      'vault',
+      'vault_name',
+      'folder',
     });
 
     final result = <PasswordImportEntry>[];
@@ -199,25 +277,38 @@ class PasswordImportService {
       }
 
       final title = _cell(row, titleIndex) ?? _titleFromUrl(_cell(row, urlIndex));
+      final email = _cell(row, emailIndex);
       final username = _cell(row, usernameIndex);
       final password = _cell(row, passwordIndex);
       final note = _cell(row, noteIndex);
+      final totp = _cell(row, totpIndex);
       final url = _cell(row, urlIndex);
+      final createdAt = _parseDateTimeValue(_cell(row, createTimeIndex));
+      final modifiedAt = _parseDateTimeValue(_cell(row, modifyTimeIndex));
+      final vault = _cell(row, vaultIndex);
 
       if ((title ?? '').trim().isEmpty) {
         continue;
       }
-      if ((password ?? '').trim().isEmpty && (note ?? '').trim().isEmpty) {
+      if ((password ?? '').trim().isEmpty &&
+          (note ?? '').trim().isEmpty &&
+          (totp ?? '').trim().isEmpty) {
         continue;
       }
 
       result.add(
         PasswordImportEntry(
           title: title!.trim(),
+          type: _normalizeOptional(type),
+          email: _normalizeOptional(email),
           username: _normalizeOptional(username),
           password: _normalizeOptional(password),
           note: _normalizeOptional(note),
+          totp: _normalizeOptional(totp),
           url: _normalizeOptional(url),
+          createdAt: createdAt,
+          modifiedAt: modifiedAt,
+          vault: _normalizeOptional(vault),
         ),
       );
     }
@@ -229,11 +320,16 @@ class PasswordImportService {
     'title',
     'name',
     'username',
+    'email',
     'password',
     'url',
     'website',
     'note',
     'notes',
+    'totp',
+    'vault',
+    'createtime',
+    'modifytime',
     'login_password',
     'login_username',
     'login_uri',
@@ -323,6 +419,14 @@ class PasswordImportService {
         } catch (_) {}
       }
 
+      if (stringValue.contains(',')) {
+        final first = stringValue
+            .split(',')
+            .map((part) => part.trim())
+            .firstWhere((part) => part.isNotEmpty, orElse: () => '');
+        if (first.isNotEmpty) return first;
+      }
+
       if (stringValue.contains(';')) {
         final first = stringValue
             .split(';')
@@ -354,16 +458,34 @@ class PasswordImportService {
     return trimmed.isEmpty ? null : trimmed;
   }
 
+  DateTime? _parseDateTimeValue(dynamic rawValue) {
+    if (rawValue == null) return null;
+    final value = rawValue.toString().trim();
+    if (value.isEmpty) return null;
+
+    final unixValue = int.tryParse(value);
+    if (unixValue != null) {
+      if (value.length >= 13) {
+        return DateTime.fromMillisecondsSinceEpoch(unixValue);
+      }
+      return DateTime.fromMillisecondsSinceEpoch(unixValue * 1000);
+    }
+
+    return DateTime.tryParse(value);
+  }
+
   List<PasswordImportEntry> _dedupe(List<PasswordImportEntry> entries) {
     final seen = <String>{};
     final result = <PasswordImportEntry>[];
     for (final entry in entries) {
       final key = [
         entry.title.toLowerCase(),
+        entry.email?.toLowerCase() ?? '',
         entry.username?.toLowerCase() ?? '',
         entry.url?.toLowerCase() ?? '',
         entry.password ?? '',
         entry.note ?? '',
+        entry.totp ?? '',
       ].join('|');
       if (seen.add(key)) {
         result.add(entry);
