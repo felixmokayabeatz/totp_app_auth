@@ -194,7 +194,14 @@ def build_backup_codes_pdf(
     text(margin + 18, y + 30, generated_at or "Just now", size=12, font="F2", color=heading_color)
     text(margin + info_width + 34, y + 108, "Email", size=11, font="F2", color=label_color)
     text(margin + info_width + 34, y + 84, email, size=14, font="F2", color=heading_color)
-    text(margin + info_width + 34, y + 54, "Generated from", size=11, font="F2", color=label_color)
+    text(
+        margin + info_width + 34,
+        y + 54,
+        "Generated from primary device",
+        size=11,
+        font="F2",
+        color=label_color,
+    )
     multiline(
         margin + info_width + 34,
         y + 30,

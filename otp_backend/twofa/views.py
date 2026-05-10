@@ -62,7 +62,10 @@ def _consume_recovery_code(user: User, raw_code: str):
             break
 
     if matched_entry is None:
-        return False, 'Invalid recovery code.'
+        return (
+            False,
+            'Invalid recovery code. If you generated a newer recovery-code PDF, older codes no longer work.',
+        )
 
     if matched_entry.get('used_at'):
         return False, 'This recovery code has already been used.'

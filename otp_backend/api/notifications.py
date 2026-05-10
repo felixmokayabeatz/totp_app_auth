@@ -189,16 +189,29 @@ def create_recovery_code_used_notification(
     )
 
 
-def create_recovery_codes_generated_notification(user: User) -> AppNotification:
+def create_recovery_codes_generated_notification(
+    user: User,
+    *,
+    device_label: str | None = None,
+) -> AppNotification:
+    clean_label = device_label.strip() if device_label else ''
+    device_suffix = (
+        f' from your primary device {clean_label}.'
+        if clean_label
+        else ' from your primary device.'
+    )
     return create_notification(
         user,
         "recovery_codes_generated",
         title="New recovery codes generated",
-        message="A new PDF with fresh recovery codes was generated.",
+        message=f"A new PDF with fresh recovery codes was generated{device_suffix}",
         details=(
             "A new set of BeatzLock recovery codes was generated for your account. "
-            "All older recovery codes were invalidated immediately."
+            f"It was generated{device_suffix} All older recovery codes were invalidated immediately."
         ),
+        metadata={
+            "device_label": clean_label,
+        },
     )
 
 

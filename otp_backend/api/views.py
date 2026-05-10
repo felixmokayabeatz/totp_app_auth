@@ -2079,7 +2079,10 @@ def download_backup_codes(request):
                 fail_silently=True,
             )
 
-        create_recovery_codes_generated_notification(user)
+        create_recovery_codes_generated_notification(
+            user,
+            device_label=current_session.device_label,
+        )
 
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[BACKUP CODES] PDF ready in {elapsed_time:.2f} seconds")
