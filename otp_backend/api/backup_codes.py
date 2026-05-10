@@ -120,6 +120,8 @@ def build_backup_codes_pdf(
     note_heading = (1.0, 0.80, 0.42) if is_dark else (0.69, 0.36, 0.04)
     note_body = (0.97, 0.90, 0.78) if is_dark else (0.43, 0.29, 0.09)
     footer_color = (0.57, 0.63, 0.74) if is_dark else (0.47, 0.51, 0.60)
+    generated_at_display = (generated_at or "Just now").strip()
+    generated_from_display = (generated_from or "Primary device").strip()
 
     def esc(value: str) -> str:
         return (
@@ -160,6 +162,19 @@ def build_backup_codes_pdf(
             current_y -= leading
         return current_y
 
+    def bounded_lines(value: str, *, width_chars: int, max_lines: int) -> list[str]:
+        lines = wrap(value, width_chars) or ['']
+        if len(lines) <= max_lines:
+            return lines
+
+        trimmed = lines[:max_lines]
+        last = trimmed[-1]
+        if len(last) > 3:
+            trimmed[-1] = f"{last[:-3]}..."
+        else:
+            trimmed[-1] = f"{last}..."
+        return trimmed
+
     rect(0, 0, page_width, page_height, fill=page_bg)
     rect(0, page_height - 190, page_width, 190, fill=hero_bg)
     rect(margin, page_height - 212, page_width - (margin * 2), 4, fill=hero_accent)
@@ -191,7 +206,15 @@ def build_backup_codes_pdf(
     text(margin + 18, y + 108, "Account", size=11, font="F2", color=label_color)
     text(margin + 18, y + 84, account_name, size=18, font="F2", color=heading_color)
     text(margin + 18, y + 54, "Generated", size=11, font="F2", color=label_color)
-    text(margin + 18, y + 30, generated_at or "Just now", size=12, font="F2", color=heading_color)
+    for index, line in enumerate(bounded_lines(generated_at_display, width_chars=28, max_lines=2)):
+        text(
+            margin + 18,
+            y + 30 - (index * 14),
+            line,
+            size=12,
+            font="F2",
+            color=heading_color,
+        )
     text(margin + info_width + 34, y + 108, "Email", size=11, font="F2", color=label_color)
     text(margin + info_width + 34, y + 84, email, size=14, font="F2", color=heading_color)
     text(
@@ -202,16 +225,15 @@ def build_backup_codes_pdf(
         font="F2",
         color=label_color,
     )
-    multiline(
-        margin + info_width + 34,
-        y + 30,
-        generated_from or "Primary device",
-        width_chars=24,
-        size=12,
-        font="F2",
-        color=heading_color,
-        leading=14,
-    )
+    for index, line in enumerate(bounded_lines(generated_from_display, width_chars=22, max_lines=2)):
+        text(
+            margin + info_width + 34,
+            y + 30 - (index * 14),
+            line,
+            size=12,
+            font="F2",
+            color=heading_color,
+        )
 
     section_y = y - 52
     text(margin, section_y, "Your backup codes", size=17, font="F2", color=heading_color)

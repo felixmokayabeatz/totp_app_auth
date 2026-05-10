@@ -246,7 +246,18 @@ def get_delete_otp_email_text(username, code):
     return _render_text(_delete_otp_context(username, code))
 
 
-def _recovery_codes_generated_context(username):
+def _recovery_codes_generated_context(
+    username,
+    *,
+    generated_at: str = '',
+    device_label: str = '',
+):
+    device_phrase = (
+        f'from your primary device {device_label}'
+        if device_label
+        else 'from your primary device'
+    )
+    time_phrase = f' at {generated_at}' if generated_at else ''
     return _base_context(
         username,
         preheader='A fresh set of BeatzLock recovery codes was generated for your account.',
@@ -258,6 +269,10 @@ def _recovery_codes_generated_context(username):
                 'label': 'What changed',
                 'body': 'All older recovery codes are now invalid. Only the newest PDF and the codes inside it can be used.',
             },
+            {
+                'label': 'Generated from',
+                'body': f'{device_phrase}{time_phrase}.',
+            },
         ],
         notice={
             'tone': 'warning',
@@ -267,9 +282,31 @@ def _recovery_codes_generated_context(username):
     )
 
 
-def get_recovery_codes_generated_email_template(username):
-    return _render_html(_recovery_codes_generated_context(username))
+def get_recovery_codes_generated_email_template(
+    username,
+    *,
+    generated_at: str = '',
+    device_label: str = '',
+):
+    return _render_html(
+        _recovery_codes_generated_context(
+            username,
+            generated_at=generated_at,
+            device_label=device_label,
+        )
+    )
 
 
-def get_recovery_codes_generated_email_text(username):
-    return _render_text(_recovery_codes_generated_context(username))
+def get_recovery_codes_generated_email_text(
+    username,
+    *,
+    generated_at: str = '',
+    device_label: str = '',
+):
+    return _render_text(
+        _recovery_codes_generated_context(
+            username,
+            generated_at=generated_at,
+            device_label=device_label,
+        )
+    )

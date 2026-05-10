@@ -1,5 +1,4 @@
-from django.contrib import admin, messages
-from django.utils import timezone
+from django.contrib import admin
 from .models import (
     AppNotification,
     DeviceSession,
@@ -182,30 +181,26 @@ class AppNotificationAdmin(admin.ModelAdmin):
 
 @admin.register(DeviceSession)
 class DeviceSessionAdmin(admin.ModelAdmin):
-    actions = ("mark_selected_session_as_primary",)
     list_display = (
         "user",
         "device_label",
         "device_kind",
         "device_id",
-        "is_primary",
         "is_active",
         "last_seen_at",
         "created_at",
         "revoked_at",
     )
-    list_filter = ("is_primary", "is_active", "created_at", "last_seen_at", "revoked_at")
+    list_filter = ("is_active", "created_at", "last_seen_at", "revoked_at")
     search_fields = ("user__username", "user__email", "device_label", "device_id", "ip_address")
     readonly_fields = (
         "id",
         "user",
         "device_id",
-        "device_fingerprint",
         "device_label",
         "device_kind",
         "user_agent",
         "ip_address",
-        "is_primary",
         "is_active",
         "created_at",
         "updated_at",
@@ -217,60 +212,13 @@ class DeviceSessionAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False
 
     def get_list_display_links(self, request, list_display):
         return ()
-
-    @admin.action(description="Mark selected device session as primary")
-    def mark_selected_session_as_primary(self, request, queryset):
-        if not request.user.is_superuser:
-            self.message_user(
-                request,
-                "Only a superuser can change the primary device here.",
-                level=messages.ERROR,
-            )
-            return
-
-        if queryset.count() != 1:
-            self.message_user(
-                request,
-                "Select exactly one active device session to make primary.",
-                level=messages.ERROR,
-            )
-            return
-
-        session = queryset.select_related("user").first()
-        if session is None or not session.is_active or session.revoked_at is not None:
-            self.message_user(
-                request,
-                "Choose an active device session.",
-                level=messages.ERROR,
-            )
-            return
-
-        now = timezone.now()
-        DeviceSession.objects.filter(
-            user=session.user,
-            is_active=True,
-            revoked_at__isnull=True,
-            is_primary=True,
-        ).exclude(id=session.id).update(
-            is_primary=False,
-            updated_at=now,
-        )
-        if not session.is_primary:
-            session.is_primary = True
-            session.save(update_fields=["is_primary", "updated_at"])
-
-        self.message_user(
-            request,
-            f"{session.device_label} is now the primary device for {session.user.username}.",
-            level=messages.SUCCESS,
-        )
 
 
 @admin.register(PasswordlessLoginRequest)

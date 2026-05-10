@@ -2052,11 +2052,13 @@ def download_backup_codes(request):
             code_set.save(update_fields=['encrypted_codes', 'last_used_at', 'updated_at'])
         debug_print("[BACKUP CODES] Generated fresh backup codes and invalidated previous ones")
 
+        generated_at = timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p %Z')
+
         pdf_bytes = build_backup_codes_pdf(
             email=user.email or user.username,
             account_name='BeatzLock Auth',
             codes=codes,
-            generated_at=timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p %Z'),
+            generated_at=generated_at,
             generated_from=current_session.device_label or 'Primary device',
             theme=get_request_pdf_theme(request),
         )
@@ -2070,11 +2072,19 @@ def download_backup_codes(request):
         response['Content-Length'] = str(len(pdf_bytes))
 
         if user.email:
-            html_content = get_recovery_codes_generated_email_template(user.username)
+            html_content = get_recovery_codes_generated_email_template(
+                user.username,
+                generated_at=generated_at,
+                device_label=current_session.device_label or '',
+            )
             send_transactional_email(
                 subject='New recovery codes generated - BeatzLock Authenticator',
                 recipient=user.email,
-                text_content=get_recovery_codes_generated_email_text(user.username),
+                text_content=get_recovery_codes_generated_email_text(
+                    user.username,
+                    generated_at=generated_at,
+                    device_label=current_session.device_label or '',
+                ),
                 html_content=html_content,
                 fail_silently=True,
             )
@@ -2082,6 +2092,7 @@ def download_backup_codes(request):
         create_recovery_codes_generated_notification(
             user,
             device_label=current_session.device_label,
+            generated_at=generated_at,
         )
 
         elapsed_time = __import__('time').time() - start_time
