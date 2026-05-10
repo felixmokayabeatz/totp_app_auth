@@ -193,12 +193,12 @@ def build_backup_codes_pdf(
         margin,
         y,
         "Keep this PDF somewhere safe. Each code can help you get back into your account if you lose access to your device or your normal sign-in method.",
-        width_chars=72,
+        width_chars=52,
         size=11,
         color=hero_body,
     )
 
-    y = page_height - 250
+    y = page_height - 290
     card_height = 138
     info_width = (page_width - (margin * 2) - 16) / 2
     rect(margin, y, info_width, card_height, fill=card_fill, stroke=card_stroke)
