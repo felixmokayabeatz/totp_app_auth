@@ -347,25 +347,13 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     final box = _passwordBox ?? await _syncService.getPasswordBox();
     final userId = await _currentUserId();
     var importedCount = 0;
-    var skippedCount = 0;
 
-    for (final imported in entries) {
+    for (var index = 0; index < entries.length; index++) {
+      final imported = entries[index];
       final importedUsername = _importedUsername(imported);
-      final duplicate = box.values.any((entry) {
-        final sameTitle = entry.title.toLowerCase() == imported.title.toLowerCase();
-        final sameUsername =
-            entry.username.toLowerCase() == importedUsername.toLowerCase();
-        final sameContext =
-            (entry.serverIP ?? '').toLowerCase() == (imported.url ?? '').toLowerCase();
-        return sameTitle && sameUsername && sameContext;
-      });
-      if (duplicate) {
-        skippedCount++;
-        continue;
-      }
-
       final entry = PasswordEntry(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        id:
+            '${DateTime.now().microsecondsSinceEpoch}_${index}_${imported.title.hashCode.abs()}',
         title: imported.title,
         username: importedUsername,
         password: imported.password ?? '',
@@ -385,16 +373,10 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     }
 
     if (importedCount == 0) {
-      return skippedCount > 0
-          ? 'Everything in that export was already in your vault.'
-          : 'No supported password items were found in that export.';
+      return 'No supported password items were found in that export.';
     }
 
-    if (skippedCount == 0) {
-      return 'Imported $importedCount secure item${importedCount == 1 ? '' : 's'}.';
-    }
-
-    return 'Imported $importedCount secure item${importedCount == 1 ? '' : 's'} and skipped $skippedCount duplicate${skippedCount == 1 ? '' : 's'}.';
+    return 'Imported $importedCount secure item${importedCount == 1 ? '' : 's'}.';
   }
 
   String _importedUsername(PasswordImportEntry entry) {
@@ -1532,7 +1514,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         title: Text(
           _isSelectionMode
               ? '${_selectedEntryIds.length} selected'
-              : 'Passwords & Notes',
+              : 'Passwords & Notes (${sortedEntries.length})',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w700,
@@ -1725,6 +1707,25 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                                           fontSize: 16,
                                           fontWeight: FontWeight.w800,
                                         ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          _buildInfoChip(
+                                            icon: Icons.inventory_2_rounded,
+                                            label:
+                                                '${entries.length} total entr${entries.length == 1 ? 'y' : 'ies'}',
+                                          ),
+                                          if (_searchQuery.isNotEmpty)
+                                            _buildInfoChip(
+                                              icon: Icons.filter_alt_rounded,
+                                              label:
+                                                  '${filteredEntries.length} shown',
+                                              color: const Color(0xFF2563EB),
+                                            ),
+                                        ],
                                       ),
                                       const SizedBox(height: 6),
                                       Text(

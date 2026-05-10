@@ -38,11 +38,11 @@ class PasswordImportService {
         trimmed.startsWith('{') ||
         trimmed.startsWith('[')) {
       final jsonEntries = _parseJson(trimmed);
-      if (jsonEntries.isNotEmpty) return _dedupe(jsonEntries);
+      if (jsonEntries.isNotEmpty) return jsonEntries;
     }
 
     final csvEntries = _parseDelimitedRows(trimmed);
-    return _dedupe(csvEntries);
+    return csvEntries;
   }
 
   List<PasswordImportEntry> _parseJson(String input) {
@@ -268,14 +268,6 @@ class PasswordImportService {
     final result = <PasswordImportEntry>[];
     for (final row in dataRows) {
       final type = _cell(row, typeIndex)?.toLowerCase() ?? '';
-      if (type.isNotEmpty &&
-          !(type.contains('login') ||
-              type.contains('password') ||
-              type.contains('note') ||
-              type.contains('alias'))) {
-        continue;
-      }
-
       final title = _cell(row, titleIndex) ?? _titleFromUrl(_cell(row, urlIndex));
       final email = _cell(row, emailIndex);
       final username = _cell(row, usernameIndex);
@@ -288,11 +280,6 @@ class PasswordImportService {
       final vault = _cell(row, vaultIndex);
 
       if ((title ?? '').trim().isEmpty) {
-        continue;
-      }
-      if ((password ?? '').trim().isEmpty &&
-          (note ?? '').trim().isEmpty &&
-          (totp ?? '').trim().isEmpty) {
         continue;
       }
 
@@ -472,25 +459,5 @@ class PasswordImportService {
     }
 
     return DateTime.tryParse(value);
-  }
-
-  List<PasswordImportEntry> _dedupe(List<PasswordImportEntry> entries) {
-    final seen = <String>{};
-    final result = <PasswordImportEntry>[];
-    for (final entry in entries) {
-      final key = [
-        entry.title.toLowerCase(),
-        entry.email?.toLowerCase() ?? '',
-        entry.username?.toLowerCase() ?? '',
-        entry.url?.toLowerCase() ?? '',
-        entry.password ?? '',
-        entry.note ?? '',
-        entry.totp ?? '',
-      ].join('|');
-      if (seen.add(key)) {
-        result.add(entry);
-      }
-    }
-    return result;
   }
 }
