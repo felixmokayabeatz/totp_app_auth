@@ -101,6 +101,19 @@ def debug_print(*args, **kwargs):
         print(*args, **kwargs)
 
 
+def get_request_pdf_theme(request) -> str:
+    candidates = []
+    if hasattr(request, 'query_params'):
+        candidates.append(request.query_params.get('pdf_theme'))
+    candidates.append(request.headers.get('X-PDF-Theme'))
+
+    for value in candidates:
+        normalized = str(value or '').strip().lower()
+        if normalized in {'light', 'dark'}:
+            return normalized
+    return 'light'
+
+
 def get_current_active_device_session(request):
     auth = getattr(request, 'auth', None)
     session_id = auth.get('session_id') if hasattr(auth, 'get') else None
@@ -2043,6 +2056,9 @@ def download_backup_codes(request):
             email=user.email or user.username,
             account_name='BeatzLock Auth',
             codes=codes,
+            generated_at=timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p %Z'),
+            generated_from=current_session.device_label or 'Primary device',
+            theme=get_request_pdf_theme(request),
         )
 
         safe_username = ''.join(

@@ -932,6 +932,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 );
                 if (!context.mounted || changed != true) return;
+                await _loadBackupCodeStatus();
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: const Text('This device is now your primary device.'),
@@ -2166,7 +2168,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     setState(() => _isDownloadingBackupCodes = true);
-    final savedPath = await _syncService.downloadBackupCodesPdf();
+    final savedPath = await _syncService.downloadBackupCodesPdf(
+      preferDarkTheme: _isDark,
+    );
     if (!mounted) return;
     setState(() => _isDownloadingBackupCodes = false);
 

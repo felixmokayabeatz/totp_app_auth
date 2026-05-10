@@ -29,6 +29,10 @@ class _RecoverPrimaryDeviceScreenState
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
 
+  String get _normalizedRecoveryCode => _recoveryCodeController.text
+      .toUpperCase()
+      .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
   @override
   void dispose() {
     _usernameController.dispose();
@@ -72,7 +76,7 @@ class _RecoverPrimaryDeviceScreenState
     if (_usernameController.text.trim().isEmpty ||
         _passwordController.text.isEmpty ||
         _emailCodeController.text.trim().length != 6 ||
-        _recoveryCodeController.text.trim().length != 10) {
+        _normalizedRecoveryCode.length != 10) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -89,7 +93,7 @@ class _RecoverPrimaryDeviceScreenState
       username: _usernameController.text.trim(),
       password: _passwordController.text,
       emailCode: _emailCodeController.text.trim(),
-      recoveryCode: _recoveryCodeController.text.trim(),
+      recoveryCode: _normalizedRecoveryCode,
     );
     if (!mounted) return;
     setState(() => _isRecovering = false);
@@ -215,15 +219,20 @@ class _RecoverPrimaryDeviceScreenState
                     const SizedBox(height: 12),
                     TextField(
                       controller: _recoveryCodeController,
+                      textCapitalization: TextCapitalization.characters,
                       inputFormatters: [
-                        LengthLimitingTextInputFormatter(10),
+                        LengthLimitingTextInputFormatter(16),
                         FilteringTextInputFormatter.allow(
-                          RegExp(r'[A-Za-z0-9]'),
+                          RegExp(r'[A-Za-z0-9 -]'),
                         ),
                       ],
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Recovery code',
-                        border: OutlineInputBorder(),
+                        hintText: 'ABCD1 EFGH2',
+                        helperText:
+                            'Spaces and dashes are okay. We will normalize it.',
+                        helperStyle: TextStyle(color: _textSecondary),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 20),

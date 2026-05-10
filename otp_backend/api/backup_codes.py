@@ -91,12 +91,35 @@ def build_backup_codes_pdf(
     email: str,
     account_name: str,
     codes: list[str],
+    generated_at: str = '',
+    generated_from: str = '',
+    theme: str = 'light',
 ) -> bytes:
     page_width = 595
     page_height = 842
     margin = 40
     y = page_height - 60
     commands: list[str] = []
+    is_dark = str(theme).strip().lower() == 'dark'
+
+    page_bg = (0.08, 0.09, 0.15) if is_dark else (1, 1, 1)
+    hero_bg = (0.08, 0.11, 0.22) if is_dark else (0.09, 0.13, 0.33)
+    hero_accent = (0.38, 0.74, 0.99) if is_dark else (0.31, 0.71, 0.98)
+    hero_title = (1, 1, 1)
+    hero_subtitle = (0.82, 0.88, 1)
+    hero_body = (0.88, 0.91, 0.98)
+    card_fill = (0.13, 0.16, 0.24) if is_dark else (0.96, 0.98, 1)
+    card_stroke = (0.26, 0.32, 0.44) if is_dark else (0.82, 0.87, 0.96)
+    label_color = (0.68, 0.75, 0.88) if is_dark else (0.31, 0.39, 0.56)
+    heading_color = (0.95, 0.97, 1) if is_dark else (0.09, 0.13, 0.24)
+    body_color = (0.78, 0.82, 0.90) if is_dark else (0.42, 0.47, 0.56)
+    code_fill = (0.10, 0.12, 0.18) if is_dark else (1, 1, 1)
+    code_stroke = (0.24, 0.29, 0.39) if is_dark else (0.86, 0.89, 0.94)
+    note_fill = (0.25, 0.18, 0.08) if is_dark else (1.0, 0.97, 0.92)
+    note_stroke = (0.75, 0.55, 0.25) if is_dark else (0.95, 0.79, 0.55)
+    note_heading = (1.0, 0.80, 0.42) if is_dark else (0.69, 0.36, 0.04)
+    note_body = (0.97, 0.90, 0.78) if is_dark else (0.43, 0.29, 0.09)
+    footer_color = (0.57, 0.63, 0.74) if is_dark else (0.47, 0.51, 0.60)
 
     def esc(value: str) -> str:
         return (
@@ -137,9 +160,10 @@ def build_backup_codes_pdf(
             current_y -= leading
         return current_y
 
-    rect(0, page_height - 190, page_width, 190, fill=(0.09, 0.13, 0.33))
-    rect(margin, page_height - 212, page_width - (margin * 2), 4, fill=(0.31, 0.71, 0.98))
-    text(margin, y, "BeatzLock Auth", size=28, font="F2", color=(1, 1, 1))
+    rect(0, 0, page_width, page_height, fill=page_bg)
+    rect(0, page_height - 190, page_width, 190, fill=hero_bg)
+    rect(margin, page_height - 212, page_width - (margin * 2), 4, fill=hero_accent)
+    text(margin, y, "BeatzLock Auth", size=28, font="F2", color=hero_title)
     y -= 34
     text(
         margin,
@@ -147,7 +171,7 @@ def build_backup_codes_pdf(
         "Backup recovery codes",
         size=16,
         font="F2",
-        color=(0.82, 0.88, 1),
+        color=hero_subtitle,
     )
     y -= 26
     y = multiline(
@@ -156,27 +180,40 @@ def build_backup_codes_pdf(
         "Keep this PDF somewhere safe. Each code can help you get back into your account if you lose access to your device or your normal sign-in method.",
         width_chars=72,
         size=11,
-        color=(0.90, 0.93, 1),
+        color=hero_body,
     )
 
     y = page_height - 250
-    card_height = 92
+    card_height = 138
     info_width = (page_width - (margin * 2) - 16) / 2
-    rect(margin, y, info_width, card_height, fill=(0.96, 0.98, 1), stroke=(0.82, 0.87, 0.96))
-    rect(margin + info_width + 16, y, info_width, card_height, fill=(0.96, 0.98, 1), stroke=(0.82, 0.87, 0.96))
-    text(margin + 18, y + 62, "Account", size=11, font="F2", color=(0.31, 0.39, 0.56))
-    text(margin + 18, y + 38, account_name, size=18, font="F2", color=(0.09, 0.13, 0.24))
-    text(margin + info_width + 34, y + 62, "Email", size=11, font="F2", color=(0.31, 0.39, 0.56))
-    text(margin + info_width + 34, y + 38, email, size=14, font="F2", color=(0.09, 0.13, 0.24))
+    rect(margin, y, info_width, card_height, fill=card_fill, stroke=card_stroke)
+    rect(margin + info_width + 16, y, info_width, card_height, fill=card_fill, stroke=card_stroke)
+    text(margin + 18, y + 108, "Account", size=11, font="F2", color=label_color)
+    text(margin + 18, y + 84, account_name, size=18, font="F2", color=heading_color)
+    text(margin + 18, y + 54, "Generated", size=11, font="F2", color=label_color)
+    text(margin + 18, y + 30, generated_at or "Just now", size=12, font="F2", color=heading_color)
+    text(margin + info_width + 34, y + 108, "Email", size=11, font="F2", color=label_color)
+    text(margin + info_width + 34, y + 84, email, size=14, font="F2", color=heading_color)
+    text(margin + info_width + 34, y + 54, "Generated from", size=11, font="F2", color=label_color)
+    multiline(
+        margin + info_width + 34,
+        y + 30,
+        generated_from or "Primary device",
+        width_chars=24,
+        size=12,
+        font="F2",
+        color=heading_color,
+        leading=14,
+    )
 
-    section_y = y - 48
-    text(margin, section_y, "Your backup codes", size=17, font="F2", color=(0.09, 0.13, 0.24))
+    section_y = y - 52
+    text(margin, section_y, "Your backup codes", size=17, font="F2", color=heading_color)
     text(
         margin,
         section_y - 18,
         "Use each code carefully and store them offline if possible.",
         size=10,
-        color=(0.42, 0.47, 0.56),
+        color=body_color,
     )
 
     block_y = section_y - 64
@@ -187,26 +224,26 @@ def build_backup_codes_pdf(
             block_y,
             page_width - (margin * 2),
             block_height,
-            fill=(1, 1, 1),
-            stroke=(0.86, 0.89, 0.94),
+            fill=code_fill,
+            stroke=code_stroke,
         )
-        text(margin + 18, block_y + 46, f"Code {index}", size=11, font="F2", color=(0.31, 0.39, 0.56))
-        text(margin + 18, block_y + 18, code, size=24, font="F2", color=(0.09, 0.13, 0.24))
+        text(margin + 18, block_y + 46, f"Code {index}", size=11, font="F2", color=label_color)
+        text(margin + 18, block_y + 18, code, size=24, font="F2", color=heading_color)
         block_y -= block_height + 16
 
     note_y = 110
-    rect(margin, note_y, page_width - (margin * 2), 86, fill=(1.0, 0.97, 0.92), stroke=(0.95, 0.79, 0.55))
-    text(margin + 18, note_y + 58, "Important", size=13, font="F2", color=(0.69, 0.36, 0.04))
+    rect(margin, note_y, page_width - (margin * 2), 86, fill=note_fill, stroke=note_stroke)
+    text(margin + 18, note_y + 58, "Important", size=13, font="F2", color=note_heading)
     multiline(
         margin + 18,
         note_y + 38,
         "Anyone with these backup codes may be able to recover access. Do not share this document. If you think it has been exposed, generate a fresh set from BeatzLock.",
         width_chars=78,
         size=10,
-        color=(0.43, 0.29, 0.09),
+        color=note_body,
         leading=13,
     )
-    text(margin, 48, "Generated by BeatzLock Auth", size=10, color=(0.47, 0.51, 0.60))
+    text(margin, 48, "Generated by BeatzLock Auth", size=10, color=footer_color)
 
     stream = "\n".join(commands).encode("latin-1", "replace")
     objects = [

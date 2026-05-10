@@ -47,6 +47,10 @@ class SyncService {
 
   String? get lastErrorMessage => _lastErrorMessage;
 
+  String _normalizeRecoveryCode(String rawCode) {
+    return rawCode.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
   String? _extractServerError(dynamic data) {
     if (data is String && data.trim().isNotEmpty) {
       final trimmed = data.trim();
@@ -2239,7 +2243,9 @@ class SyncService {
     return file.path;
   }
 
-  Future<String?> downloadBackupCodesPdf() async {
+  Future<String?> downloadBackupCodesPdf({
+    bool preferDarkTheme = false,
+  }) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
@@ -2254,10 +2260,14 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get<List<int>>(
           'backup-codes/download/',
+          queryParameters: {
+            'pdf_theme': preferDarkTheme ? 'dark' : 'light',
+          },
           options: Options(
             responseType: ResponseType.bytes,
             headers: {
               'Authorization': 'Bearer $accessToken',
+              'X-PDF-Theme': preferDarkTheme ? 'dark' : 'light',
             },
           ),
         ),
@@ -3058,7 +3068,7 @@ class SyncService {
         'username': username.trim(),
         'password': password,
         'email_code': emailCode.trim(),
-        'recovery_code': recoveryCode.trim(),
+        'recovery_code': _normalizeRecoveryCode(recoveryCode),
         'device_id': deviceId,
         'device_label': deviceLabel,
         'device_kind': _deviceKind(),
