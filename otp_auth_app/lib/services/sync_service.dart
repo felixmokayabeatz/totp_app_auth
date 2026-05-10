@@ -555,6 +555,37 @@ class SyncService {
     await _storeDeletedPasswordEntryIds(deletedIds);
   }
 
+  _DeletedState _parseDeletedState(String? rawValue) {
+    if (rawValue == null || rawValue.trim().isEmpty) {
+      return const _DeletedState();
+    }
+
+    try {
+      final decoded = jsonDecode(rawValue);
+      if (decoded is List) {
+        return _DeletedState(
+          deletedIds: decoded.map((item) => item.toString()).toSet(),
+        );
+      }
+      if (decoded is Map) {
+        final deletedRaw = decoded['deleted'];
+        final restoredRaw = decoded['restored'];
+        final deletedIds = deletedRaw is List
+            ? deletedRaw.map((item) => item.toString()).toSet()
+            : <String>{};
+        final restoredIds = restoredRaw is List
+            ? restoredRaw.map((item) => item.toString()).toSet()
+            : <String>{};
+        return _DeletedState(
+          deletedIds: deletedIds,
+          restoredIds: restoredIds,
+        );
+      }
+    } catch (_) {}
+
+    return const _DeletedState();
+  }
+
   Future<String> _getSecureMessageDeletedIdsKey() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
@@ -1295,11 +1326,11 @@ class SyncService {
       final localBox = await _getPasswordBox();
       final userId = await _getCurrentUserId();
       final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
-      final cloudDeletedIds =
-          cloudDeletedIdsRaw == null || cloudDeletedIdsRaw.trim().isEmpty
-              ? <String>{}
-              : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+      final cloudDeletedState = _parseDeletedState(cloudDeletedIdsRaw);
+      final cloudDeletedIds = cloudDeletedState.deletedIds;
+      final restoredIds = cloudDeletedState.restoredIds;
       final localDeletedIds = await _getDeletedPasswordEntryIds();
+      localDeletedIds.removeAll(restoredIds);
       final deletedIds = {...cloudDeletedIds, ...localDeletedIds};
 
       final List<dynamic> cloudEntries = jsonDecode(decrypted);
@@ -1598,6 +1629,15 @@ class SyncService {
     }
   }
 
+  Future<void> clearRestoredPasswordDeletionMarkers(
+    List<String> entryIds,
+  ) async {
+    if (entryIds.isEmpty) return;
+    final deletedIds = await _getDeletedPasswordEntryIds();
+    deletedIds.removeWhere((id) => entryIds.contains(id));
+    await _storeDeletedPasswordEntryIds(deletedIds);
+  }
+
   Future<bool> uploadCurrentAccountsAsAuthoritative() async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -1652,6 +1692,71 @@ class SyncService {
       );
     } catch (_) {
       _lastErrorMessage = 'Could not sync restored accounts everywhere.';
+      return false;
+    }
+  }
+
+  Future<bool> uploadCurrentPasswordsAsAuthoritative() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'Sign in to sync restored passwords everywhere.';
+      return false;
+    }
+
+    if (!await _ensureEncryptionKeyAvailable()) {
+      _lastErrorMessage =
+          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      return false;
+    }
+
+    final passwordBox = await _getPasswordBox();
+    final userId = await _getCurrentUserId();
+
+    try {
+      var cloudVersion = 0;
+      try {
+        final existing = await getEncryptedSyncData('password_entries');
+        if (existing != null) {
+          cloudVersion =
+              int.tryParse(existing['version']?.toString() ?? '0') ?? 0;
+        }
+      } catch (_) {}
+
+      final payload = passwordBox.values.map((entry) {
+        return {
+          'id': entry.id,
+          'title': entry.title,
+          'username': entry.username,
+          'password': entry.getPassword(userId),
+          'note': entry.getNote(userId),
+          'server_ip': entry.serverIP,
+          'created_at': entry.createdAt.toIso8601String(),
+        };
+      }).toList(growable: false);
+
+      final encrypted = EncryptionService.encryptSensitiveSyncPayload(
+        jsonEncode(payload),
+        _encryptionKey!,
+        context: 'password-entries-sync',
+      );
+      return uploadEncryptedSyncData(
+        'password_entries',
+        encryptedContent: encrypted,
+        version: cloudVersion + 1,
+        deletedAccounts: jsonEncode({
+          'deleted': <String>[],
+          'restored': payload
+              .map((entry) => entry['id']?.toString() ?? '')
+              .where((id) => id.trim().isNotEmpty)
+              .toList(growable: false),
+        }),
+      );
+    } catch (_) {
+      _lastErrorMessage = 'Could not sync restored passwords everywhere.';
       return false;
     }
   }
@@ -1724,8 +1829,12 @@ class SyncService {
           final cloudDeletedIdsRaw =
               downloadResponse.data['deleted_accounts']?.toString();
           if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
-            cloudDeletedIds =
-                List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+            final cloudDeletedState = _parseDeletedState(cloudDeletedIdsRaw);
+            cloudDeletedIds = cloudDeletedState.deletedIds;
+            final restoredIds = cloudDeletedState.restoredIds;
+            final localDeletedIds = await _getDeletedPasswordEntryIds();
+            localDeletedIds.removeAll(restoredIds);
+            await _storeDeletedPasswordEntryIds(localDeletedIds);
           }
         }
       } on DioException catch (e) {
@@ -3656,4 +3765,14 @@ class SyncService {
   Future<String?> getCurrentUser() async {
     return _secureStorage.read(SecureStorageService.currentUserKey);
   }
+}
+
+class _DeletedState {
+  const _DeletedState({
+    this.deletedIds = const <String>{},
+    this.restoredIds = const <String>{},
+  });
+
+  final Set<String> deletedIds;
+  final Set<String> restoredIds;
 }

@@ -441,7 +441,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (snapshots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('No OTP restore points are available yet.'),
+          content: const Text('No vault restore points are available yet.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -457,7 +457,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
-        title: Text('OTP Restore Points', style: TextStyle(color: _textPrimary)),
+        title:
+            Text('Vault Restore Points', style: TextStyle(color: _textPrimary)),
         content: SizedBox(
           width: 460,
           child: SingleChildScrollView(
@@ -466,8 +467,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(
                   signedIn
-                      ? 'BeatzLock keeps encrypted OTP restore points about every 24 hours and before delete-all actions, then syncs them to your account.'
-                      : 'BeatzLock keeps local OTP restore points about every 24 hours and before delete-all actions while you are offline.',
+                      ? 'BeatzLock keeps 10 encrypted automatic vault restore points across roughly 24 hours, 1 week, 1 month, 3 months, and up to 6 months, plus your latest manual restore point.'
+                      : 'BeatzLock keeps 10 local automatic vault restore points across roughly 24 hours, 1 week, 1 month, 3 months, and up to 6 months, plus your latest manual restore point.',
                   style: TextStyle(
                     color: _textSecondary,
                     fontSize: 13,
@@ -509,7 +510,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${snapshot.accountCount} OTP account${snapshot.accountCount == 1 ? '' : 's'}',
+                          '${snapshot.otpAccountCount} OTP account${snapshot.otpAccountCount == 1 ? '' : 's'}'
+                          ' • ${snapshot.passwordEntryCount} password${snapshot.passwordEntryCount == 1 ? '' : 's'}',
                           style: TextStyle(
                             color: _textSecondary,
                             fontSize: 12,
@@ -555,11 +557,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         actions: [
+          TextButton.icon(
+            onPressed: (!signedIn || isPrimaryDevice)
+                ? () async {
+                    Navigator.pop(dialogContext);
+                    await _createManualVaultRestorePoint();
+                  }
+                : null,
+            icon: const Icon(Icons.add_circle_outline_rounded),
+            label: const Text('Create restore point'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Close'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _createManualVaultRestorePoint() async {
+    final authenticated = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !authenticated) return;
+
+    if (await _syncService.isLoggedIn()) {
+      final currentSession = await _syncService.getCurrentDeviceSession();
+      if (!mounted) return;
+      if (currentSession == null || !currentSession.isPrimary) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Only your primary device can create synced manual restore points.',
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    await _otpVaultSnapshotService.captureSnapshot(reason: 'manual_on_demand');
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Created a manual vault restore point for your current OTP accounts and passwords.',
+        ),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
       ),
     );
   }
@@ -575,7 +628,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              'Only your primary device can restore synced OTP restore points.',
+              'Only your primary device can restore synced vault restore points.',
             ),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
@@ -593,10 +646,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
-        title: Text('Restore OTP Snapshot', style: TextStyle(color: _textPrimary)),
+        title:
+            Text('Restore Vault Snapshot', style: TextStyle(color: _textPrimary)),
         content: Text(
-          'Restore your OTP vault to ${_formatSnapshotDate(snapshot.createdAt)}? '
-          'This will replace the current OTP vault on this device.',
+          'Restore your vault to ${_formatSnapshotDate(snapshot.createdAt)}? '
+          'This will replace the current OTP accounts and password entries on this device.',
           style: TextStyle(
             color: _textSecondary,
             fontSize: 13,
@@ -627,7 +681,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (result == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Could not restore that OTP snapshot.'),
+          content: const Text('Could not restore that vault snapshot.'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -646,9 +700,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text(
           syncEnabled
               ? (result.syncedToCloud
-                  ? 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
-                  : 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
-              : 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
+                  ? 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
+                  : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
+              : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
         ),
         backgroundColor:
             (!syncEnabled || result.syncedToCloud)
@@ -673,7 +727,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              'Only your primary device can delete synced OTP restore points.',
+              'Only your primary device can delete synced vault restore points.',
             ),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
@@ -696,7 +750,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(color: _textPrimary),
         ),
         content: Text(
-          'Delete the OTP restore point from ${_formatSnapshotDate(snapshot.createdAt)}? This removes it from this device and the encrypted server copy.',
+          'Delete the vault restore point from ${_formatSnapshotDate(snapshot.createdAt)}? This removes it from this device and the encrypted server copy.',
           style: TextStyle(
             color: _textSecondary,
             fontSize: 13,
@@ -729,8 +783,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(
           deleted
-              ? 'Deleted the OTP restore point from ${_formatSnapshotDate(snapshot.createdAt)}.'
-              : 'Could not delete that OTP restore point.',
+              ? 'Deleted the vault restore point from ${_formatSnapshotDate(snapshot.createdAt)}.'
+              : 'Could not delete that vault restore point.',
         ),
         backgroundColor: deleted ? Colors.red : Colors.orange,
         behavior: SnackBarBehavior.floating,
@@ -826,8 +880,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _dividerLine(),
             _tappableTile(
               icon: Icons.restore_rounded,
-              label: 'OTP Restore Points',
-              sub: 'Restore your OTP vault from recent automatic snapshots',
+              label: 'Vault Restore Points',
+              sub:
+                  'Restore your OTP accounts and passwords from recent automatic snapshots',
               onTap: _showOtpRestorePoints,
             ),
             _dividerLine(),
@@ -2526,81 +2581,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    final otpController = TextEditingController();
+    var otpCode = '';
     if (!mounted) return;
     final verified = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: _cardColor,
-        title: Text('Confirm Deletion', style: TextStyle(color: _textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.email_outlined, size: 48, color: Colors.red),
-            const SizedBox(height: 12),
-            Text(
-              'A 6-digit verification code was sent to your email. Enter it to permanently delete ALL accounts everywhere.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              decoration: BoxDecoration(
-                color: _isDark ? Colors.white12 : Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
-              ),
-              child: TextField(
-                controller: otpController,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title: Text('Confirm Deletion', style: TextStyle(color: _textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.email_outlined, size: 48, color: Colors.red),
+              const SizedBox(height: 12),
+              Text(
+                'A 6-digit verification code was sent to your email. Enter it to permanently delete ALL accounts everywhere.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 24,
-                    letterSpacing: 4,
-                    fontWeight: FontWeight.bold),
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(
-                  hintText: '000000',
-                  hintStyle: TextStyle(fontSize: 18, letterSpacing: 2),
-                  border: InputBorder.none,
-                  counterText: '',
-                  contentPadding: EdgeInsets.symmetric(vertical: 16),
+                style: TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+                ),
+                child: TextField(
+                  onChanged: (value) {
+                    setDialogState(() => otpCode = value);
+                  },
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 24,
+                      letterSpacing: 4,
+                      fontWeight: FontWeight.bold),
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(
+                    hintText: '000000',
+                    hintStyle: TextStyle(fontSize: 18, letterSpacing: 2),
+                    border: InputBorder.none,
+                    counterText: '',
+                    contentPadding: EdgeInsets.symmetric(vertical: 16),
+                  ),
                 ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red, foregroundColor: Colors.white),
+              onPressed: () async {
+                final code = otpCode.trim();
+                if (code.length != 6) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(
+                    content: Text('Enter the 6-digit code'),
+                    backgroundColor: Colors.red,
+                  ));
+                  return;
+                }
+                final ok = await _syncService.verifyDeleteOtp(username, code);
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext, ok);
+              },
+              child: const Text('Delete Everything'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext, false);
-            },
-            child: Text('Cancel', style: TextStyle(color: _textSecondary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () async {
-              final code = otpController.text.trim();
-              if (code.length != 6) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(
-                  content: Text('Enter the 6-digit code'),
-                  backgroundColor: Colors.red,
-                ));
-                return;
-              }
-              final ok = await _syncService.verifyDeleteOtp(username, code);
-              if (!dialogContext.mounted) return;
-              Navigator.pop(dialogContext, ok);
-            },
-            child: const Text('Delete Everything'),
-          ),
-        ],
       ),
     );
-    otpController.dispose();
 
     if (verified != true) {
       if (!mounted) return;

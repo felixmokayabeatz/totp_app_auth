@@ -94,84 +94,86 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       return false;
     }
 
-    final otpController = TextEditingController();
+    var otpCode = '';
     final verified = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: _cardColor,
-        title: Text(title, style: TextStyle(color: _textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.email_outlined, size: 48, color: Colors.red),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 18),
-            Container(
-              decoration: BoxDecoration(
-                color: _isDark ? Colors.white12 : Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
-              ),
-              child: TextField(
-                controller: otpController,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title: Text(title, style: TextStyle(color: _textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.email_outlined, size: 48, color: Colors.red),
+              const SizedBox(height: 12),
+              Text(
+                message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 24,
-                  letterSpacing: 4,
-                  fontWeight: FontWeight.bold,
+                style: TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                decoration: BoxDecoration(
+                  color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
                 ),
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                decoration: const InputDecoration(
-                  hintText: '000000',
-                  hintStyle: TextStyle(fontSize: 18, letterSpacing: 2),
-                  border: InputBorder.none,
-                  counterText: '',
-                  contentPadding: EdgeInsets.symmetric(vertical: 16),
+                child: TextField(
+                  onChanged: (value) {
+                    setDialogState(() => otpCode = value);
+                  },
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    letterSpacing: 4,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(
+                    hintText: '000000',
+                    hintStyle: TextStyle(fontSize: 18, letterSpacing: 2),
+                    border: InputBorder.none,
+                    counterText: '',
+                    contentPadding: EdgeInsets.symmetric(vertical: 16),
+                  ),
                 ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final code = otpCode.trim();
+                if (code.length != 6) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter the 6-digit code.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                final ok = await _syncService.verifyDeleteOtp(username, code);
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext, ok);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(confirmLabel),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              otpController.dispose();
-              Navigator.pop(dialogContext, false);
-            },
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final code = otpController.text.trim();
-              if (code.length != 6) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Enter the 6-digit code.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-              final ok = await _syncService.verifyDeleteOtp(username, code);
-              if (!dialogContext.mounted) return;
-              otpController.dispose();
-              Navigator.pop(dialogContext, ok);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: Text(confirmLabel),
-          ),
-        ],
       ),
     );
 
