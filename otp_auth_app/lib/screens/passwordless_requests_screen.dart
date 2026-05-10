@@ -132,34 +132,57 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
     required bool selected,
     required VoidCallback? onPressed,
   }) {
-    return SizedBox(
-      width: 108,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: selected
-              ? _accent
-              : _accent.withValues(alpha: _isDark ? 0.18 : 0.08),
-          foregroundColor: selected ? Colors.white : _accent,
-          elevation: 0,
-          side: BorderSide(
-            color: selected ? _accent : _accent.withValues(alpha: 0.4),
-            width: 1.6,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor:
+            selected ? _accent : _accent.withValues(alpha: _isDark ? 0.14 : 0.09),
+        foregroundColor: selected ? Colors.white : _textPrimary,
+        elevation: selected ? 1 : 0,
+        side: BorderSide(
+          color: selected ? _accent : _accent.withValues(alpha: 0.28),
+          width: selected ? 2 : 1.4,
         ),
-        child: Text(
-          choice,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.8,
-          ),
+        minimumSize: const Size.fromHeight(88),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
         ),
       ),
+      child: Text(
+        choice,
+        style: TextStyle(
+          fontSize: 26,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.6,
+          color: selected ? Colors.white : _textPrimary,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChoiceRow(
+    List<String> choices, {
+    required String? selectedCode,
+    required String requestId,
+  }) {
+    return Row(
+      children: [
+        for (var index = 0; index < choices.length; index++) ...[
+          Expanded(
+            child: _buildChoiceButton(
+              choices[index],
+              selected: selectedCode == choices[index],
+              onPressed: _isActing
+                  ? null
+                  : () => setState(() {
+                        _selectedCodes[requestId] = choices[index];
+                      }),
+            ),
+          ),
+          if (index != choices.length - 1) const SizedBox(width: 10),
+        ],
+      ],
     );
   }
 
@@ -258,21 +281,10 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
             Column(
               children: [
                 if (choices.isNotEmpty)
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final choice in choices)
-                        _buildChoiceButton(
-                          choice,
-                          selected: selectedCode == choice,
-                          onPressed: _isActing
-                              ? null
-                              : () => setState(() {
-                                    _selectedCodes[requestId] = choice;
-                                  }),
-                        ),
-                    ],
+                  _buildChoiceRow(
+                    choices,
+                    selectedCode: selectedCode,
+                    requestId: requestId,
                   ),
                 const SizedBox(height: 10),
                 SizedBox(

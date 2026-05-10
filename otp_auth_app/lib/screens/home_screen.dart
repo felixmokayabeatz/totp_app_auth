@@ -348,38 +348,50 @@ class _HomeScreenState extends State<HomeScreen>
           final isDark = theme.brightness == Brightness.dark;
           final surfaceColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
           final softAccent = _accent.withValues(alpha: isDark ? 0.18 : 0.08);
+          final textPrimary =
+              isDark ? Colors.white : theme.colorScheme.onSurface;
 
           Widget buildChoiceButton(String choice) {
             final isSelected = selectedCode == choice;
-            return SizedBox(
-              width: 108,
-              child: ElevatedButton(
-                onPressed: () {
-                  setDialogState(() => selectedCode = choice);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isSelected ? _accent : softAccent,
-                  foregroundColor: isSelected ? Colors.white : _accent,
-                  elevation: 0,
-                  side: BorderSide(
-                    color: isSelected ? _accent : _accent.withValues(alpha: 0.4),
-                    width: 1.6,
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+            return ElevatedButton(
+              onPressed: () {
+                setDialogState(() => selectedCode = choice);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isSelected ? _accent : softAccent,
+                foregroundColor: isSelected ? Colors.white : textPrimary,
+                elevation: isSelected ? 1 : 0,
+                side: BorderSide(
+                  color: isSelected ? _accent : _accent.withValues(alpha: 0.28),
+                  width: isSelected ? 2 : 1.4,
                 ),
-                child: Text(
-                  choice,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.8,
-                  ),
+                minimumSize: const Size.fromHeight(88),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
                 ),
               ),
+              child: Text(
+                choice,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.6,
+                  color: isSelected ? Colors.white : textPrimary,
+                ),
+              ),
+            );
+          }
+
+          Widget buildChoiceRow() {
+            return Row(
+              children: [
+                for (var index = 0; index < choices.length; index++) ...[
+                  Expanded(child: buildChoiceButton(choices[index])),
+                  if (index != choices.length - 1) const SizedBox(width: 10),
+                ],
+              ],
             );
           }
 
@@ -409,13 +421,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 if (choices.isNotEmpty) ...[
                   const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final choice in choices) buildChoiceButton(choice),
-                    ],
-                  ),
+                  buildChoiceRow(),
                 ],
               ],
             ),
