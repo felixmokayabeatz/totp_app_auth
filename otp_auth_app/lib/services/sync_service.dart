@@ -19,6 +19,8 @@ import 'dart:io';
 
 class SyncService {
   static const _passwordDeletedIdsPrefix = 'password_deleted_ids_';
+  static const _secureMessageDeletedIdsPrefix = 'secure_message_deleted_ids_';
+  static const _secureMessageLifetime = Duration(minutes: 30);
   // ─── Singleton ────────────────────────────────────────────────────────────
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
@@ -506,6 +508,8 @@ class SyncService {
         'default_user';
   }
 
+  Future<String> getCurrentVaultIdentity() async => await _getCurrentUserId();
+
   Future<String> _getPasswordDeletedIdsKey() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
@@ -531,6 +535,60 @@ class SyncService {
     final deletedIds = await _getDeletedPasswordEntryIds();
     deletedIds.add(entryId);
     await _storeDeletedPasswordEntryIds(deletedIds);
+  }
+
+  Future<String> _getSecureMessageDeletedIdsKey() async {
+    final username =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ??
+            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
+            'default_user';
+    return '$_secureMessageDeletedIdsPrefix$username';
+  }
+
+  Future<Set<String>> _getDeletedSecureMessageIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = await _getSecureMessageDeletedIdsKey();
+    final raw = prefs.getStringList(key) ?? const <String>[];
+    return raw.where((id) => id.trim().isNotEmpty).toSet();
+  }
+
+  Future<void> _storeDeletedSecureMessageIds(Set<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = await _getSecureMessageDeletedIdsKey();
+    await prefs.setStringList(key, ids.toList()..sort());
+  }
+
+  Future<void> markSecureMessageDeleted(String messageId) async {
+    final deletedIds = await _getDeletedSecureMessageIds();
+    deletedIds.add(messageId);
+    await _storeDeletedSecureMessageIds(deletedIds);
+  }
+
+  bool isSecureMessageExpired(DateTime createdAt, {DateTime? now}) {
+    final currentTime = now ?? DateTime.now();
+    return createdAt.add(_secureMessageLifetime).isBefore(currentTime);
+  }
+
+  Future<int> purgeExpiredSecureMessages() async {
+    final box = await _getSecureMessageBox();
+    final now = DateTime.now();
+    final expiredIds = box.values
+        .where((message) => isSecureMessageExpired(message.createdAt, now: now))
+        .map((message) => message.id)
+        .toList();
+
+    if (expiredIds.isEmpty) {
+      return 0;
+    }
+
+    for (final id in expiredIds) {
+      await box.delete(id);
+    }
+
+    final deletedIds = await _getDeletedSecureMessageIds();
+    deletedIds.addAll(expiredIds);
+    await _storeDeletedSecureMessageIds(deletedIds);
+    return expiredIds.length;
   }
 
   Future<String> getOrCreateDeviceId() async {
@@ -1464,6 +1522,8 @@ class SyncService {
     if (!await _ensureEncryptionKeyAvailable()) return;
 
     final localBox = await _getSecureMessageBox();
+    final localDeletedIds = await _getDeletedSecureMessageIds();
+    final now = DateTime.now();
     final userId = await _getCurrentUserId();
     final prefs = await SharedPreferences.getInstance();
     final deviceId = prefs.getString('device_id') ?? '';
@@ -1488,6 +1548,13 @@ class SyncService {
       );
       if (decrypted.trim().isEmpty) return;
 
+      final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
+      final cloudDeletedIds = cloudDeletedIdsRaw == null ||
+              cloudDeletedIdsRaw.trim().isEmpty
+          ? <String>{}
+          : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+      final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
+
       final cloudMessages = List<Map<String, dynamic>>.from(
         (jsonDecode(decrypted) as List).map(
           (item) => Map<String, dynamic>.from(item),
@@ -1496,20 +1563,34 @@ class SyncService {
 
       for (final rawMessage in cloudMessages) {
         final id = rawMessage['id']?.toString() ?? '';
-        if (id.isEmpty || localBox.containsKey(id)) continue;
+        final createdAt = DateTime.tryParse(
+              rawMessage['created_at']?.toString() ?? '',
+            ) ??
+            DateTime.now();
+        if (id.isEmpty || deletedIds.contains(id) || localBox.containsKey(id)) {
+          continue;
+        }
+        if (isSecureMessageExpired(createdAt, now: now)) {
+          deletedIds.add(id);
+          continue;
+        }
 
         final message = SecureMessage(
           id: id,
           text: rawMessage['text']?.toString() ?? '',
-          createdAt: DateTime.tryParse(
-                rawMessage['created_at']?.toString() ?? '',
-              ) ??
-              DateTime.now(),
+          createdAt: createdAt,
           authorDeviceLabel: rawMessage['author_device_label']?.toString(),
           userId: userId,
         );
         await localBox.put(id, message);
       }
+
+      for (final deletedId in deletedIds) {
+        if (localBox.containsKey(deletedId)) {
+          await localBox.delete(deletedId);
+        }
+      }
+      await _storeDeletedSecureMessageIds(deletedIds);
     } on DioException catch (e) {
       if (e.response?.statusCode != 404) {
         debugPrint('downloadAndMergeSecureMessages error: $e');
@@ -1540,6 +1621,8 @@ class SyncService {
     }
 
     final messageBox = await _getSecureMessageBox();
+    final localDeletedIds = await _getDeletedSecureMessageIds();
+    final now = DateTime.now();
     final userId = await _getCurrentUserId();
     final prefs = await SharedPreferences.getInstance();
     var deviceId = prefs.getString('device_id') ?? '';
@@ -1551,6 +1634,7 @@ class SyncService {
     try {
       final mergedMessages = <String, Map<String, dynamic>>{};
       var cloudVersion = 0;
+      var cloudDeletedIds = <String>{};
 
       try {
         final downloadResponse = await _requestWithRetry((_) => _dio.get(
@@ -1582,6 +1666,12 @@ class SyncService {
           }
           cloudVersion =
               int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
+          final cloudDeletedIdsRaw =
+              downloadResponse.data['deleted_accounts']?.toString();
+          if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
+            cloudDeletedIds =
+                List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+          }
         }
       } on DioException catch (e) {
         if (e.response?.statusCode != 404) {
@@ -1589,7 +1679,30 @@ class SyncService {
         }
       }
 
+      final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
+
+      for (final cloudMessage in List<MapEntry<String, Map<String, dynamic>>>.from(
+          mergedMessages.entries)) {
+        final createdAt = DateTime.tryParse(
+              cloudMessage.value['created_at']?.toString() ?? '',
+            ) ??
+            DateTime.now();
+        if (deletedIds.contains(cloudMessage.key) ||
+            isSecureMessageExpired(createdAt, now: now)) {
+          mergedMessages.remove(cloudMessage.key);
+          deletedIds.add(cloudMessage.key);
+        }
+      }
+
       for (final message in messageBox.values) {
+        if (deletedIds.contains(message.id) ||
+            isSecureMessageExpired(message.createdAt, now: now)) {
+          if (messageBox.containsKey(message.id)) {
+            await messageBox.delete(message.id);
+          }
+          deletedIds.add(message.id);
+          continue;
+        }
         mergedMessages[message.id] = {
           'id': message.id,
           'text': message.getText(userId),
@@ -1615,11 +1728,15 @@ class SyncService {
               'encrypted_content': encrypted,
               'version': cloudVersion + 1,
               'device_id': deviceId,
-              'deleted_accounts': '[]',
+              'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
             },
           ));
 
-      return uploadResponse.statusCode == 200;
+      if (uploadResponse.statusCode == 200) {
+        await _storeDeletedSecureMessageIds(deletedIds);
+        return true;
+      }
+      return false;
     } on DioException catch (e) {
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??

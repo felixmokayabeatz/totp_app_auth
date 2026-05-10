@@ -48,8 +48,7 @@ class SecureMessage {
           EncryptionService.decryptSecureMessageText(encryptedText, userId);
       return _plainText!;
     } catch (_) {
-      _plainText = encryptedText;
-      return _plainText!;
+      return 'Unable to decrypt message.';
     }
   }
 }
