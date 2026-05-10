@@ -62,7 +62,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
 
   Future<void> _loadVault() async {
     try {
-      if (await _syncService.isLoggedIn() && await _syncService.isSyncEnabled()) {
+      if (await _syncService.isLoggedIn() &&
+          await _syncService.isSyncEnabled()) {
         await _syncService.downloadAndMergePasswordEntries();
       }
 
@@ -220,7 +221,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       );
     }
 
-    throw Exception('Password file import is not available on this device yet.');
+    throw Exception(
+        'Password file import is not available on this device yet.');
   }
 
   Future<void> _finishPasswordImport(
@@ -234,7 +236,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       setState(() => _isImporting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No supported password items were found in that export.'),
+          content:
+              Text('No supported password items were found in that export.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -352,8 +355,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       final imported = entries[index];
       final importedUsername = _importedUsername(imported);
       final entry = PasswordEntry(
-        id:
-            '${DateTime.now().microsecondsSinceEpoch}_${index}_${imported.title.hashCode.abs()}',
+        id: '${DateTime.now().microsecondsSinceEpoch}_${index}_${imported.title.hashCode.abs()}',
         title: imported.title,
         username: importedUsername,
         password: imported.password ?? '',
@@ -544,8 +546,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
           final requiresPhrase = deleteAll;
           final validPhrase =
               confirmationController.text.trim().toUpperCase() == 'DELETE ALL';
-          final canDelete =
-              acknowledged && (!requiresPhrase || validPhrase);
+          final canDelete = acknowledged && (!requiresPhrase || validPhrase);
 
           return AlertDialog(
             shape:
@@ -614,14 +615,14 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: canDelete
-                    ? () => Navigator.pop(dialogContext, true)
-                    : null,
+                onPressed:
+                    canDelete ? () => Navigator.pop(dialogContext, true) : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
                 ),
-                child: Text(deleteAll ? 'Delete everything' : 'Delete selected'),
+                child:
+                    Text(deleteAll ? 'Delete everything' : 'Delete selected'),
               ),
             ],
           );
@@ -736,8 +737,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                   children: [
                     Text(
                       'Save a password, private note, or both. It stays in your BeatzLock account vault and syncs only through your encrypted account data.',
-                      style:
-                          TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
+                      style: TextStyle(
+                          color: _textSecondary, fontSize: 13, height: 1.4),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -745,7 +746,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                       textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(
                         labelText: 'Title',
-                        hintText: 'Example: Server root password or private note',
+                        hintText:
+                            'Example: Server root password or private note',
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
@@ -771,7 +773,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                       maxLines: 5,
                       decoration: const InputDecoration(
                         labelText: 'Password or secret text',
-                        hintText: 'Optional if you only want to save a secure note',
+                        hintText:
+                            'Optional if you only want to save a secure note',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -811,8 +814,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed:
-                  isSaving ? null : () => Navigator.pop(dialogContext),
+              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -824,7 +826,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                       }
 
                       setDialogState(() => isSaving = true);
-                      final box = _passwordBox ?? await _syncService.getPasswordBox();
+                      final box =
+                          _passwordBox ?? await _syncService.getPasswordBox();
                       final entry = PasswordEntry(
                         id: existing?.id ??
                             DateTime.now().millisecondsSinceEpoch.toString(),
@@ -922,8 +925,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
-        title: Text('Delete secure item',
-            style: TextStyle(color: _textPrimary)),
+        title:
+            Text('Delete secure item', style: TextStyle(color: _textPrimary)),
         content: Text(
           'Delete "${entry.title}" from your secure vault?',
           style: TextStyle(color: _textSecondary),
@@ -985,6 +988,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
     final userId = await _currentUserId();
+    if (!mounted) return;
     final password = entry.getPassword(userId);
     final note = entry.getNote(userId) ?? '';
     final hasPassword = password.trim().isNotEmpty;
@@ -1040,8 +1044,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                             const SizedBox(height: 6),
                             Text(
                               entry.serverIP!,
-                              style:
-                                  TextStyle(color: _textSecondary, fontSize: 12),
+                              style: TextStyle(
+                                  color: _textSecondary, fontSize: 12),
                             ),
                           ],
                           if (hasPassword) ...[
@@ -1120,7 +1124,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: () async {
-                              await Clipboard.setData(ClipboardData(text: note));
+                              await Clipboard.setData(
+                                  ClipboardData(text: note));
                               if (sheetContext.mounted) {
                                 Navigator.pop(sheetContext);
                               }
@@ -1250,280 +1255,288 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (selectionMode) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12, top: 10),
-                    child: Checkbox(
-                      value: isSelected,
-                      activeColor: _accent,
-                      onChanged: (_) => _toggleEntrySelection(entry.id),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (selectionMode) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(right: 12, top: 10),
+                        child: Checkbox(
+                          value: isSelected,
+                          activeColor: _accent,
+                          onChanged: (_) => _toggleEntrySelection(entry.id),
+                        ),
+                      ),
+                    ],
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        color: _accent.withValues(alpha: _isDark ? 0.18 : 0.10),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Center(
+                        child: AccountLogoBadge(
+                          service: entry.title,
+                          issuer: entry.serverIP,
+                          size: 50,
+                          iconSize: 24,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: _isDark ? 0.18 : 0.10),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Center(
-                    child: AccountLogoBadge(
-                      service: entry.title,
-                      issuer: entry.serverIP,
-                      size: 50,
-                      iconSize: 24,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            entry.title,
+                            style: TextStyle(
+                              color: _textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            contextLabel,
+                            style: TextStyle(
+                              color: _textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Added ${_formatAdded(entry.createdAt)}',
+                            style: TextStyle(
+                              color: _textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (entry.username.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              entry.username,
+                              style: TextStyle(
+                                color: _textPrimary.withValues(alpha: 0.92),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
+                    if (selectionMode)
+                      Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? _accent.withValues(alpha: _isDark ? 0.22 : 0.14)
+                              : Colors.transparent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isSelected
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                          color: isSelected ? _accent : _textSecondary,
+                          size: 22,
+                        ),
+                      )
+                    else
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'edit') {
+                            _showEntryDialog(existing: entry);
+                          } else if (value == 'delete') {
+                            _deleteEntry(entry);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        ],
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: 16),
+                FutureBuilder<String>(
+                  future: _currentUserId(),
+                  builder: (context, snapshot) {
+                    final id = snapshot.data;
+                    if (id == null || id.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final hasPassword = entry.getPassword(id).trim().isNotEmpty;
+                    final hasNote = (entry.getNote(id) ?? '').trim().isNotEmpty;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildInfoChip(
+                          icon: Icons.shield_rounded,
+                          label: _entryTypeLabel(entry, id),
+                        ),
+                        if (hasPassword)
+                          _buildInfoChip(
+                            icon: Icons.key_rounded,
+                            label: 'Saved password',
+                            color: const Color(0xFF0F766E),
+                          ),
+                        if (hasNote)
+                          _buildInfoChip(
+                            icon: Icons.notes_rounded,
+                            label: 'Encrypted note',
+                            color: const Color(0xFFC2410C),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: _isDark
+                          ? [
+                              _accent.withValues(alpha: 0.16),
+                              Colors.white.withValues(alpha: 0.04),
+                            ]
+                          : [
+                              _accent.withValues(alpha: 0.10),
+                              _accent.withValues(alpha: 0.03),
+                            ],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: _accent.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      Text(
-                        entry.title,
-                        style: TextStyle(
-                          color: _textPrimary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          height: 1.15,
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color:
+                              _accent.withValues(alpha: _isDark ? 0.20 : 0.14),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.lock_open_rounded,
+                          color: _accent,
+                          size: 20,
                         ),
                       ),
-                      const SizedBox(height: 5),
-                      Text(
-                        contextLabel,
-                        style: TextStyle(
-                          color: _textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Added ${_formatAdded(entry.createdAt)}',
-                        style: TextStyle(
-                          color: _textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (entry.username.trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          entry.username,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          selectionMode
+                              ? 'Tap cards to pick several items, then use the top bar to delete them safely.'
+                              : 'Reveal to unlock the saved password or encrypted note for ${_entryInitial(entry)}.',
                           style: TextStyle(
-                            color: _textPrimary.withValues(alpha: 0.92),
-                            fontSize: 13,
+                            color: _textSecondary,
+                            height: 1.35,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
-                if (selectionMode)
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? _accent.withValues(alpha: _isDark ? 0.22 : 0.14)
-                          : Colors.transparent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      isSelected
-                          ? Icons.check_circle_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      color: isSelected ? _accent : _textSecondary,
-                      size: 22,
-                    ),
-                  )
-                else
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _showEntryDialog(existing: entry);
-                      } else if (value == 'delete') {
-                        _deleteEntry(entry);
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
-                    ],
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            FutureBuilder<String>(
-              future: _currentUserId(),
-              builder: (context, snapshot) {
-                final id = snapshot.data;
-                if (id == null || id.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-                final hasPassword = entry.getPassword(id).trim().isNotEmpty;
-                final hasNote = (entry.getNote(id) ?? '').trim().isNotEmpty;
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                const SizedBox(height: 16),
+                Row(
                   children: [
-                    _buildInfoChip(
-                      icon: Icons.shield_rounded,
-                      label: _entryTypeLabel(entry, id),
+                    if (entry.username.trim().isNotEmpty)
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              selectionMode ? null : () => _copyUsername(entry),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(
+                              color: _accent.withValues(alpha: 0.22),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          icon: const Icon(Icons.alternate_email_rounded),
+                          label: const Text('Copy user'),
+                        ),
+                      ),
+                    if (entry.username.trim().isNotEmpty)
+                      const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: selectionMode
+                            ? null
+                            : () => _showPasswordSheet(entry),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        icon: const Icon(Icons.visibility_rounded),
+                        label: Text(selectionMode ? 'Selected' : 'Reveal'),
+                      ),
                     ),
-                    if (hasPassword)
-                      _buildInfoChip(
-                        icon: Icons.key_rounded,
-                        label: 'Saved password',
-                        color: const Color(0xFF0F766E),
-                      ),
-                    if (hasNote)
-                      _buildInfoChip(
-                        icon: Icons.notes_rounded,
-                        label: 'Encrypted note',
-                        color: const Color(0xFFC2410C),
-                      ),
                   ],
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: _isDark
-                      ? [
-                          _accent.withValues(alpha: 0.16),
-                          Colors.white.withValues(alpha: 0.04),
-                        ]
-                      : [
-                          _accent.withValues(alpha: 0.10),
-                          _accent.withValues(alpha: 0.03),
-                        ],
                 ),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: _accent.withValues(alpha: 0.15),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: _accent.withValues(alpha: _isDark ? 0.20 : 0.14),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.lock_open_rounded,
-                      color: _accent,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      selectionMode
-                          ? 'Tap cards to pick several items, then use the top bar to delete them safely.'
-                          : 'Reveal to unlock the saved password or encrypted note for ${_entryInitial(entry)}.',
-                      style: TextStyle(
-                        color: _textSecondary,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                if (entry.username.trim().isNotEmpty)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: selectionMode ? null : () => _copyUsername(entry),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(
-                          color: _accent.withValues(alpha: 0.22),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed:
+                            selectionMode ? null : () => _copyPassword(entry),
+                        style: TextButton.styleFrom(
+                          foregroundColor: _textPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                        icon: const Icon(Icons.copy_rounded),
+                        label: const Text('Quick copy'),
+                      ),
+                    ),
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed:
+                            selectionMode ? null : () => _copyNote(entry),
+                        style: TextButton.styleFrom(
+                          foregroundColor: _textPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
-                      ),
-                      icon: const Icon(Icons.alternate_email_rounded),
-                      label: const Text('Copy user'),
-                    ),
-                  ),
-                if (entry.username.trim().isNotEmpty) const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton.icon(
-                    onPressed: selectionMode ? null : () => _showPasswordSheet(entry),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        icon: const Icon(Icons.notes_rounded),
+                        label: const Text('Copy note'),
                       ),
                     ),
-                    icon: const Icon(Icons.visibility_rounded),
-                    label: Text(selectionMode ? 'Selected' : 'Reveal'),
-                  ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: selectionMode ? null : () => _copyPassword(entry),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _textPrimary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    icon: const Icon(Icons.copy_rounded),
-                    label: const Text('Quick copy'),
-                  ),
-                ),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: selectionMode ? null : () => _copyNote(entry),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _textPrimary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    icon: const Icon(Icons.notes_rounded),
-                    label: const Text('Copy note'),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
-      ),
-      ),
       ),
     );
   }
@@ -1554,8 +1567,9 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         actions: [
           if (_isSelectionMode) ...[
             IconButton(
-              tooltip:
-                  allVisibleSelected ? 'Clear visible selection' : 'Select all visible',
+              tooltip: allVisibleSelected
+                  ? 'Clear visible selection'
+                  : 'Select all visible',
               onPressed: filteredEntries.isEmpty
                   ? null
                   : () => _toggleSelectAllVisible(filteredEntries),
@@ -1777,8 +1791,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                               margin: const EdgeInsets.only(bottom: 14),
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: Colors.orange.withValues(
-                                    alpha: _isDark ? 0.16 : 0.10),
+                                color: Colors.orange
+                                    .withValues(alpha: _isDark ? 0.16 : 0.10),
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
                                   color: Colors.orange.withValues(alpha: 0.18),
@@ -1813,7 +1827,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                               suffixIcon: _searchQuery.isEmpty
                                   ? null
                                   : IconButton(
-                                      onPressed: () => _searchController.clear(),
+                                      onPressed: () =>
+                                          _searchController.clear(),
                                       icon: const Icon(Icons.close_rounded),
                                     ),
                               filled: true,

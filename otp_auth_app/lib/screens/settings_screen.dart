@@ -519,10 +519,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 )) {
                   return;
                 }
-                if (!mounted) return;
+                if (!context.mounted) return;
                 final authenticated =
                     await _appLockService.authenticateToUnlock(context);
-                if (!mounted || !authenticated) return;
+                if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -544,10 +544,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 )) {
                   return;
                 }
-                if (!mounted) return;
+                if (!context.mounted) return;
                 final authenticated =
                     await _appLockService.authenticateToUnlock(context);
-                if (!mounted || !authenticated) return;
+                if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -1563,269 +1563,273 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: _cardColor,
-          title: Text('Import Accounts', style: TextStyle(color: _textPrimary)),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Scan Google Authenticator transfer QR codes, or choose a CSV export with columns such as Service, Account, Secret.',
-                  style: TextStyle(color: _textSecondary, fontSize: 13),
-                ),
-                if (Platform.isAndroid || Platform.isIOS) ...[
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: isImporting
-                        ? null
-                        : () async {
-                            Navigator.pop(dialogContext);
-                            final imported = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const AddAccountScreen(startScanning: true),
-                              ),
-                            );
-                            if (imported == true && mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content:
-                                      const Text('Success. Account added.'),
-                                  backgroundColor: const Color(0xFF10B981),
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: _cardColor,
+            title:
+                Text('Import Accounts', style: TextStyle(color: _textPrimary)),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Scan Google Authenticator transfer QR codes, or choose a CSV export with columns such as Service, Account, Secret.',
+                    style: TextStyle(color: _textSecondary, fontSize: 13),
+                  ),
+                  if (Platform.isAndroid || Platform.isIOS) ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: isImporting
+                          ? null
+                          : () async {
+                              Navigator.pop(dialogContext);
+                              final imported = await Navigator.push<bool>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const AddAccountScreen(
+                                      startScanning: true),
                                 ),
                               );
-                            }
-                          },
-                    icon: const Icon(Icons.qr_code_scanner_rounded),
-                    label: const Text('Scan transfer QR'),
+                              if (imported == true && mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content:
+                                        const Text('Success. Account added.'),
+                                    backgroundColor: const Color(0xFF10B981),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                      icon: const Icon(Icons.qr_code_scanner_rounded),
+                      label: const Text('Scan transfer QR'),
+                    ),
+                  ],
+                  if (!Platform.isWindows) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'On phone, paste exported OTP text below. On Windows, you can also pick a CSV file.',
+                      style: TextStyle(
+                          color: Colors.orange.shade600, fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: pastedImportController,
+                    minLines: 5,
+                    maxLines: 8,
+                    decoration: const InputDecoration(
+                      labelText: 'Paste OTP export text',
+                      hintText: 'otpauth links, migration links, CSV, or JSON',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      final entries = OTPImportService().parse(value);
+                      setDialogState(() {
+                        selectedEntries = entries;
+                        selectedFileName = value.trim().isEmpty
+                            ? selectedFileName
+                            : 'Pasted export text';
+                        errorText = value.trim().isEmpty
+                            ? errorText
+                            : (entries.isEmpty
+                                ? 'No valid OTP accounts were found in the pasted text.'
+                                : null);
+                      });
+                    },
                   ),
-                ],
-                if (!Platform.isWindows) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'On phone, paste exported OTP text below. On Windows, you can also pick a CSV file.',
-                    style:
-                        TextStyle(color: Colors.orange.shade600, fontSize: 12),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: isImporting
+                          ? null
+                          : () async {
+                              final clipboard =
+                                  await Clipboard.getData('text/plain');
+                              final value = clipboard?.text ?? '';
+                              pastedImportController.text = value;
+                              final entries = OTPImportService().parse(value);
+                              setDialogState(() {
+                                selectedEntries = entries;
+                                selectedFileName = value.trim().isEmpty
+                                    ? null
+                                    : 'Pasted export text';
+                                errorText = value.trim().isEmpty
+                                    ? null
+                                    : (entries.isEmpty
+                                        ? 'No valid OTP accounts were found in the pasted text.'
+                                        : null);
+                              });
+                            },
+                      icon: const Icon(Icons.paste_rounded),
+                      label: const Text('Paste clipboard'),
+                    ),
                   ),
-                ],
-                const SizedBox(height: 16),
-                TextField(
-                  controller: pastedImportController,
-                  minLines: 5,
-                  maxLines: 8,
-                  decoration: const InputDecoration(
-                    labelText: 'Paste OTP export text',
-                    hintText: 'otpauth links, migration links, CSV, or JSON',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (value) {
-                    final entries = OTPImportService().parse(value);
-                    setDialogState(() {
-                      selectedEntries = entries;
-                      selectedFileName = value.trim().isEmpty
-                          ? selectedFileName
-                          : 'Pasted export text';
-                      errorText = value.trim().isEmpty
-                          ? errorText
-                          : (entries.isEmpty
-                              ? 'No valid OTP accounts were found in the pasted text.'
-                              : null);
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: isImporting
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: isImporting ||
+                            isPickingFile ||
+                            !Platform.isWindows
                         ? null
                         : () async {
-                            final clipboard =
-                                await Clipboard.getData('text/plain');
-                            final value = clipboard?.text ?? '';
-                            pastedImportController.text = value;
-                            final entries = OTPImportService().parse(value);
                             setDialogState(() {
-                              selectedEntries = entries;
-                              selectedFileName = value.trim().isEmpty
-                                  ? null
-                                  : 'Pasted export text';
-                              errorText = value.trim().isEmpty
-                                  ? null
-                                  : (entries.isEmpty
-                                      ? 'No valid OTP accounts were found in the pasted text.'
-                                      : null);
+                              isPickingFile = true;
+                              errorText = null;
                             });
-                          },
-                    icon: const Icon(Icons.paste_rounded),
-                    label: const Text('Paste clipboard'),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: isImporting || isPickingFile || !Platform.isWindows
-                      ? null
-                      : () async {
-                          setDialogState(() {
-                            isPickingFile = true;
-                            errorText = null;
-                          });
 
-                          try {
-                            final file = await FileSelectorWindows().openFile(
-                              confirmButtonText: 'Import CSV',
-                            );
-                            if (!dialogContext.mounted) return;
+                            try {
+                              final file = await FileSelectorWindows().openFile(
+                                confirmButtonText: 'Import CSV',
+                              );
+                              if (!dialogContext.mounted) return;
 
-                            if (file == null) {
-                              setDialogState(() => isPickingFile = false);
-                              return;
-                            }
+                              if (file == null) {
+                                setDialogState(() => isPickingFile = false);
+                                return;
+                              }
 
-                            final fileName = file.name;
-                            if (!fileName.toLowerCase().endsWith('.csv')) {
+                              final fileName = file.name;
+                              if (!fileName.toLowerCase().endsWith('.csv')) {
+                                setDialogState(() {
+                                  selectedEntries = const [];
+                                  selectedFileName = null;
+                                  isPickingFile = false;
+                                  errorText = 'Choose a .csv file.';
+                                });
+                                return;
+                              }
+
+                              final contents = await file.readAsString();
+                              final entries =
+                                  OTPImportService().parseCsv(contents);
+                              setDialogState(() {
+                                selectedEntries = entries;
+                                selectedFileName = fileName;
+                                isPickingFile = false;
+                                errorText = entries.isEmpty
+                                    ? 'No valid TOTP accounts were found in this CSV file.'
+                                    : null;
+                              });
+                            } catch (_) {
+                              if (!dialogContext.mounted) return;
                               setDialogState(() {
                                 selectedEntries = const [];
                                 selectedFileName = null;
                                 isPickingFile = false;
-                                errorText = 'Choose a .csv file.';
+                                errorText = 'Could not read that CSV file.';
                               });
-                              return;
                             }
-
-                            final contents = await file.readAsString();
-                            final entries =
-                                OTPImportService().parseCsv(contents);
-                            setDialogState(() {
-                              selectedEntries = entries;
-                              selectedFileName = fileName;
-                              isPickingFile = false;
-                              errorText = entries.isEmpty
-                                  ? 'No valid TOTP accounts were found in this CSV file.'
-                                  : null;
-                            });
-                          } catch (_) {
-                            if (!dialogContext.mounted) return;
-                            setDialogState(() {
-                              selectedEntries = const [];
-                              selectedFileName = null;
-                              isPickingFile = false;
-                              errorText = 'Could not read that CSV file.';
-                            });
-                          }
-                        },
-                  icon: isPickingFile
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _accent,
-                          ),
-                        )
-                      : const Icon(Icons.upload_file_rounded),
-                  label: Text(selectedFileName == null
-                      ? 'Choose CSV File'
-                      : 'Change CSV File'),
-                ),
-                if (selectedFileName != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _isDark ? Colors.white10 : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _dividerColor),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          selectedFileName!,
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${selectedEntries.length} account${selectedEntries.length == 1 ? '' : 's'} ready to import',
-                          style: TextStyle(color: _textSecondary, fontSize: 12),
-                        ),
-                      ],
-                    ),
+                          },
+                    icon: isPickingFile
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _accent,
+                            ),
+                          )
+                        : const Icon(Icons.upload_file_rounded),
+                    label: Text(selectedFileName == null
+                        ? 'Choose CSV File'
+                        : 'Change CSV File'),
                   ),
-                ],
-                if (errorText != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    errorText!,
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed:
-                  isImporting ? null : () => Navigator.pop(dialogContext),
-              child: Text('Cancel', style: TextStyle(color: _textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: isImporting || selectedEntries.isEmpty
-                  ? null
-                  : () async {
-                      setDialogState(() {
-                        isImporting = true;
-                        errorText = null;
-                      });
-
-                      final result = await _importOtpEntries(selectedEntries);
-                      if (!dialogContext.mounted) return;
-                      Navigator.pop(dialogContext);
-                      if (!mounted) return;
-
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(result.message),
-                          backgroundColor: result.importedCount > 0
-                              ? const Color(0xFF10B981)
-                              : Colors.orange,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      );
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.white,
-              ),
-              child: isImporting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+                  if (selectedFileName != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _isDark ? Colors.white10 : Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _dividerColor),
                       ),
-                    )
-                  : const Text('Import'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            selectedFileName!,
+                            style: TextStyle(
+                              color: _textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${selectedEntries.length} account${selectedEntries.length == 1 ? '' : 's'} ready to import',
+                            style:
+                                TextStyle(color: _textSecondary, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (errorText != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorText!,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed:
+                    isImporting ? null : () => Navigator.pop(dialogContext),
+                child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: isImporting || selectedEntries.isEmpty
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          isImporting = true;
+                          errorText = null;
+                        });
+
+                        final result = await _importOtpEntries(selectedEntries);
+                        if (!dialogContext.mounted) return;
+                        Navigator.pop(dialogContext);
+                        if (!mounted) return;
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(result.message),
+                            backgroundColor: result.importedCount > 0
+                                ? const Color(0xFF10B981)
+                                : Colors.orange,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                ),
+                child: isImporting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Import'),
+              ),
+            ],
           ),
         ),
       );

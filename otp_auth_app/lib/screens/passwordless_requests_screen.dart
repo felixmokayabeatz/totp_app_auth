@@ -13,7 +13,8 @@ class PasswordlessRequestsScreen extends StatefulWidget {
       _PasswordlessRequestsScreenState();
 }
 
-class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen> {
+class _PasswordlessRequestsScreenState
+    extends State<PasswordlessRequestsScreen> {
   final SyncService _syncService = SyncService();
   final AppLockService _appLockService = AppLockService();
   Timer? _refreshTimer;
@@ -54,7 +55,8 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
           .map((item) => item['id']?.toString() ?? '')
           .where((id) => id.isNotEmpty)
           .toSet();
-      _selectedCodes.removeWhere((requestId, _) => !requestIds.contains(requestId));
+      _selectedCodes
+          .removeWhere((requestId, _) => !requestIds.contains(requestId));
       for (final item in requests) {
         final requestId = item['id']?.toString() ?? '';
         if (requestId.isEmpty) {
@@ -135,8 +137,9 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor:
-            selected ? _accent : _accent.withValues(alpha: _isDark ? 0.14 : 0.09),
+        backgroundColor: selected
+            ? _accent
+            : _accent.withValues(alpha: _isDark ? 0.14 : 0.09),
         foregroundColor: selected ? Colors.white : _textPrimary,
         elevation: selected ? 1 : 0,
         side: BorderSide(
@@ -190,7 +193,8 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
     final status = (item['status']?.toString() ?? 'pending').toLowerCase();
     final isPending = status == 'pending';
     final requestId = item['id']?.toString() ?? '';
-    final label = item['requester_device_label']?.toString() ?? 'Unknown device';
+    final label =
+        item['requester_device_label']?.toString() ?? 'Unknown device';
     final kind = item['requester_device_kind']?.toString() ?? 'unknown';
     final code = item['verification_code']?.toString() ?? '---';
     final selectedCode = _selectedCodes[requestId];
@@ -370,7 +374,8 @@ class _PasswordlessRequestsScreenState extends State<PasswordlessRequestsScreen>
                               Text(
                                 'When another device asks to sign in passwordlessly, approve it here from your primary phone.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(color: _textSecondary, height: 1.45),
+                                style: TextStyle(
+                                    color: _textSecondary, height: 1.45),
                               ),
                             ],
                           ),

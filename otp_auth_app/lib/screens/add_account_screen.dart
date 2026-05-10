@@ -274,6 +274,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   Future<void> _importOtpExportText() async {
     await _stopScanner();
+    if (!mounted) return;
     final controller = TextEditingController();
     try {
       final rawText = await showDialog<String>(
@@ -330,7 +331,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('No supported OTP accounts were found in that pasted export.'),
+            content: const Text(
+                'No supported OTP accounts were found in that pasted export.'),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
           ),

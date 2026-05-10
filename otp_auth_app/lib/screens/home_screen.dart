@@ -233,7 +233,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _pollPasswordlessApprovalRequests() async {
-    if (!mounted || !_canShowPasswordlessPrompt || _isShowingPasswordlessPrompt) {
+    if (!mounted ||
+        !_canShowPasswordlessPrompt ||
+        _isShowingPasswordlessPrompt) {
       return;
     }
 
@@ -428,8 +430,8 @@ class _HomeScreenState extends State<HomeScreen>
             actions: [
               TextButton(
                 onPressed: () async {
-                  final success = await _syncService
-                      .denyPasswordlessRequest(requestId);
+                  final success =
+                      await _syncService.denyPasswordlessRequest(requestId);
                   if (!dialogContext.mounted) return;
                   dialogClosed = true;
                   Navigator.pop(dialogContext);

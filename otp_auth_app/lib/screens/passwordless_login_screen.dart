@@ -15,7 +15,8 @@ class PasswordlessLoginScreen extends StatefulWidget {
   final String? passwordForSync;
 
   @override
-  State<PasswordlessLoginScreen> createState() => _PasswordlessLoginScreenState();
+  State<PasswordlessLoginScreen> createState() =>
+      _PasswordlessLoginScreenState();
 }
 
 class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
@@ -150,7 +151,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.phonelink_lock_rounded, size: 54, color: _accent),
+                    Icon(Icons.phonelink_lock_rounded,
+                        size: 54, color: _accent),
                     const SizedBox(height: 16),
                     Text(
                       'Approve on your primary phone',

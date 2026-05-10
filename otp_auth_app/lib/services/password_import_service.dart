@@ -192,7 +192,8 @@ class PasswordImportService {
         lines.map((line) => _splitDelimitedLine(line, delimiter)).toList();
     if (rows.isEmpty) return const [];
 
-    final headers = rows.first.map((cell) => cell.trim().toLowerCase()).toList();
+    final headers =
+        rows.first.map((cell) => cell.trim().toLowerCase()).toList();
     final hasHeader = headers.any((cell) => _knownHeaderNames.contains(cell));
     final dataRows = hasHeader ? rows.skip(1) : rows;
 
@@ -268,7 +269,8 @@ class PasswordImportService {
     final result = <PasswordImportEntry>[];
     for (final row in dataRows) {
       final type = _cell(row, typeIndex)?.toLowerCase() ?? '';
-      final title = _cell(row, titleIndex) ?? _titleFromUrl(_cell(row, urlIndex));
+      final title =
+          _cell(row, titleIndex) ?? _titleFromUrl(_cell(row, urlIndex));
       final email = _cell(row, emailIndex);
       final username = _cell(row, usernameIndex);
       final password = _cell(row, passwordIndex);

@@ -275,7 +275,8 @@ class SyncService {
   }
 
   Future<Box<PasswordEntry>> getPasswordBox() async => await _getPasswordBox();
-  Future<String> getCurrentPasswordBoxName() async => await _getPasswordBoxName();
+  Future<String> getCurrentPasswordBoxName() async =>
+      await _getPasswordBoxName();
 
   Future<String> _getSecureMessageBoxName() async {
     final username =
@@ -1239,10 +1240,10 @@ class SyncService {
       final localBox = await _getPasswordBox();
       final userId = await _getCurrentUserId();
       final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
-      final cloudDeletedIds = cloudDeletedIdsRaw == null ||
-              cloudDeletedIdsRaw.trim().isEmpty
-          ? <String>{}
-          : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+      final cloudDeletedIds =
+          cloudDeletedIdsRaw == null || cloudDeletedIdsRaw.trim().isEmpty
+              ? <String>{}
+              : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
       final localDeletedIds = await _getDeletedPasswordEntryIds();
       final deletedIds = {...cloudDeletedIds, ...localDeletedIds};
 
@@ -1549,10 +1550,10 @@ class SyncService {
       if (decrypted.trim().isEmpty) return;
 
       final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
-      final cloudDeletedIds = cloudDeletedIdsRaw == null ||
-              cloudDeletedIdsRaw.trim().isEmpty
-          ? <String>{}
-          : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+      final cloudDeletedIds =
+          cloudDeletedIdsRaw == null || cloudDeletedIdsRaw.trim().isEmpty
+              ? <String>{}
+              : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
       final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
 
       final cloudMessages = List<Map<String, dynamic>>.from(
@@ -1681,8 +1682,9 @@ class SyncService {
 
       final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
 
-      for (final cloudMessage in List<MapEntry<String, Map<String, dynamic>>>.from(
-          mergedMessages.entries)) {
+      for (final cloudMessage
+          in List<MapEntry<String, Map<String, dynamic>>>.from(
+              mergedMessages.entries)) {
         final createdAt = DateTime.tryParse(
               cloudMessage.value['created_at']?.toString() ?? '',
             ) ??
@@ -2595,7 +2597,8 @@ class SyncService {
     final token =
         await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
-      _lastErrorMessage = 'You need to be signed in to review sign-in requests.';
+      _lastErrorMessage =
+          'You need to be signed in to review sign-in requests.';
       return const [];
     }
 

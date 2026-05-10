@@ -46,7 +46,8 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
   Future<void> _loadMessages() async {
     try {
       await _syncService.purgeExpiredSecureMessages();
-      if (await _syncService.isLoggedIn() && await _syncService.isSyncEnabled()) {
+      if (await _syncService.isLoggedIn() &&
+          await _syncService.isSyncEnabled()) {
         await _syncService.downloadAndMergeSecureMessages();
       }
       final box = await _syncService.getSecureMessageBox();
@@ -85,7 +86,8 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
         await _syncService.syncSecureMessages();
       }
 
-      if (!await _syncService.isLoggedIn() || !await _syncService.isSyncEnabled()) {
+      if (!await _syncService.isLoggedIn() ||
+          !await _syncService.isSyncEnabled()) {
         return;
       }
       await _syncService.downloadAndMergeSecureMessages();
@@ -111,7 +113,8 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
       await box.put(message.id, message);
       _composerController.clear();
 
-      if (await _syncService.isLoggedIn() && await _syncService.isSyncEnabled()) {
+      if (await _syncService.isLoggedIn() &&
+          await _syncService.isSyncEnabled()) {
         await _syncService.syncSecureMessages();
       }
     } finally {
@@ -351,14 +354,16 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                         valueListenable: box.listenable(),
                         builder: (context, Box<SecureMessage> messageBox, _) {
                           final messages = messageBox.values.toList()
-                            ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+                            ..sort(
+                                (a, b) => a.createdAt.compareTo(b.createdAt));
                           if (messages.isEmpty) {
                             return _buildEmptyState();
                           }
 
                           final userId = _vaultIdentity;
                           if (userId == null || userId.isEmpty) {
-                            return const Center(child: CircularProgressIndicator());
+                            return const Center(
+                                child: CircularProgressIndicator());
                           }
 
                           return ListView(
@@ -394,7 +399,8 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                 color: _cardColor,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: _isDark ? 0.22 : 0.06),
+                    color:
+                        Colors.black.withValues(alpha: _isDark ? 0.22 : 0.06),
                     blurRadius: 16,
                     offset: const Offset(0, -4),
                   ),

@@ -995,9 +995,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
-                          onPressed: _isLoading ? null : _startPasswordlessLogin,
+                          onPressed:
+                              _isLoading ? null : _startPasswordlessLogin,
                           icon: const Icon(Icons.phonelink_lock_rounded),
-                          label: const Text('Use passwordless from primary phone'),
+                          label:
+                              const Text('Use passwordless from primary phone'),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(double.infinity, 46),
                             shape: RoundedRectangleBorder(
@@ -1250,7 +1252,8 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() {
           _show2FA = true;
         });
-        _showSuccess('Primary-phone approval was not completed. A normal 2FA code was sent to your email.');
+        _showSuccess(
+            'Primary-phone approval was not completed. A normal 2FA code was sent to your email.');
       } else {
         _showError(_syncService.lastErrorMessage ??
             'Unable to send the verification code. Check your username, password, or internet connection.');

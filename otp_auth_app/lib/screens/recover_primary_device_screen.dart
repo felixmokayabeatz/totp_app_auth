@@ -11,7 +11,8 @@ class RecoverPrimaryDeviceScreen extends StatefulWidget {
       _RecoverPrimaryDeviceScreenState();
 }
 
-class _RecoverPrimaryDeviceScreenState extends State<RecoverPrimaryDeviceScreen> {
+class _RecoverPrimaryDeviceScreenState
+    extends State<RecoverPrimaryDeviceScreen> {
   final SyncService _syncService = SyncService();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -74,7 +75,8 @@ class _RecoverPrimaryDeviceScreenState extends State<RecoverPrimaryDeviceScreen>
         _recoveryCodeController.text.trim().length != 10) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter your username, password, 6-digit email code, and 10-character recovery code.'),
+          content: Text(
+              'Enter your username, password, 6-digit email code, and 10-character recovery code.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -99,8 +101,8 @@ class _RecoverPrimaryDeviceScreenState extends State<RecoverPrimaryDeviceScreen>
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content:
-            Text(_syncService.lastErrorMessage ?? 'Primary-device recovery failed.'),
+        content: Text(
+            _syncService.lastErrorMessage ?? 'Primary-device recovery failed.'),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
       ),

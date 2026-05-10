@@ -58,12 +58,15 @@ class EncryptionService {
   }
 
   static String encryptPasswordEntryNote(String note, String userId) {
-    final key = generateKey(userId, 'password_entry_note_local_encryption_salt');
-    return authenticatedEncrypt(note, key, context: 'password-entry-note-local');
+    final key =
+        generateKey(userId, 'password_entry_note_local_encryption_salt');
+    return authenticatedEncrypt(note, key,
+        context: 'password-entry-note-local');
   }
 
   static String decryptPasswordEntryNote(String encryptedNote, String userId) {
-    final key = generateKey(userId, 'password_entry_note_local_encryption_salt');
+    final key =
+        generateKey(userId, 'password_entry_note_local_encryption_salt');
     return authenticatedDecrypt(
       encryptedNote,
       key,
