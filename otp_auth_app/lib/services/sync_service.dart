@@ -1403,6 +1403,259 @@ class SyncService {
     }
   }
 
+  Future<String?> getAvailableEncryptionKey() async {
+    final ready = await _ensureEncryptionKeyAvailable();
+    if (!ready) {
+      return null;
+    }
+    return _encryptionKey;
+  }
+
+  Future<Map<String, dynamic>?> getEncryptedSyncData(String dataType) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to load synced data.';
+      return null;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var deviceId = prefs.getString('device_id') ?? '';
+      if (deviceId.isEmpty) {
+        deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+        await prefs.setString('device_id', deviceId);
+      }
+
+      final response = await _requestWithRetry(
+        (_) => _dio.get(
+          'sync/get-data/',
+          queryParameters: {
+            'data_type': dataType,
+            'device_id': deviceId,
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
+      }
+
+      _lastErrorMessage = 'Could not load synced data.';
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return null;
+      }
+      _lastErrorMessage =
+          _friendlyRequestError(e, 'Could not load synced data.');
+      return null;
+    } catch (_) {
+      _lastErrorMessage = 'Could not load synced data.';
+      return null;
+    }
+  }
+
+  Future<bool> uploadEncryptedSyncData(
+    String dataType, {
+    required String encryptedContent,
+    required int version,
+    String deletedAccounts = 'N/A',
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to save synced data.';
+      return false;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var deviceId = prefs.getString('device_id') ?? '';
+      if (deviceId.isEmpty) {
+        deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+        await prefs.setString('device_id', deviceId);
+      }
+
+      final response = await _requestWithRetry(
+        (_) => _dio.post(
+          'sync/sync/',
+          data: {
+            'data_type': dataType,
+            'encrypted_content': encryptedContent,
+            'version': version,
+            'device_id': deviceId,
+            'deleted_accounts': deletedAccounts,
+          },
+        ),
+      );
+
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not save synced data.',
+      );
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not save synced data.';
+      return false;
+    }
+  }
+
+  Future<bool> unlockSyncAfterPasswordless(String password) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final canonicalUsername =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    if (token == null || token.isEmpty || canonicalUsername.isEmpty) {
+      _lastErrorMessage =
+          'You need to be signed in before unlocking sync on this device.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'auth/unlock-sync/',
+          data: {'password': password},
+          options: Options(headers: {
+            'Authorization': 'Bearer $accessToken',
+          }),
+        ),
+      );
+      if (response.statusCode == 200) {
+        final encryptionKey = EncryptionService.generateKey(
+          canonicalUsername + password,
+          'beatzLockKenya2099',
+        );
+        await _storeEncryptionKey(encryptionKey);
+        _encryptionKey = encryptionKey;
+        await setSyncEnabled(true);
+        await _restoreSyncedVaultDataAfterUnlock();
+        return true;
+      }
+
+      _lastErrorMessage = 'Could not unlock sync on this device.';
+      return false;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not unlock sync on this device.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not unlock sync on this device.';
+      return false;
+    }
+  }
+
+  Future<DeviceSessionInfo?> getCurrentDeviceSession() async {
+    final sessions = await getActiveDeviceSessions();
+    for (final session in sessions) {
+      if (session.isCurrent) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  Future<bool> clearRestoredAccountTombstones(List<String> accountIds) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'You need to be signed in to restore synced accounts.';
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (_) => _dio.post(
+          'sync/restore-accounts/',
+          data: {
+            'account_ids': accountIds,
+          },
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
+          'Could not prepare synced restore on the server.';
+      return false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not prepare synced restore on the server.';
+      return false;
+    }
+  }
+
+  Future<bool> uploadCurrentAccountsAsAuthoritative() async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'Sign in to sync restored accounts everywhere.';
+      return false;
+    }
+
+    if (!await _ensureEncryptionKeyAvailable()) {
+      _lastErrorMessage =
+          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      return false;
+    }
+
+    final userBox = await _getUserBox();
+
+    try {
+      var cloudVersion = 0;
+      try {
+        final existing = await getEncryptedSyncData('otp_accounts');
+        if (existing != null) {
+          cloudVersion = int.tryParse(existing['version']?.toString() ?? '0') ?? 0;
+        }
+      } catch (_) {}
+
+      final finalData = await Future.wait(
+        userBox.values.map((a) async {
+          final plainSecret = await _decryptSecretForUpload(a.secret);
+          return {
+            'id': a.id,
+            'service': a.service,
+            'secret': plainSecret,
+            'issuer': a.issuer,
+            'account_label': a.accountLabel,
+            'createdAt': a.createdAt.toIso8601String(),
+          };
+        }).toList(),
+      );
+
+      final encrypted = EncryptionService.simpleEncrypt(
+        jsonEncode(finalData),
+        _encryptionKey!,
+      );
+      return uploadEncryptedSyncData(
+        'otp_accounts',
+        encryptedContent: encrypted,
+        version: cloudVersion + 1,
+        deletedAccounts: '[]',
+      );
+    } catch (_) {
+      _lastErrorMessage = 'Could not sync restored accounts everywhere.';
+      return false;
+    }
+  }
+
   Future<bool> syncPasswordEntries() async {
     if (!(await isSyncEnabled())) {
       debugPrint('Password sync disabled by user preference');

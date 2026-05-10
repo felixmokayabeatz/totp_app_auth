@@ -2030,7 +2030,6 @@ class _HomeScreenState extends State<HomeScreen>
         actions: [
           TextButton(
             onPressed: () {
-              otpController.dispose();
               Navigator.pop(dialogContext, false);
             },
             child: const Text('Cancel'),
@@ -2049,7 +2048,6 @@ class _HomeScreenState extends State<HomeScreen>
               }
               final ok = await _syncService.verifyDeleteOtp(username, code);
               if (!dialogContext.mounted) return;
-              otpController.dispose();
               Navigator.pop(dialogContext, ok);
             },
             style: ElevatedButton.styleFrom(
@@ -2061,6 +2059,7 @@ class _HomeScreenState extends State<HomeScreen>
         ],
       ),
     );
+    otpController.dispose();
 
     if (!mounted) return false;
     if (verified != true) {
@@ -2306,7 +2305,6 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (!verified) return;
 
-      await _vaultSnapshotService.captureSnapshot(reason: 'pre_bulk_delete');
       for (final account in matches) {
         final ok = await _syncService.deleteAccountEverywhere(account.id);
         if (ok) {
@@ -2319,7 +2317,6 @@ class _HomeScreenState extends State<HomeScreen>
         }
       }
     } else {
-      await _vaultSnapshotService.captureSnapshot(reason: 'pre_bulk_delete');
       for (final account in matches) {
         await _syncService.deleteAccountLocalOnly(account.id);
         deletedCount++;

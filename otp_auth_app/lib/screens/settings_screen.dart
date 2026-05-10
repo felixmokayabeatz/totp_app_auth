@@ -433,6 +433,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final snapshots = await _otpVaultSnapshotService.getSnapshots();
     if (!mounted) return;
 
+    final signedIn = await _syncService.isLoggedIn();
+    final currentSession =
+        signedIn ? await _syncService.getCurrentDeviceSession() : null;
+    final isPrimaryDevice = !signedIn || currentSession?.isPrimary == true;
+
     if (snapshots.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -460,11 +465,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'BeatzLock keeps automatic local OTP vault snapshots about every 24 hours and retains a small history across recent days and longer-term restore points.',
+                  signedIn
+                      ? 'BeatzLock keeps encrypted OTP restore points about every 24 hours and before delete-all actions, then syncs them to your account.'
+                      : 'BeatzLock keeps local OTP restore points about every 24 hours and before delete-all actions while you are offline.',
                   style: TextStyle(
                     color: _textSecondary,
                     fontSize: 13,
                     height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  signedIn
+                      ? (isPrimaryDevice
+                          ? 'This is your primary device, so you can restore or delete any restore point here.'
+                          : 'You can view restore points on this device, but only your primary device can restore or delete them.')
+                      : 'Offline vault restore points can be restored on this device.',
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 12,
+                    height: 1.35,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -498,13 +518,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(height: 12),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              Navigator.pop(dialogContext);
-                              await _restoreOtpSnapshot(snapshot);
-                            },
-                            icon: const Icon(Icons.restore_rounded),
-                            label: const Text('Restore'),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: (!signedIn || isPrimaryDevice)
+                                    ? () async {
+                                        Navigator.pop(dialogContext);
+                                        await _restoreOtpSnapshot(snapshot);
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.restore_rounded),
+                                label: const Text('Restore'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: (!signedIn || isPrimaryDevice)
+                                    ? () async {
+                                        Navigator.pop(dialogContext);
+                                        await _deleteOtpSnapshot(snapshot);
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.delete_outline_rounded),
+                                label: const Text('Delete'),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -529,6 +568,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final authenticated = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !authenticated) return;
 
+    if (await _syncService.isLoggedIn()) {
+      final currentSession = await _syncService.getCurrentDeviceSession();
+      if (!mounted) return;
+      if (currentSession == null || !currentSession.isPrimary) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Only your primary device can restore synced OTP restore points.',
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -537,7 +596,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text('Restore OTP Snapshot', style: TextStyle(color: _textPrimary)),
         content: Text(
           'Restore your OTP vault to ${_formatSnapshotDate(snapshot.createdAt)}? '
-          'A fresh safety snapshot will be created first before the restore runs.',
+          'This will replace the current OTP vault on this device.',
           style: TextStyle(
             color: _textSecondary,
             fontSize: 13,
@@ -586,10 +645,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(
           syncEnabled
-              ? 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}. Sync manually if you want that restored state everywhere.'
+              ? (result.syncedToCloud
+                  ? 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
+                  : 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
               : 'Restored ${result.restoredCount} OTP account${result.restoredCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
         ),
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor:
+            (!syncEnabled || result.syncedToCloud)
+                ? const Color(0xFF10B981)
+                : Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteOtpSnapshot(OtpVaultSnapshotInfo snapshot) async {
+    final authenticated = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !authenticated) return;
+
+    if (await _syncService.isLoggedIn()) {
+      final currentSession = await _syncService.getCurrentDeviceSession();
+      if (!mounted) return;
+      if (currentSession == null || !currentSession.isPrimary) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Only your primary device can delete synced OTP restore points.',
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Text(
+          'Delete Restore Point',
+          style: TextStyle(color: _textPrimary),
+        ),
+        content: Text(
+          'Delete the OTP restore point from ${_formatSnapshotDate(snapshot.createdAt)}? This removes it from this device and the encrypted server copy.',
+          style: TextStyle(
+            color: _textSecondary,
+            fontSize: 13,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final deleted = await _otpVaultSnapshotService.deleteSnapshot(snapshot.id);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          deleted
+              ? 'Deleted the OTP restore point from ${_formatSnapshotDate(snapshot.createdAt)}.'
+              : 'Could not delete that OTP restore point.',
+        ),
+        backgroundColor: deleted ? Colors.red : Colors.orange,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -2432,7 +2575,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              otpController.dispose();
               Navigator.pop(dialogContext, false);
             },
             child: Text('Cancel', style: TextStyle(color: _textSecondary)),
@@ -2451,7 +2593,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               }
               final ok = await _syncService.verifyDeleteOtp(username, code);
               if (!dialogContext.mounted) return;
-              otpController.dispose();
               Navigator.pop(dialogContext, ok);
             },
             child: const Text('Delete Everything'),
@@ -2459,6 +2600,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+    otpController.dispose();
 
     if (verified != true) {
       if (!mounted) return;

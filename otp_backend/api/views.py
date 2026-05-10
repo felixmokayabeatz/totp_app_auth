@@ -1,4 +1,5 @@
 import base64
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import (
     action,
@@ -724,6 +725,19 @@ class AuthViewSet(viewsets.GenericViewSet):
             logger.error("Password change failed.\n%s", error_details)
             return Response({'error': 'Failed to change password'}, status=500)
 
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='unlock-sync')
+    def unlock_sync(self, request):
+        user = request.user
+        password = request.data.get('password') or ''
+
+        if not password:
+            return Response({'error': 'Password is required.'}, status=400)
+
+        if not user.check_password(password):
+            return Response({'error': 'Password is incorrect.'}, status=400)
+
+        return Response({'success': True, 'message': 'Sync unlocked successfully.'})
+
 
 # ===================
 # SYNC VIEWSET
@@ -1072,6 +1086,72 @@ class SyncViewSet(viewsets.GenericViewSet):
             
             logger.error("Delete all accounts failed.\n%s", error_details)
             return Response({'error': 'Failed to delete accounts'}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='restore-accounts')
+    def restore_accounts(self, request):
+        current_session = get_current_active_device_session(request)
+        if current_session is None:
+            return Response(
+                {'error': 'This device could not be verified for restore sync.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not current_session.is_primary:
+            return Response(
+                {'error': 'Only your primary device can restore synced OTP accounts.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        raw_ids = request.data.get('account_ids') or []
+        if not isinstance(raw_ids, list):
+            return Response({'error': 'account_ids must be a list.'}, status=400)
+
+        normalized_ids = []
+        seen = set()
+        for raw_id in raw_ids:
+            account_id = str(raw_id or '').strip()
+            if not account_id or account_id == '__ALL__' or account_id in seen:
+                continue
+            seen.add(account_id)
+            normalized_ids.append(account_id)
+
+        tombstone_filter = Q(account_id='__ALL__')
+        if normalized_ids:
+            tombstone_filter |= Q(account_id__in=normalized_ids)
+        cleared_count, _ = AccountTombstone.objects.filter(
+            user=request.user,
+        ).filter(tombstone_filter).delete()
+
+        encrypted_data = EncryptedData.objects.filter(
+            user=request.user,
+            data_type='otp_accounts',
+        ).first()
+        if encrypted_data is not None:
+            try:
+                deleted_accounts = (
+                    json.loads(encrypted_data.deleted_accounts)
+                    if encrypted_data.deleted_accounts
+                    else []
+                )
+            except Exception:
+                deleted_accounts = []
+
+            restored_ids = set(normalized_ids)
+            restored_ids.add('__ALL__')
+            filtered_deleted_accounts = [
+                str(item)
+                for item in deleted_accounts
+                if str(item) not in restored_ids
+            ]
+            encrypted_data.deleted_accounts = json.dumps(filtered_deleted_accounts)
+            encrypted_data.save(update_fields=['deleted_accounts', 'updated_at'])
+
+        return Response(
+            {
+                'success': True,
+                'cleared_count': cleared_count,
+            }
+        )
 
 
 class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
