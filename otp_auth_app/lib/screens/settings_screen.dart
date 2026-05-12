@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -53,6 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isInstallingUpdate = false;
   bool _isDownloadingBackupCodes = false;
   bool _isLoadingBackupCodeStatus = false;
+bool _isLoadingVaultRestorePoints = false;
   bool _syncEnabled = false;
   String _appVersionLabel = '...';
   String? _profilePhotoUrl;
@@ -429,153 +430,278 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showOtpRestorePoints() async {
-    await _otpVaultSnapshotService.captureDailySnapshotIfNeeded();
-    final snapshots = await _otpVaultSnapshotService.getSnapshots();
-    if (!mounted) return;
+    if (_isLoadingVaultRestorePoints) return;
 
-    final signedIn = await _syncService.isLoggedIn();
-    final currentSession =
-        signedIn ? await _syncService.getCurrentDeviceSession() : null;
-    final isPrimaryDevice = !signedIn || currentSession?.isPrimary == true;
+    setState(() {
+      _isLoadingVaultRestorePoints = true;
+    });
 
-    if (snapshots.isEmpty) {
+    unawaited(_showVaultRestorePointsLoadingDialog());
+
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await _otpVaultSnapshotService.captureDailySnapshotIfNeeded();
+      final snapshots = await _otpVaultSnapshotService.getSnapshots();
+      if (!mounted) return;
+
+      final signedIn = await _syncService.isLoggedIn();
+      final currentSession =
+          signedIn ? await _syncService.getCurrentDeviceSession() : null;
+      final isPrimaryDevice = !signedIn || currentSession?.isPrimary == true;
+
+      _dismissVaultRestorePointsLoadingDialog();
+
+      if (snapshots.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No vault restore points are available yet.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+        return;
+      }
+
+      final visibleSnapshots = List<OtpVaultSnapshotInfo>.from(snapshots);
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            backgroundColor: _cardColor,
+            title: Text(
+              'Vault Restore Points',
+              style: TextStyle(color: _textPrimary),
+            ),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      signedIn
+                          ? 'BeatzLock keeps 10 encrypted automatic vault restore points across roughly 24 hours, 1 week, 1 month, 3 months, and up to 6 months, plus your latest manual restore point.'
+                          : 'BeatzLock keeps 10 local automatic vault restore points across roughly 24 hours, 1 week, 1 month, 3 months, and up to 6 months, plus your latest manual restore point.',
+                      style: TextStyle(
+                        color: _textSecondary,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      signedIn
+                          ? (isPrimaryDevice
+                              ? 'This is your primary device, so you can restore or delete any restore point here.'
+                              : 'You can view restore points on this device, but only your primary device can restore or delete them.')
+                          : 'Offline vault restore points can be restored on this device.',
+                      style: TextStyle(
+                        color: _textSecondary,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (visibleSnapshots.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: _isDark ? Colors.white10 : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: _dividerColor),
+                        ),
+                        child: Text(
+                          'No vault restore points are left on this device.',
+                          style: TextStyle(
+                            color: _textSecondary,
+                            fontSize: 13,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    for (final snapshot in visibleSnapshots) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _isDark ? Colors.white10 : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: _dividerColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _formatSnapshotDate(snapshot.createdAt),
+                              style: TextStyle(
+                                color: _textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${snapshot.otpAccountCount} OTP account${snapshot.otpAccountCount == 1 ? '' : 's'}'
+                              ' • ${snapshot.passwordEntryCount} password${snapshot.passwordEntryCount == 1 ? '' : 's'}',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.end,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: (!signedIn || isPrimaryDevice)
+                                        ? () async {
+                                            Navigator.pop(dialogContext);
+                                            await _restoreOtpSnapshot(snapshot);
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.restore_rounded),
+                                    label: const Text('Restore'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: (!signedIn || isPrimaryDevice)
+                                        ? () async {
+                                            final deleted =
+                                                await _deleteOtpSnapshot(snapshot);
+                                            if (!deleted || !dialogContext.mounted) {
+                                              return;
+                                            }
+                                            setDialogState(() {
+                                              visibleSnapshots.removeWhere(
+                                                (item) => item.id == snapshot.id,
+                                              );
+                                            });
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.delete_outline_rounded),
+                                    label: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton.icon(
+                onPressed: (!signedIn || isPrimaryDevice)
+                    ? () async {
+                        Navigator.pop(dialogContext);
+                        await _createManualVaultRestorePoint();
+                      }
+                    : null,
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                label: const Text('Create restore point'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _dismissVaultRestorePointsLoadingDialog();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('No vault restore points are available yet.'),
-          backgroundColor: Colors.orange,
+          content: const Text(
+            'Could not load vault restore points right now.',
+          ),
+          backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
         ),
       );
-      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingVaultRestorePoints = false;
+        });
+      }
     }
+  }
 
-    await showDialog<void>(
+  void _dismissVaultRestorePointsLoadingDialog() {
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).popUntil((route) {
+      return route is! PopupRoute ||
+          route.settings.name != 'vault-restore-loading';
+    });
+  }
+
+  Future<void> _showVaultRestorePointsLoadingDialog() {
+    return showDialog<void>(
       context: context,
+      barrierDismissible: false,
+      routeSettings: const RouteSettings(name: 'vault-restore-loading'),
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
-        title:
-            Text('Vault Restore Points', style: TextStyle(color: _textPrimary)),
-        content: SizedBox(
-          width: 460,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  signedIn
-                      ? 'BeatzLock keeps 10 encrypted automatic vault restore points across roughly 24 hours, 1 week, 1 month, 3 months, and up to 6 months, plus your latest manual restore point.'
-                      : 'BeatzLock keeps 10 local automatic vault restore points across roughly 24 hours, 1 week, 1 month, 3 months, and up to 6 months, plus your latest manual restore point.',
-                  style: TextStyle(
-                    color: _textSecondary,
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  signedIn
-                      ? (isPrimaryDevice
-                          ? 'This is your primary device, so you can restore or delete any restore point here.'
-                          : 'You can view restore points on this device, but only your primary device can restore or delete them.')
-                      : 'Offline vault restore points can be restored on this device.',
-                  style: TextStyle(
-                    color: _textSecondary,
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                for (final snapshot in snapshots) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: _isDark ? Colors.white10 : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _dividerColor),
+        content: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: _accent,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Loading vault restore points...',
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _formatSnapshotDate(snapshot.createdAt),
-                          style: TextStyle(
-                            color: _textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${snapshot.otpAccountCount} OTP account${snapshot.otpAccountCount == 1 ? '' : 's'}'
-                          ' • ${snapshot.passwordEntryCount} password${snapshot.passwordEntryCount == 1 ? '' : 's'}',
-                          style: TextStyle(
-                            color: _textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            alignment: WrapAlignment.end,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: (!signedIn || isPrimaryDevice)
-                                    ? () async {
-                                        Navigator.pop(dialogContext);
-                                        await _restoreOtpSnapshot(snapshot);
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.restore_rounded),
-                                label: const Text('Restore'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: (!signedIn || isPrimaryDevice)
-                                    ? () async {
-                                        Navigator.pop(dialogContext);
-                                        await _deleteOtpSnapshot(snapshot);
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.delete_outline_rounded),
-                                label: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Checking local snapshots and syncing recent restore points from the server.',
+                    style: TextStyle(
+                      color: _textSecondary,
+                      fontSize: 12,
+                      height: 1.35,
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
+          ],
         ),
-        actions: [
-          TextButton.icon(
-            onPressed: (!signedIn || isPrimaryDevice)
-                ? () async {
-                    Navigator.pop(dialogContext);
-                    await _createManualVaultRestorePoint();
-                  }
-                : null,
-            icon: const Icon(Icons.add_circle_outline_rounded),
-            label: const Text('Create restore point'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
-
   Future<void> _createManualVaultRestorePoint() async {
     final authenticated = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !authenticated) return;
@@ -716,13 +842,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _deleteOtpSnapshot(OtpVaultSnapshotInfo snapshot) async {
+  Future<bool> _deleteOtpSnapshot(OtpVaultSnapshotInfo snapshot) async {
     final authenticated = await _appLockService.authenticateToUnlock(context);
-    if (!mounted || !authenticated) return;
+    if (!mounted || !authenticated) return false;
 
     if (await _syncService.isLoggedIn()) {
       final currentSession = await _syncService.getCurrentDeviceSession();
-      if (!mounted) return;
+      if (!mounted) return false;
       if (currentSession == null || !currentSession.isPrimary) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -736,7 +862,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         );
-        return;
+        return false;
       }
     }
 
@@ -774,10 +900,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted) return false;
 
     final deleted = await _otpVaultSnapshotService.deleteSnapshot(snapshot.id);
-    if (!mounted) return;
+    if (!mounted) return false;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -793,8 +919,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+    return deleted;
   }
-
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
@@ -883,7 +1009,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Vault Restore Points',
               sub:
                   'Restore your OTP accounts and passwords from recent automatic snapshots',
-              onTap: _showOtpRestorePoints,
+              trailing: _isLoadingVaultRestorePoints
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _accent,
+                      ),
+                    )
+                  : null,
+              onTap:
+                  _isLoadingVaultRestorePoints ? null : _showOtpRestorePoints,
             ),
             _dividerLine(),
             _tappableTile(
@@ -2435,7 +2572,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ========== EXISTING METHODS (unchanged from your original) ==========
 
-  // ─── Clear all data (with local/everywhere choice) ────────────────────────
+  // --- Clear all data (with local/everywhere choice) ------------------------
   void _clearAllData() async {
     // Step 1: ask local-only vs everywhere
     final choice = await showDialog<String>(
@@ -2529,7 +2666,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    // ── "Everywhere" path: require OTP ──────────────────────────────────────
+    // -- "Everywhere" path: require OTP --------------------------------------
     if (!await _syncService.isLoggedIn()) {
       if (!mounted) return;
       await showDialog<void>(
@@ -2739,7 +2876,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ─── Change password dialog (unchanged from original) ─────────────────────
+  // --- Change password dialog (unchanged from original) ---------------------
   void _showChangePasswordDialog() {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -3073,7 +3210,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ─── UI helpers ───────────────────────────────────────────────────────────
+  // --- UI helpers -----------------------------------------------------------
   Widget _profileCard(AuthProvider authProvider) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -4000,3 +4137,4 @@ class _ImportResult {
   final int skippedCount;
   final String message;
 }
+
