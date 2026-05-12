@@ -40,6 +40,8 @@ from django.views.generic import RedirectView
 from django.conf.urls import handler404
 from accounts.views import custom_404_view
 
+from accounts.go_main import go_to_main_site
+
 handler404 = custom_404_view
 
 router = DefaultRouter()
@@ -56,7 +58,7 @@ urlpatterns = [
     # Admin
     path('admin/', admin.site.urls),
     
-    # Log viewer - THIS IS THE IMPORTANT PART
+    path('', go_to_main_site, name='go_to_main_site'),
     path('admin/logs/', include('beatzlocklogs.urls')),
     
     path('favicon.ico', RedirectView.as_view(url='/static/favicon.ico')),
