@@ -1,0 +1,35 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        /* Restore Django's desktop changelist layout when local CSS falls back to the stacked mobile view. */
+        @media (min-width: 768px) {
+            #changelist .changelist-form-container {
+                display: flex;
+                flex-direction: row !important;
+                align-items: flex-start;
+                width: 100%;
+            }
+
+            #changelist .changelist-form-container:has(#changelist-filter) > div {
+                min-width: 0;
+                width: calc(100% - 260px);
+                max-width: calc(100% - 260px);
+            }
+
+            #changelist-filter {
+                flex: 0 0 240px;
+                width: 240px !important;
+                margin-top: 0 !important;
+                margin-left: 20px;
+                align-self: flex-start;
+            }
+
+            html[dir="rtl"] #changelist-filter {
+                margin-left: 0;
+                margin-right: 20px;
+            }
+        }
+    </style>
+{% endblock %}
