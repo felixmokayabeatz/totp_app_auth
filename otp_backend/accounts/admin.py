@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import UserProfile
 from django.db import models
+from django.conf import settings as django_settings
 
 
 @admin.register(UserProfile)

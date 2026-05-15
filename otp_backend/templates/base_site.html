@@ -6,13 +6,46 @@
 {% block extrahead %}
     <link rel="shortcut icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
     <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+    <style>
+        .beatzlock-admin-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .beatzlock-admin-shortcut {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: #0f766e;
+            color: #fff !important;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 8px 18px rgba(15, 118, 110, 0.18);
+        }
+
+        .beatzlock-admin-shortcut:hover,
+        .beatzlock-admin-shortcut:focus {
+            background: #115e59;
+        }
+    </style>
 {% endblock %}
 
 {% block branding %}
-    <h1 id="site-name">
-        <a href="{% url 'admin:index' %}">
-            <img src="{% static 'favicon.ico' %}" alt="BeatzLock" style="height: 28px; vertical-align: middle; margin-right: 10px;">
-            BeatzLock Admin
+    <div class="beatzlock-admin-header">
+        <h1 id="site-name">
+            <a href="{% url 'admin:index' %}">
+                <img src="{% static 'favicon.ico' %}" alt="BeatzLock" style="height: 28px; vertical-align: middle; margin-right: 10px;">
+                BeatzLock Admin
+            </a>
+        </h1>
+        <a href="{% url 'admin:log_viewer' %}" class="beatzlock-admin-shortcut">
+            View Logs
         </a>
-    </h1>
+    </div>
 {% endblock %}
