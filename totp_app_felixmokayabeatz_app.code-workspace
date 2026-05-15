@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../felixmokayabeatz_app"
+		},
+		{
+			"path": "../beatz_deployer"
 		}
 	],
 	"settings": {}
