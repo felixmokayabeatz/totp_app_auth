@@ -16,6 +16,9 @@ VENV_PATH="$APP_PATH/totp_app_venv"
 PORT="8002"
 DOMAIN="api.felixmokayabeatz.online"
 EMAIL="felixmokaya675@gmail.com"
+NGINX_SOURCE="$BACKEND_PATH/nginx/beatzlock.conf"
+NGINX_TARGET="/etc/nginx/sites-available/beatzlock.conf"
+NGINX_ENABLED="/etc/nginx/sites-enabled/beatzlock.conf"
 
 # Superuser credentials
 SUPERUSER_USERNAME="felixmokayabeatz"
@@ -196,7 +199,7 @@ EOF
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Superuser created successfully!${NC}"
-        echo -e "${YELLOW}Login at: https://$DOMAIN/admin/${NC}"
+        echo -e "${YELLOW}Login at: https://$DOMAIN/beatzlock_admin/${NC}"
         echo -e "  Username: ${GREEN}$SUPERUSER_USERNAME${NC}"
         echo -e "  Password: ${GREEN}$SUPERUSER_PASSWORD${NC}"
     else
@@ -238,6 +241,26 @@ EOF
     fi
 }
 
+copy_nginx_config() {
+    echo -e "${YELLOW}Installing nginx config...${NC}"
+
+    if [ ! -f "$NGINX_SOURCE" ]; then
+        echo -e "${RED}Nginx config not found at $NGINX_SOURCE${NC}"
+        return 1
+    fi
+
+    sudo cp "$NGINX_SOURCE" "$NGINX_TARGET"
+    sudo ln -sfn "$NGINX_TARGET" "$NGINX_ENABLED"
+
+    if sudo nginx -t; then
+        echo -e "${GREEN}Nginx config installed${NC}"
+        return 0
+    else
+        echo -e "${RED}Nginx config has errors${NC}"
+        return 1
+    fi
+}
+
 # Function to full deploy
 full_deploy() {
     echo -e "${GREEN}Starting full deployment...${NC}"
@@ -271,6 +294,9 @@ full_deploy() {
     
     echo -e "${YELLOW}[7/9] Installing service file...${NC}"
     copy_service_file
+
+    echo -e "${YELLOW}Syncing nginx site config...${NC}"
+    copy_nginx_config || return 1
     
     echo -e "${YELLOW}[8/9] Starting services...${NC}"
     sudo systemctl daemon-reload
@@ -322,6 +348,9 @@ quick_deploy() {
     cd $BACKEND_PATH
     python manage.py migrate
     python manage.py collectstatic --noinput
+
+    echo -e "${BLUE}Syncing nginx config...${NC}"
+    copy_nginx_config || return 1
     
     echo -e "${BLUE}Restarting services...${NC}"
     sudo systemctl daemon-reload
@@ -377,8 +406,8 @@ view_logs() {
 # Function to reload nginx only
 reload_nginx() {
     echo -e "${YELLOW}Reloading Nginx...${NC}"
-    sudo nginx -t
-    if [ $? -eq 0 ]; then
+    copy_nginx_config || return 1
+    if sudo nginx -t; then
         sudo systemctl reload nginx
         echo -e "${GREEN}✓ Nginx reloaded successfully${NC}"
     else
