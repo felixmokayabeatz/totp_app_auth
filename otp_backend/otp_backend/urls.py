@@ -63,10 +63,6 @@ urlpatterns = [
         'beatzlock_admin/logs',
         RedirectView.as_view(url='/beatzlock_admin/logs/', permanent=False),
     ),
-    path(
-        'admin/',
-        RedirectView.as_view(url='/beatzlock_admin/', permanent=False),
-    ),
     path('beatzlock_admin/logs/', include('beatzlocklogs.urls')),
     path('beatzlock_admin/', admin.site.urls),
     path('', go_to_main_site, name='go_to_main_site'),
