@@ -37,6 +37,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   static const _offlineBackupReminderKey = 'offline_backup_reminder_last_shown';
+  static const Duration _approvalPollInterval = Duration(seconds: 8);
+  static const Duration _approvalDialogRefreshInterval = Duration(seconds: 2);
 
   final OTPService _otpService = OTPService();
   final SyncService _syncService = SyncService();
@@ -63,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _canShowBulkDeletePrompt = false;
   bool _isShowingApprovalPrompt = false;
   bool _isShowingBackupCodeRequirementDialog = false;
+  bool _approvalPollInProgress = false;
   Timer? _passwordlessPollTimer;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
@@ -80,37 +83,37 @@ class _HomeScreenState extends State<HomeScreen>
     _animationController.forward();
     _loadData();
     _loadSyncStatus();
-    _loadUnreadNotificationCount();
     _initializePasswordlessApprovals();
   }
 
   Future<void> _loadSyncStatus() async {
     _isSyncEnabled = await _syncService.isSyncEnabled();
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadData() async {
     try {
       final isSignedIn = await _syncService.isLoggedIn();
+      final syncEnabled = isSignedIn && await _syncService.isSyncEnabled();
       await _syncService.migrateLegacyLocalAccounts();
       await _initUserBox();
       await _loadProfileData();
-      if (isSignedIn && await _syncService.isSyncEnabled()) {
-        await _syncService.downloadAndMergeAccounts();
-        await _initUserBox();
-      }
-      await _vaultSnapshotService.captureDailySnapshotIfNeeded();
       _startTimer();
       _updateAllOTPs();
-      await _loadUnreadNotificationCount();
       if (mounted) {
         setState(() {
           _isLoadingVault = false;
           _loadError = null;
         });
       }
-      await _showOfflineBackupReminderIfNeeded();
-      await _checkBackupCodeRequirement();
+      unawaited(
+        _finishLoadingAfterInitialRender(
+          isSignedIn: isSignedIn,
+          syncEnabled: syncEnabled,
+        ),
+      );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -119,6 +122,27 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
     }
+  }
+
+  Future<void> _finishLoadingAfterInitialRender({
+    required bool isSignedIn,
+    required bool syncEnabled,
+  }) async {
+    try {
+      if (isSignedIn && syncEnabled) {
+        await _syncService.downloadAndMergeAccounts();
+        await _initUserBox();
+        _updateAllOTPs();
+        if (mounted) {
+          setState(() {});
+        }
+      }
+
+      await _vaultSnapshotService.captureDailySnapshotIfNeeded();
+      await _loadUnreadNotificationCount();
+      await _showOfflineBackupReminderIfNeeded();
+      await _checkBackupCodeRequirement();
+    } catch (_) {}
   }
 
   Future<void> _showOfflineBackupReminderIfNeeded() async {
@@ -210,8 +234,8 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     _passwordlessPollTimer = Timer.periodic(
-      const Duration(milliseconds: 500),
-      (_) => _pollPrimaryApprovalRequests(),
+      _approvalPollInterval,
+      (_) => unawaited(_pollPrimaryApprovalRequests()),
     );
     await _pollPrimaryApprovalRequests();
   }
@@ -245,9 +269,18 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _pollPrimaryApprovalRequests() async {
-    await _pollPasswordlessApprovalRequests();
-    await _pollBulkDeleteApprovalRequests();
-    await _pollBackupCodeGenerationRequests();
+    if (_approvalPollInProgress) {
+      return;
+    }
+
+    _approvalPollInProgress = true;
+    try {
+      await _pollPasswordlessApprovalRequests();
+      await _pollBulkDeleteApprovalRequests();
+      await _pollBackupCodeGenerationRequests();
+    } finally {
+      _approvalPollInProgress = false;
+    }
   }
 
   Future<void> _pollPasswordlessApprovalRequests() async {
@@ -415,8 +448,8 @@ class _HomeScreenState extends State<HomeScreen>
           activeDialogContext = dialogContext;
           dialogSetState = setDialogState;
           dialogRefreshTimer ??= Timer.periodic(
-            const Duration(milliseconds: 500),
-            (_) => refreshDialogData(),
+            _approvalDialogRefreshInterval,
+            (_) => unawaited(refreshDialogData()),
           );
           final theme = Theme.of(dialogContext);
           final isDark = theme.brightness == Brightness.dark;

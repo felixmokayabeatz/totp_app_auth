@@ -19,6 +19,7 @@ import 'screens/home_screen.dart';
 import 'screens/legal_consent_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'config/app_config.dart';
 import 'services/app_update_service.dart';
 import 'services/app_lock_service.dart';
 import 'services/biometric_service.dart';
@@ -28,6 +29,9 @@ import 'services/sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!AppConfig.isDevelopment) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     final appSupportDir = await getApplicationSupportDirectory();
@@ -76,7 +80,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   static const Duration _backgroundLockThreshold = Duration(seconds: 2);
-  static const Duration _sessionHeartbeatInterval = Duration(seconds: 5);
+  static const Duration _sessionHeartbeatInterval = Duration(minutes: 1);
   static const Duration _startupLogoDuration = Duration(milliseconds: 1250);
   static const String _legalConsentAcceptedKey = 'legal_consent_accepted_v1';
   static const String _onboardingCompletedKey = 'onboarding_completed_v1';

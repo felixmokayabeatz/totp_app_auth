@@ -1247,6 +1247,7 @@ class SyncService {
               'encrypted_content': encrypted,
               'version': newVersion,
               'device_id': deviceId,
+              'item_count': finalData.length,
               'deleted_accounts': jsonEncode(cloudDeletedAccounts),
             },
           ));
@@ -1509,6 +1510,7 @@ class SyncService {
     required String encryptedContent,
     required int version,
     String deletedAccounts = 'N/A',
+    int? itemCount,
   }) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -1536,6 +1538,7 @@ class SyncService {
             'encrypted_content': encryptedContent,
             'version': version,
             'device_id': deviceId,
+            if (itemCount != null) 'item_count': itemCount,
             'deleted_accounts': deletedAccounts,
           },
         ),
@@ -1702,6 +1705,7 @@ class SyncService {
         'otp_accounts',
         encryptedContent: encrypted,
         version: cloudVersion + 1,
+        itemCount: finalData.length,
         deletedAccounts: '[]',
       );
     } catch (_) {
@@ -2408,6 +2412,7 @@ class SyncService {
         'encrypted_content': encrypted,
         'version': DateTime.now().millisecondsSinceEpoch,
         'device_id': prefs.getString('device_id') ?? 'unknown',
+        'item_count': plainAccounts.length,
         'deleted_accounts': '[]',
       });
 

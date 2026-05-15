@@ -1,5 +1,5 @@
 import base64
-from django.db.models import Q
+from django.db.models import F, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import (
     action,
@@ -104,6 +104,53 @@ def debug_print(*args, **kwargs):
     """Conditional print only when DEBUG=True"""
     if django_settings.DEBUG:
         print(*args, **kwargs)
+
+
+def _coerce_item_count(value) -> int | None:
+    if value in (None, ''):
+        return None
+    try:
+        return max(int(value), 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def _update_sync_log(
+    *,
+    user,
+    device_id,
+    sync_type,
+    status,
+    error_message=None,
+    increment_total=False,
+    last_sync_count=None,
+):
+    sync_log, _ = SyncLog.objects.get_or_create(user=user)
+    sync_log.device_id = device_id
+    sync_log.sync_type = sync_type
+    sync_log.status = status
+    sync_log.error_message = error_message
+    sync_log.timestamp = timezone.now()
+
+    update_fields = [
+        'device_id',
+        'sync_type',
+        'status',
+        'error_message',
+        'timestamp',
+    ]
+
+    if last_sync_count is not None:
+        sync_log.last_sync_count = max(last_sync_count, 0)
+        update_fields.append('last_sync_count')
+
+    sync_log.save(update_fields=update_fields)
+
+    if increment_total:
+        SyncLog.objects.filter(user=user).update(total_syncs=F('total_syncs') + 1)
+        sync_log.refresh_from_db(fields=['total_syncs'])
+
+    return sync_log
 
 
 def get_request_pdf_theme(request) -> str:
@@ -755,6 +802,7 @@ class SyncViewSet(viewsets.GenericViewSet):
         version = request.data.get('version', 1)
         device_id = request.data.get('device_id', 'unknown')
         deleted_accounts = request.data.get('deleted_accounts', '[]')
+        item_count = _coerce_item_count(request.data.get('item_count'))
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[SYNC] Upload sync called")
@@ -764,6 +812,8 @@ class SyncViewSet(viewsets.GenericViewSet):
         debug_print(f"[SYNC] Device ID: {device_id}")
         debug_print(f"[SYNC] Content length: {len(encrypted_content) if encrypted_content else 0}")
         debug_print(f"[SYNC] Deleted accounts length: {len(deleted_accounts)}")
+        if item_count is not None:
+            debug_print(f"[SYNC] Item count: {item_count}")
         debug_print(f"{'='*60}\n")
         
         logger.info(f"Sync upload request - User: {user.username}, Type: {data_type}, Device: {device_id}, Version: {version}")
@@ -788,28 +838,27 @@ class SyncViewSet(viewsets.GenericViewSet):
             
             debug_print(f"[SYNC] EncryptedData record {'created' if created else 'updated'} - ID: {obj.id}, Version: {obj.version}")
             
-            # Update sync log
-            sync_log, created_log = SyncLog.objects.update_or_create(
+            sync_log = _update_sync_log(
                 user=request.user,
-                defaults={
-                    'device_id': device_id,
-                    'sync_type': 'upload',
-                    'status': 'success',
-                    'error_message': None,
-                    'timestamp': timezone.now(),
-                }
+                device_id=device_id,
+                sync_type='upload',
+                status='success',
+                increment_total=True,
+                last_sync_count=item_count if data_type == 'otp_accounts' else None,
             )
-            
-            old_total = sync_log.total_syncs
-            sync_log.total_syncs = sync_log.total_syncs + 1
-            sync_log.save(update_fields=['total_syncs'])
-            
-            debug_print(f"[SYNC] Sync log {'created' if created_log else 'updated'} - Total syncs: {old_total} -> {sync_log.total_syncs}")
+
+            debug_print(
+                f"[SYNC] Sync log updated - Total syncs: {sync_log.total_syncs}, "
+                f"Last sync count: {sync_log.last_sync_count}"
+            )
             
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Upload sync completed in {elapsed_time:.2f} seconds")
             
-            logger.info(f"Sync upload successful - User: {user.username}, Type: {data_type}, Created: {created}, Total syncs: {sync_log.total_syncs}")
+            logger.info(
+                f"Sync upload successful - User: {user.username}, Type: {data_type}, "
+                f"Created: {created}, Total syncs: {sync_log.total_syncs}"
+            )
             
             return Response({
                 'status': 'synced', 
@@ -823,21 +872,15 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] ERROR during upload sync: {str(e)}")
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
-            # Log error in sync log
             try:
-                sync_log, _ = SyncLog.objects.update_or_create(
+                _update_sync_log(
                     user=request.user,
-                    defaults={
-                        'device_id': device_id,
-                        'sync_type': 'upload',
-                        'status': 'error',
-                        'error_message': str(e)[:500],
-                        'timestamp': timezone.now(),
-                    }
+                    device_id=device_id,
+                    sync_type='upload',
+                    status='error',
+                    error_message=str(e)[:500],
                 )
-                sync_log.total_syncs = sync_log.total_syncs + 1
-                sync_log.save(update_fields=['total_syncs'])
-            except:
+            except Exception:
                 pass
             
             logger.error("Sync upload failed.\n%s", error_details)
@@ -870,24 +913,6 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] Data found - ID: {data.id}, Version: {data.version}")
             debug_print(f"[SYNC] Content length: {len(data.encrypted_content) if data.encrypted_content else 0}")
             debug_print(f"[SYNC] Last synced: {data.synced_at}")
-            
-            # Update sync log
-            sync_log, created_log = SyncLog.objects.update_or_create(
-                user=request.user,
-                defaults={
-                    'device_id': device_id,
-                    'sync_type': 'download',
-                    'status': 'success',
-                    'error_message': None,
-                    'timestamp': timezone.now(),
-                }
-            )
-            
-            old_total = sync_log.total_syncs
-            sync_log.total_syncs = sync_log.total_syncs + 1
-            sync_log.save(update_fields=['total_syncs'])
-            
-            debug_print(f"[SYNC] Sync log updated - Total syncs: {old_total} -> {sync_log.total_syncs}")
             
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Download completed in {elapsed_time:.2f} seconds")
@@ -998,23 +1023,15 @@ class SyncViewSet(viewsets.GenericViewSet):
             except Exception as e:
                 debug_print(f"[SYNC] Error updating EncryptedData: {str(e)}")
             
-            # Update sync log
-            sync_log, created_log = SyncLog.objects.update_or_create(
+            sync_log = _update_sync_log(
                 user=request.user,
-                defaults={
-                    'device_id': device_id,
-                    'sync_type': 'delete',
-                    'status': 'success',
-                    'error_message': None,
-                    'timestamp': timezone.now(),
-                }
+                device_id=device_id,
+                sync_type='delete',
+                status='success',
+                increment_total=True,
             )
-            
-            old_total = sync_log.total_syncs
-            sync_log.total_syncs = sync_log.total_syncs + 1
-            sync_log.save(update_fields=['total_syncs'])
-            
-            debug_print(f"[SYNC] Sync log updated - Total syncs: {old_total} -> {sync_log.total_syncs}")
+
+            debug_print(f"[SYNC] Sync log updated - Total syncs: {sync_log.total_syncs}")
             
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Account deletion completed in {elapsed_time:.2f} seconds")
@@ -1054,23 +1071,19 @@ class SyncViewSet(viewsets.GenericViewSet):
             tombstone, created = AccountTombstone.objects.get_or_create(user=request.user, account_id='__ALL__')
             debug_print(f"[SYNC] Global tombstone {'created' if created else 'already existed'}")
             
-            # Update sync log for delete all
-            sync_log, created_log = SyncLog.objects.update_or_create(
+            sync_log = _update_sync_log(
                 user=request.user,
-                defaults={
-                    'device_id': device_id,
-                    'sync_type': 'delete_all',
-                    'status': 'success',
-                    'error_message': None,
-                    'timestamp': timezone.now(),
-                }
+                device_id=device_id,
+                sync_type='delete_all',
+                status='success',
+                increment_total=True,
+                last_sync_count=0,
             )
-            
-            old_total = sync_log.total_syncs
-            sync_log.total_syncs = sync_log.total_syncs + 1
-            sync_log.save(update_fields=['total_syncs'])
-            
-            debug_print(f"[SYNC] Sync log updated - Total syncs: {old_total} -> {sync_log.total_syncs}")
+
+            debug_print(
+                f"[SYNC] Sync log updated - Total syncs: {sync_log.total_syncs}, "
+                f"Last sync count: {sync_log.last_sync_count}"
+            )
             
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Delete all accounts completed in {elapsed_time:.2f} seconds")
@@ -2163,7 +2176,7 @@ def send_delete_otp(request):
         debug_print(f"[DELETE OTP] Traceback:\n{error_details}")
         
         logger.error("Delete OTP sending failed.\n%s", error_details)
-        print(f"Send delete OTP error: {e}")  # Keep original print for console
+        debug_print(f"Send delete OTP error: {e}")
         
         return Response({'success': False, 'error': str(e)}, status=500)
 

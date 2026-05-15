@@ -39,8 +39,8 @@ class SyncLog(models.Model):
     status = models.CharField(max_length=50, blank=True, default='')
     timestamp = models.DateTimeField(auto_now=True)  # Auto-updates on each change
     error_message = models.TextField(null=True, blank=True)
-    last_sync_count = models.IntegerField(default=0)  # Track how many accounts synced
-    total_syncs = models.IntegerField(default=0)  # Counter for number of sync operations
+    last_sync_count = models.IntegerField(default=0)  # OTP accounts included in the most recent successful upload
+    total_syncs = models.IntegerField(default=0)  # Successful cloud write operations
 
     def __str__(self):
         return f"{self.user.username} - Last sync: {self.timestamp}"

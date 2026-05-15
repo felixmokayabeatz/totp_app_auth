@@ -16,12 +16,15 @@ class PasswordlessRequestsScreen extends StatefulWidget {
 
 class _PasswordlessRequestsScreenState
     extends State<PasswordlessRequestsScreen> {
+  static const Duration _refreshInterval = Duration(seconds: 5);
+
   final SyncService _syncService = SyncService();
   final AppLockService _appLockService = AppLockService();
   Timer? _refreshTimer;
 
   bool _isLoading = true;
   bool _isActing = false;
+  bool _isRefreshing = false;
   bool _canManageLogs = false;
   List<Map<String, dynamic>> _requests = const [];
   final Map<String, String> _selectedCodes = {};
@@ -38,8 +41,8 @@ class _PasswordlessRequestsScreenState
     super.initState();
     _refreshPage(includeAccessState: true);
     _refreshTimer = Timer.periodic(
-      const Duration(milliseconds: 500),
-      (_) => _loadRequests(),
+      _refreshInterval,
+      (_) => unawaited(_loadRequests()),
     );
   }
 
@@ -75,31 +78,40 @@ class _PasswordlessRequestsScreenState
   }
 
   Future<void> _loadRequests() async {
-    final requests = await _syncService.getPasswordlessRequests();
-    if (!mounted) return;
-    setState(() {
-      _requests = requests;
-      final requestIds = requests
-          .map((item) => item['id']?.toString() ?? '')
-          .where((id) => id.isNotEmpty)
-          .toSet();
-      _selectedCodes
-          .removeWhere((requestId, _) => !requestIds.contains(requestId));
-      for (final item in requests) {
-        final requestId = item['id']?.toString() ?? '';
-        if (requestId.isEmpty) continue;
+    if (_isRefreshing) {
+      return;
+    }
 
-        final choices = ((item['verification_choices'] as List?) ?? const [])
-            .map((choice) => choice.toString())
-            .where((choice) => choice.trim().isNotEmpty)
+    _isRefreshing = true;
+    try {
+      final requests = await _syncService.getPasswordlessRequests();
+      if (!mounted) return;
+      setState(() {
+        _requests = requests;
+        final requestIds = requests
+            .map((item) => item['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
             .toSet();
-        final selectedCode = _selectedCodes[requestId];
-        if (selectedCode != null && !choices.contains(selectedCode)) {
-          _selectedCodes.remove(requestId);
+        _selectedCodes
+            .removeWhere((requestId, _) => !requestIds.contains(requestId));
+        for (final item in requests) {
+          final requestId = item['id']?.toString() ?? '';
+          if (requestId.isEmpty) continue;
+
+          final choices = ((item['verification_choices'] as List?) ?? const [])
+              .map((choice) => choice.toString())
+              .where((choice) => choice.trim().isNotEmpty)
+              .toSet();
+          final selectedCode = _selectedCodes[requestId];
+          if (selectedCode != null && !choices.contains(selectedCode)) {
+            _selectedCodes.remove(requestId);
+          }
         }
-      }
-      _isLoading = false;
-    });
+        _isLoading = false;
+      });
+    } finally {
+      _isRefreshing = false;
+    }
   }
 
   bool _isPending(Map<String, dynamic> item) =>
