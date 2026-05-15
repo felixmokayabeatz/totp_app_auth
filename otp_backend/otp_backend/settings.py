@@ -53,6 +53,7 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 BEATZLOCK_INTERNAL_SERVICE_SECRET = os.getenv('BEATZLOCK_INTERNAL_SERVICE_SECRET', '')
 
 INSTALLED_APPS = [
+    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -67,9 +68,6 @@ INSTALLED_APPS = [
     'beatzlocklogs',
     'django_extensions',
 ]
-
-if DEBUG:
-    INSTALLED_APPS.insert(0, 'django.contrib.admin')
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

@@ -55,6 +55,8 @@ router.register(r'backup-code-requests', BackupCodeGenerationRequestViewSet, bas
 router.register(r'profile', ProfileViewSet, basename='profile')
 
 urlpatterns = [
+    path('beatzlock_admin/logs/', include('beatzlocklogs.urls')),
+    path('beatzlock_admin/', admin.site.urls),
     path('', go_to_main_site, name='go_to_main_site'),
     path('favicon.ico', RedirectView.as_view(url='/static/favicon.ico')),
     # API URLs
@@ -76,9 +78,3 @@ urlpatterns = [
     path('api/backup-codes/status/', get_backup_code_status, name='get_backup_code_status'),
     path('api/external/review-reply/', receive_external_review_reply, name='receive_external_review_reply'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-
-if settings.DEBUG:
-    urlpatterns = [
-        path('beatzlock_admin/logs/', include('beatzlocklogs.urls')),
-        path('beatzlock_admin/', admin.site.urls),
-    ] + urlpatterns
