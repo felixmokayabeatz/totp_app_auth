@@ -42,6 +42,13 @@
         padding: 28px 22px 56px;
     }
 
+    .log-browser,
+    .log-browser *,
+    .log-browser *::before,
+    .log-browser *::after {
+        box-sizing: border-box;
+    }
+
     .hero,
     .filters,
     .month-group,
@@ -226,12 +233,16 @@
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
+        align-items: start;
+        min-width: 0;
     }
 
     .field {
         display: flex;
         flex-direction: column;
         gap: 8px;
+        min-width: 0;
+        overflow: hidden;
     }
 
     .field label {
@@ -243,12 +254,24 @@
 
     .field input {
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
         min-height: 48px;
         padding: 0 14px;
         border-radius: 14px;
         border: 1px solid rgba(255, 255, 255, 0.08);
         background: rgba(255, 255, 255, 0.06);
         color: var(--ops-text);
+    }
+
+    .field input[type="date"] {
+        padding-right: 42px;
+    }
+
+    .field input[type="date"]::-webkit-calendar-picker-indicator {
+        cursor: pointer;
+        opacity: 0.92;
+        margin: 0;
     }
 
     .field input::placeholder {
