@@ -48,6 +48,13 @@ def _safe_log_path(log_file: str) -> Path:
     return log_path
 
 
+def _extract_log_level(line: str) -> str:
+    parts = line.split("|", 3)
+    if len(parts) < 3:
+        return ""
+    return parts[1].strip()
+
+
 @staff_member_required
 @require_http_methods(["GET"])
 def log_viewer(request, log_file=None):
@@ -55,7 +62,6 @@ def log_viewer(request, log_file=None):
 
     date_from = request.GET.get("date_from", "").strip()
     date_to = request.GET.get("date_to", "").strip()
-    log_type = request.GET.get("log_type", "").strip()
     search = request.GET.get("search", "").strip()
 
     filtered_logs = list(log_files)
@@ -78,9 +84,6 @@ def log_viewer(request, log_file=None):
         except ValueError:
             date_to = ""
 
-    if log_type and log_type != "all":
-        filtered_logs = [log for log in filtered_logs if log["type"] == log_type]
-
     if search:
         search_lower = search.lower()
         filtered_logs = [
@@ -91,23 +94,21 @@ def log_viewer(request, log_file=None):
         ]
 
     total_size = sum(log["size"] for log in filtered_logs)
+    total_visible_lines = sum(log["line_count"] for log in filtered_logs)
     grouped_logs = _group_logs(filtered_logs)
+    latest_modified = max((log["modified"] for log in filtered_logs), default=None)
 
     context = {
         "grouped_logs": grouped_logs,
         "total_files": len(filtered_logs),
         "total_size": total_size,
+        "total_visible_lines": total_visible_lines,
         "total_size_display": _format_size(total_size),
-        "error_logs": sum(1 for log in filtered_logs if log["type"] == "error"),
-        "warning_logs": sum(1 for log in filtered_logs if log["type"] == "warning"),
-        "api_logs": sum(1 for log in filtered_logs if log["type"] == "api"),
-        "twofa_logs": sum(1 for log in filtered_logs if log["type"] == "2fa"),
-        "sync_logs": sum(1 for log in filtered_logs if log["type"] == "sync"),
+        "latest_modified": latest_modified,
         "date_from": date_from,
         "date_to": date_to,
-        "log_type": log_type,
         "search": search,
-        "title": "Log Viewer",
+        "title": "Application Error Logs",
     }
 
     if not log_file:
@@ -141,7 +142,9 @@ def log_viewer(request, log_file=None):
         ]
 
     if level_filter:
-        filtered_lines = [line for line in filtered_lines if f"] {level_filter} " in line]
+        filtered_lines = [
+            line for line in filtered_lines if _extract_log_level(line) == level_filter
+        ]
 
     displayed_lines = filtered_lines[-lines:] if lines > 0 else filtered_lines
 
@@ -161,7 +164,7 @@ def log_viewer(request, log_file=None):
         "error_count": sum(1 for line in filtered_lines if "ERROR" in line),
         "warning_count": sum(1 for line in filtered_lines if "WARNING" in line),
         "info_count": sum(1 for line in filtered_lines if "INFO" in line),
-        "title": f"Log Viewer - {log_path.name}",
+        "title": f"Error Log - {log_path.name}",
     }
 
     return render(request, "admin/log_detail.html", detail_context)

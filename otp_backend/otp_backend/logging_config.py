@@ -1,5 +1,4 @@
 import logging
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -9,7 +8,7 @@ LOGS_DIR = BASE_DIR / "logs"
 
 
 def get_log_files_for_admin():
-    """Return only error log files for the admin log viewer."""
+    """Return available error log files for the admin viewer."""
     log_files = []
 
     if not LOGS_DIR.exists():
@@ -57,45 +56,6 @@ def count_lines(filepath):
             return sum(1 for _ in file_handle)
     except OSError:
         return 0
-
-
-class RedactingFormatter(logging.Formatter):
-    """Strip sensitive values from error logs."""
-
-    EMAIL_RE = re.compile(r"[\w.\-+%]+@[\w.\-]+\.[A-Za-z]{2,}")
-    IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-    KEY_VALUE_RE = re.compile(
-        r"\b(User|Username|Email|IP|Code|Device|Account ID)\s*:\s*([^\s,\]]+)",
-        re.IGNORECASE,
-    )
-
-    def format(self, record):
-        original_msg = record.msg
-        original_args = record.args
-        original_exc = record.exc_info
-
-        try:
-            rendered = record.getMessage()
-            record.msg = self._redact(rendered)
-            record.args = ()
-
-            if original_exc:
-                exc_text = self.formatException(original_exc)
-                redacted_exc = self._redact(exc_text)
-                formatted = super().format(record)
-                return f"{formatted}\n{redacted_exc}"
-
-            return super().format(record)
-        finally:
-            record.msg = original_msg
-            record.args = original_args
-            record.exc_info = original_exc
-
-    def _redact(self, value):
-        value = self.EMAIL_RE.sub("[redacted-email]", value)
-        value = self.IPV4_RE.sub("[redacted-ip]", value)
-        value = self.KEY_VALUE_RE.sub(lambda m: f"{m.group(1)}: [redacted]", value)
-        return value
 
 
 class DailyRotatingFileHandler(logging.Handler):
@@ -152,9 +112,8 @@ def get_logging_config(debug_mode):
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
-            "redacted_detailed": {
-                "()": RedactingFormatter,
-                "format": "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)d] - %(message)s",
+            "detailed": {
+                "format": "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
             },
         },
@@ -162,11 +121,12 @@ def get_logging_config(debug_mode):
             "error_file": {
                 "()": DailyRotatingFileHandler,
                 "filename_prefix": "errors",
-                "formatter": "redacted_detailed",
+                "formatter": "detailed",
                 "level": "ERROR",
             },
             "console": {
                 "class": "logging.StreamHandler",
+                "formatter": "detailed",
             },
         },
         "loggers": {
@@ -176,6 +136,11 @@ def get_logging_config(debug_mode):
                 "propagate": False,
             },
             "django.request": {
+                "handlers": ["error_file", "console"],
+                "level": "ERROR",
+                "propagate": False,
+            },
+            "django.security": {
                 "handlers": ["error_file", "console"],
                 "level": "ERROR",
                 "propagate": False,

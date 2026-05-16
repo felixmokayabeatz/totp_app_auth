@@ -9,10 +9,10 @@
         {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
     {% else %}
         <div class="module" style="max-width: 720px;">
-            <h2>Production Admin</h2>
-            <p>The production admin is intentionally locked down.</p>
+            <h2>Administrative Access</h2>
+            <p>Production access is limited to operational log review.</p>
             <p>
-                <a href="{% url 'beatzlocklogs:log_viewer' %}" class="button">Open Log Viewer</a>
+                <a href="{% url 'beatzlocklogs:log_viewer' %}" class="button">Open Error Logs</a>
             </p>
         </div>
     {% endif %}

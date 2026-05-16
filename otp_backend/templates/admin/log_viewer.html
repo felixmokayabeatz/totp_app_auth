@@ -2,534 +2,384 @@
 {% load i18n %}
 
 {% block extrastyle %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&family=Lora:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
 <style>
     :root {
-        --ink: #0d0b09;
-        --paper: #f7f3ed;
-        --cream: #fffdf9;
-        --warm-100: #f0e8d8;
-        --warm-200: #ddd0ba;
-        --warm-300: #c4b49a;
-        --amber: #c07b2a;
-        --amber-dark: #8f5a1a;
-        --teal: #2a6e69;
-        --danger: #b83225;
-        --warn: #a86a10;
-        --surface: rgba(255, 253, 249, 0.92);
+        --bg: #f4efe7;
+        --panel: rgba(255, 252, 247, 0.94);
+        --panel-strong: #fffdf9;
+        --text: #1e1a17;
+        --muted: #6f6356;
+        --border: #d7c6b1;
+        --accent: #9a5c1f;
+        --accent-dark: #6f3f11;
+        --teal: #165f5b;
+        --shadow: 0 18px 40px rgba(20, 16, 12, 0.10);
         --radius: 20px;
-        --radius-sm: 10px;
+        --radius-sm: 12px;
     }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-        background: var(--paper);
-        background-image:
-            radial-gradient(ellipse 80% 60% at 80% 0%, rgba(192, 123, 42, 0.09) 0%, transparent 60%),
-            radial-gradient(ellipse 60% 50% at 10% 100%, rgba(42, 110, 105, 0.08) 0%, transparent 55%);
-        font-family: 'Lora', Georgia, serif;
-        color: var(--ink);
-        min-height: 100vh;
-    }
-
-    #content { padding: 0; }
-
-    /* ── Shell ── */
-    .v-shell {
-        max-width: 1340px;
-        margin: 0 auto;
-        padding: 36px 32px 60px;
-    }
-
-    /* ── Masthead ── */
-    .masthead {
-        position: relative;
-        background: var(--ink);
-        border-radius: var(--radius);
-        padding: 40px 44px 36px;
-        margin-bottom: 28px;
-        overflow: hidden;
-        color: #f7f3ed;
-    }
-
-    .masthead::before {
-        content: '';
-        position: absolute;
-        inset: 0;
         background:
-            repeating-linear-gradient(
-                -45deg,
-                transparent,
-                transparent 28px,
-                rgba(255,255,255,0.025) 28px,
-                rgba(255,255,255,0.025) 29px
-            );
-        pointer-events: none;
+            radial-gradient(circle at top right, rgba(154, 92, 31, 0.10), transparent 35%),
+            radial-gradient(circle at bottom left, rgba(22, 95, 91, 0.08), transparent 32%),
+            var(--bg);
+        color: var(--text);
     }
 
-    .masthead-eyebrow {
-        font-family: 'DM Mono', monospace;
-        font-size: 11px;
-        letter-spacing: 0.2em;
+    #content {
+        padding: 0;
+    }
+
+    .log-shell {
+        max-width: 1260px;
+        margin: 0 auto;
+        padding: 32px 24px 56px;
+    }
+
+    .hero,
+    .filters,
+    .group,
+    .empty-state,
+    .stat-card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(8px);
+    }
+
+    .hero {
+        padding: 28px 30px;
+        margin-bottom: 24px;
+        background:
+            linear-gradient(135deg, rgba(154, 92, 31, 0.08), rgba(22, 95, 91, 0.05)),
+            var(--panel);
+    }
+
+    .hero-kicker {
+        font: 600 11px/1.4 Consolas, "Courier New", monospace;
+        letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: var(--warm-300);
-        margin-bottom: 14px;
+        color: var(--muted);
+        margin-bottom: 10px;
     }
 
-    .masthead-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        gap: 20px;
-        flex-wrap: wrap;
+    .hero-title {
+        margin: 0;
+        font-size: clamp(32px, 4vw, 48px);
+        line-height: 1.05;
+        color: var(--text);
     }
 
-    .masthead-title {
-        font-family: 'Syne', sans-serif;
-        font-size: clamp(32px, 5vw, 52px);
-        font-weight: 800;
-        line-height: 1;
-        letter-spacing: -0.02em;
-        color: #fffdf9;
-    }
-
-    .masthead-sub {
-        margin-top: 10px;
+    .hero-subtitle {
+        margin: 14px 0 0;
+        max-width: 720px;
+        color: var(--muted);
         font-size: 15px;
-        color: rgba(240, 232, 216, 0.7);
-        max-width: 540px;
-        line-height: 1.6;
-        font-style: italic;
+        line-height: 1.7;
     }
 
-    .masthead-tag {
-        font-family: 'DM Mono', monospace;
-        font-size: 12px;
-        background: rgba(255,255,255,0.07);
-        border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 999px;
-        padding: 8px 14px;
-        color: var(--warm-300);
-        white-space: nowrap;
-        align-self: flex-start;
-        margin-top: 4px;
-    }
-
-    /* ── Stat bar ── */
-    .stat-bar {
+    .stats {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 14px;
-        margin-bottom: 28px;
+        margin-bottom: 24px;
     }
 
-    .stat-tile {
-        background: var(--surface);
-        border: 1px solid var(--warm-200);
-        border-radius: var(--radius);
-        padding: 20px 22px;
-        backdrop-filter: blur(4px);
+    .stat-card {
+        padding: 18px 20px;
     }
 
-    .stat-tile-label {
-        font-family: 'DM Mono', monospace;
-        font-size: 10px;
-        letter-spacing: 0.16em;
+    .stat-label {
+        font: 600 11px/1.4 Consolas, "Courier New", monospace;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: #8a7e70;
-        margin-bottom: 6px;
+        color: var(--muted);
     }
 
-    .stat-tile-value {
-        font-family: 'Syne', sans-serif;
-        font-size: 34px;
-        font-weight: 800;
-        line-height: 1;
-        color: var(--ink);
-    }
-
-    .stat-tile-value.danger { color: var(--danger); }
-    .stat-tile-value.warn { color: var(--warn); }
-
-    .stat-tile-note {
-        margin-top: 6px;
-        font-size: 12px;
-        color: #9e9080;
-        font-style: italic;
-    }
-
-    /* ── Filters ── */
-    .filter-card {
-        background: var(--surface);
-        border: 1px solid var(--warm-200);
-        border-radius: var(--radius);
-        padding: 26px 28px;
-        margin-bottom: 28px;
-        backdrop-filter: blur(4px);
-    }
-
-    .filter-card-title {
-        font-family: 'Syne', sans-serif;
-        font-size: 18px;
+    .stat-value {
+        margin-top: 8px;
+        font-size: 28px;
         font-weight: 700;
-        color: var(--ink);
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        color: var(--text);
     }
 
-    .filter-card-title::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background: var(--warm-200);
+    .stat-note {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13px;
+    }
+
+    .filters {
+        padding: 22px 24px;
+        margin-bottom: 24px;
+    }
+
+    .filters-title {
+        margin: 0 0 18px;
+        font-size: 20px;
     }
 
     .filters-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
     }
 
-    .fld {
+    .field {
         display: flex;
         flex-direction: column;
         gap: 6px;
     }
 
-    .fld label {
-        font-family: 'DM Mono', monospace;
-        font-size: 10px;
-        letter-spacing: 0.14em;
+    .field label {
+        font: 600 11px/1.4 Consolas, "Courier New", monospace;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: #8a7e70;
-        font-weight: 500;
+        color: var(--muted);
     }
 
-    .fld input,
-    .fld select {
-        border: 1px solid var(--warm-200);
-        border-radius: var(--radius-sm);
-        padding: 11px 14px;
-        height: 44px;
-        background: var(--cream);
-        color: var(--ink);
-        font-family: 'Lora', serif;
-        font-size: 14px;
+    .field input {
         width: 100%;
-        transition: border-color 0.15s;
+        min-height: 44px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--panel-strong);
+        color: var(--text);
     }
 
-    .fld select {
-        appearance: none;
-        -webkit-appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a7e70' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 14px center;
-        padding-right: 36px;
-    }
-
-    .fld input[type="date"]::-webkit-calendar-picker-indicator {
-        opacity: 0.5;
-        cursor: pointer;
-        filter: invert(0.3) sepia(0.4) saturate(2) hue-rotate(5deg);
-    }
-
-    .fld input[type="date"]::-webkit-calendar-picker-indicator:hover {
-        opacity: 0.85;
-    }
-
-    .fld input:focus,
-    .fld select:focus {
-        outline: none;
-        border-color: var(--amber);
+    .field input:focus {
+        outline: 2px solid rgba(154, 92, 31, 0.18);
+        border-color: var(--accent);
     }
 
     .filter-actions {
         display: flex;
         gap: 10px;
-        margin-top: 18px;
         flex-wrap: wrap;
+        margin-top: 16px;
     }
 
     .btn {
-        appearance: none;
-        border: 0;
-        border-radius: 999px;
-        padding: 11px 22px;
-        font-family: 'Syne', sans-serif;
-        font-weight: 700;
-        font-size: 13px;
-        cursor: pointer;
-        text-decoration: none;
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        transition: transform 0.14s, opacity 0.14s;
-        letter-spacing: 0.03em;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 18px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        text-decoration: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
-    .btn:hover { transform: translateY(-1px); }
-    .btn:active { transform: scale(0.97); }
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px rgba(20, 16, 12, 0.12);
+    }
 
     .btn-primary {
-        background: var(--ink);
-        color: #f7f3ed;
+        background: var(--text);
+        color: #fff;
     }
 
-    .btn-ghost {
-        background: var(--warm-100);
-        color: #5a4e40;
-        border: 1px solid var(--warm-200);
+    .btn-secondary {
+        background: var(--panel-strong);
+        color: var(--accent-dark);
+        border-color: var(--border);
     }
 
-    /* ── Groups ── */
-    .log-group {
-        background: var(--surface);
-        border: 1px solid var(--warm-200);
-        border-radius: var(--radius);
+    .group {
         overflow: hidden;
-        margin-bottom: 22px;
-        backdrop-filter: blur(4px);
+        margin-bottom: 20px;
     }
 
-    .group-head {
+    .group-header {
         display: flex;
-        align-items: center;
         justify-content: space-between;
-        padding: 20px 26px;
-        border-bottom: 1px solid var(--warm-200);
-        background: linear-gradient(90deg, rgba(192,123,42,0.07), transparent 60%);
-        gap: 14px;
-        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(154, 92, 31, 0.04);
     }
 
-    .group-date {
-        font-family: 'Syne', sans-serif;
+    .group-title {
+        margin: 0;
         font-size: 22px;
-        font-weight: 800;
-        color: var(--ink);
     }
 
-    .group-count {
-        font-family: 'DM Mono', monospace;
-        font-size: 12px;
-        color: #8a7e70;
-        background: var(--warm-100);
-        border: 1px solid var(--warm-200);
-        border-radius: 999px;
-        padding: 4px 12px;
+    .group-meta {
+        color: var(--muted);
+        font: 600 12px/1.4 Consolas, "Courier New", monospace;
     }
 
-    /* ── Log grid ── */
-    .logs-grid {
+    .cards {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: 16px;
         padding: 18px;
     }
 
-    .log-card {
+    .card {
         display: flex;
         flex-direction: column;
-        text-decoration: none;
-        color: inherit;
-        background: var(--cream);
-        border: 1px solid var(--warm-200);
+        gap: 14px;
+        min-height: 160px;
+        padding: 18px;
         border-radius: 16px;
-        padding: 18px 20px;
-        transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+        border: 1px solid var(--border);
+        background: var(--panel-strong);
+        color: inherit;
+        text-decoration: none;
+        transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
     }
 
-    .log-card:hover {
-        transform: translateY(-3px);
-        border-color: var(--amber);
-        box-shadow: 0 12px 28px rgba(13,11,9,0.10);
+    .card:hover {
+        transform: translateY(-2px);
+        border-color: var(--accent);
+        box-shadow: 0 14px 28px rgba(20, 16, 12, 0.10);
     }
 
-    .log-card-top {
+    .card-title {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.4;
+    }
+
+    .card-path {
+        color: var(--muted);
+        font: 600 12px/1.5 Consolas, "Courier New", monospace;
+        word-break: break-word;
+    }
+
+    .card-meta {
+        margin-top: auto;
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
-        gap: 10px;
-        margin-bottom: 14px;
-    }
-
-    .log-card-name {
-        font-family: 'Syne', sans-serif;
-        font-size: 15px;
-        font-weight: 700;
-        color: var(--ink);
-        word-break: break-word;
-        line-height: 1.3;
-    }
-
-    .log-card-path {
-        margin-top: 5px;
-        font-family: 'DM Mono', monospace;
-        font-size: 11px;
-        color: #9e9080;
-        word-break: break-all;
+        gap: 8px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font: 600 12px/1.5 Consolas, "Courier New", monospace;
     }
 
     .badge {
-        border-radius: 6px;
-        padding: 4px 9px;
-        font-family: 'DM Mono', monospace;
-        font-size: 10px;
-        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: fit-content;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(154, 92, 31, 0.10);
+        color: var(--accent-dark);
+        font: 700 11px/1.2 Consolas, "Courier New", monospace;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        white-space: nowrap;
-        flex-shrink: 0;
     }
 
-    .badge-error   { background: rgba(184,50,37,0.1);   color: var(--danger); }
-    .badge-warning { background: rgba(168,106,16,0.1);  color: var(--warn); }
-    .badge-api     { background: rgba(42,110,105,0.12); color: var(--teal); }
-    .badge-2fa     { background: rgba(60,80,180,0.1);   color: #3450b0; }
-    .badge-sync    { background: rgba(100,60,160,0.1);  color: #6430a0; }
-    .badge-info    { background: rgba(192,123,42,0.1);  color: var(--amber-dark); }
-
-    .log-card-meta {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: auto;
-        padding-top: 14px;
-        border-top: 1px solid var(--warm-100);
-        font-family: 'DM Mono', monospace;
-        font-size: 11px;
-        color: #9e9080;
-    }
-
-    /* ── Empty ── */
-    .empty {
+    .empty-state {
+        padding: 42px 28px;
         text-align: center;
-        padding: 56px 24px;
-        background: var(--surface);
-        border: 1px dashed var(--warm-200);
-        border-radius: var(--radius);
     }
 
-    .empty h2 {
-        font-family: 'Syne', sans-serif;
-        font-size: 22px;
-        font-weight: 700;
-        margin-bottom: 10px;
-        color: var(--ink);
+    .empty-state h2 {
+        margin: 0 0 10px;
+        font-size: 24px;
     }
 
-    .empty p {
-        font-style: italic;
-        color: #8a7e70;
+    .empty-state p {
+        margin: 0;
+        color: var(--muted);
     }
 
-    /* ── Responsive ── */
     @media (max-width: 700px) {
-        .v-shell { padding: 18px 16px 48px; }
-        .masthead { padding: 28px 22px; }
-        .masthead-title { font-size: 32px; }
+        .log-shell {
+            padding: 20px 14px 44px;
+        }
+
+        .hero,
+        .filters {
+            padding: 20px 18px;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="v-shell">
+<div class="log-shell">
+    <section class="hero">
+        <div class="hero-kicker">BeatzLock / Operations</div>
+        <h1 class="hero-title">Application Error Logs</h1>
+        <p class="hero-subtitle">
+            Review daily error files with full timestamps, request details, and stack traces.
+        </p>
+    </section>
 
-    <header class="masthead">
-        <div class="masthead-eyebrow">BeatzLock · Admin</div>
-        <div class="masthead-row">
-            <div>
-                <h1 class="masthead-title">Log Dashboard</h1>
-                <p class="masthead-sub">Browse daily log files, filter by date and type, and jump straight to the entries that matter.</p>
-            </div>
-            <span class="masthead-tag">logs/YYYY/MM/</span>
-        </div>
-    </header>
+    <section class="stats">
+        <article class="stat-card">
+            <div class="stat-label">Visible Files</div>
+            <div class="stat-value">{{ total_files }}</div>
+            <div class="stat-note">Matching the current filters</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-label">Combined Size</div>
+            <div class="stat-value">{{ total_size_display }}</div>
+            <div class="stat-note">Across the visible log set</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-label">Visible Lines</div>
+            <div class="stat-value">{{ total_visible_lines }}</div>
+            <div class="stat-note">Across the visible files</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-label">Latest Update</div>
+            <div class="stat-value">{% if latest_modified %}{{ latest_modified|date:"Y-m-d" }}{% else %}-{% endif %}</div>
+            <div class="stat-note">Newest visible file timestamp</div>
+        </article>
+    </section>
 
-    <div class="stat-bar">
-        <div class="stat-tile">
-            <div class="stat-tile-label">Visible Files</div>
-            <div class="stat-tile-value">{{ total_files }}</div>
-            <div class="stat-tile-note">Matching current filters</div>
-        </div>
-        <div class="stat-tile">
-            <div class="stat-tile-label">Combined Size</div>
-            <div class="stat-tile-value">{{ total_size_display }}</div>
-            <div class="stat-tile-note">Of visible log set</div>
-        </div>
-        <div class="stat-tile">
-            <div class="stat-tile-label">Warnings</div>
-            <div class="stat-tile-value warn">{{ warning_logs }}</div>
-            <div class="stat-tile-note">Warning-type files</div>
-        </div>
-        <div class="stat-tile">
-            <div class="stat-tile-label">Errors</div>
-            <div class="stat-tile-value danger">{{ error_logs }}</div>
-            <div class="stat-tile-note">Error-type files</div>
-        </div>
-    </div>
-
-    <section class="filter-card">
-        <div class="filter-card-title">Filter Logs</div>
+    <section class="filters">
+        <h2 class="filters-title">Filter Error Logs</h2>
         <form method="get">
             <div class="filters-grid">
-                <div class="fld">
+                <div class="field">
                     <label for="date_from">From</label>
                     <input id="date_from" type="date" name="date_from" value="{{ date_from }}">
                 </div>
-                <div class="fld">
+                <div class="field">
                     <label for="date_to">To</label>
                     <input id="date_to" type="date" name="date_to" value="{{ date_to }}">
                 </div>
-                <div class="fld">
-                    <label for="log_type">Type</label>
-                    <select id="log_type" name="log_type">
-                        <option value="all" {% if log_type == 'all' or not log_type %}selected{% endif %}>All types</option>
-                        <option value="error"   {% if log_type == 'error'   %}selected{% endif %}>Error</option>
-                        <option value="warning" {% if log_type == 'warning' %}selected{% endif %}>Warning</option>
-                        <option value="api"     {% if log_type == 'api'     %}selected{% endif %}>API</option>
-                        <option value="2fa"     {% if log_type == '2fa'     %}selected{% endif %}>2FA</option>
-                        <option value="sync"    {% if log_type == 'sync'    %}selected{% endif %}>Sync</option>
-                        <option value="info"    {% if log_type == 'info'    %}selected{% endif %}>Info</option>
-                    </select>
-                </div>
-                <div class="fld">
+                <div class="field">
                     <label for="search">Name or Path</label>
-                    <input id="search" type="text" name="search" value="{{ search }}" placeholder="api, warnings, 2026-04…">
+                    <input id="search" type="text" name="search" value="{{ search }}" placeholder="errors_2026-05-14.log or django.security">
                 </div>
             </div>
             <div class="filter-actions">
                 <button type="submit" class="btn btn-primary">Apply Filters</button>
-                <a href="{% url 'beatzlocklogs:log_viewer' %}" class="btn btn-ghost">Reset</a>
+                <a href="{% url 'beatzlocklogs:log_viewer' %}" class="btn btn-secondary">Reset</a>
             </div>
         </form>
     </section>
 
     {% if grouped_logs %}
         {% for group in grouped_logs %}
-            <section class="log-group">
-                <div class="group-head">
-                    <div class="group-date">{{ group.display }}</div>
-                    <span class="group-count">{{ group.logs|length }} file{{ group.logs|length|pluralize }}</span>
+            <section class="group">
+                <div class="group-header">
+                    <h2 class="group-title">{{ group.display }}</h2>
+                    <div class="group-meta">{{ group.logs|length }} file{{ group.logs|length|pluralize }}</div>
                 </div>
-                <div class="logs-grid">
+                <div class="cards">
                     {% for log in group.logs %}
-                        <a class="log-card" href="{% url 'beatzlocklogs:log_detail' log.path %}">
-                            <div class="log-card-top">
-                                <div>
-                                    <div class="log-card-name">{{ log.name }}</div>
-                                    <div class="log-card-path">{{ log.path }}</div>
-                                </div>
-                                <span class="badge badge-{{ log.type }}">{{ log.type|upper }}</span>
+                        <a class="card" href="{% url 'beatzlocklogs:log_detail' log.path %}">
+                            <div class="badge">{{ log.type|upper }}</div>
+                            <div>
+                                <h3 class="card-title">{{ log.name }}</h3>
+                                <div class="card-path">{{ log.path }}</div>
                             </div>
-                            <div class="log-card-meta">
+                            <div class="card-meta">
                                 <span>{{ log.modified|date:"Y-m-d H:i" }}</span>
                                 <span>{{ log.line_count }} lines</span>
                                 <span>{{ log.size_display }}</span>
@@ -540,11 +390,10 @@
             </section>
         {% endfor %}
     {% else %}
-        <section class="empty">
-            <h2>No logs matched your filters</h2>
-            <p>Try widening the date range or clearing the type and search filters.</p>
+        <section class="empty-state">
+            <h2>No error logs matched the current filters</h2>
+            <p>Try widening the date range or clearing the search term.</p>
         </section>
     {% endif %}
-
 </div>
 {% endblock %}
