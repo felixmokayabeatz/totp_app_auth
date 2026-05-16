@@ -1,355 +1,568 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}{% endblock %}
+{% block content_title %}{% endblock %}
+
 {% block extrastyle %}
 <style>
     :root {
-        --bg: #f4efe7;
-        --panel: rgba(255, 252, 247, 0.94);
-        --panel-strong: #fffdf9;
-        --text: #1e1a17;
-        --muted: #6f6356;
-        --border: #d7c6b1;
-        --accent: #9a5c1f;
-        --accent-dark: #6f3f11;
-        --teal: #165f5b;
-        --shadow: 0 18px 40px rgba(20, 16, 12, 0.10);
-        --radius: 20px;
-        --radius-sm: 12px;
+        --ops-bg: #0b1320;
+        --ops-surface: #101a2d;
+        --ops-surface-strong: #15233b;
+        --ops-surface-soft: #1a2b46;
+        --ops-border: rgba(140, 170, 210, 0.18);
+        --ops-text: #edf3fb;
+        --ops-muted: #9eb2cc;
+        --ops-accent: #f3a64c;
+        --ops-accent-strong: #ffbe71;
+        --ops-teal: #34d399;
+        --ops-shadow: 0 24px 56px rgba(3, 8, 18, 0.36);
+        --ops-radius: 24px;
+        --ops-radius-sm: 16px;
     }
 
     body {
         background:
-            radial-gradient(circle at top right, rgba(154, 92, 31, 0.10), transparent 35%),
-            radial-gradient(circle at bottom left, rgba(22, 95, 91, 0.08), transparent 32%),
-            var(--bg);
-        color: var(--text);
+            radial-gradient(circle at top left, rgba(52, 211, 153, 0.12), transparent 28%),
+            radial-gradient(circle at top right, rgba(243, 166, 76, 0.12), transparent 32%),
+            linear-gradient(180deg, #08111d 0%, #0b1320 48%, #0d1727 100%);
+        color: var(--ops-text);
     }
 
-    #content {
+    #content,
+    #content-main {
         padding: 0;
+        margin: 0;
     }
 
-    .log-shell {
-        max-width: 1260px;
+    .log-browser {
+        max-width: 1320px;
         margin: 0 auto;
-        padding: 32px 24px 56px;
+        padding: 28px 22px 56px;
     }
 
     .hero,
     .filters,
-    .group,
-    .empty-state,
-    .stat-card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(8px);
+    .month-group,
+    .metric,
+    .empty-state {
+        border: 1px solid var(--ops-border);
+        box-shadow: var(--ops-shadow);
+        backdrop-filter: blur(18px);
     }
 
     .hero {
-        padding: 28px 30px;
-        margin-bottom: 24px;
+        display: grid;
+        grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr);
+        gap: 20px;
+        padding: 28px;
+        border-radius: var(--ops-radius);
         background:
-            linear-gradient(135deg, rgba(154, 92, 31, 0.08), rgba(22, 95, 91, 0.05)),
-            var(--panel);
+            linear-gradient(135deg, rgba(21, 35, 59, 0.98), rgba(13, 22, 38, 0.94)),
+            var(--ops-surface);
     }
 
-    .hero-kicker {
-        font: 600 11px/1.4 Consolas, "Courier New", monospace;
+    .hero-kicker,
+    .filters-kicker,
+    .month-kicker,
+    .metric-label {
+        font: 700 11px/1.4 Consolas, "Courier New", monospace;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: var(--muted);
-        margin-bottom: 10px;
+        color: var(--ops-muted);
     }
 
     .hero-title {
-        margin: 0;
-        font-size: clamp(32px, 4vw, 48px);
-        line-height: 1.05;
-        color: var(--text);
+        margin: 12px 0 0;
+        font-size: clamp(34px, 4vw, 54px);
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+        color: var(--ops-text);
     }
 
     .hero-subtitle {
-        margin: 14px 0 0;
+        margin: 16px 0 0;
         max-width: 720px;
-        color: var(--muted);
         font-size: 15px;
         line-height: 1.7;
+        color: var(--ops-muted);
     }
 
-    .stats {
+    .hero-summary {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 22px;
+    }
+
+    .summary-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--ops-text);
+        font: 600 12px/1.4 Consolas, "Courier New", monospace;
+    }
+
+    .summary-pill strong {
+        color: var(--ops-accent-strong);
+        font-size: 14px;
+    }
+
+    .hero-side {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 14px;
-        margin-bottom: 24px;
+        align-content: start;
     }
 
-    .stat-card {
-        padding: 18px 20px;
+    .hero-side-panel {
+        padding: 18px 18px 16px;
+        border-radius: var(--ops-radius-sm);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
     }
 
-    .stat-label {
-        font: 600 11px/1.4 Consolas, "Courier New", monospace;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--muted);
+    .hero-side-title {
+        margin: 0 0 10px;
+        font-size: 15px;
+        color: var(--ops-text);
     }
 
-    .stat-value {
-        margin-top: 8px;
-        font-size: 28px;
+    .hero-side-copy {
+        margin: 0;
+        color: var(--ops-muted);
+        font-size: 14px;
+        line-height: 1.65;
+    }
+
+    .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin: 18px 0 22px;
+    }
+
+    .metric {
+        padding: 18px 18px 16px;
+        border-radius: 18px;
+        background:
+            linear-gradient(180deg, rgba(20, 34, 57, 0.96), rgba(12, 22, 38, 0.96));
+    }
+
+    .metric-value {
+        margin-top: 10px;
+        font-size: clamp(26px, 3vw, 38px);
+        line-height: 1;
         font-weight: 700;
-        color: var(--text);
+        color: var(--ops-text);
     }
 
-    .stat-note {
-        margin-top: 6px;
-        color: var(--muted);
+    .metric-note {
+        margin-top: 8px;
+        color: var(--ops-muted);
         font-size: 13px;
+        line-height: 1.55;
     }
 
     .filters {
-        padding: 22px 24px;
-        margin-bottom: 24px;
+        padding: 24px;
+        border-radius: var(--ops-radius);
+        background:
+            linear-gradient(180deg, rgba(16, 26, 45, 0.98), rgba(12, 20, 35, 0.96));
+        margin-bottom: 22px;
+    }
+
+    .filters-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: end;
+        margin-bottom: 18px;
     }
 
     .filters-title {
-        margin: 0 0 18px;
-        font-size: 20px;
+        margin: 10px 0 0;
+        font-size: 28px;
+        line-height: 1.08;
+        color: var(--ops-text);
+    }
+
+    .filters-copy {
+        margin: 6px 0 0;
+        color: var(--ops-muted);
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .filters-status {
+        min-width: 220px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(52, 211, 153, 0.08);
+        border: 1px solid rgba(52, 211, 153, 0.14);
+    }
+
+    .filters-status strong {
+        display: block;
+        font-size: 24px;
+        line-height: 1;
+        color: var(--ops-teal);
+    }
+
+    .filters-status span {
+        display: block;
+        margin-top: 6px;
+        color: var(--ops-muted);
+        font-size: 13px;
+        line-height: 1.5;
     }
 
     .filters-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
     }
 
     .field {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
     }
 
     .field label {
-        font: 600 11px/1.4 Consolas, "Courier New", monospace;
-        letter-spacing: 0.12em;
+        font: 700 11px/1.4 Consolas, "Courier New", monospace;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--muted);
+        color: var(--ops-muted);
     }
 
     .field input {
         width: 100%;
-        min-height: 44px;
-        padding: 10px 12px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        background: var(--panel-strong);
-        color: var(--text);
+        min-height: 48px;
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--ops-text);
+    }
+
+    .field input::placeholder {
+        color: #8095b1;
     }
 
     .field input:focus {
-        outline: 2px solid rgba(154, 92, 31, 0.18);
-        border-color: var(--accent);
+        outline: none;
+        border-color: rgba(243, 166, 76, 0.55);
+        box-shadow: 0 0 0 4px rgba(243, 166, 76, 0.12);
     }
 
     .filter-actions {
         display: flex;
-        gap: 10px;
+        gap: 12px;
         flex-wrap: wrap;
-        margin-top: 16px;
+        margin-top: 18px;
     }
 
     .btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 42px;
+        min-height: 46px;
         padding: 0 18px;
         border-radius: 999px;
         border: 1px solid transparent;
         text-decoration: none;
-        font-weight: 600;
+        font-weight: 700;
+        letter-spacing: 0.01em;
         cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
     }
 
     .btn:hover {
         transform: translateY(-1px);
-        box-shadow: 0 10px 22px rgba(20, 16, 12, 0.12);
     }
 
     .btn-primary {
-        background: var(--text);
-        color: #fff;
+        background: linear-gradient(135deg, var(--ops-accent), #e68424);
+        color: #20140a;
     }
 
     .btn-secondary {
-        background: var(--panel-strong);
-        color: var(--accent-dark);
-        border-color: var(--border);
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: var(--ops-text);
     }
 
-    .group {
+    .month-group {
         overflow: hidden;
-        margin-bottom: 20px;
+        border-radius: var(--ops-radius);
+        background:
+            linear-gradient(180deg, rgba(16, 26, 45, 0.98), rgba(12, 20, 35, 0.96));
+        margin-bottom: 18px;
     }
 
-    .group-header {
+    .month-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        padding: 18px 22px;
-        border-bottom: 1px solid var(--border);
-        background: rgba(154, 92, 31, 0.04);
+        align-items: end;
+        gap: 18px;
+        padding: 22px 24px 18px;
+        border-bottom: 1px solid var(--ops-border);
     }
 
-    .group-title {
-        margin: 0;
-        font-size: 22px;
+    .month-title {
+        margin: 10px 0 0;
+        font-size: 24px;
+        line-height: 1.08;
+        color: var(--ops-text);
     }
 
-    .group-meta {
-        color: var(--muted);
-        font: 600 12px/1.4 Consolas, "Courier New", monospace;
+    .month-meta {
+        color: var(--ops-muted);
+        font: 700 12px/1.4 Consolas, "Courier New", monospace;
     }
 
-    .cards {
+    .log-cards {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
         gap: 16px;
-        padding: 18px;
+        padding: 20px;
     }
 
-    .card {
-        display: flex;
-        flex-direction: column;
+    .log-card {
+        display: grid;
         gap: 14px;
-        min-height: 160px;
+        min-height: 190px;
         padding: 18px;
-        border-radius: 16px;
-        border: 1px solid var(--border);
-        background: var(--panel-strong);
+        border-radius: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03));
         color: inherit;
         text-decoration: none;
         transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
     }
 
-    .card:hover {
-        transform: translateY(-2px);
-        border-color: var(--accent);
-        box-shadow: 0 14px 28px rgba(20, 16, 12, 0.10);
+    .log-card:hover {
+        transform: translateY(-3px);
+        border-color: rgba(243, 166, 76, 0.42);
+        box-shadow: 0 20px 34px rgba(0, 0, 0, 0.22);
     }
 
-    .card-title {
-        margin: 0;
-        font-size: 16px;
-        line-height: 1.4;
-    }
-
-    .card-path {
-        color: var(--muted);
-        font: 600 12px/1.5 Consolas, "Courier New", monospace;
-        word-break: break-word;
-    }
-
-    .card-meta {
-        margin-top: auto;
+    .log-card-top {
         display: flex;
         justify-content: space-between;
-        gap: 8px;
-        flex-wrap: wrap;
-        color: var(--muted);
-        font: 600 12px/1.5 Consolas, "Courier New", monospace;
+        gap: 12px;
+        align-items: start;
     }
 
-    .badge {
+    .log-day {
+        display: inline-flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 58px;
+        min-height: 64px;
+        padding: 10px 10px 8px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        text-align: center;
+    }
+
+    .log-day strong {
+        font-size: 24px;
+        line-height: 1;
+        color: var(--ops-text);
+    }
+
+    .log-day span {
+        margin-top: 6px;
+        font: 700 11px/1.3 Consolas, "Courier New", monospace;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ops-muted);
+    }
+
+    .log-kind {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        width: fit-content;
-        padding: 6px 10px;
+        min-height: 32px;
+        padding: 0 12px;
         border-radius: 999px;
-        background: rgba(154, 92, 31, 0.10);
-        color: var(--accent-dark);
-        font: 700 11px/1.2 Consolas, "Courier New", monospace;
-        letter-spacing: 0.08em;
+        background: rgba(52, 211, 153, 0.10);
+        border: 1px solid rgba(52, 211, 153, 0.14);
+        color: #8cf2c5;
+        font: 700 11px/1.3 Consolas, "Courier New", monospace;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
     }
 
+    .log-card-title {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.35;
+        color: var(--ops-text);
+        word-break: break-word;
+    }
+
+    .log-card-path {
+        margin: 8px 0 0;
+        color: var(--ops-muted);
+        font: 600 12px/1.65 Consolas, "Courier New", monospace;
+        word-break: break-word;
+    }
+
+    .log-card-meta {
+        margin-top: auto;
+        display: grid;
+        gap: 6px;
+        color: var(--ops-muted);
+        font: 600 12px/1.55 Consolas, "Courier New", monospace;
+    }
+
     .empty-state {
-        padding: 42px 28px;
+        padding: 46px 28px;
+        border-radius: var(--ops-radius);
+        background:
+            linear-gradient(180deg, rgba(16, 26, 45, 0.98), rgba(12, 20, 35, 0.96));
         text-align: center;
     }
 
     .empty-state h2 {
         margin: 0 0 10px;
-        font-size: 24px;
+        font-size: 26px;
+        color: var(--ops-text);
     }
 
     .empty-state p {
         margin: 0;
-        color: var(--muted);
+        color: var(--ops-muted);
+        font-size: 14px;
+        line-height: 1.6;
     }
 
-    @media (max-width: 700px) {
-        .log-shell {
-            padding: 20px 14px 44px;
+    @media (max-width: 1080px) {
+        .hero {
+            grid-template-columns: 1fr;
+        }
+
+        .metrics,
+        .filters-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .filters-head {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .log-browser {
+            padding: 20px 14px 42px;
         }
 
         .hero,
-        .filters {
+        .filters,
+        .month-header {
             padding: 20px 18px;
+        }
+
+        .metrics,
+        .filters-grid,
+        .log-cards {
+            grid-template-columns: 1fr;
+        }
+
+        .month-header {
+            align-items: start;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="log-shell">
+<div class="log-browser">
     <section class="hero">
-        <div class="hero-kicker">BeatzLock / Operations</div>
-        <h1 class="hero-title">Application Error Logs</h1>
-        <p class="hero-subtitle">
-            Review daily error files with full timestamps, request details, and stack traces.
-        </p>
+        <div>
+            <div class="hero-kicker">BeatzLock / Admin / Error Logs</div>
+            <h1 class="hero-title">Application Error Logs</h1>
+            <p class="hero-subtitle">
+                Review production error files, narrow the date range quickly, and jump straight into the stack traces that matter.
+            </p>
+            <div class="hero-summary">
+                <span class="summary-pill"><strong>{{ total_files }}</strong> visible file{{ total_files|pluralize }}</span>
+                <span class="summary-pill"><strong>{{ total_size_display }}</strong> combined size</span>
+                <span class="summary-pill">
+                    <strong>{% if latest_modified %}{{ latest_modified|date:"M d, Y H:i" }}{% else %}No files{% endif %}</strong>
+                    latest update
+                </span>
+            </div>
+        </div>
+        <div class="hero-side">
+            <div class="hero-side-panel">
+                <h2 class="hero-side-title">Operational Focus</h2>
+                <p class="hero-side-copy">
+                    Search by file name or logger path, filter the date window, and open the exact log you want without digging through the shell.
+                </p>
+            </div>
+            <div class="hero-side-panel">
+                <h2 class="hero-side-title">Current Scope</h2>
+                <p class="hero-side-copy">
+                    {{ total_visible_lines }} visible line{{ total_visible_lines|pluralize }} across the current filtered set.
+                </p>
+            </div>
+        </div>
     </section>
 
-    <section class="stats">
-        <article class="stat-card">
-            <div class="stat-label">Visible Files</div>
-            <div class="stat-value">{{ total_files }}</div>
-            <div class="stat-note">Matching the current filters</div>
+    <section class="metrics">
+        <article class="metric">
+            <div class="metric-label">Visible Files</div>
+            <div class="metric-value">{{ total_files }}</div>
+            <div class="metric-note">Files matching the current filter state.</div>
         </article>
-        <article class="stat-card">
-            <div class="stat-label">Combined Size</div>
-            <div class="stat-value">{{ total_size_display }}</div>
-            <div class="stat-note">Across the visible log set</div>
+        <article class="metric">
+            <div class="metric-label">Combined Size</div>
+            <div class="metric-value">{{ total_size_display }}</div>
+            <div class="metric-note">Disk footprint of the visible log set.</div>
         </article>
-        <article class="stat-card">
-            <div class="stat-label">Visible Lines</div>
-            <div class="stat-value">{{ total_visible_lines }}</div>
-            <div class="stat-note">Across the visible files</div>
+        <article class="metric">
+            <div class="metric-label">Visible Lines</div>
+            <div class="metric-value">{{ total_visible_lines }}</div>
+            <div class="metric-note">Total lines across the visible files.</div>
         </article>
-        <article class="stat-card">
-            <div class="stat-label">Latest Update</div>
-            <div class="stat-value">{% if latest_modified %}{{ latest_modified|date:"Y-m-d" }}{% else %}-{% endif %}</div>
-            <div class="stat-note">Newest visible file timestamp</div>
+        <article class="metric">
+            <div class="metric-label">Latest Update</div>
+            <div class="metric-value">{% if latest_modified %}{{ latest_modified|date:"Y-m-d" }}{% else %}-{% endif %}</div>
+            <div class="metric-note">Newest timestamp inside the current results.</div>
         </article>
     </section>
 
     <section class="filters">
-        <h2 class="filters-title">Filter Error Logs</h2>
+        <div class="filters-head">
+            <div>
+                <div class="filters-kicker">Find a Log Fast</div>
+                <h2 class="filters-title">Filter the Error Log Inventory</h2>
+                <p class="filters-copy">Use a date window for incident reviews, or search by file name and logger path.</p>
+            </div>
+            <div class="filters-status">
+                <strong>{{ total_files }}</strong>
+                <span>result{{ total_files|pluralize }} visible after applying the current filters</span>
+            </div>
+        </div>
         <form method="get">
             <div class="filters-grid">
                 <div class="field">
-                    <label for="date_from">From</label>
+                    <label for="date_from">From Date</label>
                     <input id="date_from" type="date" name="date_from" value="{{ date_from }}">
                 </div>
                 <div class="field">
-                    <label for="date_to">To</label>
+                    <label for="date_to">To Date</label>
                     <input id="date_to" type="date" name="date_to" value="{{ date_to }}">
                 </div>
                 <div class="field">
@@ -366,22 +579,31 @@
 
     {% if grouped_logs %}
         {% for group in grouped_logs %}
-            <section class="group">
-                <div class="group-header">
-                    <h2 class="group-title">{{ group.display }}</h2>
-                    <div class="group-meta">{{ group.logs|length }} file{{ group.logs|length|pluralize }}</div>
+            <section class="month-group">
+                <div class="month-header">
+                    <div>
+                        <div class="month-kicker">Monthly Slice</div>
+                        <h2 class="month-title">{{ group.display }}</h2>
+                    </div>
+                    <div class="month-meta">{{ group.logs|length }} file{{ group.logs|length|pluralize }} in this period</div>
                 </div>
-                <div class="cards">
+                <div class="log-cards">
                     {% for log in group.logs %}
-                        <a class="card" href="{% url 'beatzlocklogs:log_detail' log.path %}">
-                            <div class="badge">{{ log.type|upper }}</div>
-                            <div>
-                                <h3 class="card-title">{{ log.name }}</h3>
-                                <div class="card-path">{{ log.path }}</div>
+                        <a class="log-card" href="{% url 'beatzlocklogs:log_detail' log.path %}">
+                            <div class="log-card-top">
+                                <div class="log-day">
+                                    <strong>{{ log.day }}</strong>
+                                    <span>Day</span>
+                                </div>
+                                <span class="log-kind">{{ log.type|upper }}</span>
                             </div>
-                            <div class="card-meta">
-                                <span>{{ log.modified|date:"Y-m-d H:i" }}</span>
-                                <span>{{ log.line_count }} lines</span>
+                            <div>
+                                <h3 class="log-card-title">{{ log.name }}</h3>
+                                <p class="log-card-path">{{ log.path }}</p>
+                            </div>
+                            <div class="log-card-meta">
+                                <span>Updated {{ log.modified|date:"Y-m-d H:i" }}</span>
+                                <span>{{ log.line_count }} line{{ log.line_count|pluralize }} tracked</span>
                                 <span>{{ log.size_display }}</span>
                             </div>
                         </a>
@@ -392,7 +614,7 @@
     {% else %}
         <section class="empty-state">
             <h2>No error logs matched the current filters</h2>
-            <p>Try widening the date range or clearing the search term.</p>
+            <p>Widen the date range or clear the search field to bring more log files back into scope.</p>
         </section>
     {% endif %}
 </div>

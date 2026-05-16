@@ -55,6 +55,44 @@ def _extract_log_level(line: str) -> str:
     return parts[1].strip()
 
 
+def _build_log_entries(lines: list[str]) -> list[dict]:
+    entries: list[dict] = []
+    current_entry: dict | None = None
+
+    for raw_line in lines:
+        line = raw_line.rstrip("\n")
+        parts = [part.strip() for part in line.split("|", 3)]
+
+        if len(parts) == 4:
+            level = parts[1].upper()
+            current_entry = {
+                "timestamp": parts[0],
+                "level": level,
+                "level_class": level.lower() if level in {"ERROR", "WARNING", "INFO", "DEBUG"} else "plain",
+                "source": parts[2],
+                "message": parts[3],
+                "continuation": [],
+            }
+            entries.append(current_entry)
+            continue
+
+        if current_entry is None:
+            current_entry = {
+                "timestamp": "",
+                "level": "LOG",
+                "level_class": "plain",
+                "source": "",
+                "message": line,
+                "continuation": [],
+            }
+            entries.append(current_entry)
+            continue
+
+        current_entry["continuation"].append(line)
+
+    return entries
+
+
 @staff_member_required
 @require_http_methods(["GET"])
 def log_viewer(request, log_file=None):
@@ -147,14 +185,17 @@ def log_viewer(request, log_file=None):
         ]
 
     displayed_lines = filtered_lines[-lines:] if lines > 0 else filtered_lines
+    log_entries = _build_log_entries(displayed_lines)
 
     detail_context = {
         "log_file": log_file,
         "log_name": log_path.name,
         "log_lines": displayed_lines,
+        "log_entries": log_entries,
         "total_lines": len(all_lines),
         "filtered_lines": len(filtered_lines),
         "displayed_lines": len(displayed_lines),
+        "displayed_entries": len(log_entries),
         "search_text": search_text,
         "level_filter": level_filter,
         "lines": lines,

@@ -1,385 +1,633 @@
 {% extends "admin/base_site.html" %}
 {% load i18n %}
 
+{% block breadcrumbs %}{% endblock %}
+{% block content_title %}{% endblock %}
+
 {% block extrastyle %}
 <style>
     :root {
-        --bg: #f4efe7;
-        --panel: rgba(255, 252, 247, 0.94);
-        --panel-strong: #fffdf9;
-        --text: #1e1a17;
-        --muted: #6f6356;
-        --border: #d7c6b1;
-        --accent: #9a5c1f;
-        --accent-dark: #6f3f11;
-        --error: #b3473c;
-        --warning: #a06b16;
-        --info: #205c99;
-        --debug: #2f7450;
-        --terminal: #14110f;
-        --terminal-top: #1e1a17;
-        --terminal-text: #d8cfbf;
-        --shadow: 0 18px 40px rgba(20, 16, 12, 0.12);
-        --radius: 20px;
-        --radius-sm: 12px;
+        --ops-bg: #0b1320;
+        --ops-surface: #101a2d;
+        --ops-surface-strong: #15233b;
+        --ops-surface-soft: #1a2b46;
+        --ops-border: rgba(140, 170, 210, 0.18);
+        --ops-text: #edf3fb;
+        --ops-muted: #9eb2cc;
+        --ops-accent: #f3a64c;
+        --ops-accent-strong: #ffbe71;
+        --ops-teal: #34d399;
+        --ops-danger: #f87171;
+        --ops-warning: #fbbf24;
+        --ops-info: #60a5fa;
+        --ops-debug: #86efac;
+        --ops-shadow: 0 24px 56px rgba(3, 8, 18, 0.36);
+        --ops-radius: 24px;
+        --ops-radius-sm: 16px;
+        --ops-console: #08111d;
+        --ops-console-strong: #0d1728;
+        --ops-console-line: rgba(255, 255, 255, 0.04);
     }
 
     body {
         background:
-            radial-gradient(circle at top right, rgba(154, 92, 31, 0.10), transparent 35%),
-            radial-gradient(circle at bottom left, rgba(22, 95, 91, 0.08), transparent 32%),
-            var(--bg);
-        color: var(--text);
+            radial-gradient(circle at top left, rgba(52, 211, 153, 0.10), transparent 28%),
+            radial-gradient(circle at top right, rgba(243, 166, 76, 0.12), transparent 32%),
+            linear-gradient(180deg, #08111d 0%, #0b1320 48%, #0d1727 100%);
+        color: var(--ops-text);
     }
 
-    #content {
+    #content,
+    #content-main {
         padding: 0;
+        margin: 0;
     }
 
-    .detail-shell {
-        max-width: 1320px;
+    .log-detail {
+        max-width: 1380px;
         margin: 0 auto;
-        padding: 32px 24px 56px;
+        padding: 28px 22px 56px;
     }
 
     .hero,
     .controls,
-    .stats article,
-    .terminal {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(8px);
+    .metric,
+    .console {
+        border: 1px solid var(--ops-border);
+        box-shadow: var(--ops-shadow);
+        backdrop-filter: blur(18px);
     }
 
     .hero {
-        padding: 28px 30px;
-        margin-bottom: 22px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 20px;
+        align-items: end;
+        padding: 28px;
+        border-radius: var(--ops-radius);
         background:
-            linear-gradient(135deg, rgba(154, 92, 31, 0.08), rgba(22, 95, 91, 0.05)),
-            var(--panel);
+            linear-gradient(135deg, rgba(21, 35, 59, 0.98), rgba(13, 22, 38, 0.94)),
+            var(--ops-surface);
+        margin-bottom: 18px;
     }
 
-    .hero-kicker {
-        font: 600 11px/1.4 Consolas, "Courier New", monospace;
+    .hero-kicker,
+    .controls-kicker,
+    .metric-label,
+    .console-kicker {
+        font: 700 11px/1.4 Consolas, "Courier New", monospace;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: var(--muted);
-        margin-bottom: 10px;
+        color: var(--ops-muted);
+    }
+
+    .hero-kicker a {
+        color: var(--ops-accent-strong);
+        text-decoration: none;
     }
 
     .hero-title {
-        margin: 0;
-        font-size: clamp(28px, 4vw, 42px);
-        line-height: 1.1;
+        margin: 12px 0 0;
+        font-size: clamp(30px, 4vw, 50px);
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: var(--ops-text);
         word-break: break-word;
+    }
+
+    .hero-copy {
+        margin: 14px 0 0;
+        max-width: 760px;
+        color: var(--ops-muted);
+        font-size: 15px;
+        line-height: 1.7;
     }
 
     .hero-pills {
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
-        margin-top: 16px;
+        margin-top: 18px;
     }
 
     .pill {
         display: inline-flex;
         align-items: center;
-        padding: 8px 12px;
+        min-height: 38px;
+        padding: 0 14px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.7);
-        border: 1px solid var(--border);
-        color: var(--muted);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--ops-text);
         font: 600 12px/1.4 Consolas, "Courier New", monospace;
     }
 
+    .hero-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--ops-accent), #e68424);
+        color: #20140a;
+        text-decoration: none;
+        font-weight: 700;
+    }
+
     .controls {
-        padding: 22px 24px;
-        margin-bottom: 22px;
+        padding: 24px;
+        border-radius: var(--ops-radius);
+        background:
+            linear-gradient(180deg, rgba(16, 26, 45, 0.98), rgba(12, 20, 35, 0.96));
+        margin-bottom: 18px;
+    }
+
+    .controls-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 18px;
+        margin-bottom: 18px;
+    }
+
+    .controls-title {
+        margin: 10px 0 0;
+        font-size: 28px;
+        line-height: 1.08;
+        color: var(--ops-text);
+    }
+
+    .controls-copy {
+        margin: 6px 0 0;
+        color: var(--ops-muted);
+        font-size: 14px;
+        line-height: 1.6;
     }
 
     .controls-grid {
         display: grid;
-        grid-template-columns: minmax(280px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
+        grid-template-columns: minmax(280px, 2fr) minmax(160px, 1fr) minmax(160px, 1fr);
         gap: 14px;
-        align-items: end;
     }
 
     .field {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
     }
 
     .field label {
-        font: 600 11px/1.4 Consolas, "Courier New", monospace;
-        letter-spacing: 0.12em;
+        font: 700 11px/1.4 Consolas, "Courier New", monospace;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--muted);
+        color: var(--ops-muted);
     }
 
     .field input,
     .field select {
         width: 100%;
-        min-height: 44px;
-        padding: 10px 12px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        background: var(--panel-strong);
-        color: var(--text);
+        min-height: 48px;
+        padding: 0 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--ops-text);
+    }
+
+    .field input::placeholder {
+        color: #8095b1;
     }
 
     .field input:focus,
     .field select:focus {
-        outline: 2px solid rgba(154, 92, 31, 0.18);
-        border-color: var(--accent);
+        outline: none;
+        border-color: rgba(243, 166, 76, 0.55);
+        box-shadow: 0 0 0 4px rgba(243, 166, 76, 0.12);
     }
 
     .actions {
         display: flex;
-        gap: 10px;
+        gap: 12px;
         flex-wrap: wrap;
+        margin-top: 18px;
     }
 
     .btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 42px;
+        min-height: 46px;
         padding: 0 18px;
         border-radius: 999px;
         border: 1px solid transparent;
         text-decoration: none;
-        font-weight: 600;
+        font-weight: 700;
+        letter-spacing: 0.01em;
         cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
     }
 
     .btn:hover {
         transform: translateY(-1px);
-        box-shadow: 0 10px 22px rgba(20, 16, 12, 0.12);
     }
 
     .btn-primary {
-        background: var(--text);
-        color: #fff;
+        background: linear-gradient(135deg, var(--ops-accent), #e68424);
+        color: #20140a;
     }
 
     .btn-secondary {
-        background: var(--panel-strong);
-        color: var(--accent-dark);
-        border-color: var(--border);
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: var(--ops-text);
     }
 
-    .stats {
+    .metrics {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 14px;
-        margin-bottom: 22px;
+        margin-bottom: 18px;
     }
 
-    .stats article {
-        padding: 18px 20px;
+    .metric {
+        padding: 18px 18px 16px;
+        border-radius: 18px;
+        background:
+            linear-gradient(180deg, rgba(20, 34, 57, 0.96), rgba(12, 22, 38, 0.96));
     }
 
-    .stat-label {
-        font: 600 11px/1.4 Consolas, "Courier New", monospace;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--muted);
-    }
-
-    .stat-value {
-        margin-top: 8px;
-        font-size: 28px;
+    .metric-value {
+        margin-top: 10px;
+        font-size: clamp(24px, 3vw, 34px);
+        line-height: 1;
         font-weight: 700;
+        color: var(--ops-text);
     }
 
-    .terminal {
+    .metric-value.error { color: var(--ops-danger); }
+    .metric-value.warning { color: var(--ops-warning); }
+    .metric-value.info { color: var(--ops-info); }
+    .metric-value.debug { color: var(--ops-debug); }
+
+    .metric-note {
+        margin-top: 8px;
+        color: var(--ops-muted);
+        font-size: 13px;
+        line-height: 1.55;
+    }
+
+    .console {
         overflow: hidden;
-        background: var(--terminal);
-        border-color: rgba(0, 0, 0, 0.18);
+        border-radius: var(--ops-radius);
+        background: linear-gradient(180deg, var(--ops-console), var(--ops-console-strong));
     }
 
-    .terminal-top {
+    .console-head {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 8px;
-        padding: 14px 18px;
-        background: var(--terminal-top);
+        gap: 18px;
+        padding: 18px 20px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.03);
     }
 
-    .terminal-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #4b443d;
+    .console-title {
+        margin: 8px 0 0;
+        font-size: 20px;
+        color: var(--ops-text);
     }
 
-    .terminal-label {
-        color: #a79a88;
-        font: 600 12px/1.4 Consolas, "Courier New", monospace;
-        margin-left: 4px;
+    .console-copy {
+        margin: 6px 0 0;
+        color: var(--ops-muted);
+        font: 600 12px/1.6 Consolas, "Courier New", monospace;
     }
 
-    .lines {
+    .console-flags {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: end;
+    }
+
+    .flag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--ops-text);
+        font: 600 11px/1.4 Consolas, "Courier New", monospace;
+    }
+
+    .entries {
         max-height: 72vh;
         overflow: auto;
     }
 
-    .line {
+    .entry {
         display: grid;
-        grid-template-columns: 60px 4px 1fr;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        grid-template-columns: 120px minmax(0, 1fr);
+        border-bottom: 1px solid var(--ops-console-line);
     }
 
-    .line-number {
-        padding: 9px 10px;
-        text-align: right;
-        color: #6d6458;
+    .entry-rail {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        padding: 16px 14px;
+        background: rgba(255, 255, 255, 0.02);
+        border-right: 1px solid var(--ops-console-line);
+    }
+
+    .entry-level {
+        display: inline-flex;
+        justify-content: center;
+        min-height: 30px;
+        padding: 0 10px;
+        border-radius: 999px;
+        font: 700 11px/1.4 Consolas, "Courier New", monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        background: rgba(158, 178, 204, 0.12);
+        color: var(--ops-text);
+    }
+
+    .entry-index {
+        color: #6f829d;
         font: 600 11px/1.5 Consolas, "Courier New", monospace;
-        border-right: 1px solid rgba(255, 255, 255, 0.05);
-        user-select: none;
     }
 
-    .line-accent {
-        background: transparent;
+    .entry-main {
+        padding: 16px 18px 18px;
     }
 
-    .line-body {
+    .entry-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .entry-time {
+        color: var(--ops-accent-strong);
+        font: 700 11px/1.4 Consolas, "Courier New", monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .entry-source {
+        color: var(--ops-muted);
+        font: 600 12px/1.5 Consolas, "Courier New", monospace;
+        word-break: break-word;
+    }
+
+    .entry-message,
+    .entry-stack pre {
         margin: 0;
-        padding: 9px 16px;
-        color: var(--terminal-text);
-        font: 400 12.5px/1.6 Consolas, "Courier New", monospace;
+        color: var(--ops-text);
+        font: 400 13px/1.7 Consolas, "Courier New", monospace;
         white-space: pre-wrap;
         word-break: break-word;
     }
 
-    .lvl-error .line-accent { background: var(--error); }
-    .lvl-error .line-body { color: #f1a29a; background: rgba(179, 71, 60, 0.08); }
-
-    .lvl-warning .line-accent { background: var(--warning); }
-    .lvl-warning .line-body { color: #e9c06a; background: rgba(160, 107, 22, 0.08); }
-
-    .lvl-info .line-accent { background: var(--info); }
-    .lvl-info .line-body { color: #8bb8ea; }
-
-    .lvl-debug .line-accent { background: var(--debug); }
-    .lvl-debug .line-body { color: #8fc9a5; }
-
-    .empty {
-        padding: 36px 24px;
-        text-align: center;
-        color: #8c8275;
-        font: 600 13px/1.6 Consolas, "Courier New", monospace;
+    .entry-stack {
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 
-    @media (max-width: 980px) {
+    .entry-stack pre + pre {
+        margin-top: 8px;
+    }
+
+    .entry-error .entry-level {
+        background: rgba(248, 113, 113, 0.14);
+        color: var(--ops-danger);
+    }
+
+    .entry-error .entry-message {
+        color: #ffd1d1;
+    }
+
+    .entry-warning .entry-level {
+        background: rgba(251, 191, 36, 0.14);
+        color: var(--ops-warning);
+    }
+
+    .entry-warning .entry-message {
+        color: #ffe6a7;
+    }
+
+    .entry-info .entry-level {
+        background: rgba(96, 165, 250, 0.14);
+        color: var(--ops-info);
+    }
+
+    .entry-info .entry-message {
+        color: #cfe2ff;
+    }
+
+    .entry-debug .entry-level {
+        background: rgba(134, 239, 172, 0.14);
+        color: var(--ops-debug);
+    }
+
+    .entry-debug .entry-message {
+        color: #cff7da;
+    }
+
+    .empty {
+        padding: 42px 24px;
+        text-align: center;
+        color: var(--ops-muted);
+        font: 600 13px/1.7 Consolas, "Courier New", monospace;
+    }
+
+    @media (max-width: 1100px) {
+        .hero,
+        .metrics,
         .controls-grid {
             grid-template-columns: 1fr;
         }
+
+        .hero {
+            align-items: start;
+        }
     }
 
-    @media (max-width: 700px) {
-        .detail-shell {
-            padding: 20px 14px 44px;
+    @media (max-width: 760px) {
+        .log-detail {
+            padding: 20px 14px 42px;
         }
 
         .hero,
-        .controls {
+        .controls,
+        .console-head {
             padding: 20px 18px;
+        }
+
+        .metrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .entry {
+            grid-template-columns: 1fr;
+        }
+
+        .entry-rail {
+            border-right: 0;
+            border-bottom: 1px solid var(--ops-console-line);
+            grid-template-columns: auto auto;
+            align-items: center;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="detail-shell">
+<div class="log-detail">
     <section class="hero">
-        <div class="hero-kicker">BeatzLock / Operations / Error Log</div>
-        <h1 class="hero-title">{{ log_name }}</h1>
-        <div class="hero-pills">
-            <span class="pill">{{ file_size_display }}</span>
-            <span class="pill">Updated {{ modified|date:"Y-m-d H:i:s" }}</span>
-            <span class="pill">{{ total_lines }} lines in file</span>
+        <div>
+            <div class="hero-kicker">
+                <a href="{% url 'beatzlocklogs:log_viewer' %}">All Logs</a> / {{ log_name }}
+            </div>
+            <h1 class="hero-title">{{ log_name }}</h1>
+            <p class="hero-copy">
+                Inspect the filtered log stream with timestamps, levels, source context, and any continuation lines from stack traces.
+            </p>
+            <div class="hero-pills">
+                <span class="pill">{{ file_size_display }}</span>
+                <span class="pill">Updated {{ modified|date:"Y-m-d H:i:s" }}</span>
+                <span class="pill">{{ total_lines }} total line{{ total_lines|pluralize }}</span>
+            </div>
         </div>
+        <a href="{% url 'beatzlocklogs:log_viewer' %}" class="hero-action">Back to log inventory</a>
     </section>
 
     <section class="controls">
-        <form method="get" class="controls-grid">
-            <div class="field">
-                <label for="search_text">Search inside log</label>
-                <input id="search_text" type="text" name="search_text" value="{{ search_text }}" placeholder="HTTP_HOST, traceback, DisallowedHost">
+        <div class="controls-head">
+            <div>
+                <div class="controls-kicker">Query This File</div>
+                <h2 class="controls-title">Search and Narrow the Log Stream</h2>
+                <p class="controls-copy">Filter inside the current file by text, level, and how many lines you want to bring into view.</p>
             </div>
-            <div class="field">
-                <label for="level">Level</label>
-                <select id="level" name="level">
-                    <option value="" {% if not level_filter %}selected{% endif %}>All levels</option>
-                    <option value="ERROR" {% if level_filter == 'ERROR' %}selected{% endif %}>ERROR</option>
-                    <option value="WARNING" {% if level_filter == 'WARNING' %}selected{% endif %}>WARNING</option>
-                    <option value="INFO" {% if level_filter == 'INFO' %}selected{% endif %}>INFO</option>
-                    <option value="DEBUG" {% if level_filter == 'DEBUG' %}selected{% endif %}>DEBUG</option>
-                </select>
-            </div>
-            <div class="field">
-                <label for="lines">Lines to show</label>
-                <select id="lines" name="lines">
-                    <option value="100" {% if lines == 100 %}selected{% endif %}>100</option>
-                    <option value="500" {% if lines == 500 %}selected{% endif %}>500</option>
-                    <option value="1000" {% if lines == 1000 %}selected{% endif %}>1000</option>
-                    <option value="5000" {% if lines == 5000 %}selected{% endif %}>5000</option>
-                    <option value="0" {% if lines == 0 %}selected{% endif %}>All</option>
-                </select>
+        </div>
+        <form method="get">
+            <div class="controls-grid">
+                <div class="field">
+                    <label for="search_text">Search Text</label>
+                    <input id="search_text" type="text" name="search_text" value="{{ search_text }}" placeholder="HTTP_HOST, traceback, DisallowedHost">
+                </div>
+                <div class="field">
+                    <label for="level">Level</label>
+                    <select id="level" name="level">
+                        <option value="" {% if not level_filter %}selected{% endif %}>All levels</option>
+                        <option value="ERROR" {% if level_filter == 'ERROR' %}selected{% endif %}>ERROR</option>
+                        <option value="WARNING" {% if level_filter == 'WARNING' %}selected{% endif %}>WARNING</option>
+                        <option value="INFO" {% if level_filter == 'INFO' %}selected{% endif %}>INFO</option>
+                        <option value="DEBUG" {% if level_filter == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="lines">Lines to Show</label>
+                    <select id="lines" name="lines">
+                        <option value="100" {% if lines == 100 %}selected{% endif %}>100</option>
+                        <option value="500" {% if lines == 500 %}selected{% endif %}>500</option>
+                        <option value="1000" {% if lines == 1000 %}selected{% endif %}>1000</option>
+                        <option value="5000" {% if lines == 5000 %}selected{% endif %}>5000</option>
+                        <option value="0" {% if lines == 0 %}selected{% endif %}>All</option>
+                    </select>
+                </div>
             </div>
             <div class="actions">
-                <button type="submit" class="btn btn-primary">Apply</button>
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
                 <a href="{% url 'beatzlocklogs:log_detail' log_file %}" class="btn btn-secondary">Reset</a>
-                <a href="{% url 'beatzlocklogs:log_viewer' %}" class="btn btn-secondary">Back to logs</a>
+                <a href="{% url 'beatzlocklogs:log_viewer' %}" class="btn btn-secondary">Back to Logs</a>
             </div>
         </form>
     </section>
 
-    <section class="stats">
-        <article>
-            <div class="stat-label">Filtered Lines</div>
-            <div class="stat-value">{{ filtered_lines }}</div>
+    <section class="metrics">
+        <article class="metric">
+            <div class="metric-label">Filtered Lines</div>
+            <div class="metric-value">{{ filtered_lines }}</div>
+            <div class="metric-note">Lines matching the current filters.</div>
         </article>
-        <article>
-            <div class="stat-label">Displayed</div>
-            <div class="stat-value">{{ displayed_lines }}</div>
+        <article class="metric">
+            <div class="metric-label">Displayed Lines</div>
+            <div class="metric-value">{{ displayed_lines }}</div>
+            <div class="metric-note">Lines actually rendered on this page.</div>
         </article>
-        <article>
-            <div class="stat-label">Errors</div>
-            <div class="stat-value">{{ error_count }}</div>
+        <article class="metric">
+            <div class="metric-label">Rendered Entries</div>
+            <div class="metric-value">{{ displayed_entries }}</div>
+            <div class="metric-note">Structured log entries built from the visible lines.</div>
         </article>
-        <article>
-            <div class="stat-label">Warnings</div>
-            <div class="stat-value">{{ warning_count }}</div>
+        <article class="metric">
+            <div class="metric-label">Errors</div>
+            <div class="metric-value error">{{ error_count }}</div>
+            <div class="metric-note">Error lines in the current filtered set.</div>
         </article>
-        <article>
-            <div class="stat-label">Info</div>
-            <div class="stat-value">{{ info_count }}</div>
+        <article class="metric">
+            <div class="metric-label">Warnings / Info</div>
+            <div class="metric-value warning">{{ warning_count }}</div>
+            <div class="metric-note">{{ info_count }} info line{{ info_count|pluralize }} in the same result set.</div>
         </article>
     </section>
 
-    <section class="terminal">
-        <div class="terminal-top">
-            <span class="terminal-dot"></span>
-            <span class="terminal-dot"></span>
-            <span class="terminal-dot"></span>
-            <span class="terminal-label">
-                Showing {% if lines == 0 %}all{% else %}up to {{ lines }}{% endif %} lines | {{ log_name }}
-            </span>
+    <section class="console">
+        <div class="console-head">
+            <div>
+                <div class="console-kicker">Console View</div>
+                <h2 class="console-title">{{ log_name }}</h2>
+                <p class="console-copy">
+                    Showing {% if lines == 0 %}all visible lines{% else %}the latest {{ lines }} visible line{{ lines|pluralize }}{% endif %} from the filtered result.
+                </p>
+            </div>
+            <div class="console-flags">
+                {% if level_filter %}
+                    <span class="flag">Level {{ level_filter }}</span>
+                {% endif %}
+                {% if search_text %}
+                    <span class="flag">Search {{ search_text }}</span>
+                {% endif %}
+                <span class="flag">{{ displayed_entries }} entry{{ displayed_entries|pluralize }}</span>
+            </div>
         </div>
-        <div class="lines">
-            {% for line in log_lines %}
-                <div class="line {% if 'ERROR' in line %}lvl-error{% elif 'WARNING' in line %}lvl-warning{% elif 'INFO' in line %}lvl-info{% elif 'DEBUG' in line %}lvl-debug{% endif %}">
-                    <div class="line-number">{{ forloop.counter }}</div>
-                    <div class="line-accent"></div>
-                    <pre class="line-body">{{ line|escape }}</pre>
-                </div>
+        <div class="entries">
+            {% for entry in log_entries %}
+                <article class="entry entry-{{ entry.level_class }}">
+                    <div class="entry-rail">
+                        <div class="entry-level">{{ entry.level }}</div>
+                        <div class="entry-index">Entry {{ forloop.counter }}</div>
+                    </div>
+                    <div class="entry-main">
+                        <div class="entry-head">
+                            {% if entry.timestamp %}
+                                <span class="entry-time">{{ entry.timestamp }}</span>
+                            {% endif %}
+                            {% if entry.source %}
+                                <span class="entry-source">{{ entry.source }}</span>
+                            {% endif %}
+                        </div>
+                        <pre class="entry-message">{{ entry.message|escape }}</pre>
+                        {% if entry.continuation %}
+                            <div class="entry-stack">
+                                {% for extra_line in entry.continuation %}
+                                    <pre>{{ extra_line|escape }}</pre>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </article>
             {% empty %}
                 <div class="empty">No log entries matched the current filters.</div>
             {% endfor %}
