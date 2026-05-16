@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.conf import settings as django_settings
 from django.utils import timezone
 from .models import (
     AppNotification,
@@ -11,8 +12,6 @@ from .models import (
     PasswordlessLoginRequest,
 )
 
-
-@admin.register(EncryptedData)
 class EncryptedDataAdmin(admin.ModelAdmin):
     list_display = (
         "id",
@@ -41,8 +40,6 @@ class EncryptedDataAdmin(admin.ModelAdmin):
     def get_list_display_links(self, request, list_display):
         return ()
 
-
-@admin.register(SyncLog)
 class SyncLogAdmin(admin.ModelAdmin):
     list_display = (
         "user",
@@ -67,8 +64,6 @@ class SyncLogAdmin(admin.ModelAdmin):
     def get_list_display_links(self, request, list_display):
         return ()
 
-
-@admin.register(AccountTombstone)
 class AccountTombstoneAdmin(admin.ModelAdmin):
     list_display = (
         "user",
@@ -91,8 +86,6 @@ class AccountTombstoneAdmin(admin.ModelAdmin):
     def get_list_display_links(self, request, list_display):
         return ()
 
-
-@admin.register(DeleteOTPCode)
 class DeleteOTPCodeAdmin(admin.ModelAdmin):
     list_display = (
         "user",
@@ -145,9 +138,6 @@ class DeleteOTPCodeAdmin(admin.ModelAdmin):
 #     def get_list_display_links(self, request, list_display):
 #         return ()
 
-from django.contrib import admin
-
-@admin.register(BackupCodeSet)
 class BackupCodeSetAdmin(admin.ModelAdmin):
     list_display = (
         "user",
@@ -174,7 +164,6 @@ class BackupCodeSetAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-@admin.register(AppNotification)
 class AppNotificationAdmin(admin.ModelAdmin):
     list_display = (
         "user",
@@ -207,8 +196,6 @@ class AppNotificationAdmin(admin.ModelAdmin):
     def get_list_display_links(self, request, list_display):
         return ()
 
-
-@admin.register(DeviceSession)
 class DeviceSessionAdmin(admin.ModelAdmin):
     actions = ("mark_selected_session_as_primary",)
     list_display = (
@@ -300,8 +287,6 @@ class DeviceSessionAdmin(admin.ModelAdmin):
             level=messages.SUCCESS,
         )
 
-
-@admin.register(PasswordlessLoginRequest)
 class PasswordlessLoginRequestAdmin(admin.ModelAdmin):
     list_display = (
         "user",
@@ -341,3 +326,14 @@ class PasswordlessLoginRequestAdmin(admin.ModelAdmin):
 
     def get_list_display_links(self, request, list_display):
         return ()
+
+
+if django_settings.DEBUG:
+    admin.site.register(EncryptedData, EncryptedDataAdmin)
+    admin.site.register(SyncLog, SyncLogAdmin)
+    admin.site.register(AccountTombstone, AccountTombstoneAdmin)
+    admin.site.register(DeleteOTPCode, DeleteOTPCodeAdmin)
+    admin.site.register(BackupCodeSet, BackupCodeSetAdmin)
+    admin.site.register(AppNotification, AppNotificationAdmin)
+    admin.site.register(DeviceSession, DeviceSessionAdmin)
+    admin.site.register(PasswordlessLoginRequest, PasswordlessLoginRequestAdmin)

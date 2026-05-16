@@ -17,8 +17,8 @@ PORT="8002"
 DOMAIN="api.felixmokayabeatz.online"
 EMAIL="felixmokaya675@gmail.com"
 NGINX_SOURCE="$BACKEND_PATH/nginx/beatzlock.conf"
-NGINX_TARGET="/etc/nginx/sites-available/beatzlock.conf"
-NGINX_ENABLED="/etc/nginx/sites-enabled/beatzlock.conf"
+NGINX_TARGET="/etc/nginx/sites-available/beatzlock"
+NGINX_ENABLED="/etc/nginx/sites-enabled/beatzlock"
 
 # Superuser credentials
 SUPERUSER_USERNAME="felixmokayabeatz"

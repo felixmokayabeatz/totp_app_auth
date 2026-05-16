@@ -1,8 +1,11 @@
 from django.contrib import admin
+from django.conf import settings as django_settings
+from django.contrib.auth.models import Group, User
 from django.urls import path
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.admin.sites import NotRegistered
 
 from .views import log_viewer
 
@@ -28,3 +31,15 @@ def custom_get_urls():
 
 
 admin.site.get_urls = custom_get_urls
+
+
+def _safe_unregister(model):
+    try:
+        admin.site.unregister(model)
+    except NotRegistered:
+        pass
+
+
+if not django_settings.DEBUG:
+    _safe_unregister(User)
+    _safe_unregister(Group)

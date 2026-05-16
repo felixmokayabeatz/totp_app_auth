@@ -3,8 +3,6 @@ from .models import UserProfile
 from django.db import models
 from django.conf import settings as django_settings
 
-
-@admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = (
         "user",
@@ -74,3 +72,7 @@ class UserProfileAdmin(admin.ModelAdmin):
     # Disable editing entirely - view only
     def has_change_permission(self, request, obj=None):
         return False
+
+
+if django_settings.DEBUG:
+    admin.site.register(UserProfile, UserProfileAdmin)
