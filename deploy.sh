@@ -418,14 +418,39 @@ reload_nginx() {
 
 # Function to backup database
 backup_db() {
-    echo -e "${YELLOW}Backing up database...${NC}"
-    BACKUP_FILE="$APP_PATH/backup_$(date +%Y%m%d_%H%M%S).sql"
+    echo -e "${YELLOW}Backing up application data...${NC}"
+    BACKUP_STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
+    CURRENT_YEAR="$(date +%Y)"
+    CURRENT_WEEK="$(date +%V)"
+    BACKUP_DIR="$HOME/backups/$CURRENT_YEAR/week_$CURRENT_WEEK"
+    BACKUP_FILE="$BACKUP_DIR/totp_db_$BACKUP_STAMP.sqlite3"
+    MEDIA_BACKUP_FILE="$BACKUP_DIR/totp_media_$BACKUP_STAMP.tar.gz"
+    mkdir -p "$BACKUP_DIR"
     if [ -f "$BACKEND_PATH/db.sqlite3" ]; then
         sqlite3 $BACKEND_PATH/db.sqlite3 ".backup $BACKUP_FILE"
         echo -e "${GREEN}✓ Database backed up to: $BACKUP_FILE${NC}"
     else
         echo -e "${RED}✗ Database file not found${NC}"
     fi
+
+    if [ -d "$BACKEND_PATH/media" ]; then
+        tar -czf "$MEDIA_BACKUP_FILE" -C "$BACKEND_PATH/media" . 2>/dev/null || true
+        if [ -f "$MEDIA_BACKUP_FILE" ]; then
+            echo -e "${GREEN}âœ“ Media backed up to: $MEDIA_BACKUP_FILE${NC}"
+        else
+            echo -e "${YELLOW}! Media archive could not be created${NC}"
+        fi
+    else
+        echo -e "${YELLOW}! Media directory not found at: $BACKEND_PATH/media${NC}"
+    fi
+
+    (
+        cd "$BACKUP_DIR" || exit 0
+        ls -t totp_db_* 2>/dev/null | tail -n +2 | xargs rm -f 2>/dev/null || true
+        ls -t totp_media_* 2>/dev/null | tail -n +2 | xargs rm -f 2>/dev/null || true
+    )
+
+    echo -e "${GREEN}âœ“ Backup directory: $BACKUP_DIR${NC}"
 }
 
 # Main loop
