@@ -208,6 +208,12 @@
         color: var(--ops-text);
     }
 
+    .field select option,
+    .field select optgroup {
+        color: #101a2d;
+        background: #f4efe7;
+    }
+
     .field input::placeholder {
         color: #8095b1;
     }
@@ -359,13 +365,17 @@
 
     .entry-level {
         display: inline-flex;
+        align-items: center;
         justify-content: center;
+        align-self: start;
         min-height: 30px;
         padding: 0 10px;
+        margin: 0 auto;
         border-radius: 999px;
         font: 700 11px/1.4 Consolas, "Courier New", monospace;
         letter-spacing: 0.12em;
         text-transform: uppercase;
+        text-align: center;
         background: rgba(158, 178, 204, 0.12);
         color: var(--ops-text);
     }
