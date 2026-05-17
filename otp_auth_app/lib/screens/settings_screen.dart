@@ -1365,6 +1365,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             _dividerLine(),
             _tappableTile(
+              icon: Icons.language_rounded,
+              label: 'Website',
+              sub: 'Open example.com in your browser',
+              onTap: _openCreatorWebsite,
+            ),
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.code_rounded,
+              label: 'GitHub',
+              sub: 'View github.com/felixmokayabeatz',
+              onTap: _openCreatorGithub,
+            ),
+            _dividerLine(),
+            _tappableTile(
               icon: Icons.privacy_tip_outlined,
               label: 'Privacy Policy',
               sub: 'Read our privacy policy',
@@ -1931,6 +1945,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ? 'Opening the manual download page.'
               : 'Could not open the manual download page.',
         ),
+        backgroundColor: opened ? _accent : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Future<void> _openCreatorWebsite() {
+    return _openExternalLink(
+      title: 'Open Website?',
+      message:
+          'This will open example.com in your browser.',
+      successMessage: 'Opening FelixMokayabeatz website.',
+      failureMessage: 'Could not open the website.',
+      url: AppConfig.creatorWebsiteUrl,
+    );
+  }
+
+  Future<void> _openCreatorGithub() {
+    return _openExternalLink(
+      title: 'Open GitHub?',
+      message:
+          'This will open the FelixMokayabeatz GitHub profile in your browser.',
+      successMessage: 'Opening GitHub profile.',
+      failureMessage: 'Could not open the GitHub profile.',
+      url: AppConfig.creatorGithubUrl,
+    );
+  }
+
+  Future<void> _openExternalLink({
+    required String title,
+    required String message,
+    required String successMessage,
+    required String failureMessage,
+    required String url,
+  }) async {
+    final confirmed = await _confirmExternalBrowserLaunch(
+      title: title,
+      message: message,
+      continueLabel: 'Open Browser',
+    );
+    if (confirmed != true || !mounted) return;
+
+    final opened = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(opened ? successMessage : failureMessage),
         backgroundColor: opened ? _accent : Colors.red,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

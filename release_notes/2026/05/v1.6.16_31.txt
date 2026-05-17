@@ -1,0 +1,9 @@
+v1.6.16 (Build 31)
+
+What's New
+- Added direct Website and GitHub links in Settings > About for quicker access to FelixMokayabeatz online pages.
+- Improved passwordless sign-in so the remembered primary device can sign in directly again even after being logged out.
+- Added clearer guidance when another device requests passwordless approval while the primary device is signed out and cannot approve the request.
+- Added a Start again option on the passwordless waiting screen after expiry or failed approval states.
+- Fixed approval prompt and sync-unlock dialog issues that could glitch or overflow on larger screens and tablets.
+- Refined account lookup messaging so unavailable usernames now return a clearer account not available response.
