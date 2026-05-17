@@ -1489,28 +1489,31 @@ class _LoginScreenState extends State<LoginScreen> {
         builder: (dialogContext, setDialogState) => PopScope(
           canPop: false,
           child: AlertDialog(
+            scrollable: true,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Unlock Sync On This Device'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Passwordless sign-in was approved. Enter your account password once on this device to restore the encryption key and unlock synced OTPs, passwords, and secure text.',
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  enabled: !isSubmitting,
-                  decoration: InputDecoration(
-                    labelText: 'Account password',
-                    border: const OutlineInputBorder(),
-                    errorText: errorText,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Passwordless sign-in was approved. Enter your account password once on this device to restore the encryption key and unlock synced OTPs, passwords, and secure text.',
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    enabled: !isSubmitting,
+                    decoration: InputDecoration(
+                      labelText: 'Account password',
+                      border: const OutlineInputBorder(),
+                      errorText: errorText,
+                    ),
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -1569,6 +1572,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
 
+    await Future<void>.delayed(const Duration(milliseconds: 250));
     passwordController.dispose();
     return didUnlock;
   }
