@@ -9,10 +9,12 @@ class PasswordlessLoginScreen extends StatefulWidget {
     super.key,
     required this.username,
     this.passwordForSync,
+    this.initialResult,
   });
 
   final String username;
   final String? passwordForSync;
+  final Map<String, dynamic>? initialResult;
 
   @override
   State<PasswordlessLoginScreen> createState() =>
@@ -41,6 +43,11 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   @override
   void initState() {
     super.initState();
+    final initialResult = widget.initialResult;
+    if (initialResult != null) {
+      _consumeStartResult(initialResult);
+      return;
+    }
     _startFlow();
   }
 
@@ -55,6 +62,10 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       widget.username,
       password: widget.passwordForSync,
     );
+    _consumeStartResult(result);
+  }
+
+  void _consumeStartResult(Map<String, dynamic>? result) {
     if (!mounted) return;
 
     if (result == null) {
@@ -66,9 +77,30 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       return;
     }
 
+    final access = result['access']?.toString() ?? '';
+    final refresh = result['refresh']?.toString() ?? '';
+    if (result['success'] == true && access.isNotEmpty && refresh.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pop(context, result);
+      });
+      return;
+    }
+
+    final requestId = result['request_id']?.toString() ?? '';
+    if (requestId.isEmpty) {
+      setState(() {
+        _isStarting = false;
+        _errorMessage = result['error']?.toString() ??
+            _syncService.lastErrorMessage ??
+            'Passwordless sign-in could not be started.';
+      });
+      return;
+    }
+
     setState(() {
       _isStarting = false;
-      _requestId = result['request_id']?.toString();
+      _requestId = requestId;
       _code = result['verification_code']?.toString();
       _codeExpiresAt = DateTime.tryParse(
         result['code_expires_at']?.toString() ?? '',

@@ -253,6 +253,38 @@ def _expire_stale_passwordless_requests(user: User | None = None):
     )
 
 
+def _build_passwordless_authenticated_response(
+    user: User,
+    request,
+    *,
+    status_text: str,
+    message: str,
+    requires_password_for_sync: bool,
+):
+    refresh = RefreshToken.for_user(user)
+    session = attach_session_to_refresh_token(user, request, refresh)
+    create_sign_in_notification(user, session.device_label)
+    sync_unlock_message = (
+        'To unlock encrypted vault sync on this device, sign in once with your account password here later.'
+        if requires_password_for_sync
+        else ''
+    )
+    return Response(
+        {
+            'success': True,
+            'status': status_text,
+            'message': message,
+            'requires_password_for_sync': requires_password_for_sync,
+            'sync_unlock_message': sync_unlock_message,
+            'user': UserSerializer(user).data,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'is_primary_device': session.is_primary,
+            'primary_device_label': session.device_label if session.is_primary else '',
+        }
+    )
+
+
 def _expire_stale_bulk_delete_requests(user: User | None = None):
     queryset = BulkAccountDeleteRequest.objects.filter(
         status=BulkAccountDeleteRequest.STATUS_PENDING,
@@ -490,6 +522,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         username = (request.data.get('username') or '').strip()
         password = request.data.get('password') or ''
         device_id = get_request_device_id(request)
+        device_fingerprint = get_request_device_fingerprint(request)
         device_label = get_request_device_label(request)
         device_kind = get_request_device_kind(request)
 
@@ -522,6 +555,24 @@ class AuthViewSet(viewsets.GenericViewSet):
                     'fallback_to_password': True,
                 },
                 status=409,
+            )
+
+        current_session = find_active_device_session(
+            user,
+            device_id=device_id,
+            device_fingerprint=device_fingerprint,
+        )
+        if (
+            current_session is not None
+            and primary_session is not None
+            and str(current_session.id) == str(primary_session.id)
+        ):
+            return _build_passwordless_authenticated_response(
+                user,
+                request,
+                status_text='authenticated',
+                message='Signed in on your current primary device.',
+                requires_password_for_sync=not bool(password),
             )
 
         if primary_session.device_kind != DeviceSession.DEVICE_KIND_MOBILE:
@@ -607,24 +658,16 @@ class AuthViewSet(viewsets.GenericViewSet):
         if request_obj.status != PasswordlessLoginRequest.STATUS_APPROVED:
             return Response({'success': False, 'status': request_obj.status}, status=409)
 
-        refresh = RefreshToken.for_user(request_obj.user)
-        session = attach_session_to_refresh_token(request_obj.user, request, refresh)
-        create_sign_in_notification(request_obj.user, session.device_label)
         request_obj.status = PasswordlessLoginRequest.STATUS_COMPLETED
         request_obj.completed_at = timezone.now()
         request_obj.save(update_fields=['status', 'completed_at', 'updated_at'])
 
-        return Response(
-            {
-                'success': True,
-                'status': 'approved',
-                'message': 'Passwordless sign-in approved.',
-                'requires_password_for_sync': True,
-                'sync_unlock_message': 'To unlock encrypted vault sync on this new device, sign in once with your account password here later.',
-                'user': UserSerializer(request_obj.user).data,
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-            }
+        return _build_passwordless_authenticated_response(
+            request_obj.user,
+            request,
+            status_text='approved',
+            message='Passwordless sign-in approved.',
+            requires_password_for_sync=True,
         )
 
     @action(detail=False, methods=['post'], url_path='recover-primary-device')

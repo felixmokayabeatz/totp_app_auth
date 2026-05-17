@@ -2219,14 +2219,28 @@ class SyncService {
         'device_kind': _deviceKind(),
       });
       if (response.statusCode == 200 || response.statusCode == 201) {
-        return Map<String, dynamic>.from(response.data as Map);
+        final data = Map<String, dynamic>.from(response.data as Map);
+        final access = data['access']?.toString() ?? '';
+        final refresh = data['refresh']?.toString() ?? '';
+        if (data['success'] == true &&
+            access.isNotEmpty &&
+            refresh.isNotEmpty) {
+          await _applyAuthenticatedResponse(
+            data,
+            password: password,
+            enableSyncByDefault: password != null && password.isNotEmpty,
+          );
+        }
+        return data;
       }
       _lastErrorMessage = 'Passwordless sign-in could not be started.';
       return null;
     } on DioException catch (e) {
       _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Passwordless sign-in could not be started.';
-      return null;
+      return e.response?.data is Map
+          ? Map<String, dynamic>.from(e.response!.data as Map)
+          : null;
     } catch (e) {
       _lastErrorMessage = 'Passwordless sign-in could not be started.';
       return null;

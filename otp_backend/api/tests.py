@@ -322,6 +322,49 @@ class PasswordlessLoginFlowTests(APITestCase):
             PasswordlessLoginRequest.objects.filter(user=self.user).exists()
         )
 
+    def test_passwordless_start_signs_in_immediately_on_current_primary_device(self):
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['status'], 'authenticated')
+        self.assertTrue(response.data['requires_password_for_sync'])
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+        self.assertFalse(
+            PasswordlessLoginRequest.objects.filter(user=self.user).exists()
+        )
+
+    def test_passwordless_start_on_current_primary_device_with_password_unlocks_sync(self):
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {
+                'username': self.user.username,
+                'password': 'testpass123',
+            },
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['status'], 'authenticated')
+        self.assertFalse(response.data['requires_password_for_sync'])
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+        self.assertFalse(
+            PasswordlessLoginRequest.objects.filter(user=self.user).exists()
+        )
+
     def test_passwordless_start_falls_back_when_primary_is_not_mobile(self):
         self.primary_session.device_kind = DeviceSession.DEVICE_KIND_DESKTOP
         self.primary_session.save(update_fields=['device_kind', 'updated_at'])

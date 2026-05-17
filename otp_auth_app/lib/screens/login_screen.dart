@@ -9,6 +9,13 @@ import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
+enum _PasswordlessLoginOutcome {
+  approved,
+  cancelled,
+  fallbackToPassword,
+  failed,
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, this.returnToPreviousOnOffline = false});
 
@@ -1226,12 +1233,16 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
       });
 
-      final passwordlessApproved = await _startPasswordlessLogin(
+      final passwordlessOutcome = await _startPasswordlessLogin(
         passwordForSync: password,
         showFallbackMessage: false,
       );
       if (!mounted) return;
-      if (passwordlessApproved) {
+      if (passwordlessOutcome == _PasswordlessLoginOutcome.approved) {
+        return;
+      }
+      if (passwordlessOutcome == _PasswordlessLoginOutcome.cancelled ||
+          passwordlessOutcome == _PasswordlessLoginOutcome.failed) {
         return;
       }
 
@@ -1331,7 +1342,48 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<bool> _startPasswordlessLogin({
+  bool _passwordlessResultHasAuthenticatedSession(
+    Map<String, dynamic> result,
+  ) {
+    final access = result['access']?.toString() ?? '';
+    final refresh = result['refresh']?.toString() ?? '';
+    return result['success'] == true &&
+        access.isNotEmpty &&
+        refresh.isNotEmpty;
+  }
+
+  Future<void> _completePasswordlessSession(
+    Map<String, dynamic> result, {
+    String? effectivePassword,
+  }) async {
+    final needsSyncUnlock = result['requires_password_for_sync'] == true &&
+        (effectivePassword == null || effectivePassword.isEmpty);
+    var syncUnlockedNow = false;
+    if (needsSyncUnlock) {
+      syncUnlockedNow = await _promptToUnlockSyncAfterPasswordless();
+      if (!mounted) return;
+    }
+
+    _showSuccess(
+      syncUnlockedNow
+          ? 'Passwordless sign-in approved and sync unlocked on this device.'
+          : (() {
+              final syncMessage =
+                  result['sync_unlock_message']?.toString().trim() ?? '';
+              if (syncMessage.isNotEmpty) {
+                return syncMessage;
+              }
+              final message = result['message']?.toString().trim() ?? '';
+              if (message.isNotEmpty) {
+                return message;
+              }
+              return 'Passwordless sign-in approved.';
+            })(),
+    );
+    await _completeAuthenticatedSession();
+  }
+
+  Future<_PasswordlessLoginOutcome> _startPasswordlessLogin({
     String? passwordForSync,
     bool showFallbackMessage = true,
   }) async {
@@ -1340,7 +1392,54 @@ class _LoginScreenState extends State<LoginScreen> {
         (_passwordController.text.isEmpty ? null : _passwordController.text);
     if (username.isEmpty) {
       _showError('Enter your username first');
-      return false;
+      return _PasswordlessLoginOutcome.failed;
+    }
+
+    final startResult = await _syncService.startPasswordlessLogin(
+      username,
+      password: effectivePassword,
+    );
+    if (!mounted) {
+      return _PasswordlessLoginOutcome.failed;
+    }
+
+    if (startResult == null) {
+      if (showFallbackMessage && mounted) {
+        final fallbackMessage = _syncService.lastErrorMessage;
+        if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
+          _showError(fallbackMessage);
+        }
+      }
+      return _PasswordlessLoginOutcome.failed;
+    }
+
+    if (_passwordlessResultHasAuthenticatedSession(startResult)) {
+      await _completePasswordlessSession(
+        startResult,
+        effectivePassword: effectivePassword,
+      );
+      return _PasswordlessLoginOutcome.approved;
+    }
+
+    if (startResult['fallback_to_password'] == true) {
+      if (showFallbackMessage) {
+        final fallbackMessage = startResult['error']?.toString() ??
+            _syncService.lastErrorMessage;
+        if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
+          _showError(fallbackMessage);
+        }
+      }
+      return _PasswordlessLoginOutcome.fallbackToPassword;
+    }
+
+    final requestId = startResult['request_id']?.toString() ?? '';
+    if (requestId.isEmpty) {
+      final fallbackMessage = startResult['error']?.toString() ??
+          _syncService.lastErrorMessage;
+      if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
+        _showError(fallbackMessage);
+      }
+      return _PasswordlessLoginOutcome.failed;
     }
 
     final result = await Navigator.push<Map<String, dynamic>?>(
@@ -1349,35 +1448,32 @@ class _LoginScreenState extends State<LoginScreen> {
         builder: (_) => PasswordlessLoginScreen(
           username: username,
           passwordForSync: effectivePassword,
+          initialResult: startResult,
         ),
       ),
     );
-    if (!mounted || result == null) {
-      if (showFallbackMessage && mounted) {
-        final fallbackMessage = _syncService.lastErrorMessage;
-        if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
-          _showError(fallbackMessage);
-        }
+    if (!mounted) {
+      return _PasswordlessLoginOutcome.failed;
+    }
+    if (result == null) {
+      return _PasswordlessLoginOutcome.cancelled;
+    }
+    if (_passwordlessResultHasAuthenticatedSession(result)) {
+      await _completePasswordlessSession(
+        result,
+        effectivePassword: effectivePassword,
+      );
+      return _PasswordlessLoginOutcome.approved;
+    }
+
+    if (showFallbackMessage) {
+      final fallbackMessage = result['error']?.toString() ??
+          _syncService.lastErrorMessage;
+      if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
+        _showError(fallbackMessage);
       }
-      return false;
     }
-
-    final needsSyncUnlock = result['requires_password_for_sync'] == true &&
-        (effectivePassword == null || effectivePassword.isEmpty);
-    var syncUnlockedNow = false;
-    if (needsSyncUnlock) {
-      syncUnlockedNow = await _promptToUnlockSyncAfterPasswordless();
-      if (!mounted) return false;
-    }
-
-    _showSuccess(
-      syncUnlockedNow
-          ? 'Passwordless sign-in approved and sync unlocked on this device.'
-          : (result['sync_unlock_message']?.toString() ??
-              'Passwordless sign-in approved.'),
-    );
-    await _completeAuthenticatedSession();
-    return true;
+    return _PasswordlessLoginOutcome.failed;
   }
 
   Future<bool> _promptToUnlockSyncAfterPasswordless() async {
