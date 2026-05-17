@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_selector_windows/file_selector_windows.dart';
 import 'package:flutter/services.dart';
@@ -50,15 +49,15 @@ class ImportFilePickerService {
   }
 
   Future<PickedImportFile?> _pickAndroidImportFile(String methodName) async {
-    final payload =
-        await _channel.invokeMapMethod<String, dynamic>(methodName);
+    final payload = await _channel.invokeMapMethod<String, dynamic>(methodName);
     if (payload == null) return null;
 
     final fileName = payload['fileName']?.toString().trim();
     final mimeType = payload['mimeType']?.toString().trim() ?? '';
     final bytes = _asBytes(payload['bytes']);
     return PickedImportFile(
-      fileName: (fileName == null || fileName.isEmpty) ? 'import.txt' : fileName,
+      fileName:
+          (fileName == null || fileName.isEmpty) ? 'import.txt' : fileName,
       mimeType: mimeType,
       content: _decodeText(bytes),
     );

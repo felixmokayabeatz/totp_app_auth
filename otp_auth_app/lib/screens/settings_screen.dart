@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -53,7 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isInstallingUpdate = false;
   bool _isDownloadingBackupCodes = false;
   bool _isLoadingBackupCodeStatus = false;
-bool _isLoadingVaultRestorePoints = false;
+  bool _isLoadingVaultRestorePoints = false;
   bool _syncEnabled = false;
   String _appVersionLabel = '...';
   String? _profilePhotoUrl;
@@ -447,6 +447,7 @@ bool _isLoadingVaultRestorePoints = false;
       final signedIn = await _syncService.isLoggedIn();
       final currentSession =
           signedIn ? await _syncService.getCurrentDeviceSession() : null;
+      if (!mounted) return;
       final isPrimaryDevice = !signedIn || currentSession?.isPrimary == true;
 
       _dismissVaultRestorePointsLoadingDialog();
@@ -467,6 +468,7 @@ bool _isLoadingVaultRestorePoints = false;
 
       final visibleSnapshots = List<OtpVaultSnapshotInfo>.from(snapshots);
 
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
@@ -577,18 +579,22 @@ bool _isLoadingVaultRestorePoints = false;
                                     onPressed: (!signedIn || isPrimaryDevice)
                                         ? () async {
                                             final deleted =
-                                                await _deleteOtpSnapshot(snapshot);
-                                            if (!deleted || !dialogContext.mounted) {
+                                                await _deleteOtpSnapshot(
+                                                    snapshot);
+                                            if (!deleted ||
+                                                !dialogContext.mounted) {
                                               return;
                                             }
                                             setDialogState(() {
                                               visibleSnapshots.removeWhere(
-                                                (item) => item.id == snapshot.id,
+                                                (item) =>
+                                                    item.id == snapshot.id,
                                               );
                                             });
                                           }
                                         : null,
-                                    icon: const Icon(Icons.delete_outline_rounded),
+                                    icon: const Icon(
+                                        Icons.delete_outline_rounded),
                                     label: const Text('Delete'),
                                   ),
                                 ],
@@ -702,6 +708,7 @@ bool _isLoadingVaultRestorePoints = false;
       ),
     );
   }
+
   Future<void> _createManualVaultRestorePoint() async {
     final authenticated = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !authenticated) return;
@@ -767,13 +774,14 @@ bool _isLoadingVaultRestorePoints = false;
       }
     }
 
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
-        title:
-            Text('Restore Vault Snapshot', style: TextStyle(color: _textPrimary)),
+        title: Text('Restore Vault Snapshot',
+            style: TextStyle(color: _textPrimary)),
         content: Text(
           'Restore your vault to ${_formatSnapshotDate(snapshot.createdAt)}? '
           'This will replace the current OTP accounts and password entries on this device.',
@@ -818,8 +826,8 @@ bool _isLoadingVaultRestorePoints = false;
       return;
     }
 
-    final syncEnabled = await _syncService.isLoggedIn() &&
-        await _syncService.isSyncEnabled();
+    final syncEnabled =
+        await _syncService.isLoggedIn() && await _syncService.isSyncEnabled();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -830,10 +838,9 @@ bool _isLoadingVaultRestorePoints = false;
                   : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
               : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
         ),
-        backgroundColor:
-            (!syncEnabled || result.syncedToCloud)
-                ? const Color(0xFF10B981)
-                : Colors.orange,
+        backgroundColor: (!syncEnabled || result.syncedToCloud)
+            ? const Color(0xFF10B981)
+            : Colors.orange,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -866,6 +873,7 @@ bool _isLoadingVaultRestorePoints = false;
       }
     }
 
+    if (!mounted) return false;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -921,6 +929,7 @@ bool _isLoadingVaultRestorePoints = false;
     );
     return deleted;
   }
+
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
@@ -1271,7 +1280,8 @@ bool _isLoadingVaultRestorePoints = false;
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: const Text('This device is now your primary device.'),
+                    content:
+                        const Text('This device is now your primary device.'),
                     backgroundColor: const Color(0xFF10B981),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -2193,8 +2203,8 @@ bool _isLoadingVaultRestorePoints = false;
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: _cardColor,
-          title:
-              Text('Import OTP Accounts', style: TextStyle(color: _textPrimary)),
+          title: Text('Import OTP Accounts',
+              style: TextStyle(color: _textPrimary)),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -2357,7 +2367,8 @@ bool _isLoadingVaultRestorePoints = false;
           ),
           actions: [
             TextButton(
-              onPressed: isImporting ? null : () => Navigator.pop(dialogContext),
+              onPressed:
+                  isImporting ? null : () => Navigator.pop(dialogContext),
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
             ElevatedButton(
@@ -2422,7 +2433,8 @@ bool _isLoadingVaultRestorePoints = false;
     final userBox = await _syncService.getUserBox();
     final isSignedIn = await _syncService.isLoggedIn();
     final existingKeys = userBox.values
-        .map((account) => _otpIdentityKey(account.service, account.accountLabel))
+        .map(
+            (account) => _otpIdentityKey(account.service, account.accountLabel))
         .toSet();
     var importedCount = 0;
     var skippedCount = 0;
@@ -2470,10 +2482,7 @@ bool _isLoadingVaultRestorePoints = false;
   String _otpIdentityKey(String service, String? accountLabel) {
     return [
       service.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
-      (accountLabel ?? '')
-          .trim()
-          .toLowerCase()
-          .replaceAll(RegExp(r'\s+'), ' '),
+      (accountLabel ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
     ].join('|');
   }
 
@@ -2725,9 +2734,11 @@ bool _isLoadingVaultRestorePoints = false;
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: _cardColor,
-          title: Text('Confirm Deletion', style: TextStyle(color: _textPrimary)),
+          title:
+              Text('Confirm Deletion', style: TextStyle(color: _textPrimary)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -2780,7 +2791,8 @@ bool _isLoadingVaultRestorePoints = false;
               onPressed: () async {
                 final code = otpCode.trim();
                 if (code.length != 6) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(
+                  ScaffoldMessenger.of(dialogContext)
+                      .showSnackBar(const SnackBar(
                     content: Text('Enter the 6-digit code'),
                     backgroundColor: Colors.red,
                   ));
@@ -4137,4 +4149,3 @@ class _ImportResult {
   final int skippedCount;
   final String message;
 }
-

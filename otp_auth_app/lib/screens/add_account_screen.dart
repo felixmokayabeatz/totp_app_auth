@@ -416,13 +416,15 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     final isSignedIn = await syncService.isLoggedIn();
     final shouldSync = isSignedIn && await syncService.isSyncEnabled();
     final existingKeys = userBox.values
-        .map((account) => _accountIdentityKey(account.service, account.accountLabel))
+        .map((account) =>
+            _accountIdentityKey(account.service, account.accountLabel))
         .toSet();
     var importedCount = 0;
     var skippedCount = 0;
 
     for (final entry in entries) {
-      final identityKey = _accountIdentityKey(entry.service, entry.accountLabel);
+      final identityKey =
+          _accountIdentityKey(entry.service, entry.accountLabel);
       if (existingKeys.contains(identityKey)) {
         skippedCount++;
         continue;

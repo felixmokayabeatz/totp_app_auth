@@ -108,6 +108,13 @@ class SyncService {
   String _normalizeAuthError(String message, {int? statusCode}) {
     final normalized = message.toLowerCase();
 
+    if (statusCode == 404 &&
+        (normalized.contains('no account was found for that username') ||
+            normalized.contains('user not found') ||
+            normalized.contains('account not available'))) {
+      return 'Account not available.';
+    }
+
     if (statusCode == 401 ||
         normalized.contains('invalid credential') ||
         normalized.contains('invalid username or password') ||
@@ -669,8 +676,8 @@ class SyncService {
     }
 
     try {
-      final rawId =
-          await _deviceIdentityChannel.invokeMethod<String>('getStableDeviceId');
+      final rawId = await _deviceIdentityChannel
+          .invokeMethod<String>('getStableDeviceId');
       final cleaned = rawId?.trim() ?? '';
       if (cleaned.isEmpty) {
         return null;
@@ -1622,7 +1629,8 @@ class SyncService {
     final token =
         await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
-      _lastErrorMessage = 'You need to be signed in to restore synced accounts.';
+      _lastErrorMessage =
+          'You need to be signed in to restore synced accounts.';
       return false;
     }
 
@@ -1679,7 +1687,8 @@ class SyncService {
       try {
         final existing = await getEncryptedSyncData('otp_accounts');
         if (existing != null) {
-          cloudVersion = int.tryParse(existing['version']?.toString() ?? '0') ?? 0;
+          cloudVersion =
+              int.tryParse(existing['version']?.toString() ?? '0') ?? 0;
         }
       } catch (_) {}
 
@@ -3445,7 +3454,8 @@ class SyncService {
         ),
       );
       if (response.statusCode == 200 && response.data is Map) {
-        return int.tryParse(response.data['cleared_count']?.toString() ?? '0') ??
+        return int.tryParse(
+                response.data['cleared_count']?.toString() ?? '0') ??
             0;
       }
       _lastErrorMessage = 'Could not clear the sign-in logs.';
@@ -3467,8 +3477,7 @@ class SyncService {
     final token =
         await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
-      _lastErrorMessage =
-          'You need to be signed in to review delete requests.';
+      _lastErrorMessage = 'You need to be signed in to review delete requests.';
       return const [];
     }
 
@@ -3559,7 +3568,8 @@ class SyncService {
     final token =
         await _secureStorage.read(SecureStorageService.accessTokenKey);
     if (token == null || token.isEmpty) {
-      _lastErrorMessage = 'You need to be signed in to approve delete requests.';
+      _lastErrorMessage =
+          'You need to be signed in to approve delete requests.';
       return null;
     }
 

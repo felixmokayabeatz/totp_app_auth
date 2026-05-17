@@ -57,6 +57,23 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
     super.dispose();
   }
 
+  Future<void> _restartFlow() async {
+    _pollTimer?.cancel();
+    if (!mounted) return;
+
+    setState(() {
+      _isStarting = true;
+      _isPolling = false;
+      _requestId = null;
+      _code = null;
+      _codeExpiresAt = null;
+      _errorMessage = null;
+      _statusMessage = 'Starting passwordless sign-in...';
+    });
+
+    await _startFlow();
+  }
+
   Future<void> _startFlow() async {
     final result = await _syncService.startPasswordlessLogin(
       widget.username,
@@ -277,13 +294,28 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                     ],
                     const SizedBox(height: 18),
                     if (_errorMessage != null)
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _accent,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Back to login'),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          OutlinedButton(
+                            onPressed: _restartFlow,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _accent,
+                              side: BorderSide(color: _accent),
+                            ),
+                            child: const Text('Start again'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _accent,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Back to login'),
+                          ),
+                        ],
                       )
                     else
                       TextButton(

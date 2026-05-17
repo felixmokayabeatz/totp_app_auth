@@ -257,10 +257,11 @@ class _HomeScreenState extends State<HomeScreen>
           (session) => session?.isCurrent == true,
           orElse: () => null,
         );
-    final canShowBulkDelete = currentSession != null && currentSession.isPrimary;
+    final canShowBulkDelete =
+        currentSession != null && currentSession.isPrimary;
     final canShowPasswordless = canShowBulkDelete &&
         (Platform.isAndroid || Platform.isIOS) &&
-        currentSession!.deviceKind == 'mobile';
+        currentSession.deviceKind == 'mobile';
 
     setState(() {
       _canShowPasswordlessPrompt = canShowPasswordless;
@@ -284,9 +285,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _pollPasswordlessApprovalRequests() async {
-    if (!mounted ||
-        !_canShowPasswordlessPrompt ||
-        _isShowingApprovalPrompt) {
+    if (!mounted || !_canShowPasswordlessPrompt || _isShowingApprovalPrompt) {
       return;
     }
 
@@ -614,10 +613,9 @@ class _HomeScreenState extends State<HomeScreen>
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor:
-            Theme.of(dialogContext).brightness == Brightness.dark
-                ? const Color(0xFF1E1E32)
-                : Colors.white,
+        backgroundColor: Theme.of(dialogContext).brightness == Brightness.dark
+            ? const Color(0xFF1E1E32)
+            : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('OTP delete approval request'),
         content: Column(
@@ -671,6 +669,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     if (approved == null) return;
+    if (!mounted) return;
 
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
@@ -725,10 +724,9 @@ class _HomeScreenState extends State<HomeScreen>
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor:
-            Theme.of(dialogContext).brightness == Brightness.dark
-                ? const Color(0xFF1E1E32)
-                : Colors.white,
+        backgroundColor: Theme.of(dialogContext).brightness == Brightness.dark
+            ? const Color(0xFF1E1E32)
+            : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Recovery Codes PDF Approval'),
         content: Column(
@@ -769,6 +767,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     if (approved == null) return;
+    if (!mounted) return;
 
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
@@ -863,7 +862,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _checkBackupCodeRequirement() async {
-    if (!mounted || _isShowingApprovalPrompt || _isShowingBackupCodeRequirementDialog) {
+    if (!mounted ||
+        _isShowingApprovalPrompt ||
+        _isShowingBackupCodeRequirementDialog) {
       return;
     }
 
@@ -969,8 +970,7 @@ class _HomeScreenState extends State<HomeScreen>
         if (!mounted) return;
 
         if (action == 'download') {
-          final unlocked =
-              await _appLockService.authenticateToUnlock(context);
+          final unlocked = await _appLockService.authenticateToUnlock(context);
           if (!mounted || !unlocked) return;
 
           final savedPath = await _runWithBlockingProgress<String?>(
@@ -2015,11 +2015,11 @@ class _HomeScreenState extends State<HomeScreen>
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor:
-              Theme.of(dialogContext).brightness == Brightness.dark
-                  ? const Color(0xFF1E1E32)
-                  : Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Theme.of(dialogContext).brightness == Brightness.dark
+              ? const Color(0xFF1E1E32)
+              : Colors.white,
           title: const Text('Confirm OTP deletion'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2207,8 +2207,7 @@ class _HomeScreenState extends State<HomeScreen>
                         onPressed: () {
                           final today = DateTime(now.year, now.month, now.day);
                           setDialogState(() {
-                            startDate =
-                                today.subtract(const Duration(days: 6));
+                            startDate = today.subtract(const Duration(days: 6));
                             endDate = today;
                           });
                         },
@@ -2709,21 +2708,21 @@ class _HomeScreenState extends State<HomeScreen>
                     'Type "DELETE" below to confirm:',
                     style: TextStyle(color: textSecondary, fontSize: 12),
                   ),
-                   const SizedBox(height: 8),
-                   TextField(
-                     onChanged: (value) {
-                       setState(() {
-                         confirmationText = value;
-                       });
-                     },
-                     textAlign: TextAlign.center,
-                     style: TextStyle(
-                       fontSize: 18,
-                       fontWeight: FontWeight.bold,
-                       color: confirmationText.trim().toUpperCase() == 'DELETE'
-                           ? Colors.red
-                           : textPrimary,
-                     ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    onChanged: (value) {
+                      setState(() {
+                        confirmationText = value;
+                      });
+                    },
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: confirmationText.trim().toUpperCase() == 'DELETE'
+                          ? Colors.red
+                          : textPrimary,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Type DELETE here',
                       hintStyle: TextStyle(color: textSecondary, fontSize: 14),

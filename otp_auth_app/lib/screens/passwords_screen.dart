@@ -100,7 +100,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: _cardColor,
           title: Text(title, style: TextStyle(color: _textPrimary)),
           content: Column(
@@ -738,7 +739,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
           final requiresPhrase = deleteAll;
-          final validPhrase = confirmationText.trim().toUpperCase() == 'DELETE ALL';
+          final validPhrase =
+              confirmationText.trim().toUpperCase() == 'DELETE ALL';
           final canDelete = acknowledged && (!requiresPhrase || validPhrase);
 
           return AlertDialog(

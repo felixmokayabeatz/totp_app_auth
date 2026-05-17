@@ -341,6 +341,19 @@ class PasswordlessLoginFlowTests(APITestCase):
             PasswordlessLoginRequest.objects.filter(user=self.user).exists()
         )
 
+    def test_passwordless_start_returns_account_not_available_for_unknown_username(self):
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': 'missing-user'},
+            format='json',
+            HTTP_X_DEVICE_ID='ghost-device',
+            HTTP_X_DEVICE_LABEL='Ghost Device',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error'], 'Account not available.')
+
     def test_passwordless_start_signs_in_immediately_on_current_primary_device(self):
         response = self.request_client.post(
             reverse('auth-passwordless-start'),

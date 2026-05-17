@@ -34,7 +34,8 @@ class _PasswordlessRequestsScreenState
   Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
-  int get _removableLogCount => _requests.where((item) => !_isPending(item)).length;
+  int get _removableLogCount =>
+      _requests.where((item) => !_isPending(item)).length;
 
   @override
   void initState() {
@@ -216,7 +217,8 @@ class _PasswordlessRequestsScreenState
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Sign-in Log', style: TextStyle(color: _textPrimary)),
+        title:
+            Text('Delete Sign-in Log', style: TextStyle(color: _textPrimary)),
         content: Text(
           'Delete the encrypted sign-in approval log for $label?',
           style: TextStyle(color: _textSecondary),
@@ -239,6 +241,7 @@ class _PasswordlessRequestsScreenState
     );
 
     if (confirmed != true) return;
+    if (!mounted) return;
 
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
@@ -272,7 +275,8 @@ class _PasswordlessRequestsScreenState
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Clear Sign-in Logs', style: TextStyle(color: _textPrimary)),
+        title:
+            Text('Clear Sign-in Logs', style: TextStyle(color: _textPrimary)),
         content: Text(
           'Clear all encrypted sign-in approval logs while keeping any still-pending requests?',
           style: TextStyle(color: _textSecondary),
@@ -295,6 +299,7 @@ class _PasswordlessRequestsScreenState
     );
 
     if (confirmed != true) return;
+    if (!mounted) return;
 
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;

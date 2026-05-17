@@ -218,9 +218,8 @@ class OtpVaultSnapshotService {
         password: entry['encrypted_password']?.toString() ?? '',
         serverIP: entry['server_ip']?.toString(),
         createdAt: createdAt,
-        updatedAt:
-            DateTime.tryParse(entry['updated_at']?.toString() ?? '') ??
-                createdAt,
+        updatedAt: DateTime.tryParse(entry['updated_at']?.toString() ?? '') ??
+            createdAt,
       );
       final encryptedNote = entry['encrypted_note']?.toString();
       restored.encryptedNote =
@@ -274,7 +273,8 @@ class OtpVaultSnapshotService {
     final snapshotBox = await _openSnapshotBox();
     return snapshotBox.values
         .whereType<Map>()
-        .map((item) => _SnapshotRecord.fromMap(Map<dynamic, dynamic>.from(item)))
+        .map(
+            (item) => _SnapshotRecord.fromMap(Map<dynamic, dynamic>.from(item)))
         .where((record) => record.boxName == boxName)
         .toList();
   }
@@ -354,7 +354,8 @@ class OtpVaultSnapshotService {
     }
 
     final records = await _recordsForCurrentVault();
-    final payload = records.map((record) => record.toMap()).toList(growable: false);
+    final payload =
+        records.map((record) => record.toMap()).toList(growable: false);
     final encrypted = EncryptionService.simpleEncrypt(
       jsonEncode(payload),
       encryptionKey,
@@ -382,7 +383,8 @@ class OtpVaultSnapshotService {
     final snapshotBox = await _openSnapshotBox();
     final records = snapshotBox.values
         .whereType<Map>()
-        .map((item) => _SnapshotRecord.fromMap(Map<dynamic, dynamic>.from(item)))
+        .map(
+            (item) => _SnapshotRecord.fromMap(Map<dynamic, dynamic>.from(item)))
         .where((record) => record.boxName == boxName)
         .toList();
     if (records.isEmpty) {
@@ -498,8 +500,8 @@ class _SnapshotRecord {
       id: raw['id']?.toString() ?? '',
       boxName: raw['box_name']?.toString() ?? '',
       createdAt: createdAt.toUtc(),
-      otpAccountCount:
-          int.tryParse(raw['account_count']?.toString() ?? '') ?? accounts.length,
+      otpAccountCount: int.tryParse(raw['account_count']?.toString() ?? '') ??
+          accounts.length,
       passwordEntryCount:
           int.tryParse(raw['password_count']?.toString() ?? '') ??
               passwordEntries.length,

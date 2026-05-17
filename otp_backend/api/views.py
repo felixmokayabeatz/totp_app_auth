@@ -533,7 +533,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         try:
             user = User.objects.get(username__iexact=username)
         except User.DoesNotExist:
-            return Response({'error': 'No account was found for that username.'}, status=404)
+            return Response({'error': 'Account not available.'}, status=404)
 
         if password:
             authenticated_user = authenticate(username=user.username, password=password)

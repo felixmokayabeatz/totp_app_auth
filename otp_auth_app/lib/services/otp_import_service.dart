@@ -268,7 +268,9 @@ class OTPImportService {
       } else if (!inQuotes && (char == '\n' || char == '\r')) {
         cells.add(current.toString());
         current.clear();
-        if (char == '\r' && index + 1 < input.length && input[index + 1] == '\n') {
+        if (char == '\r' &&
+            index + 1 < input.length &&
+            input[index + 1] == '\n') {
           index++;
         }
         records.add(List<String>.from(cells));
@@ -394,7 +396,8 @@ class OTPImportService {
       return rawItems
           .whereType<Map>()
           .expand(_entriesFromJsonItem)
-          .where((entry) => entry.service.isNotEmpty && _isBase32Secret(entry.secret))
+          .where((entry) =>
+              entry.service.isNotEmpty && _isBase32Secret(entry.secret))
           .toList();
     } catch (_) {
       return const [];

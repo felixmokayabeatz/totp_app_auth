@@ -1347,9 +1347,7 @@ class _LoginScreenState extends State<LoginScreen> {
   ) {
     final access = result['access']?.toString() ?? '';
     final refresh = result['refresh']?.toString() ?? '';
-    return result['success'] == true &&
-        access.isNotEmpty &&
-        refresh.isNotEmpty;
+    return result['success'] == true && access.isNotEmpty && refresh.isNotEmpty;
   }
 
   Future<void> _completePasswordlessSession(
@@ -1423,8 +1421,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (startResult['fallback_to_password'] == true) {
       if (showFallbackMessage) {
-        final fallbackMessage = startResult['error']?.toString() ??
-            _syncService.lastErrorMessage;
+        final fallbackMessage =
+            startResult['error']?.toString() ?? _syncService.lastErrorMessage;
         if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
           _showError(fallbackMessage);
         }
@@ -1434,8 +1432,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final requestId = startResult['request_id']?.toString() ?? '';
     if (requestId.isEmpty) {
-      final fallbackMessage = startResult['error']?.toString() ??
-          _syncService.lastErrorMessage;
+      final fallbackMessage =
+          startResult['error']?.toString() ?? _syncService.lastErrorMessage;
       if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
         _showError(fallbackMessage);
       }
@@ -1467,8 +1465,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (showFallbackMessage) {
-      final fallbackMessage = result['error']?.toString() ??
-          _syncService.lastErrorMessage;
+      final fallbackMessage =
+          result['error']?.toString() ?? _syncService.lastErrorMessage;
       if (fallbackMessage != null && fallbackMessage.trim().isNotEmpty) {
         _showError(fallbackMessage);
       }
@@ -1517,9 +1515,8 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () => Navigator.pop(dialogContext),
+                onPressed:
+                    isSubmitting ? null : () => Navigator.pop(dialogContext),
                 child: const Text('Continue without sync'),
               ),
               FilledButton(
