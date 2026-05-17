@@ -69,6 +69,7 @@ from .device_sessions import (
     ensure_device_session,
     extract_request_ip,
     find_active_device_session,
+    find_known_device_session,
     get_request_device_id,
     get_request_device_fingerprint,
     get_request_device_kind,
@@ -548,7 +549,7 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         _expire_stale_passwordless_requests(user)
         primary_session = ensure_primary_session(user)
-        if primary_session is None or not primary_session.is_active:
+        if primary_session is None:
             return Response(
                 {
                     'error': 'Passwordless sign-in is not available for this account yet. Use your normal password sign-in on this device.',
@@ -557,7 +558,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 status=409,
             )
 
-        current_session = find_active_device_session(
+        current_session = find_known_device_session(
             user,
             device_id=device_id,
             device_fingerprint=device_fingerprint,
@@ -573,6 +574,21 @@ class AuthViewSet(viewsets.GenericViewSet):
                 status_text='authenticated',
                 message='Signed in on your current primary device.',
                 requires_password_for_sync=not bool(password),
+            )
+
+        if primary_session is not None and not primary_session.is_active:
+            primary_label = primary_session.device_label or 'your primary device'
+            return Response(
+                {
+                    'error': (
+                        f'{primary_label} is currently signed out, so it cannot approve '
+                        'passwordless sign-ins right now. Sign in on that primary device first, '
+                        'or continue here with your password plus email or recovery-code verification.'
+                    ),
+                    'fallback_to_password': True,
+                    'primary_device_label': primary_label,
+                },
+                status=409,
             )
 
         if primary_session.device_kind != DeviceSession.DEVICE_KIND_MOBILE:
@@ -2149,10 +2165,14 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
 
         if current_session is not None:
             current_session.is_active = False
-            current_session.is_primary = False
             current_session.revoked_at = timezone.now()
-            current_session.save(update_fields=['is_active', 'is_primary', 'revoked_at', 'updated_at'])
-            ensure_primary_session(request.user)
+            current_session.save(
+                update_fields=[
+                    'is_active',
+                    'revoked_at',
+                    'updated_at',
+                ]
+            )
 
         return Response({'success': True})
 

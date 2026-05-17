@@ -103,6 +103,40 @@ def find_active_device_session(
     return None
 
 
+def find_known_device_session(
+    user: User,
+    *,
+    device_id: str = '',
+    device_fingerprint: str = '',
+) -> DeviceSession | None:
+    active_session = find_active_device_session(
+        user,
+        device_id=device_id,
+        device_fingerprint=device_fingerprint,
+    )
+    if active_session is not None:
+        return active_session
+
+    normalized_device_id = (device_id or '').strip()
+    normalized_device_fingerprint = (device_fingerprint or '').strip()
+
+    if normalized_device_id:
+        session = DeviceSession.objects.filter(
+            user=user,
+            device_id=normalized_device_id,
+        ).order_by('-is_primary', '-last_seen_at', '-created_at').first()
+        if session is not None:
+            return session
+
+    if normalized_device_fingerprint:
+        return DeviceSession.objects.filter(
+            user=user,
+            device_fingerprint=normalized_device_fingerprint,
+        ).order_by('-is_primary', '-last_seen_at', '-created_at').first()
+
+    return None
+
+
 def ensure_device_session(
     user: User,
     *,
@@ -119,7 +153,7 @@ def ensure_device_session(
     now = timezone.now()
     normalized_device_kind = device_kind or DeviceSession.DEVICE_KIND_UNKNOWN
 
-    session = find_active_device_session(
+    session = find_known_device_session(
         user,
         device_id=normalized_device_id,
         device_fingerprint=normalized_device_fingerprint,
@@ -155,8 +189,6 @@ def ensure_device_session(
     if session is None:
         should_be_primary = not DeviceSession.objects.filter(
             user=user,
-            is_active=True,
-            revoked_at__isnull=True,
             is_primary=True,
         ).exists()
         session = DeviceSession.objects.create(
@@ -248,6 +280,13 @@ def ensure_primary_session(user: User) -> DeviceSession | None:
     ).order_by('-last_seen_at', '-created_at').first()
     if primary_session is not None:
         return primary_session
+
+    remembered_primary = DeviceSession.objects.filter(
+        user=user,
+        is_primary=True,
+    ).order_by('-last_seen_at', '-created_at').first()
+    if remembered_primary is not None:
+        return remembered_primary
 
     fallback_session = DeviceSession.objects.filter(
         user=user,

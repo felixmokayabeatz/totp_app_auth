@@ -206,6 +206,25 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
         self.assertTrue(self.primary_session.is_primary)
         self.assertFalse(self.desktop_target_session.is_primary)
 
+    def test_logout_current_keeps_primary_assignment_on_logged_out_primary_device(self):
+        response = self.client.post(
+            reverse('device-sessions-logout-current'),
+            format='json',
+            HTTP_X_DEVICE_ID='primary-device',
+            HTTP_X_DEVICE_LABEL='Primary Device',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {'success': True})
+
+        self.primary_session.refresh_from_db()
+        self.current_session.refresh_from_db()
+
+        self.assertFalse(self.primary_session.is_active)
+        self.assertTrue(self.primary_session.is_primary)
+        self.assertFalse(self.current_session.is_primary)
+
 
 class PasswordlessLoginFlowTests(APITestCase):
     def setUp(self):
@@ -361,6 +380,48 @@ class PasswordlessLoginFlowTests(APITestCase):
         self.assertFalse(response.data['requires_password_for_sync'])
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
+        self.assertFalse(
+            PasswordlessLoginRequest.objects.filter(user=self.user).exists()
+        )
+
+    def test_logged_out_primary_device_can_still_sign_in_passwordlessly_on_same_device(self):
+        self.primary_session.is_active = False
+        self.primary_session.save(update_fields=['is_active', 'updated_at'])
+
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['status'], 'authenticated')
+        self.assertFalse(
+            PasswordlessLoginRequest.objects.filter(user=self.user).exists()
+        )
+
+    def test_other_device_falls_back_when_primary_device_is_logged_out(self):
+        self.primary_session.is_active = False
+        self.primary_session.save(update_fields=['is_active', 'updated_at'])
+
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data['fallback_to_password'], True)
+        self.assertEqual(response.data['primary_device_label'], 'Primary Phone')
+        self.assertIn('signed out', response.data['error'].lower())
+        self.assertIn('recovery', response.data['error'].lower())
         self.assertFalse(
             PasswordlessLoginRequest.objects.filter(user=self.user).exists()
         )
