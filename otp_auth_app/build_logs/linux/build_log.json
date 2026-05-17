@@ -320,5 +320,19 @@
     "build_number": "29",
     "artifact_version": "1.6.14_29",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 24,
+    "platform": "linux",
+    "artifact_type": "deb",
+    "file": "beatzlock_1.6.15_30_amd64.deb",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/final_builds/linux/1.6.15_30/beatzlock_1.6.15_30_amd64.deb",
+    "relative_path": "final_builds/linux/1.6.15_30/beatzlock_1.6.15_30_amd64.deb",
+    "is_directory": false,
+    "timestamp": "2026-05-17T11:53:15",
+    "version": "1.6.15+30",
+    "build_number": "30",
+    "artifact_version": "1.6.15_30",
+    "host_platform": "Linux"
   }
 ]
