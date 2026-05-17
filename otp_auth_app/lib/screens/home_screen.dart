@@ -492,32 +492,17 @@ class _HomeScreenState extends State<HomeScreen>
           }
 
           Widget buildChoiceRow() {
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final useVerticalLayout = constraints.maxWidth < 420;
-                if (useVerticalLayout) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (var index = 0; index < choices.length; index++) ...[
-                        buildChoiceButton(choices[index]),
-                        if (index != choices.length - 1)
-                          const SizedBox(height: 10),
-                      ],
-                    ],
-                  );
-                }
-
-                return Row(
-                  children: [
-                    for (var index = 0; index < choices.length; index++) ...[
-                      Expanded(child: buildChoiceButton(choices[index])),
-                      if (index != choices.length - 1)
-                        const SizedBox(width: 10),
-                    ],
-                  ],
-                );
-              },
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: [
+                for (final choice in choices)
+                  SizedBox(
+                    width: 150,
+                    child: buildChoiceButton(choice),
+                  ),
+              ],
             );
           }
 
@@ -527,32 +512,30 @@ class _HomeScreenState extends State<HomeScreen>
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Text('Passwordless sign-in request'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$label is asking to sign in.',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface,
-                      fontWeight: FontWeight.w700,
-                    ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$label is asking to sign in.',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Choose the exact 3-digit code shown on $label, then tap Accept.',
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                      height: 1.35,
-                    ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Choose the exact 3-digit code shown on $label, then tap Accept.',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    height: 1.35,
                   ),
-                  if (choices.isNotEmpty) ...[
-                    const SizedBox(height: 18),
-                    buildChoiceRow(),
-                  ],
+                ),
+                if (choices.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  buildChoiceRow(),
                 ],
-              ),
+              ],
             ),
             actions: [
               TextButton(
