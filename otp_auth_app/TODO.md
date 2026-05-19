@@ -57,6 +57,8 @@
 
 [ ] - Clickijg okay does not actally install the app on desktop version what the fuck man it was you fucked it up
 
+[ ] - User can input password within the app instead of a re-login to unlock sync
+
 ## Code Notes
 
 - Reviews: `lib/services/app_rating_service.dart`, `lib/screens/login_screen.dart`, and rating endpoints in `lib/config/app_config.dart`.
