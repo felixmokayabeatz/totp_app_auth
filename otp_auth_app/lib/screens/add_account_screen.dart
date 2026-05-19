@@ -122,7 +122,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
               _parseQRCode(code);
             }
           },
-          errorBuilder: (context, error, child) {
+          errorBuilder: (context, error) {
             String errorMessage = 'Camera unavailable';
             // Check for permission error
             if (error.toString().contains('Permission')) {

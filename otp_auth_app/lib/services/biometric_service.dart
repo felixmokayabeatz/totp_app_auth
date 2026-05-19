@@ -32,11 +32,13 @@ class BiometricService {
     try {
       return await _localAuth.authenticate(
         localizedReason: 'Unlock BeatzLock',
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false, // Allow PIN/Pattern/Password
-        ),
+        persistAcrossBackgrounding: true,
+        biometricOnly: false, // Allow PIN/Pattern/Password
       );
+    } on LocalAuthException catch (e) {
+      debugPrint(
+          'Device auth local_auth error: ${e.code.name} ${e.description}');
+      return false;
     } on PlatformException catch (e) {
       debugPrint('Device auth platform error: ${e.code} ${e.message}');
       return false;
