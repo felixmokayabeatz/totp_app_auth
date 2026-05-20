@@ -105,6 +105,14 @@ class AccountLogoBadge extends StatelessWidget {
       }
     }
 
+    final domainMatch = RegExp(
+      r'([a-z0-9-]+(?:\.[a-z0-9-]+)+)',
+    ).firstMatch(cleaned);
+    final embeddedDomain = domainMatch?.group(1);
+    if (embeddedDomain != null && _looksLikePublicDomain(embeddedDomain)) {
+      return embeddedDomain;
+    }
+
     final withoutProtocol = cleaned
         .replaceFirst('https://', '')
         .replaceFirst('http://', '')
@@ -157,6 +165,8 @@ class AccountLogoBadge extends StatelessWidget {
     'google': 'google.com',
     'gmail': 'google.com',
     'exness': 'exness.com',
+    'felixmokayabeatz': 'felixmokayabeatz.online',
+    'beatzlock': 'felixmokayabeatz.online',
     'github': 'github.com',
     'facebook': 'facebook.com',
     'x': 'x.com',
