@@ -1356,27 +1356,24 @@ class _LoginScreenState extends State<LoginScreen> {
   }) async {
     final needsSyncUnlock = result['requires_password_for_sync'] == true &&
         (effectivePassword == null || effectivePassword.isEmpty);
-    var syncUnlockedNow = false;
-    if (needsSyncUnlock) {
-      syncUnlockedNow = await _promptToUnlockSyncAfterPasswordless();
-      if (!mounted) return;
-    }
-
     _showSuccess(
-      syncUnlockedNow
-          ? 'Passwordless sign-in approved and sync unlocked on this device.'
-          : (() {
-              final syncMessage =
-                  result['sync_unlock_message']?.toString().trim() ?? '';
-              if (syncMessage.isNotEmpty) {
-                return syncMessage;
-              }
-              final message = result['message']?.toString().trim() ?? '';
-              if (message.isNotEmpty) {
-                return message;
-              }
-              return 'Passwordless sign-in approved.';
-            })(),
+      (() {
+        if (needsSyncUnlock) {
+          return 'Passwordless sign-in approved. If encrypted sync is still '
+              'locked on this device, use "Unlock Sync On This Device" later '
+              'from Settings.';
+        }
+        final syncMessage =
+            result['sync_unlock_message']?.toString().trim() ?? '';
+        if (syncMessage.isNotEmpty) {
+          return syncMessage;
+        }
+        final message = result['message']?.toString().trim() ?? '';
+        if (message.isNotEmpty) {
+          return message;
+        }
+        return 'Passwordless sign-in approved.';
+      })(),
     );
     await _completeAuthenticatedSession();
   }
@@ -1472,106 +1469,6 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
     return _PasswordlessLoginOutcome.failed;
-  }
-
-  Future<bool> _promptToUnlockSyncAfterPasswordless() async {
-    final passwordController = TextEditingController();
-    var isSubmitting = false;
-    String? errorText;
-    var didUnlock = false;
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            scrollable: true,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Unlock Sync On This Device'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Passwordless sign-in was approved. Enter your account password once on this device to restore the encryption key and unlock synced OTPs, passwords, and secure text.',
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    enabled: !isSubmitting,
-                    decoration: InputDecoration(
-                      labelText: 'Account password',
-                      border: const OutlineInputBorder(),
-                      errorText: errorText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed:
-                    isSubmitting ? null : () => Navigator.pop(dialogContext),
-                child: const Text('Continue without sync'),
-              ),
-              FilledButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () async {
-                        final password = passwordController.text;
-                        if (password.isEmpty) {
-                          setDialogState(() {
-                            errorText = 'Enter your password to unlock sync.';
-                          });
-                          return;
-                        }
-
-                        setDialogState(() {
-                          isSubmitting = true;
-                          errorText = null;
-                        });
-
-                        final unlockSucceeded = await _syncService
-                            .unlockSyncAfterPasswordless(password);
-                        if (!dialogContext.mounted) return;
-
-                        if (unlockSucceeded) {
-                          setDialogState(() {
-                            isSubmitting = false;
-                          });
-                          didUnlock = true;
-                          Navigator.pop(dialogContext);
-                          return;
-                        }
-
-                        setDialogState(() {
-                          isSubmitting = false;
-                          errorText = _syncService.lastErrorMessage ??
-                              'Could not unlock sync on this device.';
-                        });
-                      },
-                child: isSubmitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Unlock sync'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    passwordController.dispose();
-    return didUnlock;
   }
 
   Future<void> _recoverPrimaryDevice() async {
