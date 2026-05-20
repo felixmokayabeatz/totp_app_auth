@@ -29,6 +29,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   bool _isPolling = false;
   String? _requestId;
   String? _code;
+  String? _unlockTransferKey;
   DateTime? _codeExpiresAt;
   String? _primaryDeviceLabel;
   String? _errorMessage;
@@ -66,6 +67,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       _isPolling = false;
       _requestId = null;
       _code = null;
+      _unlockTransferKey = null;
       _codeExpiresAt = null;
       _errorMessage = null;
       _statusMessage = 'Starting passwordless sign-in...';
@@ -119,6 +121,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       _isStarting = false;
       _requestId = requestId;
       _code = result['verification_code']?.toString();
+      _unlockTransferKey = result['unlock_transfer_key']?.toString();
       _codeExpiresAt = DateTime.tryParse(
         result['code_expires_at']?.toString() ?? '',
       );
@@ -140,6 +143,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
     final result = await _syncService.pollPasswordlessLogin(
       requestId,
       password: widget.passwordForSync,
+      unlockTransferKey: _unlockTransferKey,
     );
     if (!mounted) return;
     setState(() => _isPolling = false);

@@ -180,6 +180,7 @@ class _PasswordlessRequestsScreenState
         ? await _syncService.approvePasswordlessRequest(
             requestId,
             selectedCode: selectedCode ?? '',
+            unlockTransferKey: item['unlock_transfer_key']?.toString(),
           )
         : await _syncService.denyPasswordlessRequest(requestId);
     if (!mounted) return;

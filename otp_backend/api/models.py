@@ -182,7 +182,10 @@ class PasswordlessLoginRequest(models.Model):
         choices=DeviceSession.DEVICE_KIND_CHOICES,
         default=DeviceSession.DEVICE_KIND_UNKNOWN,
     )
-    verification_code = models.CharField(max_length=7)
+    verification_code = models.TextField()
+    unlock_transfer_key = models.TextField(blank=True, default='')
+    sync_unlock_payload = models.TextField(blank=True, default='')
+    sync_unlock_transferred_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -237,6 +240,17 @@ class PasswordlessLoginRequest(models.Model):
 
     def set_verification_code(self, raw_code: str) -> None:
         self.verification_code = encrypt_passwordless_code(raw_code)
+
+    def set_unlock_transfer_key(self, raw_key: str) -> None:
+        self.unlock_transfer_key = encrypt_passwordless_code(raw_key)
+
+    def get_unlock_transfer_key(self) -> str:
+        if not self.unlock_transfer_key:
+            return ''
+        try:
+            return decrypt_passwordless_code(self.unlock_transfer_key)
+        except Exception:
+            return ''
 
     def _raw_verification_value(self) -> str:
         if not self.verification_code:

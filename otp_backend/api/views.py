@@ -21,6 +21,7 @@ from datetime import timedelta
 import hashlib
 import json
 import random
+import secrets
 import string
 import logging
 import traceback
@@ -261,6 +262,7 @@ def _build_passwordless_authenticated_response(
     status_text: str,
     message: str,
     requires_password_for_sync: bool,
+    sync_unlock_payload: str = '',
 ):
     refresh = RefreshToken.for_user(user)
     session = attach_session_to_refresh_token(user, request, refresh)
@@ -277,6 +279,7 @@ def _build_passwordless_authenticated_response(
             'message': message,
             'requires_password_for_sync': requires_password_for_sync,
             'sync_unlock_message': sync_unlock_message,
+            'sync_unlock_payload': sync_unlock_payload,
             'user': UserSerializer(user).data,
             'access': str(refresh.access_token),
             'refresh': str(refresh),
@@ -619,6 +622,8 @@ class AuthViewSet(viewsets.GenericViewSet):
             expires_at=timezone.now() + timedelta(minutes=3),
         )
         request_obj.set_verification_code(seed)
+        unlock_transfer_key = secrets.token_urlsafe(32)
+        request_obj.set_unlock_transfer_key(unlock_transfer_key)
         request_obj.save()
         verification_code = request_obj.get_verification_code()
         create_passwordless_request_notification(
@@ -633,6 +638,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'verification_code': verification_code,
                 'code_expires_at': request_obj.code_expires_at().isoformat(),
                 'expires_at': request_obj.expires_at.isoformat(),
+                'unlock_transfer_key': unlock_transfer_key,
                 'primary_device_label': primary_session.device_label,
                 'message': 'Approve this sign-in from your primary phone.',
             },
@@ -674,6 +680,8 @@ class AuthViewSet(viewsets.GenericViewSet):
         if request_obj.status != PasswordlessLoginRequest.STATUS_APPROVED:
             return Response({'success': False, 'status': request_obj.status}, status=409)
 
+        sync_unlock_payload = request_obj.sync_unlock_payload or ''
+
         request_obj.status = PasswordlessLoginRequest.STATUS_COMPLETED
         request_obj.completed_at = timezone.now()
         request_obj.save(update_fields=['status', 'completed_at', 'updated_at'])
@@ -683,7 +691,8 @@ class AuthViewSet(viewsets.GenericViewSet):
             request,
             status_text='approved',
             message='Passwordless sign-in approved.',
-            requires_password_for_sync=True,
+            requires_password_for_sync=not bool(sync_unlock_payload),
+            sync_unlock_payload=sync_unlock_payload,
         )
 
     @action(detail=False, methods=['post'], url_path='recover-primary-device')
@@ -1437,10 +1446,24 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 status=400,
             )
 
+        sync_unlock_payload = (request.data.get('sync_unlock_payload') or '').strip()
         login_request.status = PasswordlessLoginRequest.STATUS_APPROVED
         login_request.approved_at = timezone.now()
         login_request.reviewed_by_session = current_session
-        login_request.save(update_fields=['status', 'approved_at', 'reviewed_by_session', 'updated_at'])
+        login_request.sync_unlock_payload = sync_unlock_payload
+        login_request.sync_unlock_transferred_at = (
+            timezone.now() if sync_unlock_payload else None
+        )
+        login_request.save(
+            update_fields=[
+                'status',
+                'approved_at',
+                'reviewed_by_session',
+                'sync_unlock_payload',
+                'sync_unlock_transferred_at',
+                'updated_at',
+            ]
+        )
         return Response({'success': True})
 
     @action(detail=True, methods=['post'], url_path='deny')

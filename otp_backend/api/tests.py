@@ -257,6 +257,7 @@ class PasswordlessLoginFlowTests(APITestCase):
         self.assertEqual(start_response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(start_response.data['success'])
         self.assertEqual(len(start_response.data['verification_code']), 3)
+        self.assertTrue(start_response.data['unlock_transfer_key'])
         self.assertEqual(start_response.data['primary_device_label'], 'Primary Phone')
 
         request_id = start_response.data['request_id']
@@ -273,6 +274,14 @@ class PasswordlessLoginFlowTests(APITestCase):
         self.assertEqual(
             request_obj.get_verification_code(),
             start_response.data['verification_code'],
+        )
+        self.assertEqual(
+            request_obj.get_unlock_transfer_key(),
+            start_response.data['unlock_transfer_key'],
+        )
+        self.assertNotEqual(
+            request_obj.unlock_transfer_key,
+            start_response.data['unlock_transfer_key'],
         )
         self.assertTrue(
             self.user.app_notifications.filter(
@@ -320,6 +329,56 @@ class PasswordlessLoginFlowTests(APITestCase):
                 notification_type='sign_in',
             ).exists()
         )
+
+    def test_passwordless_approval_can_transfer_sync_unlock_payload(self):
+        start_response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.username},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(start_response.status_code, status.HTTP_201_CREATED)
+        request_id = start_response.data['request_id']
+        request_obj = PasswordlessLoginRequest.objects.get(id=request_id)
+        sync_unlock_payload = 'bl2:temporary-sync-key-transfer'
+
+        approve_response = self.primary_client.post(
+            reverse('passwordless-requests-approve', args=[request_id]),
+            {
+                'selected_code': request_obj.get_verification_code(),
+                'sync_unlock_payload': sync_unlock_payload,
+            },
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(approve_response.status_code, status.HTTP_200_OK)
+
+        poll_response = self.request_client.post(
+            reverse('auth-passwordless-poll'),
+            {'request_id': request_id},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+
+        self.assertEqual(poll_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(poll_response.data['success'])
+        self.assertFalse(poll_response.data['requires_password_for_sync'])
+        self.assertEqual(
+            poll_response.data['sync_unlock_payload'],
+            sync_unlock_payload,
+        )
+
+        request_obj.refresh_from_db()
+        self.assertEqual(request_obj.sync_unlock_payload, sync_unlock_payload)
+        self.assertIsNotNone(request_obj.sync_unlock_transferred_at)
 
     def test_passwordless_start_rejects_wrong_password_when_password_is_provided(self):
         response = self.request_client.post(

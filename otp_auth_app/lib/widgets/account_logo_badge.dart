@@ -68,6 +68,12 @@ class AccountLogoBadge extends StatelessWidget {
   }
 
   String? _resolveLogoDomain(String service, String? issuer) {
+    final explicitDomain =
+        _extractExplicitDomain(issuer) ?? _extractExplicitDomain(service);
+    if (explicitDomain != null) {
+      return explicitDomain;
+    }
+
     final values = [service, if (issuer != null) issuer];
     for (final value in values) {
       final cleaned = value.trim().toLowerCase();
@@ -76,22 +82,38 @@ class AccountLogoBadge extends StatelessWidget {
       final mapped = _knownDomains[cleaned];
       if (mapped != null) return mapped;
 
-      if (cleaned.contains('@')) {
-        final emailDomain = cleaned.split('@').last;
-        if (emailDomain.contains('.')) return emailDomain;
-      }
-
-      final withoutProtocol = cleaned
-          .replaceFirst('https://', '')
-          .replaceFirst('http://', '')
-          .replaceFirst('www.', '');
-      final firstSegment = withoutProtocol.split('/').first;
-      if (firstSegment.contains('.')) return firstSegment;
-
-      for (final entry in _knownDomains.entries) {
-        if (cleaned.contains(entry.key)) return entry.value;
+      for (final token in cleaned
+          .split(RegExp(r'[^a-z0-9.]+'))
+          .where((token) => token.isNotEmpty)) {
+        final tokenMatch = _knownDomains[token];
+        if (tokenMatch != null) {
+          return tokenMatch;
+        }
       }
     }
+    return null;
+  }
+
+  String? _extractExplicitDomain(String? value) {
+    final cleaned = value?.trim().toLowerCase() ?? '';
+    if (cleaned.isEmpty) return null;
+
+    if (cleaned.contains('@')) {
+      final emailDomain = cleaned.split('@').last;
+      if (_looksLikePublicDomain(emailDomain)) {
+        return emailDomain;
+      }
+    }
+
+    final withoutProtocol = cleaned
+        .replaceFirst('https://', '')
+        .replaceFirst('http://', '')
+        .replaceFirst('www.', '');
+    final host = withoutProtocol.split(RegExp(r'[/?#]')).first.split(':').first;
+    if (_looksLikePublicDomain(host)) {
+      return host;
+    }
+
     return null;
   }
 
@@ -102,7 +124,29 @@ class AccountLogoBadge extends StatelessWidget {
     if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(normalized)) {
       return false;
     }
-    return _knownDomains.values.contains(normalized);
+    return _looksLikePublicDomain(normalized);
+  }
+
+  bool _looksLikePublicDomain(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty ||
+        normalized.startsWith('.') ||
+        normalized.endsWith('.') ||
+        normalized.contains('..')) {
+      return false;
+    }
+
+    final labels = normalized.split('.');
+    if (labels.length < 2) return false;
+    if (labels.any((label) =>
+        label.isEmpty ||
+        label.startsWith('-') ||
+        label.endsWith('-') ||
+        !RegExp(r'^[a-z0-9-]+$').hasMatch(label))) {
+      return false;
+    }
+
+    return RegExp(r'^[a-z]{2,24}$').hasMatch(labels.last);
   }
 
   String _faviconUrl(String domain) {
@@ -112,6 +156,7 @@ class AccountLogoBadge extends StatelessWidget {
   static const Map<String, String> _knownDomains = {
     'google': 'google.com',
     'gmail': 'google.com',
+    'exness': 'exness.com',
     'github': 'github.com',
     'facebook': 'facebook.com',
     'x': 'x.com',

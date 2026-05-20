@@ -55,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoadingBackupCodeStatus = false;
   bool _isLoadingVaultRestorePoints = false;
   bool _syncEnabled = false;
+  bool _syncLockedOnThisDevice = false;
   String _appVersionLabel = '...';
   String? _profilePhotoUrl;
   Timer? _syncPrefTimer;
@@ -77,8 +78,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       await _syncService.refreshSyncPreferenceFromServer();
       final enabled = await _syncService.isSyncEnabled();
-      if (mounted && enabled != _syncEnabled) {
-        setState(() => _syncEnabled = enabled);
+      final syncLocked = await _syncService.isSyncLockedOnCurrentDevice();
+      if (mounted &&
+          (enabled != _syncEnabled || syncLocked != _syncLockedOnThisDevice)) {
+        setState(() {
+          _syncEnabled = enabled;
+          _syncLockedOnThisDevice = syncLocked;
+        });
       }
     });
   }
@@ -92,7 +98,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSyncPreference() async {
     final enabled = await _syncService.isSyncEnabled();
-    if (mounted) setState(() => _syncEnabled = enabled);
+    final syncLocked = await _syncService.isSyncLockedOnCurrentDevice();
+    if (mounted) {
+      setState(() {
+        _syncEnabled = enabled;
+        _syncLockedOnThisDevice = syncLocked;
+      });
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -1153,36 +1165,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Sync Now',
               sub: !authProvider.isAuthenticated
                   ? 'Sign in to sync across devices'
-                  : _syncEnabled
-                      ? 'Manually sync with cloud'
-                      : 'Cloud sync is disabled',
+                  : _syncLockedOnThisDevice
+                      ? 'Unlock sync on this device first'
+                      : _syncEnabled
+                          ? 'Manually sync with cloud'
+                          : 'Cloud sync is disabled',
               trailing: _isSyncing
                   ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: _accent))
-                  : (_syncEnabled
+                  : (_syncEnabled && !_syncLockedOnThisDevice
                       ? null
                       : const Icon(Icons.lock_outline,
                           size: 16, color: Colors.grey)),
-              onTap:
-                  !authProvider.isAuthenticated ? _openLoginForSync : _syncNow,
+              onTap: !authProvider.isAuthenticated
+                  ? _openLoginForSync
+                  : (_syncLockedOnThisDevice
+                      ? _unlockSyncOnThisDevice
+                      : _syncNow),
             ),
+            if (authProvider.isAuthenticated && _syncLockedOnThisDevice) ...[
+              _dividerLine(),
+              _tappableTile(
+                icon: Icons.lock_open_rounded,
+                label: 'Unlock Sync On This Device',
+                sub:
+                    'Enter your account password once to restore encrypted cloud sync here',
+                onTap: _unlockSyncOnThisDevice,
+              ),
+            ],
             _dividerLine(),
 
             // Sync toggle
             _switchTile(
               icon: Icons.cloud_sync_rounded,
               label: 'Sync to Cloud',
-              sub: _syncEnabled
-                  ? 'Accounts sync automatically'
-                  : 'Sync disabled - local only',
-              value: authProvider.isAuthenticated && _syncEnabled,
+              sub: _syncLockedOnThisDevice
+                  ? 'Unlock this device first to resume cloud sync'
+                  : _syncEnabled
+                      ? 'Accounts sync automatically'
+                      : 'Sync disabled - local only',
+              value: authProvider.isAuthenticated &&
+                  _syncEnabled &&
+                  !_syncLockedOnThisDevice,
               onChanged: (val) async {
                 if (!authProvider.isAuthenticated) {
                   if (val) {
                     await _openLoginForSync();
+                  }
+                  return;
+                }
+                if (_syncLockedOnThisDevice) {
+                  if (val) {
+                    await _unlockSyncOnThisDevice();
                   }
                   return;
                 }
@@ -1488,6 +1525,133 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _loadSyncPreference();
     await _loadBackupCodeStatus();
     await _loadProfilePhoto();
+  }
+
+  Future<void> _unlockSyncOnThisDevice() async {
+    if (!await _requireSignedIn(
+        'Unlocking sync is available after you sign in.')) {
+      return;
+    }
+    if (!mounted) return;
+
+    final passwordController = TextEditingController();
+    var isSubmitting = false;
+    var attemptedUnlock = false;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: _cardColor,
+          title: Text(
+            'Unlock Sync On This Device',
+            style: TextStyle(color: _textPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your account password once to restore the encryption key for synced OTPs, passwords, and secure text on this device.',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                enabled: !isSubmitting,
+                decoration: InputDecoration(
+                  labelText: 'Account password',
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final password = passwordController.text;
+                      if (password.isEmpty) {
+                        setDialogState(() {
+                          errorText = 'Enter your password to unlock sync.';
+                        });
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                        errorText = null;
+                      });
+                      attemptedUnlock = true;
+
+                      final unlocked = await _syncService
+                          .unlockSyncAfterPasswordless(password);
+                      if (!dialogContext.mounted) return;
+
+                      if (unlocked) {
+                        Navigator.pop(dialogContext);
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = false;
+                        errorText = _syncService.lastErrorMessage ??
+                            'Could not unlock sync on this device.';
+                      });
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Unlock sync'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    passwordController.dispose();
+    if (!mounted) return;
+
+    await _loadSyncPreference();
+    if (!mounted) return;
+    if (!attemptedUnlock) {
+      return;
+    }
+    final unlocked = !_syncLockedOnThisDevice;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          unlocked
+              ? 'Sync unlocked on this device.'
+              : 'Sync stayed locked on this device.',
+        ),
+        backgroundColor: unlocked ? const Color(0xFF10B981) : Colors.orange,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<bool> _requireSignedIn(String message) async {
@@ -1955,8 +2119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openCreatorWebsite() {
     return _openExternalLink(
       title: 'Open Website?',
-      message:
-          'This will open example.com in your browser.',
+      message: 'This will open example.com in your browser.',
       successMessage: 'Opening FelixMokayabeatz website.',
       failureMessage: 'Could not open the website.',
       url: AppConfig.creatorWebsiteUrl,
@@ -4148,6 +4311,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _syncNow() async {
+    if (_syncLockedOnThisDevice) {
+      await _unlockSyncOnThisDevice();
+      return;
+    }
+
     if (!_syncEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text('Sync is disabled. Enable "Sync to Cloud" first.'),

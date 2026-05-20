@@ -22,6 +22,7 @@ class SyncService {
   static const _passwordDeletedIdsPrefix = 'password_deleted_ids_';
   static const _secureMessageDeletedIdsPrefix = 'secure_message_deleted_ids_';
   static const _secureMessageLifetime = Duration(minutes: 30);
+  static const _passwordlessSyncUnlockContext = 'passwordless-sync-unlock';
   // ─── Singleton ────────────────────────────────────────────────────────────
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
@@ -46,6 +47,21 @@ class SyncService {
   final SecureStorageService _secureStorage = SecureStorageService();
 
   String? get lastErrorMessage => _lastErrorMessage;
+
+  String _syncUnlockRequiredMessage() {
+    return 'Cloud sync is locked on this device. Open Settings and use "Unlock Sync On This Device" once to restore your encrypted vault.';
+  }
+
+  Future<bool> hasAvailableEncryptionKey() async {
+    return _ensureEncryptionKeyAvailable();
+  }
+
+  Future<bool> isSyncLockedOnCurrentDevice() async {
+    if (!await isLoggedIn()) {
+      return false;
+    }
+    return !await _ensureEncryptionKeyAvailable();
+  }
 
   String _normalizeRecoveryCode(String rawCode) {
     return rawCode.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
@@ -200,6 +216,16 @@ class SyncService {
 
   Future<void> _clearStoredEncryptionKey() async {
     await _secureStorage.delete(SecureStorageService.encryptionKey);
+  }
+
+  Future<void> _activateSyncEncryptionKey(
+    String encryptionKey, {
+    bool enableSyncByDefault = true,
+  }) async {
+    await _storeEncryptionKey(encryptionKey);
+    _encryptionKey = encryptionKey;
+    await setSyncEnabled(enableSyncByDefault);
+    await _restoreSyncedVaultDataAfterUnlock();
   }
 
   // ─── Sync preference ──────────────────────────────────────────────────────
@@ -825,7 +851,7 @@ class SyncService {
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
         _initEncryption(canonicalUsername, password);
-        await setSyncEnabled(true);
+        await _activateSyncEncryptionKey(_encryptionKey!);
         return true;
       }
       _lastErrorMessage = 'Registration failed. Please try again.';
@@ -877,11 +903,7 @@ class SyncService {
         // Treat successful token issuance as a successful login.
         final encryptionKey = EncryptionService.generateKey(
             canonicalUsername + password, 'beatzLockKenya2099');
-
-        await _storeEncryptionKey(encryptionKey);
-        _encryptionKey = encryptionKey;
-        await setSyncEnabled(true);
-        await _restoreSyncedVaultDataAfterUnlock();
+        await _activateSyncEncryptionKey(encryptionKey);
 
         return true;
       }
@@ -1102,8 +1124,7 @@ class SyncService {
     }
 
     if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage =
-          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      _lastErrorMessage = _syncUnlockRequiredMessage();
       debugPrint('Encryption key not set - user must log in first');
       return false;
     }
@@ -1398,6 +1419,7 @@ class SyncService {
   Future<void> _applyAuthenticatedResponse(
     Map<String, dynamic> data, {
     String? password,
+    String? transferredEncryptionKey,
     bool enableSyncByDefault = true,
   }) async {
     final user = data['user'] as Map?;
@@ -1417,13 +1439,22 @@ class SyncService {
     OTPService().clearCachedUserId();
     await _updateAuthHeader();
 
+    if (transferredEncryptionKey != null &&
+        transferredEncryptionKey.isNotEmpty) {
+      await _activateSyncEncryptionKey(
+        transferredEncryptionKey,
+        enableSyncByDefault: enableSyncByDefault,
+      );
+      return;
+    }
+
     if (password != null && password.isNotEmpty) {
       final encryptionKey = EncryptionService.generateKey(
           canonicalUsername + password, 'beatzLockKenya2099');
-      await _storeEncryptionKey(encryptionKey);
-      _encryptionKey = encryptionKey;
-      await setSyncEnabled(enableSyncByDefault);
-      await _restoreSyncedVaultDataAfterUnlock();
+      await _activateSyncEncryptionKey(
+        encryptionKey,
+        enableSyncByDefault: enableSyncByDefault,
+      );
       return;
     }
 
@@ -1462,6 +1493,28 @@ class SyncService {
       return null;
     }
     return _encryptionKey;
+  }
+
+  String? _restoreTransferredSyncEncryptionKey(
+    String? syncUnlockPayload,
+    String? unlockTransferKey,
+  ) {
+    final payload = syncUnlockPayload?.trim() ?? '';
+    final transferKey = unlockTransferKey?.trim() ?? '';
+    if (payload.isEmpty || transferKey.isEmpty) {
+      return null;
+    }
+
+    try {
+      return EncryptionService.decryptSensitiveSyncPayload(
+        payload,
+        transferKey,
+        context: _passwordlessSyncUnlockContext,
+      );
+    } catch (e) {
+      debugPrint('Passwordless sync unlock restore error: $e');
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>?> getEncryptedSyncData(String dataType) async {
@@ -1593,10 +1646,7 @@ class SyncService {
           canonicalUsername + password,
           'beatzLockKenya2099',
         );
-        await _storeEncryptionKey(encryptionKey);
-        _encryptionKey = encryptionKey;
-        await setSyncEnabled(true);
-        await _restoreSyncedVaultDataAfterUnlock();
+        await _activateSyncEncryptionKey(encryptionKey);
         return true;
       }
 
@@ -1675,8 +1725,7 @@ class SyncService {
     }
 
     if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage =
-          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      _lastErrorMessage = _syncUnlockRequiredMessage();
       return false;
     }
 
@@ -1735,8 +1784,7 @@ class SyncService {
     }
 
     if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage =
-          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      _lastErrorMessage = _syncUnlockRequiredMessage();
       return false;
     }
 
@@ -1805,8 +1853,7 @@ class SyncService {
     }
 
     if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage =
-          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      _lastErrorMessage = _syncUnlockRequiredMessage();
       return false;
     }
 
@@ -2071,8 +2118,7 @@ class SyncService {
     }
 
     if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage =
-          'Cloud sync needs your saved encryption key. Log in again once on this device to restore sync.';
+      _lastErrorMessage = _syncUnlockRequiredMessage();
       return false;
     }
 
@@ -2259,6 +2305,7 @@ class SyncService {
   Future<Map<String, dynamic>?> pollPasswordlessLogin(
     String requestId, {
     String? password,
+    String? unlockTransferKey,
   }) async {
     try {
       _lastErrorMessage = null;
@@ -2273,10 +2320,36 @@ class SyncService {
       });
       final data = Map<String, dynamic>.from(response.data as Map);
       if (data['success'] == true && data['status'] == 'approved') {
+        String? transferredEncryptionKey;
+        final syncUnlockPayload = data['sync_unlock_payload']?.toString();
+
+        if (password == null || password.isEmpty) {
+          transferredEncryptionKey = _restoreTransferredSyncEncryptionKey(
+            syncUnlockPayload,
+            unlockTransferKey,
+          );
+          if (syncUnlockPayload != null &&
+              syncUnlockPayload.trim().isNotEmpty &&
+              (transferredEncryptionKey == null ||
+                  transferredEncryptionKey.isEmpty)) {
+            data['requires_password_for_sync'] = true;
+            data['sync_unlock_message'] =
+                'Passwordless sign-in worked, but this device still needs your account password once to unlock encrypted sync.';
+          } else if (transferredEncryptionKey != null &&
+              transferredEncryptionKey.isNotEmpty) {
+            data['requires_password_for_sync'] = false;
+          }
+        } else {
+          data['requires_password_for_sync'] = false;
+        }
+
         await _applyAuthenticatedResponse(
           data,
           password: password,
-          enableSyncByDefault: password != null && password.isNotEmpty,
+          transferredEncryptionKey: transferredEncryptionKey,
+          enableSyncByDefault: (password != null && password.isNotEmpty) ||
+              (transferredEncryptionKey != null &&
+                  transferredEncryptionKey.isNotEmpty),
         );
       }
       return data;
@@ -3341,6 +3414,7 @@ class SyncService {
   Future<bool> approvePasswordlessRequest(
     String requestId, {
     required String selectedCode,
+    String? unlockTransferKey,
   }) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -3352,11 +3426,24 @@ class SyncService {
     }
 
     try {
+      final encryptionKey = await getAvailableEncryptionKey();
+      final syncUnlockPayload = encryptionKey != null &&
+              encryptionKey.isNotEmpty &&
+              unlockTransferKey != null &&
+              unlockTransferKey.trim().isNotEmpty
+          ? EncryptionService.encryptSensitiveSyncPayload(
+              encryptionKey,
+              unlockTransferKey.trim(),
+              context: _passwordlessSyncUnlockContext,
+            )
+          : null;
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'passwordless-requests/$requestId/approve/',
           data: {
             'selected_code': selectedCode,
+            if (syncUnlockPayload != null && syncUnlockPayload.isNotEmpty)
+              'sync_unlock_payload': syncUnlockPayload,
           },
           options: Options(headers: {
             'Authorization': 'Bearer $accessToken',

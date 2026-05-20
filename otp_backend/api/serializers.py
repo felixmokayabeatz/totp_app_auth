@@ -114,6 +114,7 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
 class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
     code_expires_at = serializers.SerializerMethodField()
     verification_choices = serializers.SerializerMethodField()
+    unlock_transfer_key = serializers.SerializerMethodField()
 
     class Meta:
         model = PasswordlessLoginRequest
@@ -123,6 +124,7 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
             'requester_device_kind',
             'code_expires_at',
             'verification_choices',
+            'unlock_transfer_key',
             'status',
             'expires_at',
             'created_at',
@@ -136,6 +138,11 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
         if builder is None:
             return []
         return builder(obj)
+
+    def get_unlock_transfer_key(self, obj):
+        if obj.status != PasswordlessLoginRequest.STATUS_PENDING:
+            return ''
+        return obj.get_unlock_transfer_key()
 
     def get_code_expires_at(self, obj):
         return obj.code_expires_at().isoformat()

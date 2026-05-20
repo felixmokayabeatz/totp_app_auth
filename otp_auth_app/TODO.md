@@ -53,11 +53,15 @@
 
 [x] - Fix synch now in settngs should tell the use that synch is disabled if they click,if the togle is disabled, current just does nothing there the user might thik his device is not respomdng without a message
 
-[ ] - When I click okay after update it should show a progress and reopen the updated app. A user clicks okay and that is it very weird.
+[x] - When I click okay after update it should show a progress and reopen the updated app. A user clicks okay and that is it very weird.
 
-[ ] - Clickijg okay does not actally install the app on desktop version what the fuck man it was you fucked it up
+[x] - Clickijg okay does not actally install the app on desktop version
 
-[ ] - User can input password within the app instead of a re-login to unlock sync
+[ ] - User can input password within the app instead of a re-login to unlock sync, like say after passwordles sign in the user is promted to enter password to unlock synch which isgood but if they cancle they cannot later enter they have to re-log in aganin forthat to happen fix that man
+
+[ ] Or better we can get the password from the primary device send it to the device logging in like encrpt fetch from the primary and use it instead of the user typing it, but we leave the above functinalty just incase it fails can you make changes.
+
+[ ] Also Upgrade the packages to the latest version man
 
 ## Code Notes
 
