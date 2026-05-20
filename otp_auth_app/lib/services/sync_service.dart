@@ -1617,7 +1617,7 @@ class SyncService {
     }
   }
 
-  Future<bool> unlockSyncAfterPasswordless(String password) async {
+  Future<bool> unlockSyncOnCurrentDevice(String password) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
@@ -1660,6 +1660,10 @@ class SyncService {
       _lastErrorMessage = 'Could not unlock sync on this device.';
       return false;
     }
+  }
+
+  Future<bool> unlockSyncAfterPasswordless(String password) async {
+    return unlockSyncOnCurrentDevice(password);
   }
 
   Future<DeviceSessionInfo?> getCurrentDeviceSession() async {

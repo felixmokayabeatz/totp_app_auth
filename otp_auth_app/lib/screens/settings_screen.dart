@@ -1438,6 +1438,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: _openRateApp,
             ),
           ]),
+          const SizedBox(height: 12),
+          Text(
+            'Developed with love by Felix Mokaya (c) ${DateTime.now().year}',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 20),
           _sectionLabel('Danger Zone'),
           _settingsCard([

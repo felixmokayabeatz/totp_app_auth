@@ -28,8 +28,7 @@ class AppConfig {
   static const String prodBeatzLockAppsBaseUrl =
       'https://felixmokayabeatz.online/beatzlock-apps/';
   static const String creatorWebsiteUrl = 'http://example.com/';
-  static const String creatorGithubUrl =
-      'http://github.com/felixmokayabeatz/';
+  static const String creatorGithubUrl = 'http://github.com/felixmokayabeatz/';
 
   // Change this to false when building for production
   static const bool isDevelopment = false;

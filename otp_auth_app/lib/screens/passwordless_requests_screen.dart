@@ -6,6 +6,12 @@ import '../models/device_session_info.dart';
 import '../services/app_lock_service.dart';
 import '../services/sync_service.dart';
 
+enum _PasswordlessApprovalMode {
+  cancel,
+  approveOnly,
+  unlockAndTransfer,
+}
+
 class PasswordlessRequestsScreen extends StatefulWidget {
   const PasswordlessRequestsScreen({super.key});
 
@@ -166,6 +172,156 @@ class _PasswordlessRequestsScreenState
     return '${local.year}-$month-$day $hour:$minute';
   }
 
+  Future<_PasswordlessApprovalMode> _prepareApprovalMode(
+    Map<String, dynamic> item,
+  ) async {
+    if (await _syncService.hasAvailableEncryptionKey()) {
+      return _PasswordlessApprovalMode.unlockAndTransfer;
+    }
+
+    final requesterLabel =
+        item['requester_device_label']?.toString().trim() ?? '';
+    final targetDeviceLabel =
+        requesterLabel.isNotEmpty ? requesterLabel : 'the other device';
+    final syncEnabled = await _syncService.isSyncEnabled();
+    if (!mounted) return _PasswordlessApprovalMode.cancel;
+
+    final passwordController = TextEditingController();
+    var isSubmitting = false;
+    String? errorText;
+    var result = _PasswordlessApprovalMode.cancel;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            backgroundColor: _cardColor,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text(
+              'Unlock Sync For Approval',
+              style: TextStyle(color: _textPrimary),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    syncEnabled
+                        ? 'Cloud sync is locked on this primary phone right '
+                            'now. Enter your account password here to unlock '
+                            'sync on this phone and let $targetDeviceLabel '
+                            'start syncing immediately after approval.'
+                        : 'Cloud sync is not unlocked on this primary phone '
+                            'right now. Enter your account password here if '
+                            'you want to unlock sync on this phone too and '
+                            'let $targetDeviceLabel start syncing '
+                            'immediately after approval.',
+                    style: TextStyle(
+                      color: _textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'If you skip this, the sign-in will still work, but '
+                    '$targetDeviceLabel may need the account password later '
+                    'to unlock encrypted sync.',
+                    style: TextStyle(
+                      color: _textSecondary,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    enabled: !isSubmitting,
+                    decoration: InputDecoration(
+                      labelText: 'Account password',
+                      border: const OutlineInputBorder(),
+                      errorText: errorText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () {
+                        result = _PasswordlessApprovalMode.cancel;
+                        Navigator.pop(dialogContext);
+                      },
+                child: const Text('Cancel'),
+              ),
+              OutlinedButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () {
+                        result = _PasswordlessApprovalMode.approveOnly;
+                        Navigator.pop(dialogContext);
+                      },
+                child: const Text('Approve only'),
+              ),
+              FilledButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final password = passwordController.text.trim();
+                        if (password.isEmpty) {
+                          setDialogState(() {
+                            errorText =
+                                'Enter your password to unlock sync first.';
+                          });
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isSubmitting = true;
+                          errorText = null;
+                        });
+
+                        final unlocked = await _syncService
+                            .unlockSyncOnCurrentDevice(password);
+                        if (!dialogContext.mounted) return;
+
+                        if (unlocked) {
+                          result = _PasswordlessApprovalMode.unlockAndTransfer;
+                          Navigator.pop(dialogContext);
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isSubmitting = false;
+                          errorText = _syncService.lastErrorMessage ??
+                              'Could not unlock sync on this phone.';
+                        });
+                      },
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Unlock and approve'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    passwordController.dispose();
+    return result;
+  }
+
   Future<void> _handleRequest(
     Map<String, dynamic> item, {
     required bool approve,
@@ -173,6 +329,14 @@ class _PasswordlessRequestsScreenState
   }) async {
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
+
+    var approvalMode = _PasswordlessApprovalMode.approveOnly;
+    if (approve) {
+      approvalMode = await _prepareApprovalMode(item);
+      if (!mounted || approvalMode == _PasswordlessApprovalMode.cancel) {
+        return;
+      }
+    }
 
     setState(() => _isActing = true);
     final requestId = item['id']?.toString() ?? '';
@@ -191,7 +355,12 @@ class _PasswordlessRequestsScreenState
         content: Text(
           success
               ? (approve
-                  ? 'Sign-in request approved.'
+                  ? approvalMode == _PasswordlessApprovalMode.unlockAndTransfer
+                      ? 'Sign-in request approved and sync will unlock on '
+                          'that device too.'
+                      : 'Sign-in request approved. That device may still '
+                          'need the account password to unlock encrypted '
+                          'sync.'
                   : 'Sign-in request denied.')
               : (_syncService.lastErrorMessage ??
                   'Could not update this sign-in request.'),
