@@ -263,6 +263,7 @@ def _build_passwordless_authenticated_response(
     message: str,
     requires_password_for_sync: bool,
     sync_unlock_payload: str = '',
+    unlock_transfer_key: str = '',
 ):
     refresh = RefreshToken.for_user(user)
     session = attach_session_to_refresh_token(user, request, refresh)
@@ -280,6 +281,7 @@ def _build_passwordless_authenticated_response(
             'requires_password_for_sync': requires_password_for_sync,
             'sync_unlock_message': sync_unlock_message,
             'sync_unlock_payload': sync_unlock_payload,
+            'unlock_transfer_key': unlock_transfer_key,
             'user': UserSerializer(user).data,
             'access': str(refresh.access_token),
             'refresh': str(refresh),
@@ -670,6 +672,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'status': 'pending',
                 'verification_code': request_obj.get_verification_code(),
                 'code_expires_at': request_obj.code_expires_at().isoformat(),
+                'unlock_transfer_key': request_obj.get_unlock_transfer_key(),
             })
         if request_obj.status == PasswordlessLoginRequest.STATUS_DENIED:
             return Response({'success': False, 'status': 'denied', 'error': 'The sign-in request was denied on your primary phone.'}, status=403)
@@ -681,6 +684,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             return Response({'success': False, 'status': request_obj.status}, status=409)
 
         sync_unlock_payload = request_obj.sync_unlock_payload or ''
+        unlock_transfer_key = request_obj.get_unlock_transfer_key()
 
         request_obj.status = PasswordlessLoginRequest.STATUS_COMPLETED
         request_obj.completed_at = timezone.now()
@@ -703,6 +707,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             message='Passwordless sign-in approved.',
             requires_password_for_sync=not bool(sync_unlock_payload),
             sync_unlock_payload=sync_unlock_payload,
+            unlock_transfer_key=unlock_transfer_key,
         )
 
     @action(detail=False, methods=['post'], url_path='recover-primary-device')

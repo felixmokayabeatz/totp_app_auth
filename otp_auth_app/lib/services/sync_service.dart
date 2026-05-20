@@ -2370,12 +2370,20 @@ class SyncService {
         'device_kind': _deviceKind(),
       });
       final data = Map<String, dynamic>.from(response.data as Map);
+      final responseUnlockTransferKey =
+          data['unlock_transfer_key']?.toString().trim() ?? '';
+      if (responseUnlockTransferKey.isNotEmpty) {
+        await _storePasswordlessUnlockTransferKey(
+          requestId,
+          responseUnlockTransferKey,
+        );
+      }
       final effectiveUnlockTransferKey = (unlockTransferKey != null &&
                   unlockTransferKey.trim().isNotEmpty)
               ? unlockTransferKey.trim()
               : (await _getStoredPasswordlessUnlockTransferKey(requestId))
-                      ?.trim() ??
-                  '';
+                          ?.trim() ??
+                  responseUnlockTransferKey;
       if (data['success'] == true && data['status'] == 'approved') {
         String? transferredEncryptionKey;
         final syncUnlockPayload = data['sync_unlock_payload']?.toString();

@@ -314,6 +314,10 @@ class PasswordlessLoginFlowTests(APITestCase):
         self.assertTrue(poll_response.data['success'])
         self.assertEqual(poll_response.data['status'], 'approved')
         self.assertEqual(poll_response.data['requires_password_for_sync'], True)
+        self.assertEqual(
+            poll_response.data['unlock_transfer_key'],
+            start_response.data['unlock_transfer_key'],
+        )
         self.assertIn('access', poll_response.data)
         self.assertIn('refresh', poll_response.data)
 
@@ -375,6 +379,10 @@ class PasswordlessLoginFlowTests(APITestCase):
         self.assertEqual(
             poll_response.data['sync_unlock_payload'],
             sync_unlock_payload,
+        )
+        self.assertEqual(
+            poll_response.data['unlock_transfer_key'],
+            start_response.data['unlock_transfer_key'],
         )
 
         request_obj.refresh_from_db()
