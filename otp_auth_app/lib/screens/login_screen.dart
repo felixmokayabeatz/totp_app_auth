@@ -1497,10 +1497,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Passwordless sign-in was approved, but the primary device '
-                    'did not transfer the sync unlock key. Enter your account '
-                    'password here to restore the encryption key and unlock '
-                    'synced OTPs, passwords, and secure text on this device.',
+                    'Passwordless sign-in was approved, but this device could '
+                    'not restore the sync unlock key from that approval. '
+                    'Enter your account password here to restore the '
+                    'encryption key and unlock synced OTPs, passwords, and '
+                    'secure text on this device.',
                   ),
                   const SizedBox(height: 16),
                   TextField(

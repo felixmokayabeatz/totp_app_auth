@@ -324,6 +324,7 @@ class PasswordlessLoginFlowTests(APITestCase):
         )
         self.assertEqual(request_obj.reviewed_by_session_id, self.primary_session.id)
         self.assertIsNotNone(request_obj.completed_at)
+        self.assertEqual(request_obj.unlock_transfer_key, '')
         self.assertTrue(
             self.user.app_notifications.filter(
                 notification_type='sign_in',
@@ -377,7 +378,8 @@ class PasswordlessLoginFlowTests(APITestCase):
         )
 
         request_obj.refresh_from_db()
-        self.assertEqual(request_obj.sync_unlock_payload, sync_unlock_payload)
+        self.assertEqual(request_obj.sync_unlock_payload, '')
+        self.assertEqual(request_obj.unlock_transfer_key, '')
         self.assertIsNotNone(request_obj.sync_unlock_transferred_at)
 
     def test_passwordless_start_rejects_wrong_password_when_password_is_provided(self):

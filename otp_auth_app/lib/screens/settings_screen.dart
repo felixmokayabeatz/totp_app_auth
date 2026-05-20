@@ -1439,14 +1439,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
           const SizedBox(height: 12),
-          Text(
-            'Developed with love by Felix Mokaya (c) ${DateTime.now().year}',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+          Text.rich(
+            TextSpan(
+              style: TextStyle(
+                color: _textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              children: [
+                const TextSpan(text: 'Developed with love '),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: Icon(
+                    Icons.favorite_rounded,
+                    size: 14,
+                    color: _accent,
+                  ),
+                ),
+                TextSpan(
+                  text: ' by Felix Mokaya © ${DateTime.now().year}',
+                ),
+              ],
             ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
           _sectionLabel('Danger Zone'),

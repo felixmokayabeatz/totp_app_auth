@@ -21,6 +21,7 @@ import 'dart:io';
 class SyncService {
   static const _passwordDeletedIdsPrefix = 'password_deleted_ids_';
   static const _secureMessageDeletedIdsPrefix = 'secure_message_deleted_ids_';
+  static const _passwordlessUnlockKeyPrefix = 'passwordless_unlock_key_';
   static const _secureMessageLifetime = Duration(minutes: 30);
   static const _passwordlessSyncUnlockContext = 'passwordless-sync-unlock';
   // ─── Singleton ────────────────────────────────────────────────────────────
@@ -1495,6 +1496,44 @@ class SyncService {
     return _encryptionKey;
   }
 
+  String _passwordlessUnlockKeyStorageKey(String requestId) =>
+      '$_passwordlessUnlockKeyPrefix$requestId';
+
+  Future<void> _storePasswordlessUnlockTransferKey(
+    String requestId,
+    String unlockTransferKey,
+  ) async {
+    final trimmedRequestId = requestId.trim();
+    final trimmedTransferKey = unlockTransferKey.trim();
+    if (trimmedRequestId.isEmpty || trimmedTransferKey.isEmpty) {
+      return;
+    }
+    await _secureStorage.write(
+      _passwordlessUnlockKeyStorageKey(trimmedRequestId),
+      trimmedTransferKey,
+    );
+  }
+
+  Future<String?> _getStoredPasswordlessUnlockTransferKey(String requestId) async {
+    final trimmedRequestId = requestId.trim();
+    if (trimmedRequestId.isEmpty) {
+      return null;
+    }
+    return _secureStorage.read(
+      _passwordlessUnlockKeyStorageKey(trimmedRequestId),
+    );
+  }
+
+  Future<void> _clearPasswordlessUnlockTransferKey(String requestId) async {
+    final trimmedRequestId = requestId.trim();
+    if (trimmedRequestId.isEmpty) {
+      return;
+    }
+    await _secureStorage.delete(
+      _passwordlessUnlockKeyStorageKey(trimmedRequestId),
+    );
+  }
+
   String? _restoreTransferredSyncEncryptionKey(
     String? syncUnlockPayload,
     String? unlockTransferKey,
@@ -2279,6 +2318,14 @@ class SyncService {
       });
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = Map<String, dynamic>.from(response.data as Map);
+        final requestId = data['request_id']?.toString() ?? '';
+        final unlockTransferKey = data['unlock_transfer_key']?.toString() ?? '';
+        if (requestId.isNotEmpty && unlockTransferKey.isNotEmpty) {
+          await _storePasswordlessUnlockTransferKey(
+            requestId,
+            unlockTransferKey,
+          );
+        }
         final access = data['access']?.toString() ?? '';
         final refresh = data['refresh']?.toString() ?? '';
         if (data['success'] == true &&
@@ -2323,6 +2370,12 @@ class SyncService {
         'device_kind': _deviceKind(),
       });
       final data = Map<String, dynamic>.from(response.data as Map);
+      final effectiveUnlockTransferKey = (unlockTransferKey != null &&
+                  unlockTransferKey.trim().isNotEmpty)
+              ? unlockTransferKey.trim()
+              : (await _getStoredPasswordlessUnlockTransferKey(requestId))
+                      ?.trim() ??
+                  '';
       if (data['success'] == true && data['status'] == 'approved') {
         String? transferredEncryptionKey;
         final syncUnlockPayload = data['sync_unlock_payload']?.toString();
@@ -2330,7 +2383,7 @@ class SyncService {
         if (password == null || password.isEmpty) {
           transferredEncryptionKey = _restoreTransferredSyncEncryptionKey(
             syncUnlockPayload,
-            unlockTransferKey,
+            effectiveUnlockTransferKey,
           );
           if (syncUnlockPayload != null &&
               syncUnlockPayload.trim().isNotEmpty &&
@@ -2355,6 +2408,13 @@ class SyncService {
               (transferredEncryptionKey != null &&
                   transferredEncryptionKey.isNotEmpty),
         );
+        await _clearPasswordlessUnlockTransferKey(requestId);
+      }
+      final statusText = data['status']?.toString().trim().toLowerCase() ?? '';
+      if (statusText == 'denied' ||
+          statusText == 'expired' ||
+          statusText == 'completed') {
+        await _clearPasswordlessUnlockTransferKey(requestId);
       }
       return data;
     } on DioException catch (e) {

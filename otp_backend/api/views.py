@@ -684,7 +684,17 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         request_obj.status = PasswordlessLoginRequest.STATUS_COMPLETED
         request_obj.completed_at = timezone.now()
-        request_obj.save(update_fields=['status', 'completed_at', 'updated_at'])
+        request_obj.sync_unlock_payload = ''
+        request_obj.unlock_transfer_key = ''
+        request_obj.save(
+            update_fields=[
+                'status',
+                'completed_at',
+                'sync_unlock_payload',
+                'unlock_transfer_key',
+                'updated_at',
+            ]
+        )
 
         return _build_passwordless_authenticated_response(
             request_obj.user,
