@@ -57,11 +57,11 @@
 
 [x] - Clickijg okay does not actally install the app on desktop version
 
-[ ] - User can input password within the app instead of a re-login to unlock sync, like say after passwordles sign in the user is promted to enter password to unlock synch which isgood but if they cancle they cannot later enter they have to re-log in aganin forthat to happen fix that man
+[x] - User can input password within the app instead of a re-login to unlock sync, like say after passwordles sign in the user is promted to enter password to unlock synch which isgood but if they cancle they cannot later enter they have to re-log in aganin forthat to happen fix that man
 
-[ ] Or better we can get the password from the primary device send it to the device logging in like encrpt fetch from the primary and use it instead of the user typing it, but we leave the above functinalty just incase it fails can you make changes.
+[x] Or better we can get the password from the primary device send it to the device logging in like encrpt fetch from the primary and use it instead of the user typing it, but we leave the above functinalty just incase it fails can you make changes.
 
-[ ] Also Upgrade the packages to the latest version man
+[x] Also Upgrade the packages to the latest version man
 
 ## Code Notes
 
