@@ -116,26 +116,17 @@ def send_passwordless_request_push(
         messaging.send(
             messaging.Message(
                 token=push_token,
-                notification=messaging.Notification(
-                    title='Approve sign-in in BeatzLock',
-                    body=f'{device_label} is asking to sign in. Tap to open BeatzLock.',
-                ),
                 data={
                     'event': 'passwordless_request',
                     'action': 'open_passwordless_approvals',
                     'request_id': request_id,
                     'requester_device_label': device_label,
+                    'title': 'Approve sign-in in BeatzLock',
+                    'body': f'{device_label} is asking to sign in. Tap to open BeatzLock.',
                 },
                 android=messaging.AndroidConfig(
                     priority='high',
                     ttl=timedelta(minutes=3),
-                    notification=messaging.AndroidNotification(
-                        channel_id='passwordless_approvals',
-                        click_action='FLUTTER_NOTIFICATION_CLICK',
-                        priority='high',
-                        sound='default',
-                        tag=f'passwordless-{request_id}',
-                    ),
                 ),
             ),
             app=app,

@@ -633,7 +633,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             user,
             requester_device_label=request_obj.requester_device_label,
         )
-        send_passwordless_request_push(
+        push_dispatched = send_passwordless_request_push(
             primary_session,
             requester_device_label=request_obj.requester_device_label,
             request_id=str(request_obj.id),
@@ -648,7 +648,12 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'expires_at': request_obj.expires_at.isoformat(),
                 'unlock_transfer_key': unlock_transfer_key,
                 'primary_device_label': primary_session.device_label,
-                'message': 'Open BeatzLock on your primary phone and approve this sign-in there.',
+                'push_dispatched': push_dispatched,
+                'message': (
+                    'A sign-in notification was sent to your primary phone. Tap it there to open BeatzLock and approve.'
+                    if push_dispatched
+                    else 'Open BeatzLock on your primary phone and approve this sign-in there.'
+                ),
             },
             status=201,
         )
