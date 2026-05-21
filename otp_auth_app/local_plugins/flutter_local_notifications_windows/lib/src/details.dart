@@ -1,21 +1,37 @@
-export 'details/initialization_settings.dart';
-export 'details/notification_action.dart';
-export 'details/notification_audio.dart';
-export 'details/notification_details.dart';
-export 'details/notification_header.dart';
-export 'details/notification_input.dart';
-export 'details/notification_parts.dart';
-export 'details/notification_progress.dart';
-export 'details/notification_row.dart';
+class WindowsInitializationSettings {
+  const WindowsInitializationSettings({
+    this.appName = 'BeatzLock Authenticator',
+    this.appUserModelId = 'BeatzLock.Authenticator',
+    this.guid = '00000000-0000-0000-0000-000000000000',
+    this.iconPath,
+  });
 
-/// The result of updating a notification.
+  final String appName;
+  final String appUserModelId;
+  final String guid;
+  final String? iconPath;
+}
+
+class WindowsProgressBar {
+  const WindowsProgressBar({
+    this.data = const <String, String>{},
+  });
+
+  final Map<String, String> data;
+}
+
+class WindowsNotificationDetails {
+  const WindowsNotificationDetails({
+    this.bindings = const <String, String>{},
+    this.progressBars = const <WindowsProgressBar>[],
+  });
+
+  final Map<String, String> bindings;
+  final List<WindowsProgressBar> progressBars;
+}
+
 enum NotificationUpdateResult {
-  /// The update was successful.
   success,
-
-  /// There was an unexpected error updating the notification.
   error,
-
-  /// No notification with the provided ID could be found.
   notFound,
 }

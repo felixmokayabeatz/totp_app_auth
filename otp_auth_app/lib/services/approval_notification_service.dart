@@ -56,7 +56,7 @@ class ApprovalNotificationService {
     );
 
     await _notifications.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: _handleNotificationResponse,
     );
 
@@ -175,10 +175,10 @@ class ApprovalNotificationService {
         : requesterDeviceLabel.trim();
 
     await _notifications.show(
-      _passwordlessApprovalNotificationId,
-      'Approve sign-in in BeatzLock',
-      '$label is asking to sign in. Tap to open BeatzLock.',
-      const NotificationDetails(
+      id: _passwordlessApprovalNotificationId,
+      title: 'Approve sign-in in BeatzLock',
+      body: '$label is asking to sign in. Tap to open BeatzLock.',
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _passwordlessChannelId,
           _passwordlessChannelName,
@@ -202,7 +202,7 @@ class ApprovalNotificationService {
     }
 
     await initialize();
-    await _notifications.cancel(_passwordlessApprovalNotificationId);
+    await _notifications.cancel(id: _passwordlessApprovalNotificationId);
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_lastShownPasswordlessRequestKey);

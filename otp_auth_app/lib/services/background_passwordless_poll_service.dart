@@ -14,7 +14,6 @@ import 'sync_service.dart';
 void passwordlessApprovalBackgroundCallbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     WidgetsFlutterBinding.ensureInitialized();
-    DartPluginRegistrant.ensureInitialized();
 
     if (!Platform.isAndroid) {
       return true;

@@ -375,12 +375,11 @@ packages:
     source: hosted
     version: "10.0.0"
   flutter_local_notifications_windows:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: flutter_local_notifications_windows
-      sha256: e97a1a3016512437d9c0b12fae7d1491c3c7b9aa7f03a69b974308840656b02a
-      url: "https://pub.dev"
-    source: hosted
+      path: "local_plugins/flutter_local_notifications_windows"
+      relative: true
+    source: path
     version: "2.0.1"
   flutter_plugin_android_lifecycle:
     dependency: transitive

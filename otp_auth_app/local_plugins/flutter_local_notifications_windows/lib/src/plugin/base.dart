@@ -2,7 +2,6 @@ import 'package:flutter_local_notifications_platform_interface/flutter_local_not
 import 'package:timezone/timezone.dart';
 
 import '../details.dart';
-import '../details/xml/progress.dart';
 
 export 'package:flutter_local_notifications_platform_interface/flutter_local_notifications_platform_interface.dart';
 export 'package:timezone/timezone.dart';

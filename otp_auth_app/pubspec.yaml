@@ -38,6 +38,11 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.4.13
   hive_generator: ^2.0.1
+
+dependency_overrides:
+  flutter_local_notifications_windows:
+    path: local_plugins/flutter_local_notifications_windows
+
 flutter:
   uses-material-design: true
   assets:
