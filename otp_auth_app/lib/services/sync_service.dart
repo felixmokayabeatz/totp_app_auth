@@ -1534,6 +1534,27 @@ class SyncService {
     );
   }
 
+  List<String> _passwordlessUnlockTransferKeyCandidates({
+    String? responseUnlockTransferKey,
+    String? providedUnlockTransferKey,
+    String? storedUnlockTransferKey,
+  }) {
+    final orderedCandidates = <String>[
+      responseUnlockTransferKey?.trim() ?? '',
+      providedUnlockTransferKey?.trim() ?? '',
+      storedUnlockTransferKey?.trim() ?? '',
+    ];
+
+    final uniqueCandidates = <String>[];
+    for (final candidate in orderedCandidates) {
+      if (candidate.isEmpty || uniqueCandidates.contains(candidate)) {
+        continue;
+      }
+      uniqueCandidates.add(candidate);
+    }
+    return uniqueCandidates;
+  }
+
   String? _restoreTransferredSyncEncryptionKey(
     String? syncUnlockPayload,
     String? unlockTransferKey,
@@ -2378,21 +2399,29 @@ class SyncService {
           responseUnlockTransferKey,
         );
       }
-      final effectiveUnlockTransferKey = (unlockTransferKey != null &&
-                  unlockTransferKey.trim().isNotEmpty)
-              ? unlockTransferKey.trim()
-              : (await _getStoredPasswordlessUnlockTransferKey(requestId))
-                          ?.trim() ??
-                  responseUnlockTransferKey;
+      final storedUnlockTransferKey =
+          await _getStoredPasswordlessUnlockTransferKey(requestId);
+      final unlockTransferKeyCandidates =
+          _passwordlessUnlockTransferKeyCandidates(
+        responseUnlockTransferKey: responseUnlockTransferKey,
+        providedUnlockTransferKey: unlockTransferKey,
+        storedUnlockTransferKey: storedUnlockTransferKey,
+      );
       if (data['success'] == true && data['status'] == 'approved') {
         String? transferredEncryptionKey;
         final syncUnlockPayload = data['sync_unlock_payload']?.toString();
 
         if (password == null || password.isEmpty) {
-          transferredEncryptionKey = _restoreTransferredSyncEncryptionKey(
-            syncUnlockPayload,
-            effectiveUnlockTransferKey,
-          );
+          for (final transferKey in unlockTransferKeyCandidates) {
+            transferredEncryptionKey = _restoreTransferredSyncEncryptionKey(
+              syncUnlockPayload,
+              transferKey,
+            );
+            if (transferredEncryptionKey != null &&
+                transferredEncryptionKey.isNotEmpty) {
+              break;
+            }
+          }
           if (syncUnlockPayload != null &&
               syncUnlockPayload.trim().isNotEmpty &&
               (transferredEncryptionKey == null ||
@@ -3487,6 +3516,7 @@ class SyncService {
     String requestId, {
     required String selectedCode,
     String? unlockTransferKey,
+    bool attemptSyncUnlockTransfer = true,
   }) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -3498,17 +3528,41 @@ class SyncService {
     }
 
     try {
-      final encryptionKey = await getAvailableEncryptionKey();
-      final syncUnlockPayload = encryptionKey != null &&
-              encryptionKey.isNotEmpty &&
-              unlockTransferKey != null &&
-              unlockTransferKey.trim().isNotEmpty
-          ? EncryptionService.encryptSensitiveSyncPayload(
-              encryptionKey,
-              unlockTransferKey.trim(),
-              context: _passwordlessSyncUnlockContext,
-            )
-          : null;
+      String? syncUnlockPayload;
+      if (attemptSyncUnlockTransfer) {
+        var resolvedUnlockTransferKey = unlockTransferKey?.trim() ?? '';
+        if (resolvedUnlockTransferKey.isEmpty) {
+          final requests = await getPasswordlessRequests();
+          for (final item in requests) {
+            final itemRequestId = item['id']?.toString() ?? '';
+            if (itemRequestId != requestId) {
+              continue;
+            }
+            resolvedUnlockTransferKey =
+                item['unlock_transfer_key']?.toString().trim() ?? '';
+            break;
+          }
+        }
+
+        if (resolvedUnlockTransferKey.isEmpty) {
+          _lastErrorMessage =
+              'This sign-in request is missing its sync transfer key. Refresh and try again.';
+          return false;
+        }
+
+        final encryptionKey = await getAvailableEncryptionKey();
+        if (encryptionKey == null || encryptionKey.isEmpty) {
+          _lastErrorMessage =
+              'Unlock sync on this primary phone first, then approve again.';
+          return false;
+        }
+
+        syncUnlockPayload = EncryptionService.encryptSensitiveSyncPayload(
+          encryptionKey,
+          resolvedUnlockTransferKey,
+          context: _passwordlessSyncUnlockContext,
+        );
+      }
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'passwordless-requests/$requestId/approve/',

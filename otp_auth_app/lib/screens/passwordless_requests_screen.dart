@@ -345,6 +345,8 @@ class _PasswordlessRequestsScreenState
             requestId,
             selectedCode: selectedCode ?? '',
             unlockTransferKey: item['unlock_transfer_key']?.toString(),
+            attemptSyncUnlockTransfer:
+                approvalMode == _PasswordlessApprovalMode.unlockAndTransfer,
           )
         : await _syncService.denyPasswordlessRequest(requestId);
     if (!mounted) return;
