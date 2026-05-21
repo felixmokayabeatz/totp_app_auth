@@ -85,6 +85,8 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
     _approvalNotificationService.passwordlessOpenSignal
         .addListener(_handlePasswordlessNotificationSignal);
+    _approvalNotificationService.passwordlessRequestSignal
+        .addListener(_handleForegroundPasswordlessRequestSignal);
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
@@ -333,16 +335,7 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
-    final requestId = pendingRequest['id']?.toString() ?? '';
-    final requesterLabel =
-        pendingRequest['requester_device_label']?.toString() ??
-            'another device';
-    if (requestId.isNotEmpty) {
-      await _approvalNotificationService.showPasswordlessApprovalNotification(
-        requestId: requestId,
-        requesterDeviceLabel: requesterLabel,
-      );
-    }
+    await _approvalNotificationService.clearPasswordlessApprovalNotification();
 
     if (_isShowingApprovalPrompt ||
         _openingPasswordlessRequestsFromNotification ||
@@ -360,6 +353,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _handlePasswordlessNotificationSignal() {
     unawaited(_maybeOpenPasswordlessRequestsFromNotification());
+  }
+
+  void _handleForegroundPasswordlessRequestSignal() {
+    unawaited(_pollPrimaryApprovalRequests());
   }
 
   Future<void> _maybeOpenPasswordlessRequestsFromNotification() async {
@@ -3167,6 +3164,8 @@ class _HomeScreenState extends State<HomeScreen>
     _passwordlessPollTimer?.cancel();
     _approvalNotificationService.passwordlessOpenSignal
         .removeListener(_handlePasswordlessNotificationSignal);
+    _approvalNotificationService.passwordlessRequestSignal
+        .removeListener(_handleForegroundPasswordlessRequestSignal);
     super.dispose();
   }
 }

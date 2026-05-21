@@ -24,6 +24,7 @@ class ApprovalNotificationService {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
   final ValueNotifier<int> passwordlessOpenSignal = ValueNotifier<int>(0);
+  final ValueNotifier<int> passwordlessRequestSignal = ValueNotifier<int>(0);
 
   Future<void>? _initializationFuture;
   bool _launchDetailsChecked = false;
@@ -121,6 +122,10 @@ class ApprovalNotificationService {
 
   void markPendingPasswordlessOpenIntent() {
     _captureNotificationPayload(_openPasswordlessApprovalsAction);
+  }
+
+  void notifyPasswordlessRequestArrivedInApp() {
+    passwordlessRequestSignal.value = passwordlessRequestSignal.value + 1;
   }
 
   Future<bool> _ensureNotificationPermission() async {

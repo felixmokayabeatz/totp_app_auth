@@ -176,12 +176,9 @@ class PushMessagingService {
       return;
     }
 
-    await ApprovalNotificationService().showPasswordlessApprovalNotification(
-      requestId: message.data['request_id']?.toString().trim() ?? '',
-      requesterDeviceLabel:
-          message.data['requester_device_label']?.toString() ??
-              'another device',
-    );
+    final approvalNotifications = ApprovalNotificationService();
+    await approvalNotifications.clearPasswordlessApprovalNotification();
+    approvalNotifications.notifyPasswordlessRequestArrivedInApp();
   }
 
   void _handleOpenedMessage(RemoteMessage message) {

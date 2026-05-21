@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -127,8 +128,12 @@ def send_passwordless_request_push(
                 },
                 android=messaging.AndroidConfig(
                     priority='high',
+                    ttl=timedelta(minutes=3),
                     notification=messaging.AndroidNotification(
+                        channel_id='passwordless_approvals',
                         click_action='FLUTTER_NOTIFICATION_CLICK',
+                        priority='high',
+                        sound='default',
                         tag=f'passwordless-{request_id}',
                     ),
                 ),

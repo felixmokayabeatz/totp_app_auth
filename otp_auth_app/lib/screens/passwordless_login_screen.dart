@@ -189,182 +189,188 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
         backgroundColor: _accent,
         foregroundColor: Colors.white,
       ),
-      body: Center(
-        child: Padding(
+      body: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Card(
-              color: _cardColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.phonelink_lock_rounded,
-                        size: 54, color: _accent),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Approve on your primary phone',
-                      style: TextStyle(
-                        color: _textPrimary,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage ?? _statusMessage,
-                      style: TextStyle(
-                        color: _errorMessage != null
-                            ? Colors.red.shade400
-                            : _textSecondary,
-                        height: 1.45,
-                        fontWeight: _errorMessage != null
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    if (_primaryDeviceLabel != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Primary phone: $_primaryDeviceLabel',
-                        style: TextStyle(
-                          color: _accent,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                    if (_errorMessage == null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _accent.withValues(
-                            alpha: _isDark ? 0.12 : 0.08,
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Card(
+                  color: _cardColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.phonelink_lock_rounded,
+                            size: 54, color: _accent),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Approve on your primary phone',
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
                           ),
-                          borderRadius: BorderRadius.circular(16),
+                          textAlign: TextAlign.center,
                         ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.notifications_active_rounded,
+                        const SizedBox(height: 12),
+                        Text(
+                          _errorMessage ?? _statusMessage,
+                          style: TextStyle(
+                            color: _errorMessage != null
+                                ? Colors.red.shade400
+                                : _textSecondary,
+                            height: 1.45,
+                            fontWeight: _errorMessage != null
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        if (_primaryDeviceLabel != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Primary phone: $_primaryDeviceLabel',
+                            style: TextStyle(
                               color: _accent,
-                              size: 18,
+                              fontWeight: FontWeight.w700,
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Open BeatzLock on that primary phone to approve. '
-                                'If it is already active there, the approval prompt '
-                                'can appear inside the app or in the phone '
-                                'notification bar.',
-                                style: TextStyle(
-                                  color: _textSecondary,
-                                  fontSize: 12.5,
-                                  height: 1.45,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    if (_isStarting)
-                      const CircularProgressIndicator()
-                    else if (_code != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 18),
-                        decoration: BoxDecoration(
-                          color: _isDark
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Verification code',
-                              style: TextStyle(
-                                color: _textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _code!,
-                              style: TextStyle(
-                                color: _textPrimary,
-                                fontSize: 42,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 3,
-                              ),
-                            ),
-                            if (_codeExpiresAt != null) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'Code changes in about ${_secondsUntilRefresh()}s if not approved.',
-                                style: TextStyle(
-                                  color: _textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_isPolling)
-                        const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                    ],
-                    const SizedBox(height: 18),
-                    if (_errorMessage != null)
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          OutlinedButton(
-                            onPressed: _restartFlow,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: _accent,
-                              side: BorderSide(color: _accent),
-                            ),
-                            child: const Text('Start again'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.pop(context),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _accent,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: const Text('Back to login'),
+                            textAlign: TextAlign.center,
                           ),
                         ],
-                      )
-                    else
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Use password instead'),
-                      ),
-                  ],
+                        if (_errorMessage == null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: _accent.withValues(
+                                alpha: _isDark ? 0.12 : 0.08,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.notifications_active_rounded,
+                                  color: _accent,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Open BeatzLock on that primary phone to approve. '
+                                    'If it is already open there, the approval prompt '
+                                    'should appear right inside the app.',
+                                    style: TextStyle(
+                                      color: _textSecondary,
+                                      fontSize: 12.5,
+                                      height: 1.45,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                        if (_isStarting)
+                          const CircularProgressIndicator()
+                        else if (_code != null) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 18),
+                            decoration: BoxDecoration(
+                              color: _isDark
+                                  ? Colors.white.withValues(alpha: 0.05)
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Verification code',
+                                  style: TextStyle(
+                                    color: _textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _code!,
+                                  style: TextStyle(
+                                    color: _textPrimary,
+                                    fontSize: 42,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 3,
+                                  ),
+                                ),
+                                if (_codeExpiresAt != null) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Code changes in about ${_secondsUntilRefresh()}s if not approved.',
+                                    style: TextStyle(
+                                      color: _textSecondary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_isPolling)
+                            const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                        const SizedBox(height: 18),
+                        if (_errorMessage != null)
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              OutlinedButton(
+                                onPressed: _restartFlow,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: _accent,
+                                  side: BorderSide(color: _accent),
+                                ),
+                                child: const Text('Start again'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(context),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _accent,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('Back to login'),
+                              ),
+                            ],
+                          )
+                        else
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Use password instead'),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
