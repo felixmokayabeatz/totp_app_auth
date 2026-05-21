@@ -340,10 +340,9 @@ packages:
   firebase_core:
     dependency: "direct main"
     description:
-      name: firebase_core
-      sha256: "93a5bde9775fd5adcc937f39dfa04ae0bc89c4d79bea6abc49de3f7b049d9ff6"
-      url: "https://pub.dev"
-    source: hosted
+      path: "local_plugins/firebase_core"
+      relative: true
+    source: path
     version: "4.9.0"
   firebase_core_platform_interface:
     dependency: transitive
