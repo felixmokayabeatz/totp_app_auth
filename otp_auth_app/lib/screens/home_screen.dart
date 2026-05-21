@@ -374,6 +374,9 @@ class _HomeScreenState extends State<HomeScreen>
     if (!await _syncService.isLoggedIn()) {
       return;
     }
+    if (!mounted) {
+      return;
+    }
 
     _openingPasswordlessRequestsFromNotification = true;
     try {

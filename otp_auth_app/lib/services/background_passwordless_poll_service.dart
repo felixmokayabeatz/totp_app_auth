@@ -1,10 +1,8 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:workmanager/workmanager.dart';
 
-import '../config/app_config.dart';
 import '../models/device_session_info.dart';
 import 'approval_notification_service.dart';
 import 'secure_storage_service.dart';
@@ -62,7 +60,6 @@ class BackgroundPasswordlessPollService {
 
     final initialization = Workmanager().initialize(
       passwordlessApprovalBackgroundCallbackDispatcher,
-      isInDebugMode: AppConfig.isDevelopment,
     );
     _initializationFuture = initialization;
     await initialization;
