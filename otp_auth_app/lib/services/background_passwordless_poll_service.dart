@@ -79,7 +79,8 @@ class BackgroundPasswordlessPollService {
 
     if (!enabled) {
       await Workmanager().cancelByUniqueName(uniqueWorkName);
-      await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+      await ApprovalNotificationService()
+          .clearPasswordlessApprovalNotification();
       return;
     }
 
@@ -118,10 +119,9 @@ class BackgroundPasswordlessPollService {
           (session) => session?.isCurrent == true,
           orElse: () => null,
         );
-    final canShowPasswordlessNotification =
-        currentSession != null &&
-            currentSession.isPrimary &&
-            currentSession.deviceKind == 'mobile';
+    final canShowPasswordlessNotification = currentSession != null &&
+        currentSession.isPrimary &&
+        currentSession.deviceKind == 'mobile';
 
     if (!canShowPasswordlessNotification) {
       await approvalNotifications.clearPasswordlessApprovalNotification();
@@ -149,7 +149,8 @@ class BackgroundPasswordlessPollService {
     }
 
     final requesterDeviceLabel =
-        pendingRequest['requester_device_label']?.toString() ?? 'another device';
+        pendingRequest['requester_device_label']?.toString() ??
+            'another device';
     await approvalNotifications.showPasswordlessApprovalNotification(
       requestId: requestId,
       requesterDeviceLabel: requesterDeviceLabel,

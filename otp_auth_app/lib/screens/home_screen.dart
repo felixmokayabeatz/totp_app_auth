@@ -29,6 +29,7 @@ import '../config/app_config.dart';
 import '../widgets/account_logo_badge.dart';
 import '../services/approval_notification_service.dart';
 import '../services/background_passwordless_poll_service.dart';
+import '../services/push_messaging_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -92,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen>
     _loadData();
     _loadSyncStatus();
     _initializePasswordlessApprovals();
+    unawaited(PushMessagingService().syncCurrentPushTokenIfPossible());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_maybeOpenPasswordlessRequestsFromNotification());
     });
@@ -241,7 +243,8 @@ class _HomeScreenState extends State<HomeScreen>
     await _refreshPasswordlessApprovalCapability();
     _passwordlessPollTimer?.cancel();
     if (!_canShowPasswordlessPrompt && !_canShowBulkDeletePrompt) {
-      await _approvalNotificationService.clearPasswordlessApprovalNotification();
+      await _approvalNotificationService
+          .clearPasswordlessApprovalNotification();
       return;
     }
 
@@ -254,7 +257,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _refreshPasswordlessApprovalCapability() async {
     if (!mounted || !await _syncService.isLoggedIn()) {
-      await BackgroundPasswordlessPollService().syncRegistration(enabled: false);
+      await BackgroundPasswordlessPollService()
+          .syncRegistration(enabled: false);
       if (mounted) {
         setState(() {
           _canShowPasswordlessPrompt = false;
@@ -310,7 +314,8 @@ class _HomeScreenState extends State<HomeScreen>
     final requests = await _syncService.getPasswordlessRequests();
     if (!mounted) return;
     if (requests.isEmpty) {
-      await _approvalNotificationService.clearPasswordlessApprovalNotification();
+      await _approvalNotificationService
+          .clearPasswordlessApprovalNotification();
       return;
     }
 
@@ -323,13 +328,15 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     if (pendingRequest == null) {
-      await _approvalNotificationService.clearPasswordlessApprovalNotification();
+      await _approvalNotificationService
+          .clearPasswordlessApprovalNotification();
       return;
     }
 
     final requestId = pendingRequest['id']?.toString() ?? '';
     final requesterLabel =
-        pendingRequest['requester_device_label']?.toString() ?? 'another device';
+        pendingRequest['requester_device_label']?.toString() ??
+            'another device';
     if (requestId.isNotEmpty) {
       await _approvalNotificationService.showPasswordlessApprovalNotification(
         requestId: requestId,

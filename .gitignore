@@ -82,6 +82,7 @@ local.py
 .codex
 .build_tools/
 beatzlock_*_amd64.deb
+otp_auth_app/secrets/*.json
 
 # Keep build metadata logs tracked
 !otp_auth_app/build_logs/

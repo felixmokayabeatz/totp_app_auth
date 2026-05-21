@@ -13,9 +13,7 @@ class WindowsInitializationSettings {
 }
 
 class WindowsProgressBar {
-  const WindowsProgressBar({
-    this.data = const <String, String>{},
-  });
+  const WindowsProgressBar({this.data = const <String, String>{}});
 
   final Map<String, String> data;
 }
@@ -30,8 +28,4 @@ class WindowsNotificationDetails {
   final List<WindowsProgressBar> progressBars;
 }
 
-enum NotificationUpdateResult {
-  success,
-  error,
-  notFound,
-}
+enum NotificationUpdateResult { success, error, notFound }

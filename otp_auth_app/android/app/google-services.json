@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "32356741377",
+    "project_id": "felixmokayabeatz-b5c94",
+    "storage_bucket": "felixmokayabeatz-b5c94.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:32356741377:android:357717a2ed4b689c7dab00",
+        "android_client_info": {
+          "package_name": "com.beatzlock.otp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCkoCWVeMrIYsoJe3MvYbGIdRYYjEXN00I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

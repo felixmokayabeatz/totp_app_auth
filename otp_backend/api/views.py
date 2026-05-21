@@ -64,6 +64,7 @@ from .notifications import (
     create_recovery_codes_generated_notification,
     create_sign_in_notification,
 )
+from .push_notifications import send_passwordless_request_push
 from .device_sessions import (
     attach_session_to_refresh_token,
     ensure_primary_session,
@@ -631,6 +632,11 @@ class AuthViewSet(viewsets.GenericViewSet):
         create_passwordless_request_notification(
             user,
             requester_device_label=request_obj.requester_device_label,
+        )
+        send_passwordless_request_push(
+            primary_session,
+            requester_device_label=request_obj.requester_device_label,
+            request_id=str(request_obj.id),
         )
 
         return Response(
@@ -2062,6 +2068,55 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         )
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'], url_path='push-token')
+    def push_token(self, request):
+        current_session = self._ensure_current_session()
+        if current_session is None:
+            return Response(
+                {'error': 'This device could not be verified for push notifications.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        token = (request.data.get('token') or '').strip()
+        platform = (request.data.get('platform') or '').strip().lower()
+        now = timezone.now()
+
+        update_fields = [
+            'push_token',
+            'push_platform',
+            'push_token_updated_at',
+            'last_seen_at',
+            'updated_at',
+        ]
+
+        if token:
+            DeviceSession.objects.filter(
+                push_token=token,
+            ).exclude(id=current_session.id).update(
+                push_token='',
+                push_platform='',
+                push_token_updated_at=None,
+                updated_at=now,
+            )
+            current_session.push_token = token
+            current_session.push_platform = platform or 'android'
+            current_session.push_token_updated_at = now
+        else:
+            current_session.push_token = ''
+            current_session.push_platform = ''
+            current_session.push_token_updated_at = None
+
+        current_session.last_seen_at = now
+        current_session.save(update_fields=update_fields)
+
+        return Response(
+            {
+                'success': True,
+                'push_token_registered': bool(token),
+                'platform': current_session.push_platform,
+            }
+        )
+
     @action(detail=True, methods=['post'], url_path='revoke')
     def revoke(self, request, pk=None):
         current_session = self._ensure_current_session()
@@ -2082,8 +2137,21 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
 
         session.is_active = False
         session.is_primary = False
+        session.push_token = ''
+        session.push_platform = ''
+        session.push_token_updated_at = None
         session.revoked_at = timezone.now()
-        session.save(update_fields=['is_active', 'is_primary', 'revoked_at', 'updated_at'])
+        session.save(
+            update_fields=[
+                'is_active',
+                'is_primary',
+                'push_token',
+                'push_platform',
+                'push_token_updated_at',
+                'revoked_at',
+                'updated_at',
+            ]
+        )
         ensure_primary_session(request.user)
         return Response({'success': True})
 
@@ -2108,6 +2176,9 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         revoked_count = queryset.update(
             is_active=False,
             is_primary=False,
+            push_token='',
+            push_platform='',
+            push_token_updated_at=None,
             revoked_at=now,
             updated_at=now,
         )
@@ -2203,10 +2274,16 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
 
         if current_session is not None:
             current_session.is_active = False
+            current_session.push_token = ''
+            current_session.push_platform = ''
+            current_session.push_token_updated_at = None
             current_session.revoked_at = timezone.now()
             current_session.save(
                 update_fields=[
                     'is_active',
+                    'push_token',
+                    'push_platform',
+                    'push_token_updated_at',
                     'revoked_at',
                     'updated_at',
                 ]

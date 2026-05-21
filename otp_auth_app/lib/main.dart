@@ -26,6 +26,7 @@ import 'services/biometric_service.dart';
 import 'services/otp_service.dart';
 import 'services/approval_notification_service.dart';
 import 'services/background_passwordless_poll_service.dart';
+import 'services/push_messaging_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/sync_service.dart';
 
@@ -62,6 +63,8 @@ void main() async {
   await BackgroundPasswordlessPollService().initialize();
   await ApprovalNotificationService().initialize();
   await ApprovalNotificationService().refreshPendingActionFromPlatform();
+  await PushMessagingService().initialize();
+  await PushMessagingService().syncCurrentPushTokenIfPossible();
   final themeProvider = ThemeProvider();
   await themeProvider.loadPreferences();
 
@@ -499,11 +502,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
       }
 
-      unawaited(ApprovalNotificationService().refreshPendingActionFromPlatform());
+      unawaited(
+          ApprovalNotificationService().refreshPendingActionFromPlatform());
       unawaited(_refreshUpdateStatus());
       unawaited(_runSessionHeartbeat());
     } else if (state == AppLifecycleState.resumed) {
-      unawaited(ApprovalNotificationService().refreshPendingActionFromPlatform());
+      unawaited(
+          ApprovalNotificationService().refreshPendingActionFromPlatform());
       unawaited(_refreshUpdateStatus());
       unawaited(_runSessionHeartbeat());
     }

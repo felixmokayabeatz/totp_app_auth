@@ -1514,7 +1514,8 @@ class SyncService {
     );
   }
 
-  Future<String?> _getStoredPasswordlessUnlockTransferKey(String requestId) async {
+  Future<String?> _getStoredPasswordlessUnlockTransferKey(
+      String requestId) async {
     final trimmedRequestId = requestId.trim();
     if (trimmedRequestId.isEmpty) {
       return null;
@@ -3403,6 +3404,61 @@ class SyncService {
     } catch (e) {
       _lastErrorMessage = 'Could not load active devices.';
       return [];
+    }
+  }
+
+  Future<bool> registerPushToken({
+    required String token,
+    String platform = 'android',
+    bool reportError = false,
+  }) async {
+    await _updateAuthHeader();
+    if (reportError) {
+      _lastErrorMessage = null;
+    }
+
+    final accessToken =
+        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    if (accessToken == null || accessToken.isEmpty) {
+      if (reportError) {
+        _lastErrorMessage = 'You need to be signed in to enable notifications.';
+      }
+      return false;
+    }
+
+    final trimmedToken = token.trim();
+    if (trimmedToken.isEmpty) {
+      if (reportError) {
+        _lastErrorMessage = 'Notification token is missing.';
+      }
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (freshAccessToken) => _dio.post(
+          'device-sessions/push-token/',
+          data: {
+            'token': trimmedToken,
+            'platform': platform.trim().isEmpty ? 'android' : platform.trim(),
+          },
+          options: Options(headers: {
+            'Authorization': 'Bearer $freshAccessToken',
+          }),
+        ),
+      );
+      return response.statusCode == 200;
+    } on DioException catch (e) {
+      if (reportError) {
+        _lastErrorMessage = _extractServerError(e.response?.data) ??
+            'Could not enable push notifications.';
+      }
+      return false;
+    } catch (_) {
+      if (reportError) {
+        _lastErrorMessage = 'Could not enable push notifications.';
+      }
+      return false;
     }
   }
 
