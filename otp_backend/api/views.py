@@ -642,7 +642,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'expires_at': request_obj.expires_at.isoformat(),
                 'unlock_transfer_key': unlock_transfer_key,
                 'primary_device_label': primary_session.device_label,
-                'message': 'Approve this sign-in from your primary phone.',
+                'message': 'Open BeatzLock on your primary phone and approve this sign-in there.',
             },
             status=201,
         )

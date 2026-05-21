@@ -127,7 +127,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       );
       _primaryDeviceLabel = result['primary_device_label']?.toString();
       _statusMessage = result['message']?.toString() ??
-          'Approve this sign-in from your primary phone.';
+          'Open BeatzLock on your primary phone and approve this sign-in there.';
     });
 
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
@@ -237,6 +237,44 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                         style: TextStyle(
                           color: _accent,
                           fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    if (_errorMessage == null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(
+                            alpha: _isDark ? 0.12 : 0.08,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.notifications_active_rounded,
+                              color: _accent,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Open BeatzLock on that primary phone to approve. '
+                                'If it is already active there, the approval prompt '
+                                'can appear inside the app or in the phone '
+                                'notification bar.',
+                                style: TextStyle(
+                                  color: _textSecondary,
+                                  fontSize: 12.5,
+                                  height: 1.45,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

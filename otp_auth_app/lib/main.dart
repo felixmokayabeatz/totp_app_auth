@@ -24,6 +24,7 @@ import 'services/app_update_service.dart';
 import 'services/app_lock_service.dart';
 import 'services/biometric_service.dart';
 import 'services/otp_service.dart';
+import 'services/approval_notification_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/sync_service.dart';
 
@@ -57,6 +58,7 @@ void main() async {
 
   await SecureStorageService().init();
   await BiometricService().init();
+  await ApprovalNotificationService().refreshPendingActionFromPlatform();
   final themeProvider = ThemeProvider();
   await themeProvider.loadPreferences();
 
@@ -494,9 +496,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
       }
 
+      unawaited(ApprovalNotificationService().refreshPendingActionFromPlatform());
       unawaited(_refreshUpdateStatus());
       unawaited(_runSessionHeartbeat());
     } else if (state == AppLifecycleState.resumed) {
+      unawaited(ApprovalNotificationService().refreshPendingActionFromPlatform());
       unawaited(_refreshUpdateStatus());
       unawaited(_runSessionHeartbeat());
     }

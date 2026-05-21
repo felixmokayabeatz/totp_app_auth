@@ -98,11 +98,12 @@ def create_passwordless_request_notification(
         "passwordless_request",
         title="New passwordless sign-in request",
         message=(
-            f"A device named {requester_device_label} is asking to sign in."
+            f"Open BeatzLock on your primary phone to review a sign-in request from {requester_device_label}."
         ),
         details=(
-            f"Approve the passwordless sign-in request for {requester_device_label} "
-            "only if the 3-digit code matches what you see on that device."
+            f"Open BeatzLock on your primary phone and approve the passwordless "
+            f"sign-in request for {requester_device_label} only if the 3-digit "
+            "code matches what you see on that device."
         ),
         metadata={
             "requester_device_label": requester_device_label,
