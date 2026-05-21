@@ -1,22 +1,32 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApprovalNotificationService {
   ApprovalNotificationService._internal();
 
   static final ApprovalNotificationService _instance =
       ApprovalNotificationService._internal();
-  static const MethodChannel _channel =
-      MethodChannel('com.beatzlock.otp/notifications');
+  static const String _passwordlessChannelId = 'passwordless_approvals';
+  static const String _passwordlessChannelName = 'Passwordless approvals';
+  static const String _passwordlessChannelDescription =
+      'Sign-in approval alerts for passwordless requests.';
+  static const int _passwordlessApprovalNotificationId = 42101;
   static const String _openPasswordlessApprovalsAction =
       'open_passwordless_approvals';
+  static const String _lastShownPasswordlessRequestKey =
+      'last_passwordless_notification_request_id';
 
   factory ApprovalNotificationService() => _instance;
 
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
   final ValueNotifier<int> passwordlessOpenSignal = ValueNotifier<int>(0);
 
+  Future<void>? _initializationFuture;
+  bool _launchDetailsChecked = false;
   bool _hasPendingPasswordlessOpenIntent = false;
   bool _notificationPermissionChecked = false;
   bool _notificationPermissionGranted = false;
@@ -24,19 +34,82 @@ class ApprovalNotificationService {
   bool get hasPendingPasswordlessOpenIntent =>
       _hasPendingPasswordlessOpenIntent;
 
-  Future<void> refreshPendingActionFromPlatform() async {
-    if (!Platform.isAndroid) return;
-
-    try {
-      final action =
-          await _channel.invokeMethod<String>('consumePendingNotificationAction');
-      if (action == _openPasswordlessApprovalsAction) {
-        _hasPendingPasswordlessOpenIntent = true;
-        passwordlessOpenSignal.value = passwordlessOpenSignal.value + 1;
-      }
-    } on PlatformException {
-      // Ignore notification tap refresh failures and keep the normal in-app flow.
+  Future<void> initialize() async {
+    if (!Platform.isAndroid) {
+      return;
     }
+
+    final existingInitialization = _initializationFuture;
+    if (existingInitialization != null) {
+      await existingInitialization;
+      return;
+    }
+
+    final initialization = _initializeInternal();
+    _initializationFuture = initialization;
+    await initialization;
+  }
+
+  Future<void> _initializeInternal() async {
+    const initializationSettings = InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    );
+
+    await _notifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: _handleNotificationResponse,
+    );
+
+    final androidImplementation = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidImplementation?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _passwordlessChannelId,
+        _passwordlessChannelName,
+        description: _passwordlessChannelDescription,
+        importance: Importance.high,
+      ),
+    );
+
+    await _refreshLaunchDetailsIfNeeded();
+  }
+
+  Future<void> refreshPendingActionFromPlatform() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    await initialize();
+    await _refreshLaunchDetailsIfNeeded();
+  }
+
+  Future<void> _refreshLaunchDetailsIfNeeded() async {
+    if (_launchDetailsChecked) {
+      return;
+    }
+
+    final launchDetails = await _notifications.getNotificationAppLaunchDetails();
+    _launchDetailsChecked = true;
+
+    if (launchDetails?.didNotificationLaunchApp != true) {
+      return;
+    }
+
+    _captureNotificationPayload(launchDetails?.notificationResponse?.payload);
+  }
+
+  void _handleNotificationResponse(NotificationResponse response) {
+    _captureNotificationPayload(response.payload);
+  }
+
+  void _captureNotificationPayload(String? payload) {
+    if (payload != _openPasswordlessApprovalsAction) {
+      return;
+    }
+
+    _hasPendingPasswordlessOpenIntent = true;
+    passwordlessOpenSignal.value = passwordlessOpenSignal.value + 1;
   }
 
   bool takePendingPasswordlessOpenIntent() {
@@ -49,15 +122,21 @@ class ApprovalNotificationService {
     if (!Platform.isAndroid) {
       return false;
     }
+
+    await initialize();
     if (_notificationPermissionChecked) {
       return _notificationPermissionGranted;
     }
 
+    final androidImplementation = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
     try {
       final granted =
-          await _channel.invokeMethod<bool>('requestNotificationPermission');
-      _notificationPermissionGranted = granted ?? false;
-    } on PlatformException {
+          await androidImplementation?.requestNotificationsPermission();
+      _notificationPermissionGranted = granted ?? true;
+    } catch (_) {
       _notificationPermissionGranted = false;
     } finally {
       _notificationPermissionChecked = true;
@@ -70,34 +149,62 @@ class ApprovalNotificationService {
     required String requestId,
     required String requesterDeviceLabel,
   }) async {
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    final trimmedRequestId = requestId.trim();
+    if (trimmedRequestId.isEmpty) {
+      return;
+    }
 
     final canNotify = await _ensureNotificationPermission();
-    if (!canNotify) return;
+    if (!canNotify) {
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final lastShownRequestId =
+        prefs.getString(_lastShownPasswordlessRequestKey) ?? '';
+    if (lastShownRequestId == trimmedRequestId) {
+      return;
+    }
 
     final label = requesterDeviceLabel.trim().isEmpty
         ? 'another device'
         : requesterDeviceLabel.trim();
-    try {
-      await _channel.invokeMethod<void>(
-        'showPasswordlessApprovalNotification',
-        {
-          'requestId': requestId,
-          'requesterDeviceLabel': label,
-        },
-      );
-    } on PlatformException {
-      // Keep passwordless approvals working even if Android notifications fail.
-    }
+
+    await _notifications.show(
+      _passwordlessApprovalNotificationId,
+      'Approve sign-in in BeatzLock',
+      '$label is asking to sign in. Tap to open BeatzLock.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _passwordlessChannelId,
+          _passwordlessChannelName,
+          channelDescription: _passwordlessChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.reminder,
+          visibility: NotificationVisibility.private,
+          onlyAlertOnce: true,
+        ),
+      ),
+      payload: _openPasswordlessApprovalsAction,
+    );
+
+    await prefs.setString(_lastShownPasswordlessRequestKey, trimmedRequestId);
   }
 
   Future<void> clearPasswordlessApprovalNotification() async {
-    if (!Platform.isAndroid) return;
-
-    try {
-      await _channel.invokeMethod<void>('clearPasswordlessApprovalNotification');
-    } on PlatformException {
-      // Ignore best-effort cleanup failures.
+    if (!Platform.isAndroid) {
+      return;
     }
+
+    await initialize();
+    await _notifications.cancel(_passwordlessApprovalNotificationId);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastShownPasswordlessRequestKey);
   }
 }

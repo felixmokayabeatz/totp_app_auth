@@ -28,6 +28,7 @@ import 'profile_screen.dart';
 import '../config/app_config.dart';
 import '../widgets/account_logo_badge.dart';
 import '../services/approval_notification_service.dart';
+import '../services/background_passwordless_poll_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isShowingBackupCodeRequirementDialog = false;
   bool _approvalPollInProgress = false;
   bool _openingPasswordlessRequestsFromNotification = false;
-  String? _lastPasswordlessNotificationRequestId;
   Timer? _passwordlessPollTimer;
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
@@ -242,7 +242,6 @@ class _HomeScreenState extends State<HomeScreen>
     _passwordlessPollTimer?.cancel();
     if (!_canShowPasswordlessPrompt && !_canShowBulkDeletePrompt) {
       await _approvalNotificationService.clearPasswordlessApprovalNotification();
-      _lastPasswordlessNotificationRequestId = null;
       return;
     }
 
@@ -255,6 +254,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _refreshPasswordlessApprovalCapability() async {
     if (!mounted || !await _syncService.isLoggedIn()) {
+      await BackgroundPasswordlessPollService().syncRegistration(enabled: false);
       if (mounted) {
         setState(() {
           _canShowPasswordlessPrompt = false;
@@ -275,6 +275,10 @@ class _HomeScreenState extends State<HomeScreen>
     final canShowPasswordless = canShowBulkDelete &&
         (Platform.isAndroid || Platform.isIOS) &&
         currentSession.deviceKind == 'mobile';
+
+    await BackgroundPasswordlessPollService().syncRegistration(
+      enabled: canShowPasswordless,
+    );
 
     setState(() {
       _canShowPasswordlessPrompt = canShowPasswordless;
@@ -306,7 +310,6 @@ class _HomeScreenState extends State<HomeScreen>
     final requests = await _syncService.getPasswordlessRequests();
     if (!mounted) return;
     if (requests.isEmpty) {
-      _lastPasswordlessNotificationRequestId = null;
       await _approvalNotificationService.clearPasswordlessApprovalNotification();
       return;
     }
@@ -320,7 +323,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     if (pendingRequest == null) {
-      _lastPasswordlessNotificationRequestId = null;
       await _approvalNotificationService.clearPasswordlessApprovalNotification();
       return;
     }
@@ -328,9 +330,7 @@ class _HomeScreenState extends State<HomeScreen>
     final requestId = pendingRequest['id']?.toString() ?? '';
     final requesterLabel =
         pendingRequest['requester_device_label']?.toString() ?? 'another device';
-    if (requestId.isNotEmpty &&
-        requestId != _lastPasswordlessNotificationRequestId) {
-      _lastPasswordlessNotificationRequestId = requestId;
+    if (requestId.isNotEmpty) {
       await _approvalNotificationService.showPasswordlessApprovalNotification(
         requestId: requestId,
         requesterDeviceLabel: requesterLabel,
