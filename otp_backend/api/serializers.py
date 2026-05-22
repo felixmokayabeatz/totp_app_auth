@@ -81,6 +81,8 @@ class AppNotificationSerializer(serializers.ModelSerializer):
 
 class DeviceSessionSerializer(serializers.ModelSerializer):
     is_current = serializers.SerializerMethodField()
+    push_ready = serializers.SerializerMethodField()
+    push_status_text = serializers.SerializerMethodField()
 
     class Meta:
         model = DeviceSession
@@ -93,6 +95,10 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
             'is_active',
             'is_primary',
             'is_current',
+            'push_ready',
+            'push_status_text',
+            'push_platform',
+            'push_token_updated_at',
             'created_at',
             'last_seen_at',
         ]
@@ -109,6 +115,18 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
         if current_device_id:
             return obj.device_id == current_device_id
         return False
+
+    def get_push_ready(self, obj):
+        return bool((obj.push_token or '').strip())
+
+    def get_push_status_text(self, obj):
+        if not obj.is_active or obj.revoked_at is not None:
+            return 'Signed out'
+        if bool((obj.push_token or '').strip()):
+            return 'Push alerts ready'
+        if obj.device_kind == DeviceSession.DEVICE_KIND_MOBILE:
+            return 'Push wake-up not connected'
+        return 'Push wake-up not available'
 
 
 class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):

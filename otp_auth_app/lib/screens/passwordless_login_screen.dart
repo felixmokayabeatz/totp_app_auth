@@ -34,6 +34,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   String? _primaryDeviceLabel;
   String? _errorMessage;
   String _statusMessage = 'Starting passwordless sign-in...';
+  String? _pushStatusMessage;
+  String? _pushStatusReason;
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
@@ -71,6 +73,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       _codeExpiresAt = null;
       _errorMessage = null;
       _statusMessage = 'Starting passwordless sign-in...';
+      _pushStatusMessage = null;
+      _pushStatusReason = null;
     });
 
     await _startFlow();
@@ -126,6 +130,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
         result['code_expires_at']?.toString() ?? '',
       );
       _primaryDeviceLabel = result['primary_device_label']?.toString();
+      _pushStatusMessage = result['push_status_message']?.toString();
+      _pushStatusReason = result['push_status_reason']?.toString();
       _statusMessage = result['message']?.toString() ??
           'Open BeatzLock on your primary phone and approve this sign-in there.';
     });
@@ -266,13 +272,18 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'Check the primary phone to approve. '
-                                    'If BeatzLock is closed there, the request should '
-                                    'appear in the notification bar. If it is already '
-                                    'open, the approval prompt should appear right '
-                                    'inside the app.',
+                                    (_pushStatusMessage != null &&
+                                            _pushStatusMessage!.trim().isNotEmpty
+                                        ? _pushStatusMessage!
+                                        : 'Check the primary phone to approve. '
+                                            'If BeatzLock is closed there, the request should '
+                                            'appear in the notification bar. If it is already '
+                                            'open, the approval prompt should appear right '
+                                            'inside the app.'),
                                     style: TextStyle(
-                                      color: _textSecondary,
+                                      color: _pushStatusReason == 'sent'
+                                          ? _textSecondary
+                                          : Colors.orange.shade300,
                                       fontSize: 12.5,
                                       height: 1.45,
                                       fontWeight: FontWeight.w600,

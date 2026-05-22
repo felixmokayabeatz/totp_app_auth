@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import 'home_screen.dart';
 import 'passwordless_login_screen.dart';
 import 'recover_primary_device_screen.dart';
+import '../services/push_messaging_service.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -1330,6 +1331,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     await authProvider.setUserData(currentUsername, email, userId);
     if (!mounted) return;
+
+    unawaited(PushMessagingService().syncCurrentPushTokenIfPossible(force: true));
 
     if (widget.returnToPreviousOnOffline && Navigator.of(context).canPop()) {
       Navigator.of(context).pop(true);

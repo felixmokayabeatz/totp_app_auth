@@ -21,6 +21,21 @@ _firebase_app = None
 _firebase_init_attempted = False
 
 
+def _push_result(
+    *,
+    dispatched: bool,
+    reason: str,
+    detail: str = '',
+    message_id: str = '',
+) -> dict[str, object]:
+    return {
+        'dispatched': dispatched,
+        'reason': reason,
+        'detail': detail,
+        'message_id': message_id,
+    }
+
+
 def _candidate_service_account_paths() -> list[Path]:
     candidates: list[Path] = []
 
@@ -97,32 +112,56 @@ def send_passwordless_request_push(
     *,
     requester_device_label: str,
     request_id: str,
-) -> bool:
+) -> dict[str, object]:
     push_token = (primary_session.push_token or '').strip()
     if not push_token:
         logger.info(
             'Skipping passwordless push for session %s because no push token is registered.',
             primary_session.id,
         )
-        return False
+        return _push_result(
+            dispatched=False,
+            reason='no_token',
+            detail='This primary device has not registered a Firebase push token yet.',
+        )
 
     if not primary_session.is_active or primary_session.revoked_at is not None:
         logger.info(
             'Skipping passwordless push for inactive or revoked session %s.',
             primary_session.id,
         )
-        return False
+        return _push_result(
+            dispatched=False,
+            reason='session_inactive',
+            detail='The primary device session is inactive or already signed out.',
+        )
 
     app = _get_firebase_app()
     if app is None or messaging is None:
-        return False
+        if firebase_admin is None or credentials is None or messaging is None:
+            return _push_result(
+                dispatched=False,
+                reason='admin_sdk_missing',
+                detail='firebase-admin is not installed on the backend.',
+            )
+        if _resolve_service_account_path() is None:
+            return _push_result(
+                dispatched=False,
+                reason='service_account_missing',
+                detail='The Firebase Admin service-account JSON was not found on the backend.',
+            )
+        return _push_result(
+            dispatched=False,
+            reason='firebase_unavailable',
+            detail='Firebase Admin could not be initialized on the backend.',
+        )
 
     device_label = requester_device_label.strip() or 'another device'
     title = 'Approve sign-in in BeatzLock'
     body = f'{device_label} is asking to sign in. Tap to open BeatzLock.'
 
     try:
-        messaging.send(
+        message_id = messaging.send(
             messaging.Message(
                 token=push_token,
                 notification=messaging.Notification(
@@ -148,11 +187,20 @@ def send_passwordless_request_push(
             ),
             app=app,
         )
-        return True
+        return _push_result(
+            dispatched=True,
+            reason='sent',
+            detail='Firebase accepted the passwordless wake-up notification.',
+            message_id=message_id or '',
+        )
     except Exception:
         logger.exception(
             'Firebase push send failed for passwordless request %s and session %s.',
             request_id,
             primary_session.id,
         )
-        return False
+        return _push_result(
+            dispatched=False,
+            reason='send_failed',
+            detail='Firebase rejected or failed to deliver the wake-up notification request.',
+        )

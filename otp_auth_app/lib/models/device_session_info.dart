@@ -7,6 +7,10 @@ class DeviceSessionInfo {
   final bool isActive;
   final bool isPrimary;
   final bool isCurrent;
+  final bool pushReady;
+  final String pushStatusText;
+  final String pushPlatform;
+  final DateTime? pushTokenUpdatedAt;
   final DateTime createdAt;
   final DateTime lastSeenAt;
 
@@ -19,6 +23,10 @@ class DeviceSessionInfo {
     required this.isActive,
     required this.isPrimary,
     required this.isCurrent,
+    required this.pushReady,
+    required this.pushStatusText,
+    required this.pushPlatform,
+    required this.pushTokenUpdatedAt,
     required this.createdAt,
     required this.lastSeenAt,
   });
@@ -33,6 +41,11 @@ class DeviceSessionInfo {
       isActive: json['is_active'] == true,
       isPrimary: json['is_primary'] == true,
       isCurrent: json['is_current'] == true,
+      pushReady: json['push_ready'] == true,
+      pushStatusText: json['push_status_text']?.toString() ?? '',
+      pushPlatform: json['push_platform']?.toString() ?? '',
+      pushTokenUpdatedAt:
+          DateTime.tryParse(json['push_token_updated_at']?.toString() ?? ''),
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
       lastSeenAt: DateTime.tryParse(json['last_seen_at']?.toString() ?? '') ??

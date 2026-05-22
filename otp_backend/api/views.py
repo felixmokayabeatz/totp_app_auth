@@ -633,10 +633,22 @@ class AuthViewSet(viewsets.GenericViewSet):
             user,
             requester_device_label=request_obj.requester_device_label,
         )
-        push_dispatched = send_passwordless_request_push(
+        push_result = send_passwordless_request_push(
             primary_session,
             requester_device_label=request_obj.requester_device_label,
             request_id=str(request_obj.id),
+        )
+        push_dispatched = push_result.get('dispatched') is True
+
+        push_reason = str(push_result.get('reason') or '').strip()
+        push_detail = str(push_result.get('detail') or '').strip()
+        push_status_message = (
+            'A sign-in notification was sent to your primary phone. Tap it there to open BeatzLock and approve.'
+            if push_dispatched
+            else (
+                push_detail
+                or 'Push wake-up is not ready on the primary phone yet. Open BeatzLock there once, allow notifications, and keep that device signed in.'
+            )
         )
 
         return Response(
@@ -649,11 +661,10 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'unlock_transfer_key': unlock_transfer_key,
                 'primary_device_label': primary_session.device_label,
                 'push_dispatched': push_dispatched,
-                'message': (
-                    'A sign-in notification was sent to your primary phone. Tap it there to open BeatzLock and approve.'
-                    if push_dispatched
-                    else 'Open BeatzLock on your primary phone and approve this sign-in there.'
-                ),
+                'push_status': push_result,
+                'push_status_reason': push_reason,
+                'push_status_message': push_status_message,
+                'message': push_status_message,
             },
             status=201,
         )

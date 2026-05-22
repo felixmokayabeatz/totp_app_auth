@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/device_session_info.dart';
+import '../services/push_messaging_service.dart';
 import '../services/sync_service.dart';
 
 class DeviceSessionsScreen extends StatefulWidget {
@@ -47,6 +48,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
       _errorMessage = null;
     });
 
+    await PushMessagingService().syncCurrentPushTokenIfPossible(force: true);
     final sessions = await _syncService.getActiveDeviceSessions();
     if (!mounted) return;
 
@@ -64,6 +66,13 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '${local.year}-$month-$day $hour:$minute';
+  }
+
+  Color _pushStatusColor(DeviceSessionInfo session) {
+    if (!session.isActive) return Colors.grey;
+    if (session.pushReady) return const Color(0xFF10B981);
+    if (session.deviceKind == 'mobile') return const Color(0xFFF59E0B);
+    return _textSecondary;
   }
 
   String _deviceReference(String deviceId) {
@@ -595,6 +604,22 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
             'Device ref: ${_deviceReference(session.deviceId)}',
             style: TextStyle(color: _textSecondary, fontSize: 12.5),
           ),
+          const SizedBox(height: 6),
+          Text(
+            'Push status: ${session.pushStatusText}',
+            style: TextStyle(
+              color: _pushStatusColor(session),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (session.pushTokenUpdatedAt != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Push updated: ${_formatDate(session.pushTokenUpdatedAt!)}',
+              style: TextStyle(color: _textSecondary, fontSize: 12.5),
+            ),
+          ],
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,
