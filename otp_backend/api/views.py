@@ -156,6 +156,35 @@ def _update_sync_log(
     return sync_log
 
 
+def _delete_synced_account_everywhere(*, user: User, account_id: str, device_id: str):
+    tombstone, _ = AccountTombstone.objects.get_or_create(
+        user=user,
+        account_id=account_id,
+    )
+
+    try:
+        data = EncryptedData.objects.get(user=user, data_type='otp_accounts')
+        deleted_accounts = (
+            json.loads(data.deleted_accounts) if data.deleted_accounts else []
+        )
+
+        if account_id not in deleted_accounts:
+            deleted_accounts.append(account_id)
+            data.deleted_accounts = json.dumps(deleted_accounts)
+            data.save()
+    except EncryptedData.DoesNotExist:
+        pass
+
+    sync_log = _update_sync_log(
+        user=user,
+        device_id=device_id,
+        sync_type='delete',
+        status='success',
+        increment_total=True,
+    )
+    return tombstone, sync_log
+
+
 def get_request_pdf_theme(request) -> str:
     candidates = []
     if hasattr(request, 'query_params'):
@@ -1114,36 +1143,12 @@ class SyncViewSet(viewsets.GenericViewSet):
             return Response({'error': 'Account ID required'}, status=400)
         
         try:
-            # Create tombstone record
-            tombstone, created = AccountTombstone.objects.get_or_create(user=request.user, account_id=account_id)
-            debug_print(f"[SYNC] Tombstone {'created' if created else 'already existed'} - ID: {tombstone.id}")
-            
-            # Also remove from EncryptedData if exists
-            try:
-                data = EncryptedData.objects.get(user=request.user, data_type='otp_accounts')
-                deleted_accounts = json.loads(data.deleted_accounts) if data.deleted_accounts else []
-                debug_print(f"[SYNC] Current deleted_accounts list length: {len(deleted_accounts)}")
-                
-                if account_id not in deleted_accounts:
-                    deleted_accounts.append(account_id)
-                    data.deleted_accounts = json.dumps(deleted_accounts)
-                    data.save()
-                    debug_print(f"[SYNC] Added account_id to deleted_accounts, new length: {len(deleted_accounts)}")
-                else:
-                    debug_print(f"[SYNC] Account_id already in deleted_accounts")
-                    
-            except EncryptedData.DoesNotExist:
-                debug_print(f"[SYNC] No EncryptedData record found for otp_accounts")
-            except Exception as e:
-                debug_print(f"[SYNC] Error updating EncryptedData: {str(e)}")
-            
-            sync_log = _update_sync_log(
+            tombstone, sync_log = _delete_synced_account_everywhere(
                 user=request.user,
+                account_id=account_id,
                 device_id=device_id,
-                sync_type='delete',
-                status='success',
-                increment_total=True,
             )
+            debug_print(f"[SYNC] Tombstone ready - ID: {tombstone.id}")
 
             debug_print(f"[SYNC] Sync log updated - Total syncs: {sync_log.total_syncs}")
             
@@ -1160,6 +1165,57 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] Traceback:\n{error_details}")
             
             logger.error("Account deletion failed.\n%s", error_details)
+            return Response({'error': 'Failed to delete account'}, status=500)
+
+    @action(detail=False, methods=['post'], url_path='delete-account-everywhere')
+    def delete_account_everywhere(self, request):
+        current_session = get_current_active_device_session(request)
+        if current_session is None:
+            return Response(
+                {'error': 'This device could not be verified for cloud deletion.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not current_session.is_primary:
+            return Response(
+                {
+                    'error': 'Only your primary device can delete synced OTP accounts everywhere.'
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        confirmation_phrase = (request.data.get('confirmation_phrase') or '').strip()
+        if confirmation_phrase != 'Delete Account Everywhere':
+            return Response(
+                {
+                    'error': 'Type Delete Account Everywhere to confirm this permanent cloud deletion.'
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        account_id = (request.data.get('account_id') or '').strip()
+        if not account_id:
+            return Response({'error': 'Account ID required'}, status=400)
+
+        device_id = (
+            str(request.data.get('device_id') or '').strip()
+            or current_session.device_id
+            or 'unknown'
+        )
+
+        try:
+            _delete_synced_account_everywhere(
+                user=request.user,
+                account_id=account_id,
+                device_id=device_id,
+            )
+            return Response({'success': True, 'account_id': account_id})
+        except Exception:
+            logger.exception(
+                "Primary delete-account-everywhere failed.\nUser=%s Account=%s",
+                request.user.username,
+                account_id,
+            )
             return Response({'error': 'Failed to delete account'}, status=500)
     
     @action(detail=False, methods=['post'], url_path='delete-all-accounts')

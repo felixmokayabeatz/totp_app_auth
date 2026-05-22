@@ -2645,6 +2645,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   // â”€â”€â”€ Delete account dialog with enhanced warnings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showDeleteAccountDialog(String accountId, String serviceName) async {
+    const deleteEverywherePhrase = 'Delete Account Everywhere';
     final isLoggedIn = await _syncService.isLoggedIn();
     if (!mounted) return;
 
@@ -2782,6 +2783,9 @@ class _HomeScreenState extends State<HomeScreen>
         if (confirmed != true) return;
       }
 
+      final unlocked = await _appLockService.authenticateWithPinOnly(context);
+      if (!mounted || !unlocked) return;
+
       await _syncService.deleteAccountLocalOnly(accountId);
       setState(() {
         currentOTPs.remove(accountId);
@@ -2798,7 +2802,23 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
 
-      // Show final confirmation with "DELETE" typing
+      final currentSession = await _currentSessionInfo();
+      if (!mounted) return;
+      if (currentSession == null) {
+        _showSnackBar(
+          'This device could not be verified for cloud deletion.',
+          Colors.red,
+        );
+        return;
+      }
+      if (!currentSession.isPrimary) {
+        _showSnackBar(
+          'Delete Account Everywhere is only available from your primary device.',
+          Colors.orange,
+        );
+        return;
+      }
+
       if (!mounted) return;
       final confirmed = await _showDeleteConfirmationDialog(
         context,
@@ -2809,8 +2829,14 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (!confirmed) return;
 
+      final unlocked = await _appLockService.authenticateWithPinOnly(context);
+      if (!mounted || !unlocked) return;
+
       _showSnackBar('Deleting everywhere', Colors.grey);
-      final ok = await _syncService.deleteAccountEverywhere(accountId);
+      final ok = await _syncService.deleteSingleAccountEverywhere(
+        accountId,
+        confirmationPhrase: deleteEverywherePhrase,
+      );
       if (ok) {
         setState(() {
           currentOTPs.remove(accountId);
@@ -2819,7 +2845,10 @@ class _HomeScreenState extends State<HomeScreen>
         });
         _showSnackBar('Account deleted from all devices', Colors.red);
       } else {
-        _showSnackBar('Failed to delete from cloud try again', Colors.red);
+        _showSnackBar(
+          _syncService.lastErrorMessage ?? 'Failed to delete from cloud try again',
+          Colors.red,
+        );
       }
     }
   }
@@ -2831,6 +2860,7 @@ class _HomeScreenState extends State<HomeScreen>
     Color textPrimary,
     Color textSecondary,
   ) async {
+    const deleteEverywherePhrase = 'Delete Account Everywhere';
     var confirmationText = '';
 
     return await showDialog<bool>(
@@ -2899,7 +2929,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Type "DELETE" below to confirm:',
+                    'Type "$deleteEverywherePhrase" below to confirm:',
                     style: TextStyle(color: textSecondary, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
@@ -2913,12 +2943,12 @@ class _HomeScreenState extends State<HomeScreen>
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: confirmationText.trim().toUpperCase() == 'DELETE'
+                      color: confirmationText.trim() == deleteEverywherePhrase
                           ? Colors.red
                           : textPrimary,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Type DELETE here',
+                      hintText: 'Type $deleteEverywherePhrase here',
                       hintStyle: TextStyle(color: textSecondary, fontSize: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -2946,7 +2976,7 @@ class _HomeScreenState extends State<HomeScreen>
                   child: Text('Cancel', style: TextStyle(color: textSecondary)),
                 ),
                 ElevatedButton(
-                  onPressed: confirmationText.trim().toUpperCase() == 'DELETE'
+                  onPressed: confirmationText.trim() == deleteEverywherePhrase
                       ? () {
                           Navigator.pop(context, true);
                         }

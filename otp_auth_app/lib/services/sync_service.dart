@@ -1007,6 +1007,43 @@ class SyncService {
     }
   }
 
+  Future<bool> deleteSingleAccountEverywhere(
+    String accountId, {
+    required String confirmationPhrase,
+  }) async {
+    await _updateAuthHeader();
+    try {
+      final response = await _requestWithRetry(
+        (_) => _dio.post(
+          'sync/delete-account-everywhere/',
+          data: {
+            'account_id': accountId,
+            'confirmation_phrase': confirmationPhrase,
+          },
+        ),
+      );
+      if (response.statusCode == 200) {
+        final userBox = await _getUserBox();
+        await userBox.delete(accountId);
+        debugPrint('Deleted $accountId everywhere from primary confirmation');
+        return true;
+      }
+      _lastErrorMessage =
+          response.data is Map ? response.data['error']?.toString() : null;
+      debugPrint('Primary server delete failed: ${response.statusCode}');
+      return false;
+    } on DioException catch (e) {
+      _lastErrorMessage = e.response?.data is Map
+          ? e.response?.data['error']?.toString()
+          : null;
+      debugPrint('deleteSingleAccountEverywhere error: $e');
+      return false;
+    } catch (e) {
+      debugPrint('deleteSingleAccountEverywhere error: $e');
+      return false;
+    }
+  }
+
   // ─── Delete ALL accounts ──────────────────────────────────────────────────
   Future<void> deleteAllLocalOnly() async {
     final userBox = await _getUserBox();

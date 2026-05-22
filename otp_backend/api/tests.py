@@ -7,7 +7,12 @@ from rest_framework.test import APIClient, APITestCase
 from twofa.models import EmailVerification
 
 from .backup_codes import build_backup_code_entries, encrypt_backup_codes
-from .models import BackupCodeSet, DeviceSession, PasswordlessLoginRequest
+from .models import (
+    AccountTombstone,
+    BackupCodeSet,
+    DeviceSession,
+    PasswordlessLoginRequest,
+)
 from .notifications import create_notification, decrypt_notification_payload
 
 
@@ -736,6 +741,106 @@ class PasswordlessLoginFlowTests(APITestCase):
             PasswordlessLoginRequest.objects.filter(
                 id=pending_id,
                 status=PasswordlessLoginRequest.STATUS_PENDING,
+            ).exists()
+        )
+
+
+class PrimarySingleDeleteAccountTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='deleteuser',
+            email='delete@example.com',
+            password='testpass123',
+        )
+        self.primary_client = APIClient()
+        self.primary_client.force_authenticate(user=self.user)
+        self.secondary_client = APIClient()
+        self.secondary_client.force_authenticate(user=self.user)
+
+        self.primary_session = DeviceSession.objects.create(
+            user=self.user,
+            device_id='primary-phone',
+            device_label='Primary Phone',
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+            is_primary=True,
+        )
+        self.secondary_session = DeviceSession.objects.create(
+            user=self.user,
+            device_id='tablet-01',
+            device_label='Tablet',
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+            is_primary=False,
+        )
+
+    def test_primary_single_delete_requires_exact_phrase(self):
+        response = self.primary_client.post(
+            reverse('sync-delete-account-everywhere'),
+            {
+                'account_id': 'otp-123',
+                'confirmation_phrase': 'DELETE',
+            },
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data['error'],
+            'Type Delete Account Everywhere to confirm this permanent cloud deletion.',
+        )
+        self.assertFalse(
+            AccountTombstone.objects.filter(
+                user=self.user,
+                account_id='otp-123',
+            ).exists()
+        )
+
+    def test_primary_single_delete_is_blocked_on_non_primary_device(self):
+        response = self.secondary_client.post(
+            reverse('sync-delete-account-everywhere'),
+            {
+                'account_id': 'otp-456',
+                'confirmation_phrase': 'Delete Account Everywhere',
+            },
+            format='json',
+            HTTP_X_DEVICE_ID='tablet-01',
+            HTTP_X_DEVICE_LABEL='Tablet',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            response.data['error'],
+            'Only your primary device can delete synced OTP accounts everywhere.',
+        )
+        self.assertFalse(
+            AccountTombstone.objects.filter(
+                user=self.user,
+                account_id='otp-456',
+            ).exists()
+        )
+
+    def test_primary_single_delete_succeeds_with_exact_phrase(self):
+        response = self.primary_client.post(
+            reverse('sync-delete-account-everywhere'),
+            {
+                'account_id': 'otp-789',
+                'confirmation_phrase': 'Delete Account Everywhere',
+            },
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['success'], True)
+        self.assertTrue(
+            AccountTombstone.objects.filter(
+                user=self.user,
+                account_id='otp-789',
             ).exists()
         )
 
