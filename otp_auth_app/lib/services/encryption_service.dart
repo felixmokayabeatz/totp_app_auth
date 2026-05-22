@@ -48,7 +48,9 @@ class EncryptionService {
   }
 
   static String decryptPasswordEntrySecret(
-      String encryptedSecret, String userId) {
+    String encryptedSecret,
+    String userId,
+  ) {
     final key = generateKey(userId, 'password_entry_local_encryption_salt');
     return authenticatedDecrypt(
       encryptedSecret,
@@ -58,15 +60,22 @@ class EncryptionService {
   }
 
   static String encryptPasswordEntryNote(String note, String userId) {
-    final key =
-        generateKey(userId, 'password_entry_note_local_encryption_salt');
-    return authenticatedEncrypt(note, key,
-        context: 'password-entry-note-local');
+    final key = generateKey(
+      userId,
+      'password_entry_note_local_encryption_salt',
+    );
+    return authenticatedEncrypt(
+      note,
+      key,
+      context: 'password-entry-note-local',
+    );
   }
 
   static String decryptPasswordEntryNote(String encryptedNote, String userId) {
-    final key =
-        generateKey(userId, 'password_entry_note_local_encryption_salt');
+    final key = generateKey(
+      userId,
+      'password_entry_note_local_encryption_salt',
+    );
     return authenticatedDecrypt(
       encryptedNote,
       key,
@@ -88,40 +97,49 @@ class EncryptionService {
     );
   }
 
-  static String encryptSensitiveSyncPayload(String plainText, String key,
-      {required String context}) {
+  static String encryptSensitiveSyncPayload(
+    String plainText,
+    String key, {
+    required String context,
+  }) {
     return authenticatedEncrypt(plainText, key, context: context);
   }
 
-  static String decryptSensitiveSyncPayload(String cipherText, String key,
-      {required String context}) {
+  static String decryptSensitiveSyncPayload(
+    String cipherText,
+    String key, {
+    required String context,
+  }) {
     return authenticatedDecrypt(cipherText, key, context: context);
   }
 
-  static String authenticatedEncrypt(String plainText, String key,
-      {required String context}) {
+  static String authenticatedEncrypt(
+    String plainText,
+    String key, {
+    required String context,
+  }) {
     if (plainText.isEmpty) return '';
 
     final nonce = List<int>.generate(16, (_) => Random.secure().nextInt(256));
     final input = utf8.encode(plainText);
-    final encryptionKey =
-        sha256.convert(utf8.encode('$key|enc|$context')).bytes;
+    final encryptionKey = sha256
+        .convert(utf8.encode('$key|enc|$context'))
+        .bytes;
     final authKey = sha256.convert(utf8.encode('$key|auth|$context')).bytes;
     final encrypted = _xorWithKeystream(input, encryptionKey, nonce);
     final mac = Hmac(
       sha256,
       authKey,
-    ).convert([
-      ...utf8.encode(context),
-      ...nonce,
-      ...encrypted,
-    ]).bytes;
+    ).convert([...utf8.encode(context), ...nonce, ...encrypted]).bytes;
 
     return 'bl2:${base64Encode([...nonce, ...mac, ...encrypted])}';
   }
 
-  static String authenticatedDecrypt(String cipherText, String key,
-      {required String context}) {
+  static String authenticatedDecrypt(
+    String cipherText,
+    String key, {
+    required String context,
+  }) {
     if (cipherText.isEmpty) return '';
     if (!cipherText.startsWith('bl2:')) {
       return simpleDecrypt(cipherText, key);
@@ -135,17 +153,14 @@ class EncryptionService {
     final nonce = payload.sublist(0, 16);
     final mac = payload.sublist(16, 48);
     final encrypted = payload.sublist(48);
-    final encryptionKey =
-        sha256.convert(utf8.encode('$key|enc|$context')).bytes;
+    final encryptionKey = sha256
+        .convert(utf8.encode('$key|enc|$context'))
+        .bytes;
     final authKey = sha256.convert(utf8.encode('$key|auth|$context')).bytes;
     final expectedMac = Hmac(
       sha256,
       authKey,
-    ).convert([
-      ...utf8.encode(context),
-      ...nonce,
-      ...encrypted,
-    ]).bytes;
+    ).convert([...utf8.encode(context), ...nonce, ...encrypted]).bytes;
 
     if (!_constantTimeBytesEqual(mac, expectedMac)) {
       throw const FormatException('Encrypted payload authentication failed');
@@ -156,18 +171,19 @@ class EncryptionService {
   }
 
   static List<int> _xorWithKeystream(
-      List<int> input, List<int> keyBytes, List<int> nonce) {
+    List<int> input,
+    List<int> keyBytes,
+    List<int> nonce,
+  ) {
     final output = <int>[];
     var blockIndex = 0;
 
     while (output.length < input.length) {
-      final keystreamBlock = sha256.convert(
-        [
-          ...keyBytes,
-          ...nonce,
-          ...utf8.encode(':$blockIndex'),
-        ],
-      ).bytes;
+      final keystreamBlock = sha256.convert([
+        ...keyBytes,
+        ...nonce,
+        ...utf8.encode(':$blockIndex'),
+      ]).bytes;
 
       for (final byte in keystreamBlock) {
         if (output.length >= input.length) break;

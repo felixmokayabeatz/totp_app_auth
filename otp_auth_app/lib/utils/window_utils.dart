@@ -9,10 +9,10 @@ class WindowUtils {
   static Future<void> setMinWindowSize() async {
     if (Platform.isWindows) {
       try {
-        await MethodChannel('flutter/window').invokeMethod(
-          'setMinimumSize',
-          {'width': minWidth, 'height': minHeight},
-        );
+        await MethodChannel('flutter/window').invokeMethod('setMinimumSize', {
+          'width': minWidth,
+          'height': minHeight,
+        });
       } catch (e) {
         debugPrint('Error setting min window size: $e');
       }
@@ -22,10 +22,9 @@ class WindowUtils {
   static Future<void> setWindowTitle(String title) async {
     if (Platform.isWindows) {
       try {
-        await MethodChannel('flutter/window').invokeMethod(
-          'setTitle',
-          {'title': title},
-        );
+        await MethodChannel(
+          'flutter/window',
+        ).invokeMethod('setTitle', {'title': title});
       } catch (e) {
         debugPrint('Error setting window title: $e');
       }

@@ -54,8 +54,10 @@ class OTPAccount {
     if (_plainSecret != null) return _plainSecret!;
 
     try {
-      final decrypted =
-          EncryptionService.decryptSecret(encryptedSecret, userId);
+      final decrypted = EncryptionService.decryptSecret(
+        encryptedSecret,
+        userId,
+      );
       if (_looksLikeBase32Secret(decrypted)) {
         _plainSecret = decrypted;
         return _plainSecret!;
@@ -75,8 +77,10 @@ class OTPAccount {
   String get secret => encryptedSecret;
 
   bool _looksLikeBase32Secret(String value) {
-    final cleaned =
-        value.replaceAll(RegExp(r'\s+'), '').replaceAll('=', '').toUpperCase();
+    final cleaned = value
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll('=', '')
+        .toUpperCase();
     return cleaned.isNotEmpty && RegExp(r'^[A-Z2-7]+$').hasMatch(cleaned);
   }
 }

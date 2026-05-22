@@ -28,19 +28,23 @@ class SyncService {
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
   SyncService._internal() {
-    _dio = Dio(BaseOptions(
-      baseUrl: AppConfig.apiUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {'Content-Type': 'application/json'},
-    ));
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: AppConfig.apiUrl,
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {'Content-Type': 'application/json'},
+      ),
+    );
   }
 
   late Dio _dio;
-  static const MethodChannel _storageChannel =
-      MethodChannel('com.beatzlock.otp/storage');
-  static const MethodChannel _deviceIdentityChannel =
-      MethodChannel('com.beatzlock.otp/device_identity');
+  static const MethodChannel _storageChannel = MethodChannel(
+    'com.beatzlock.otp/storage',
+  );
+  static const MethodChannel _deviceIdentityChannel = MethodChannel(
+    'com.beatzlock.otp/device_identity',
+  );
   Future<bool>? _refreshTokenFuture;
   String? _encryptionKey;
   String? _lastErrorMessage;
@@ -284,7 +288,7 @@ class SyncService {
   Future<String> _getUserBoxName() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey);
+        await _secureStorage.read(SecureStorageService.localVaultUserKey);
     if (username == null || username.isEmpty) return 'otp_accounts_default';
     return 'otp_accounts_$username';
   }
@@ -303,7 +307,7 @@ class SyncService {
   Future<String> _getPasswordBoxName() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey);
+        await _secureStorage.read(SecureStorageService.localVaultUserKey);
     if (username == null || username.isEmpty) return 'passwords_default';
     return 'passwords_$username';
   }
@@ -323,7 +327,7 @@ class SyncService {
   Future<String> _getSecureMessageBoxName() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey);
+        await _secureStorage.read(SecureStorageService.localVaultUserKey);
     if (username == null || username.isEmpty) return 'secure_messages_default';
     return 'secure_messages_$username';
   }
@@ -340,24 +344,26 @@ class SyncService {
       await _getSecureMessageBox();
 
   String _decodeLegacySecretForMigration(
-      String storedSecret, String currentUserId) {
+    String storedSecret,
+    String currentUserId,
+  ) {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
     final isRawBase32 = RegExp(r'^[A-Z2-7a-z]+$').hasMatch(strippedSpaces);
     if (isRawBase32) {
       return storedSecret;
     }
 
-    final candidateUserIds = <String>[
-      currentUserId,
-      'default_user',
-    ];
+    final candidateUserIds = <String>[currentUserId, 'default_user'];
 
     for (final userId in candidateUserIds) {
       try {
-        final plainSecret =
-            EncryptionService.decryptSecret(storedSecret, userId);
-        final cleanPlainSecret =
-            plainSecret.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+        final plainSecret = EncryptionService.decryptSecret(
+          storedSecret,
+          userId,
+        );
+        final cleanPlainSecret = plainSecret
+            .replaceAll(RegExp(r'\s+'), '')
+            .toUpperCase();
         if (RegExp(r'^[A-Z2-7]+$').hasMatch(cleanPlainSecret)) {
           return plainSecret;
         }
@@ -404,8 +410,10 @@ class SyncService {
 
       for (final account in sourceBox.values) {
         if (targetBox.containsKey(account.id)) continue;
-        final plainSecret =
-            _decodeLegacySecretForMigration(account.secret, currentUserId);
+        final plainSecret = _decodeLegacySecretForMigration(
+          account.secret,
+          currentUserId,
+        );
         final migratedAccount = OTPAccount(
           id: account.id,
           service: account.service,
@@ -427,8 +435,9 @@ class SyncService {
 
   // ─── Auth helpers ─────────────────────────────────────────────────────────
   Future<void> _updateAuthHeader() async {
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     final deviceId = await getOrCreateDeviceId();
     final deviceLabel = await _buildDeviceLabel();
     final deviceFingerprint = await _getStableMobileDeviceFingerprint();
@@ -463,8 +472,9 @@ class SyncService {
   }
 
   Future<bool> _performTokenRefresh() async {
-    final refreshToken =
-        await _secureStorage.read(SecureStorageService.refreshTokenKey);
+    final refreshToken = await _secureStorage.read(
+      SecureStorageService.refreshTokenKey,
+    );
     if (refreshToken == null || refreshToken.isEmpty) {
       return false;
     }
@@ -472,26 +482,30 @@ class SyncService {
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final deviceFingerprint = await _getStableMobileDeviceFingerprint();
-      final refreshDio = Dio(BaseOptions(
-        baseUrl: AppConfig.apiUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Device-ID': deviceId,
-          'X-Device-Label': deviceLabel,
-          'X-Device-Kind': _deviceKind(),
-          if (deviceFingerprint != null && deviceFingerprint.isNotEmpty)
-            'X-Device-Fingerprint': deviceFingerprint,
-        },
-      ));
+      final refreshDio = Dio(
+        BaseOptions(
+          baseUrl: AppConfig.apiUrl,
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 30),
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Device-ID': deviceId,
+            'X-Device-Label': deviceLabel,
+            'X-Device-Kind': _deviceKind(),
+            if (deviceFingerprint != null && deviceFingerprint.isNotEmpty)
+              'X-Device-Fingerprint': deviceFingerprint,
+          },
+        ),
+      );
       final response = await refreshDio.post(
         'token/refresh/',
         data: {'refresh': refreshToken},
       );
       if (response.statusCode == 200) {
         await _secureStorage.write(
-            SecureStorageService.accessTokenKey, response.data['access']);
+          SecureStorageService.accessTokenKey,
+          response.data['access'],
+        );
         await _updateAuthHeader();
         return true;
       }
@@ -523,8 +537,9 @@ class SyncService {
   }) async {
     Future<Response<T>> runRequest() async {
       await _updateAuthHeader();
-      final accessToken =
-          await _secureStorage.read(SecureStorageService.accessTokenKey);
+      final accessToken = await _secureStorage.read(
+        SecureStorageService.accessTokenKey,
+      );
       if (accessToken == null || accessToken.isEmpty) {
         throw StateError('Missing access token for authenticated request.');
       }
@@ -565,8 +580,8 @@ class SyncService {
   Future<String> _getPasswordDeletedIdsKey() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
-            'default_user';
+        await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
+        'default_user';
     return '$_passwordDeletedIdsPrefix$username';
   }
 
@@ -610,10 +625,7 @@ class SyncService {
         final restoredIds = restoredRaw is List
             ? restoredRaw.map((item) => item.toString()).toSet()
             : <String>{};
-        return _DeletedState(
-          deletedIds: deletedIds,
-          restoredIds: restoredIds,
-        );
+        return _DeletedState(deletedIds: deletedIds, restoredIds: restoredIds);
       }
     } catch (_) {}
 
@@ -623,8 +635,8 @@ class SyncService {
   Future<String> _getSecureMessageDeletedIdsKey() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
-            'default_user';
+        await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
+        'default_user';
     return '$_secureMessageDeletedIdsPrefix$username';
   }
 
@@ -703,8 +715,9 @@ class SyncService {
     }
 
     try {
-      final rawId = await _deviceIdentityChannel
-          .invokeMethod<String>('getStableDeviceId');
+      final rawId = await _deviceIdentityChannel.invokeMethod<String>(
+        'getStableDeviceId',
+      );
       final cleaned = rawId?.trim() ?? '';
       if (cleaned.isEmpty) {
         return null;
@@ -766,7 +779,8 @@ class SyncService {
         ? 'Device'
         : '${operatingSystem[0].toUpperCase()}${operatingSystem.substring(1)}';
     final normalizedHostname = hostname?.toLowerCase();
-    final hasUsefulHostname = hostname != null &&
+    final hasUsefulHostname =
+        hostname != null &&
         hostname.isNotEmpty &&
         normalizedHostname != 'localhost' &&
         normalizedHostname != 'localhost.localdomain' &&
@@ -827,28 +841,41 @@ class SyncService {
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post('auth/register/', data: {
-        'username': username,
-        'email': email,
-        'password': password,
-        'device_id': deviceId,
-        'device_label': deviceLabel,
-        'device_kind': _deviceKind(),
-      });
+      final response = await _dio.post(
+        'auth/register/',
+        data: {
+          'username': username,
+          'email': email,
+          'password': password,
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+          'device_kind': _deviceKind(),
+        },
+      );
       if (response.statusCode == 200 || response.statusCode == 201) {
         final canonicalUsername =
             response.data['user']?['username']?.toString() ?? username.trim();
         await _secureStorage.write(
-            SecureStorageService.accessTokenKey, response.data['access']);
+          SecureStorageService.accessTokenKey,
+          response.data['access'],
+        );
         await _secureStorage.write(
-            SecureStorageService.refreshTokenKey, response.data['refresh']);
+          SecureStorageService.refreshTokenKey,
+          response.data['refresh'],
+        );
         await _secureStorage.write(
-            SecureStorageService.currentUserKey, canonicalUsername);
+          SecureStorageService.currentUserKey,
+          canonicalUsername,
+        );
         await _secureStorage.write(
-            SecureStorageService.localVaultUserKey, canonicalUsername);
+          SecureStorageService.localVaultUserKey,
+          canonicalUsername,
+        );
         await _secureStorage.write(SecureStorageService.userEmailKey, email);
-        await _secureStorage.write(SecureStorageService.userIdKey,
-            response.data['user']['id'].toString());
+        await _secureStorage.write(
+          SecureStorageService.userIdKey,
+          response.data['user']['id'].toString(),
+        );
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
         _initEncryption(canonicalUsername, password);
@@ -858,8 +885,10 @@ class SyncService {
       _lastErrorMessage = 'Registration failed. Please try again.';
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _friendlyRequestError(e, 'Registration failed. Please try again.');
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Registration failed. Please try again.',
+      );
       debugPrint('Register error: $e');
       return false;
     } catch (e) {
@@ -876,42 +905,61 @@ class SyncService {
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post('auth/login/', data: {
-        'username': username.trim(),
-        'password': password,
-        'device_id': deviceId,
-        'device_label': deviceLabel,
-        'device_kind': _deviceKind(),
-      });
+      final response = await _dio.post(
+        'auth/login/',
+        data: {
+          'username': username.trim(),
+          'password': password,
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+          'device_kind': _deviceKind(),
+        },
+      );
       if (response.statusCode == 200) {
         final canonicalUsername =
             response.data['user']?['username']?.toString() ?? username.trim();
         await _secureStorage.write(
-            SecureStorageService.accessTokenKey, response.data['access']);
+          SecureStorageService.accessTokenKey,
+          response.data['access'],
+        );
         await _secureStorage.write(
-            SecureStorageService.refreshTokenKey, response.data['refresh']);
+          SecureStorageService.refreshTokenKey,
+          response.data['refresh'],
+        );
         await _secureStorage.write(
-            SecureStorageService.currentUserKey, canonicalUsername);
+          SecureStorageService.currentUserKey,
+          canonicalUsername,
+        );
         await _secureStorage.write(
-            SecureStorageService.localVaultUserKey, canonicalUsername);
-        await _secureStorage.write(SecureStorageService.userEmailKey,
-            response.data['user']['email'] ?? '');
-        await _secureStorage.write(SecureStorageService.userIdKey,
-            response.data['user']['id'].toString());
+          SecureStorageService.localVaultUserKey,
+          canonicalUsername,
+        );
+        await _secureStorage.write(
+          SecureStorageService.userEmailKey,
+          response.data['user']['email'] ?? '',
+        );
+        await _secureStorage.write(
+          SecureStorageService.userIdKey,
+          response.data['user']['id'].toString(),
+        );
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
 
         // Treat successful token issuance as a successful login.
         final encryptionKey = EncryptionService.generateKey(
-            canonicalUsername + password, 'beatzLockKenya2099');
+          canonicalUsername + password,
+          'beatzLockKenya2099',
+        );
         await _activateSyncEncryptionKey(encryptionKey);
 
         return true;
       }
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _friendlyRequestError(e, 'Login failed. Please try again.');
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Login failed. Please try again.',
+      );
       debugPrint('Login error: $e');
       return false;
     } catch (e) {
@@ -943,10 +991,10 @@ class SyncService {
   Future<bool> deleteAccountEverywhere(String accountId) async {
     await _updateAuthHeader();
     try {
-      final response = await _requestWithRetry((_) => _dio.post(
-            'sync/delete-account/',
-            data: {'account_id': accountId},
-          ));
+      final response = await _requestWithRetry(
+        (_) =>
+            _dio.post('sync/delete-account/', data: {'account_id': accountId}),
+      );
       if (response.statusCode == 200) {
         final userBox = await _getUserBox();
         await userBox.delete(accountId);
@@ -990,8 +1038,9 @@ class SyncService {
   // ─── Download and merge ───────────────────────────────────────────────────
   Future<void> downloadAndMergeAccounts() async {
     await _updateAuthHeader();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       return;
     }
@@ -1009,13 +1058,12 @@ class SyncService {
     }
 
     try {
-      final response = await _requestWithRetry((_) => _dio.get(
-            'sync/get-data/',
-            queryParameters: {
-              'data_type': 'otp_accounts',
-              'device_id': deviceId
-            },
-          ));
+      final response = await _requestWithRetry(
+        (_) => _dio.get(
+          'sync/get-data/',
+          queryParameters: {'data_type': 'otp_accounts', 'device_id': deviceId},
+        ),
+      );
 
       if (response.statusCode == 200 &&
           response.data['encrypted_content'] != null) {
@@ -1026,8 +1074,10 @@ class SyncService {
           return;
         }
 
-        final decrypted =
-            EncryptionService.simpleDecrypt(encryptedContent, _encryptionKey!);
+        final decrypted = EncryptionService.simpleDecrypt(
+          encryptedContent,
+          _encryptionKey!,
+        );
 
         if (decrypted.isEmpty || decrypted.trim().isEmpty) {
           debugPrint('Decrypted content is empty');
@@ -1085,7 +1135,8 @@ class SyncService {
             }
           }
           debugPrint(
-              'Merged $added accounts from cloud and updated $updatedTitles titles');
+            'Merged $added accounts from cloud and updated $updatedTitles titles',
+          );
           await syncAccounts();
         } catch (jsonError) {
           debugPrint('Failed to parse cloud JSON: $jsonError');
@@ -1098,8 +1149,9 @@ class SyncService {
 
   Future<Set<String>> _fetchTombstones() async {
     try {
-      final response =
-          await _requestWithRetry((_) => _dio.get('sync/tombstones/'));
+      final response = await _requestWithRetry(
+        (_) => _dio.get('sync/tombstones/'),
+      );
       if (response.statusCode == 200) {
         final List ids = response.data['tombstoned_ids'] ?? [];
         return ids.cast<String>().toSet();
@@ -1117,8 +1169,9 @@ class SyncService {
 
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'Sign in to enable automatic cross-platform sync.';
       return false;
@@ -1144,13 +1197,15 @@ class SyncService {
       List<String> cloudDeletedAccounts = [];
 
       try {
-        final downloadResponse = await _requestWithRetry((_) => _dio.get(
-              'sync/get-data/',
-              queryParameters: {
-                'data_type': 'otp_accounts',
-                'device_id': deviceId,
-              },
-            ));
+        final downloadResponse = await _requestWithRetry(
+          (_) => _dio.get(
+            'sync/get-data/',
+            queryParameters: {
+              'data_type': 'otp_accounts',
+              'device_id': deviceId,
+            },
+          ),
+        );
 
         if (downloadResponse.statusCode == 200 &&
             downloadResponse.data['encrypted_content'] != null) {
@@ -1160,7 +1215,9 @@ class SyncService {
             debugPrint('Cloud has empty data');
           } else {
             final decrypted = EncryptionService.simpleDecrypt(
-                encryptedContent, _encryptionKey!);
+              encryptedContent,
+              _encryptionKey!,
+            );
             if (decrypted.isNotEmpty && decrypted.trim().isNotEmpty) {
               try {
                 final List<dynamic> cloudAccounts = jsonDecode(decrypted);
@@ -1170,7 +1227,8 @@ class SyncService {
                 }
                 if (downloadResponse.data['deleted_accounts'] != null) {
                   cloudDeletedAccounts = List<String>.from(
-                      jsonDecode(downloadResponse.data['deleted_accounts']));
+                    jsonDecode(downloadResponse.data['deleted_accounts']),
+                  );
                 }
                 debugPrint('Cloud has ${cloudAccounts.length} accounts');
               } catch (jsonError) {
@@ -1249,7 +1307,8 @@ class SyncService {
         }
       }
       debugPrint(
-          'Added $addedFromCloud accounts from cloud and updated $updatedTitlesFromCloud titles');
+        'Added $addedFromCloud accounts from cloud and updated $updatedTitlesFromCloud titles',
+      );
 
       final finalData = await Future.wait(
         userBox.values.where((a) => !tombstones.contains(a.id)).map((a) async {
@@ -1266,20 +1325,24 @@ class SyncService {
       );
 
       final encrypted = EncryptionService.simpleEncrypt(
-          jsonEncode(finalData), _encryptionKey!);
+        jsonEncode(finalData),
+        _encryptionKey!,
+      );
       final newVersion = cloudVersion + 1;
 
-      final uploadResponse = await _requestWithRetry((_) => _dio.post(
-            'sync/sync/',
-            data: {
-              'data_type': 'otp_accounts',
-              'encrypted_content': encrypted,
-              'version': newVersion,
-              'device_id': deviceId,
-              'item_count': finalData.length,
-              'deleted_accounts': jsonEncode(cloudDeletedAccounts),
-            },
-          ));
+      final uploadResponse = await _requestWithRetry(
+        (_) => _dio.post(
+          'sync/sync/',
+          data: {
+            'data_type': 'otp_accounts',
+            'encrypted_content': encrypted,
+            'version': newVersion,
+            'device_id': deviceId,
+            'item_count': finalData.length,
+            'deleted_accounts': jsonEncode(cloudDeletedAccounts),
+          },
+        ),
+      );
 
       if (uploadResponse.statusCode == 200) {
         debugPrint('Sync successful - ${finalData.length} accounts synced');
@@ -1292,7 +1355,7 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??
-              'This device session is no longer active.')
+                'This device session is no longer active.')
           : _friendlyRequestError(e, 'Sync failed. Please try again.');
       debugPrint('syncAccounts error: $e');
       return false;
@@ -1306,8 +1369,9 @@ class SyncService {
   // ─── 2FA / password helpers ───────────────────────────────────────────────
   Future<void> downloadAndMergePasswordEntries() async {
     await _updateAuthHeader();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       return;
     }
@@ -1325,13 +1389,15 @@ class SyncService {
     }
 
     try {
-      final response = await _requestWithRetry((_) => _dio.get(
-            'sync/get-data/',
-            queryParameters: {
-              'data_type': 'password_entries',
-              'device_id': deviceId,
-            },
-          ));
+      final response = await _requestWithRetry(
+        (_) => _dio.get(
+          'sync/get-data/',
+          queryParameters: {
+            'data_type': 'password_entries',
+            'device_id': deviceId,
+          },
+        ),
+      );
 
       if (response.statusCode != 200 ||
           response.data['encrypted_content'] == null) {
@@ -1370,9 +1436,8 @@ class SyncService {
           continue;
         }
 
-        final cloudUpdatedAt = DateTime.tryParse(
-              rawEntry['updated_at']?.toString() ?? '',
-            ) ??
+        final cloudUpdatedAt =
+            DateTime.tryParse(rawEntry['updated_at']?.toString() ?? '') ??
             DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
             DateTime.now();
 
@@ -1390,9 +1455,8 @@ class SyncService {
           password: rawEntry['password']?.toString() ?? '',
           note: rawEntry['note']?.toString(),
           serverIP: rawEntry['server_ip']?.toString(),
-          createdAt: DateTime.tryParse(
-                rawEntry['created_at']?.toString() ?? '',
-              ) ??
+          createdAt:
+              DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
               DateTime.now(),
           updatedAt: cloudUpdatedAt,
           userId: userId,
@@ -1426,17 +1490,29 @@ class SyncService {
     final user = data['user'] as Map?;
     final canonicalUsername = user?['username']?.toString() ?? '';
     await _secureStorage.write(
-        SecureStorageService.accessTokenKey, data['access']);
+      SecureStorageService.accessTokenKey,
+      data['access'],
+    );
     await _secureStorage.write(
-        SecureStorageService.refreshTokenKey, data['refresh']);
+      SecureStorageService.refreshTokenKey,
+      data['refresh'],
+    );
     await _secureStorage.write(
-        SecureStorageService.currentUserKey, canonicalUsername);
+      SecureStorageService.currentUserKey,
+      canonicalUsername,
+    );
     await _secureStorage.write(
-        SecureStorageService.localVaultUserKey, canonicalUsername);
+      SecureStorageService.localVaultUserKey,
+      canonicalUsername,
+    );
     await _secureStorage.write(
-        SecureStorageService.userEmailKey, user?['email']?.toString() ?? '');
+      SecureStorageService.userEmailKey,
+      user?['email']?.toString() ?? '',
+    );
     await _secureStorage.write(
-        SecureStorageService.userIdKey, user?['id']?.toString() ?? '');
+      SecureStorageService.userIdKey,
+      user?['id']?.toString() ?? '',
+    );
     OTPService().clearCachedUserId();
     await _updateAuthHeader();
 
@@ -1451,7 +1527,9 @@ class SyncService {
 
     if (password != null && password.isNotEmpty) {
       final encryptionKey = EncryptionService.generateKey(
-          canonicalUsername + password, 'beatzLockKenya2099');
+        canonicalUsername + password,
+        'beatzLockKenya2099',
+      );
       await _activateSyncEncryptionKey(
         encryptionKey,
         enableSyncByDefault: enableSyncByDefault,
@@ -1472,7 +1550,8 @@ class SyncService {
     try {
       final userBox = await _getUserBox();
       debugPrint(
-          'User box ${await _getUserBoxName()} has ${userBox.length} accounts');
+        'User box ${await _getUserBoxName()} has ${userBox.length} accounts',
+      );
     } catch (e) {
       debugPrint('User box load error after unlock: $e');
     }
@@ -1515,7 +1594,8 @@ class SyncService {
   }
 
   Future<String?> _getStoredPasswordlessUnlockTransferKey(
-      String requestId) async {
+    String requestId,
+  ) async {
     final trimmedRequestId = requestId.trim();
     if (trimmedRequestId.isEmpty) {
       return null;
@@ -1582,8 +1662,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to load synced data.';
       return null;
@@ -1600,10 +1681,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (_) => _dio.get(
           'sync/get-data/',
-          queryParameters: {
-            'data_type': dataType,
-            'device_id': deviceId,
-          },
+          queryParameters: {'data_type': dataType, 'device_id': deviceId},
         ),
       );
 
@@ -1617,8 +1695,10 @@ class SyncService {
       if (e.response?.statusCode == 404) {
         return null;
       }
-      _lastErrorMessage =
-          _friendlyRequestError(e, 'Could not load synced data.');
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not load synced data.',
+      );
       return null;
     } catch (_) {
       _lastErrorMessage = 'Could not load synced data.';
@@ -1636,8 +1716,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to save synced data.';
       return false;
@@ -1682,8 +1763,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     final canonicalUsername =
         await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
     if (token == null || token.isEmpty || canonicalUsername.isEmpty) {
@@ -1697,9 +1779,7 @@ class SyncService {
         (accessToken) => _dio.post(
           'auth/unlock-sync/',
           data: {'password': password},
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if (response.statusCode == 200) {
@@ -1714,7 +1794,8 @@ class SyncService {
       _lastErrorMessage = 'Could not unlock sync on this device.';
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not unlock sync on this device.';
       return false;
     } catch (_) {
@@ -1741,8 +1822,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to restore synced accounts.';
@@ -1753,14 +1835,13 @@ class SyncService {
       final response = await _requestWithRetry(
         (_) => _dio.post(
           'sync/restore-accounts/',
-          data: {
-            'account_ids': accountIds,
-          },
+          data: {'account_ids': accountIds},
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not prepare synced restore on the server.';
       return false;
     } catch (_) {
@@ -1782,8 +1863,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'Sign in to sync restored accounts everywhere.';
       return false;
@@ -1841,8 +1923,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'Sign in to sync restored passwords everywhere.';
       return false;
@@ -1866,18 +1949,20 @@ class SyncService {
         }
       } catch (_) {}
 
-      final payload = passwordBox.values.map((entry) {
-        return {
-          'id': entry.id,
-          'title': entry.title,
-          'username': entry.username,
-          'password': entry.getPassword(userId),
-          'note': entry.getNote(userId),
-          'server_ip': entry.serverIP,
-          'created_at': entry.createdAt.toIso8601String(),
-          'updated_at': entry.updatedAt.toIso8601String(),
-        };
-      }).toList(growable: false);
+      final payload = passwordBox.values
+          .map((entry) {
+            return {
+              'id': entry.id,
+              'title': entry.title,
+              'username': entry.username,
+              'password': entry.getPassword(userId),
+              'note': entry.getNote(userId),
+              'server_ip': entry.serverIP,
+              'created_at': entry.createdAt.toIso8601String(),
+              'updated_at': entry.updatedAt.toIso8601String(),
+            };
+          })
+          .toList(growable: false);
 
       final encrypted = EncryptionService.encryptSensitiveSyncPayload(
         jsonEncode(payload),
@@ -1910,8 +1995,9 @@ class SyncService {
 
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'Sign in to sync passwords across devices.';
       return false;
@@ -1936,18 +2022,20 @@ class SyncService {
       final cloudEntriesById = <String, Map<String, dynamic>>{};
 
       try {
-        final downloadResponse = await _requestWithRetry((_) => _dio.get(
-              'sync/get-data/',
-              queryParameters: {
-                'data_type': 'password_entries',
-                'device_id': deviceId,
-              },
-            ));
+        final downloadResponse = await _requestWithRetry(
+          (_) => _dio.get(
+            'sync/get-data/',
+            queryParameters: {
+              'data_type': 'password_entries',
+              'device_id': deviceId,
+            },
+          ),
+        );
 
         if (downloadResponse.statusCode == 200 &&
             downloadResponse.data['encrypted_content'] != null) {
-          final encryptedContent =
-              downloadResponse.data['encrypted_content'].toString();
+          final encryptedContent = downloadResponse.data['encrypted_content']
+              .toString();
           if (encryptedContent.isNotEmpty) {
             final decrypted = EncryptionService.decryptSensitiveSyncPayload(
               encryptedContent,
@@ -1966,8 +2054,8 @@ class SyncService {
 
           cloudVersion =
               int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
-          final cloudDeletedIdsRaw =
-              downloadResponse.data['deleted_accounts']?.toString();
+          final cloudDeletedIdsRaw = downloadResponse.data['deleted_accounts']
+              ?.toString();
           if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
             final cloudDeletedState = _parseDeletedState(cloudDeletedIdsRaw);
             cloudDeletedIds = cloudDeletedState.deletedIds;
@@ -1992,9 +2080,8 @@ class SyncService {
         }
 
         final value = cloudEntry.value;
-        final cloudUpdatedAt = DateTime.tryParse(
-              value['updated_at']?.toString() ?? '',
-            ) ??
+        final cloudUpdatedAt =
+            DateTime.tryParse(value['updated_at']?.toString() ?? '') ??
             DateTime.tryParse(value['created_at']?.toString() ?? '') ??
             DateTime.now();
         final existing = passwordBox.get(cloudEntry.key);
@@ -2008,9 +2095,8 @@ class SyncService {
           password: value['password']?.toString() ?? '',
           note: value['note']?.toString(),
           serverIP: value['server_ip']?.toString(),
-          createdAt: DateTime.tryParse(
-                value['created_at']?.toString() ?? '',
-              ) ??
+          createdAt:
+              DateTime.tryParse(value['created_at']?.toString() ?? '') ??
               DateTime.now(),
           updatedAt: cloudUpdatedAt,
           userId: userId,
@@ -2046,16 +2132,18 @@ class SyncService {
         context: 'password-entries-sync',
       );
 
-      final uploadResponse = await _requestWithRetry((_) => _dio.post(
-            'sync/sync/',
-            data: {
-              'data_type': 'password_entries',
-              'encrypted_content': encrypted,
-              'version': cloudVersion + 1,
-              'device_id': deviceId,
-              'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
-            },
-          ));
+      final uploadResponse = await _requestWithRetry(
+        (_) => _dio.post(
+          'sync/sync/',
+          data: {
+            'data_type': 'password_entries',
+            'encrypted_content': encrypted,
+            'version': cloudVersion + 1,
+            'device_id': deviceId,
+            'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
+          },
+        ),
+      );
 
       if (uploadResponse.statusCode == 200) {
         await _storeDeletedPasswordEntryIds(deletedIds);
@@ -2067,11 +2155,8 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??
-              'This device session is no longer active.')
-          : _friendlyRequestError(
-              e,
-              'Password sync failed. Please try again.',
-            );
+                'This device session is no longer active.')
+          : _friendlyRequestError(e, 'Password sync failed. Please try again.');
       debugPrint('syncPasswordEntries error: $e');
       return false;
     } catch (e) {
@@ -2084,8 +2169,9 @@ class SyncService {
   Future<void> downloadAndMergeSecureMessages() async {
     await _updateAuthHeader();
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) return;
     if (!await _ensureEncryptionKeyAvailable()) return;
 
@@ -2097,13 +2183,15 @@ class SyncService {
     final deviceId = prefs.getString('device_id') ?? '';
 
     try {
-      final response = await _requestWithRetry((_) => _dio.get(
-            'sync/get-data/',
-            queryParameters: {
-              'data_type': 'secure_messages',
-              'device_id': deviceId,
-            },
-          ));
+      final response = await _requestWithRetry(
+        (_) => _dio.get(
+          'sync/get-data/',
+          queryParameters: {
+            'data_type': 'secure_messages',
+            'device_id': deviceId,
+          },
+        ),
+      );
 
       final encryptedContent =
           response.data['encrypted_content']?.toString() ?? '';
@@ -2119,8 +2207,8 @@ class SyncService {
       final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
       final cloudDeletedIds =
           cloudDeletedIdsRaw == null || cloudDeletedIdsRaw.trim().isEmpty
-              ? <String>{}
-              : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+          ? <String>{}
+          : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
       final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
 
       final cloudMessages = List<Map<String, dynamic>>.from(
@@ -2131,9 +2219,8 @@ class SyncService {
 
       for (final rawMessage in cloudMessages) {
         final id = rawMessage['id']?.toString() ?? '';
-        final createdAt = DateTime.tryParse(
-              rawMessage['created_at']?.toString() ?? '',
-            ) ??
+        final createdAt =
+            DateTime.tryParse(rawMessage['created_at']?.toString() ?? '') ??
             DateTime.now();
         if (id.isEmpty || deletedIds.contains(id) || localBox.containsKey(id)) {
           continue;
@@ -2175,8 +2262,9 @@ class SyncService {
     }
 
     await _updateAuthHeader();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'Sign in to sync secure texts across devices.';
       return false;
@@ -2204,18 +2292,20 @@ class SyncService {
       var cloudDeletedIds = <String>{};
 
       try {
-        final downloadResponse = await _requestWithRetry((_) => _dio.get(
-              'sync/get-data/',
-              queryParameters: {
-                'data_type': 'secure_messages',
-                'device_id': deviceId,
-              },
-            ));
+        final downloadResponse = await _requestWithRetry(
+          (_) => _dio.get(
+            'sync/get-data/',
+            queryParameters: {
+              'data_type': 'secure_messages',
+              'device_id': deviceId,
+            },
+          ),
+        );
 
         if (downloadResponse.statusCode == 200 &&
             downloadResponse.data['encrypted_content'] != null) {
-          final encryptedContent =
-              downloadResponse.data['encrypted_content'].toString();
+          final encryptedContent = downloadResponse.data['encrypted_content']
+              .toString();
           if (encryptedContent.isNotEmpty) {
             final decrypted = EncryptionService.decryptSensitiveSyncPayload(
               encryptedContent,
@@ -2233,11 +2323,12 @@ class SyncService {
           }
           cloudVersion =
               int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
-          final cloudDeletedIdsRaw =
-              downloadResponse.data['deleted_accounts']?.toString();
+          final cloudDeletedIdsRaw = downloadResponse.data['deleted_accounts']
+              ?.toString();
           if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
-            cloudDeletedIds =
-                List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+            cloudDeletedIds = List<String>.from(
+              jsonDecode(cloudDeletedIdsRaw),
+            ).toSet();
           }
         }
       } on DioException catch (e) {
@@ -2250,8 +2341,10 @@ class SyncService {
 
       for (final cloudMessage
           in List<MapEntry<String, Map<String, dynamic>>>.from(
-              mergedMessages.entries)) {
-        final createdAt = DateTime.tryParse(
+            mergedMessages.entries,
+          )) {
+        final createdAt =
+            DateTime.tryParse(
               cloudMessage.value['created_at']?.toString() ?? '',
             ) ??
             DateTime.now();
@@ -2280,8 +2373,11 @@ class SyncService {
       }
 
       final payload = mergedMessages.values.toList()
-        ..sort((a, b) => (a['created_at']?.toString() ?? '')
-            .compareTo(b['created_at']?.toString() ?? ''));
+        ..sort(
+          (a, b) => (a['created_at']?.toString() ?? '').compareTo(
+            b['created_at']?.toString() ?? '',
+          ),
+        );
 
       final encrypted = EncryptionService.encryptSensitiveSyncPayload(
         jsonEncode(payload),
@@ -2289,16 +2385,18 @@ class SyncService {
         context: 'secure-messages-sync',
       );
 
-      final uploadResponse = await _requestWithRetry((_) => _dio.post(
-            'sync/sync/',
-            data: {
-              'data_type': 'secure_messages',
-              'encrypted_content': encrypted,
-              'version': cloudVersion + 1,
-              'device_id': deviceId,
-              'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
-            },
-          ));
+      final uploadResponse = await _requestWithRetry(
+        (_) => _dio.post(
+          'sync/sync/',
+          data: {
+            'data_type': 'secure_messages',
+            'encrypted_content': encrypted,
+            'version': cloudVersion + 1,
+            'device_id': deviceId,
+            'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
+          },
+        ),
+      );
 
       if (uploadResponse.statusCode == 200) {
         await _storeDeletedSecureMessageIds(deletedIds);
@@ -2308,7 +2406,7 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??
-              'This device session is no longer active.')
+                'This device session is no longer active.')
           : _friendlyRequestError(
               e,
               'Secure text sync failed. Please try again.',
@@ -2331,13 +2429,16 @@ class SyncService {
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post('auth/passwordless-start/', data: {
-        'username': username.trim(),
-        if (password != null && password.isNotEmpty) 'password': password,
-        'device_id': deviceId,
-        'device_label': deviceLabel,
-        'device_kind': _deviceKind(),
-      });
+      final response = await _dio.post(
+        'auth/passwordless-start/',
+        data: {
+          'username': username.trim(),
+          if (password != null && password.isNotEmpty) 'password': password,
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+          'device_kind': _deviceKind(),
+        },
+      );
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = Map<String, dynamic>.from(response.data as Map);
         final requestId = data['request_id']?.toString() ?? '';
@@ -2364,7 +2465,8 @@ class SyncService {
       _lastErrorMessage = 'Passwordless sign-in could not be started.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Passwordless sign-in could not be started.';
       return e.response?.data is Map
           ? Map<String, dynamic>.from(e.response!.data as Map)
@@ -2385,12 +2487,15 @@ class SyncService {
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post('auth/passwordless-poll/', data: {
-        'request_id': requestId,
-        'device_id': deviceId,
-        'device_label': deviceLabel,
-        'device_kind': _deviceKind(),
-      });
+      final response = await _dio.post(
+        'auth/passwordless-poll/',
+        data: {
+          'request_id': requestId,
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+          'device_kind': _deviceKind(),
+        },
+      );
       final data = Map<String, dynamic>.from(response.data as Map);
       final responseUnlockTransferKey =
           data['unlock_transfer_key']?.toString().trim() ?? '';
@@ -2404,10 +2509,10 @@ class SyncService {
           await _getStoredPasswordlessUnlockTransferKey(requestId);
       final unlockTransferKeyCandidates =
           _passwordlessUnlockTransferKeyCandidates(
-        responseUnlockTransferKey: responseUnlockTransferKey,
-        providedUnlockTransferKey: unlockTransferKey,
-        storedUnlockTransferKey: storedUnlockTransferKey,
-      );
+            responseUnlockTransferKey: responseUnlockTransferKey,
+            providedUnlockTransferKey: unlockTransferKey,
+            storedUnlockTransferKey: storedUnlockTransferKey,
+          );
       if (data['success'] == true && data['status'] == 'approved') {
         String? transferredEncryptionKey;
         final syncUnlockPayload = data['sync_unlock_payload']?.toString();
@@ -2442,7 +2547,8 @@ class SyncService {
           data,
           password: password,
           transferredEncryptionKey: transferredEncryptionKey,
-          enableSyncByDefault: (password != null && password.isNotEmpty) ||
+          enableSyncByDefault:
+              (password != null && password.isNotEmpty) ||
               (transferredEncryptionKey != null &&
                   transferredEncryptionKey.isNotEmpty),
         );
@@ -2456,7 +2562,8 @@ class SyncService {
       }
       return data;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Passwordless sign-in could not be completed.';
       return e.response?.data is Map
           ? Map<String, dynamic>.from(e.response!.data as Map)
@@ -2470,8 +2577,10 @@ class SyncService {
   Future<bool> send2FACode(String username, String password) async {
     try {
       _lastErrorMessage = null;
-      final r = await _dio.post('send-2fa/',
-          data: {'username': username.trim(), 'password': password});
+      final r = await _dio.post(
+        'send-2fa/',
+        data: {'username': username.trim(), 'password': password},
+      );
       return r.data['success'] == true;
     } on DioException catch (e) {
       _lastErrorMessage = _friendlyRequestError(
@@ -2490,8 +2599,10 @@ class SyncService {
   Future<bool> verify2FACode(String username, String code) async {
     try {
       _lastErrorMessage = null;
-      final r = await _dio.post('verify-2fa/',
-          data: {'username': username.trim(), 'code': code.trim()});
+      final r = await _dio.post(
+        'verify-2fa/',
+        data: {'username': username.trim(), 'code': code.trim()},
+      );
       return r.data['success'] == true;
     } on DioException catch (e) {
       _lastErrorMessage = _friendlyRequestError(e, 'Verification failed.');
@@ -2506,8 +2617,9 @@ class SyncService {
 
   Future<bool> sendDeleteOtp(String username) async {
     await _updateAuthHeader();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null) {
       debugPrint('No token available for delete OTP');
       return false;
@@ -2516,10 +2628,12 @@ class SyncService {
       final response = await _dio.post(
         'send-delete-otp/',
         data: {'username': username},
-        options: Options(headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        }),
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ),
       );
       return response.data['success'] == true;
     } catch (e) {
@@ -2534,17 +2648,20 @@ class SyncService {
 
   Future<bool> verifyDeleteOtp(String username, String code) async {
     await _updateAuthHeader();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null) return false;
     try {
       final response = await _dio.post(
         'verify-delete-otp/',
         data: {'username': username, 'code': code},
-        options: Options(headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        }),
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        ),
       );
       return response.data['success'] == true;
     } catch (e) {
@@ -2554,11 +2671,14 @@ class SyncService {
   }
 
   Future<bool> changePassword(
-      String currentPassword, String newPassword) async {
+    String currentPassword,
+    String newPassword,
+  ) async {
     await _updateAuthHeader();
     final prefs = await SharedPreferences.getInstance();
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null) return false;
 
     final username = await _getCurrentUserId();
@@ -2582,11 +2702,14 @@ class SyncService {
         }).toList(),
       );
 
-      final r = await _dio.post('auth/change_password/', data: {
-        'current_password': currentPassword,
-        'new_password': newPassword,
-        'device_label': deviceLabel,
-      });
+      final r = await _dio.post(
+        'auth/change_password/',
+        data: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+          'device_label': deviceLabel,
+        },
+      );
 
       if (r.statusCode != 200) return false;
 
@@ -2603,16 +2726,21 @@ class SyncService {
       }
 
       final encrypted = EncryptionService.simpleEncrypt(
-          jsonEncode(plainAccounts), _encryptionKey!);
+        jsonEncode(plainAccounts),
+        _encryptionKey!,
+      );
 
-      await _dio.post('sync/sync/', data: {
-        'data_type': 'otp_accounts',
-        'encrypted_content': encrypted,
-        'version': DateTime.now().millisecondsSinceEpoch,
-        'device_id': prefs.getString('device_id') ?? 'unknown',
-        'item_count': plainAccounts.length,
-        'deleted_accounts': '[]',
-      });
+      await _dio.post(
+        'sync/sync/',
+        data: {
+          'data_type': 'otp_accounts',
+          'encrypted_content': encrypted,
+          'version': DateTime.now().millisecondsSinceEpoch,
+          'device_id': prefs.getString('device_id') ?? 'unknown',
+          'item_count': plainAccounts.length,
+          'deleted_accounts': '[]',
+        },
+      );
 
       // Update stored encryption key
       await _storeEncryptionKey(_encryptionKey!);
@@ -2628,11 +2756,14 @@ class SyncService {
   Future<bool> sendPasswordResetCode(String email) async {
     try {
       _lastErrorMessage = null;
-      final r =
-          await _dio.post('send-reset-code/', data: {'email': email.trim()});
+      final r = await _dio.post(
+        'send-reset-code/',
+        data: {'email': email.trim()},
+      );
       return r.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage = e.response?.data?['error']?.toString() ??
+      _lastErrorMessage =
+          e.response?.data?['error']?.toString() ??
           'Unable to send reset code.';
       return false;
     } catch (e) {
@@ -2642,14 +2773,20 @@ class SyncService {
   }
 
   Future<bool> resetPassword(
-      String email, String code, String newPassword) async {
+    String email,
+    String code,
+    String newPassword,
+  ) async {
     try {
       _lastErrorMessage = null;
-      final r = await _dio.post('reset-password/', data: {
-        'email': email.trim(),
-        'code': code.trim(),
-        'new_password': newPassword,
-      });
+      final r = await _dio.post(
+        'reset-password/',
+        data: {
+          'email': email.trim(),
+          'code': code.trim(),
+          'new_password': newPassword,
+        },
+      );
       return r.statusCode == 200;
     } on DioException catch (e) {
       _lastErrorMessage =
@@ -2663,22 +2800,29 @@ class SyncService {
 
   // ─── Logout ───────────────────────────────────────────────────────────────
   Future<bool> verifyLoginWithRecoveryCode(
-      String username, String password, String recoveryCode) async {
+    String username,
+    String password,
+    String recoveryCode,
+  ) async {
     try {
       _lastErrorMessage = null;
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post('recovery-code/login/', data: {
-        'username': username.trim(),
-        'password': password,
-        'recovery_code': recoveryCode.trim(),
-        'device_id': deviceId,
-        'device_label': deviceLabel,
-      });
+      final response = await _dio.post(
+        'recovery-code/login/',
+        data: {
+          'username': username.trim(),
+          'password': password,
+          'recovery_code': recoveryCode.trim(),
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+        },
+      );
       return response.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Recovery code verification failed.';
       return false;
     } catch (e) {
@@ -2690,12 +2834,14 @@ class SyncService {
   Future<bool> checkRecoveryEmailExists(String email) async {
     try {
       _lastErrorMessage = null;
-      final response = await _dio.post('recovery-code/check-email/', data: {
-        'email': email.trim(),
-      });
+      final response = await _dio.post(
+        'recovery-code/check-email/',
+        data: {'email': email.trim()},
+      );
       return response.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'No account found with this email.';
       return false;
     } catch (e) {
@@ -2705,45 +2851,64 @@ class SyncService {
   }
 
   Future<bool> resetPasswordWithRecoveryCode(
-      String email, String recoveryCode, String newPassword) async {
+    String email,
+    String recoveryCode,
+    String newPassword,
+  ) async {
     try {
       _lastErrorMessage = null;
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post('recovery-code/reset-password/', data: {
-        'email': email.trim(),
-        'recovery_code': recoveryCode.trim(),
-        'new_password': newPassword,
-        'device_id': deviceId,
-        'device_label': deviceLabel,
-        'device_kind': _deviceKind(),
-      });
+      final response = await _dio.post(
+        'recovery-code/reset-password/',
+        data: {
+          'email': email.trim(),
+          'recovery_code': recoveryCode.trim(),
+          'new_password': newPassword,
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+          'device_kind': _deviceKind(),
+        },
+      );
       if (response.data['success'] == true) {
         final canonicalUsername =
             response.data['user']?['username']?.toString() ?? '';
         await _secureStorage.write(
-            SecureStorageService.accessTokenKey, response.data['access']);
+          SecureStorageService.accessTokenKey,
+          response.data['access'],
+        );
         await _secureStorage.write(
-            SecureStorageService.refreshTokenKey, response.data['refresh']);
+          SecureStorageService.refreshTokenKey,
+          response.data['refresh'],
+        );
         await _secureStorage.write(
-            SecureStorageService.currentUserKey, canonicalUsername);
-        await _secureStorage.write(SecureStorageService.userEmailKey,
-            response.data['user']?['email']?.toString() ?? email.trim());
-        await _secureStorage.write(SecureStorageService.userIdKey,
-            response.data['user']?['id']?.toString() ?? '');
+          SecureStorageService.currentUserKey,
+          canonicalUsername,
+        );
+        await _secureStorage.write(
+          SecureStorageService.userEmailKey,
+          response.data['user']?['email']?.toString() ?? email.trim(),
+        );
+        await _secureStorage.write(
+          SecureStorageService.userIdKey,
+          response.data['user']?['id']?.toString() ?? '',
+        );
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
 
         final encryptionKey = EncryptionService.generateKey(
-            canonicalUsername + newPassword, 'beatzLockKenya2099');
+          canonicalUsername + newPassword,
+          'beatzLockKenya2099',
+        );
         await _storeEncryptionKey(encryptionKey);
         _encryptionKey = encryptionKey;
         return true;
       }
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Password reset with recovery code failed.';
       return false;
     } catch (e) {
@@ -2756,8 +2921,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to view recovery code status.';
@@ -2768,9 +2934,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'backup-codes/status/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
 
@@ -2796,8 +2960,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to review backup-code requests.';
@@ -2808,9 +2973,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'backup-code-requests/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if (response.statusCode == 200 && response.data is List) {
@@ -2821,7 +2984,8 @@ class SyncService {
       }
       return const [];
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not load backup-code requests.';
       return const [];
     } catch (_) {
@@ -2834,8 +2998,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to request backup-code download.';
@@ -2846,9 +3011,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'backup-code-requests/start/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if ((response.statusCode == 200 || response.statusCode == 201) &&
@@ -2859,7 +3022,8 @@ class SyncService {
       _lastErrorMessage = 'Could not send the backup-code request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not send the backup-code request.';
       return null;
     } catch (_) {
@@ -2879,8 +3043,11 @@ class SyncService {
 
   String _backupCodesFileName(String username) {
     final safeUsername = username.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
-    final timestamp =
-        DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
+    final timestamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .split('.')
+        .first;
     return 'beatzlock_backup_codes_${safeUsername}_$timestamp.pdf';
   }
 
@@ -2891,10 +3058,7 @@ class SyncService {
     if (Platform.isAndroid) {
       final savedPath = await _storageChannel.invokeMethod<String>(
         'savePdfToDownloads',
-        {
-          'fileName': fileName,
-          'bytes': Uint8List.fromList(bytes),
-        },
+        {'fileName': fileName, 'bytes': Uint8List.fromList(bytes)},
       );
       if (savedPath == null || savedPath.isEmpty) {
         throw FileSystemException('Android Downloads save returned no path.');
@@ -2909,14 +3073,13 @@ class SyncService {
     return file.path;
   }
 
-  Future<String?> downloadBackupCodesPdf({
-    bool preferDarkTheme = false,
-  }) async {
+  Future<String?> downloadBackupCodesPdf({bool preferDarkTheme = false}) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to download backup codes.';
       return null;
@@ -2926,9 +3089,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get<List<int>>(
           'backup-codes/download/',
-          queryParameters: {
-            'pdf_theme': preferDarkTheme ? 'dark' : 'light',
-          },
+          queryParameters: {'pdf_theme': preferDarkTheme ? 'dark' : 'light'},
           options: Options(
             responseType: ResponseType.bytes,
             headers: {
@@ -2947,12 +3108,9 @@ class SyncService {
 
       final username =
           await _secureStorage.read(SecureStorageService.currentUserKey) ??
-              'user';
+          'user';
       final fileName = _backupCodesFileName(username);
-      return await _saveBackupCodesPdf(
-        fileName: fileName,
-        bytes: bytes,
-      );
+      return await _saveBackupCodesPdf(fileName: fileName, bytes: bytes);
     } on DioException catch (e) {
       _lastErrorMessage = _friendlyRequestError(
         e,
@@ -2972,8 +3130,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to approve backup-code requests.';
@@ -2984,13 +3143,13 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'backup-code-requests/$requestId/approve/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-            'X-PDF-Theme': preferDarkTheme ? 'dark' : 'light',
-          }),
-          queryParameters: {
-            'pdf_theme': preferDarkTheme ? 'dark' : 'light',
-          },
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $accessToken',
+              'X-PDF-Theme': preferDarkTheme ? 'dark' : 'light',
+            },
+          ),
+          queryParameters: {'pdf_theme': preferDarkTheme ? 'dark' : 'light'},
         ),
       );
 
@@ -3010,7 +3169,8 @@ class SyncService {
       _lastErrorMessage = 'Could not approve this backup-code request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not approve this backup-code request.';
       return null;
     } catch (_) {
@@ -3023,8 +3183,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to deny backup-code requests.';
@@ -3035,14 +3196,13 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'backup-code-requests/$requestId/deny/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not deny this backup-code request.';
       return false;
     } catch (_) {
@@ -3055,8 +3215,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to view notifications.';
       return [];
@@ -3066,18 +3227,17 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'notifications/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
 
       if (response.statusCode == 200 && response.data is List) {
         return (response.data as List)
             .whereType<Map>()
-            .map((item) => AppNotificationItem.fromJson(
-                  Map<String, dynamic>.from(item),
-                ))
+            .map(
+              (item) =>
+                  AppNotificationItem.fromJson(Map<String, dynamic>.from(item)),
+            )
             .toList();
       }
 
@@ -3096,12 +3256,14 @@ class SyncService {
   }
 
   Future<AppNotificationItem?> getNotificationDetail(
-      String notificationId) async {
+    String notificationId,
+  ) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to view notifications.';
       return null;
@@ -3111,9 +3273,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'notifications/$notificationId/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
 
@@ -3141,8 +3301,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage notifications.';
       return null;
@@ -3152,9 +3313,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'notifications/mark-all-read/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
 
@@ -3184,8 +3343,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage notifications.';
       return null;
@@ -3204,9 +3364,7 @@ class SyncService {
         (accessToken) => _dio.post(
           'notifications/clear/',
           data: data,
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
 
@@ -3235,8 +3393,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -3250,9 +3409,7 @@ class SyncService {
             'service_name': serviceName,
             'account_label': accountLabel,
           },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200 || response.statusCode == 201;
@@ -3261,13 +3418,15 @@ class SyncService {
     }
   }
 
-  Future<bool> logAppPinChangedNotification(
-      {required String deviceLabel}) async {
+  Future<bool> logAppPinChangedNotification({
+    required String deviceLabel,
+  }) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -3276,13 +3435,8 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'notifications/log-event/',
-          data: {
-            'event_type': 'app_pin_changed',
-            'device_label': deviceLabel,
-          },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          data: {'event_type': 'app_pin_changed', 'device_label': deviceLabel},
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200 || response.statusCode == 201;
@@ -3299,8 +3453,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -3315,9 +3470,7 @@ class SyncService {
             'skipped_count': skippedCount,
             'source_label': sourceLabel,
           },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200 || response.statusCode == 201;
@@ -3333,8 +3486,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -3348,9 +3502,7 @@ class SyncService {
             'imported_count': importedCount,
             'source_label': sourceLabel,
           },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200 || response.statusCode == 201;
@@ -3363,8 +3515,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to view active devices.';
       return [];
@@ -3376,30 +3529,28 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'device-sessions/',
-          queryParameters: {
-            'device_id': deviceId,
-            'device_label': deviceLabel,
-          },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          queryParameters: {'device_id': deviceId, 'device_label': deviceLabel},
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
 
       if (response.statusCode == 200 && response.data is List) {
         return (response.data as List)
             .whereType<Map>()
-            .map((item) => DeviceSessionInfo.fromJson(
-                  Map<String, dynamic>.from(item),
-                ))
+            .map(
+              (item) =>
+                  DeviceSessionInfo.fromJson(Map<String, dynamic>.from(item)),
+            )
             .toList();
       }
 
       _lastErrorMessage = 'Could not load active devices.';
       return [];
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _friendlyRequestError(e, 'Could not load active devices.');
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not load active devices.',
+      );
       return [];
     } catch (e) {
       _lastErrorMessage = 'Could not load active devices.';
@@ -3417,8 +3568,9 @@ class SyncService {
       _lastErrorMessage = null;
     }
 
-    final accessToken =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final accessToken = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (accessToken == null || accessToken.isEmpty) {
       if (reportError) {
         _lastErrorMessage = 'You need to be signed in to enable notifications.';
@@ -3442,15 +3594,16 @@ class SyncService {
             'token': trimmedToken,
             'platform': platform.trim().isEmpty ? 'android' : platform.trim(),
           },
-          options: Options(headers: {
-            'Authorization': 'Bearer $freshAccessToken',
-          }),
+          options: Options(
+            headers: {'Authorization': 'Bearer $freshAccessToken'},
+          ),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
       if (reportError) {
-        _lastErrorMessage = _extractServerError(e.response?.data) ??
+        _lastErrorMessage =
+            _extractServerError(e.response?.data) ??
             'Could not enable push notifications.';
       }
       return false;
@@ -3466,8 +3619,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage devices.';
       return false;
@@ -3477,14 +3631,13 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'device-sessions/$sessionId/revoke/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not sign out this device.';
       return false;
     } catch (e) {
@@ -3500,8 +3653,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage devices.';
       return false;
@@ -3511,17 +3665,14 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'device-sessions/$sessionId/set-primary/',
-          data: {
-            'password': password,
-          },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          data: {'password': password},
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not set the primary device.';
       return false;
     } catch (e) {
@@ -3534,8 +3685,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to review sign-in requests.';
@@ -3546,9 +3698,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'passwordless-requests/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if (response.statusCode == 200 && response.data is List) {
@@ -3559,7 +3709,8 @@ class SyncService {
       }
       return const [];
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not load passwordless sign-in requests.';
       return const [];
     } catch (_) {
@@ -3576,8 +3727,9 @@ class SyncService {
   }) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to approve sign-ins.';
       return false;
@@ -3627,14 +3779,13 @@ class SyncService {
             if (syncUnlockPayload != null && syncUnlockPayload.isNotEmpty)
               'sync_unlock_payload': syncUnlockPayload,
           },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not approve this sign-in request.';
       return false;
     } catch (_) {
@@ -3646,8 +3797,9 @@ class SyncService {
   Future<bool> denyPasswordlessRequest(String requestId) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to deny sign-ins.';
       return false;
@@ -3657,14 +3809,13 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'passwordless-requests/$requestId/deny/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not deny this sign-in request.';
       return false;
     } catch (_) {
@@ -3676,8 +3827,9 @@ class SyncService {
   Future<bool> deletePasswordlessRequestLog(String requestId) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage sign-in logs.';
       return false;
@@ -3687,14 +3839,13 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'passwordless-requests/$requestId/delete-log/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not delete this sign-in log.';
       return false;
     } catch (_) {
@@ -3706,8 +3857,9 @@ class SyncService {
   Future<int?> clearPasswordlessRequestLogs() async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage sign-in logs.';
       return null;
@@ -3717,20 +3869,20 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'passwordless-requests/clear-logs/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if (response.statusCode == 200 && response.data is Map) {
         return int.tryParse(
-                response.data['cleared_count']?.toString() ?? '0') ??
+              response.data['cleared_count']?.toString() ?? '0',
+            ) ??
             0;
       }
       _lastErrorMessage = 'Could not clear the sign-in logs.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not clear the sign-in logs.';
       return null;
     } catch (_) {
@@ -3743,8 +3895,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to review delete requests.';
       return const [];
@@ -3754,9 +3907,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'bulk-delete-requests/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if (response.statusCode == 200 && response.data is List) {
@@ -3767,7 +3918,8 @@ class SyncService {
       }
       return const [];
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not load OTP delete requests.';
       return const [];
     } catch (_) {
@@ -3784,8 +3936,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to request cloud deletion.';
       return null;
@@ -3808,9 +3961,7 @@ class SyncService {
               rangeEndDate.day,
             ).toIso8601String(),
           },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if ((response.statusCode == 200 || response.statusCode == 201) &&
@@ -3821,7 +3972,8 @@ class SyncService {
       _lastErrorMessage = 'Could not send the delete request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not send the delete request.';
       return null;
     } catch (_) {
@@ -3834,8 +3986,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage =
           'You need to be signed in to approve delete requests.';
@@ -3846,9 +3999,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'bulk-delete-requests/$requestId/approve/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       if (response.statusCode == 200 && response.data is Map) {
@@ -3860,7 +4011,8 @@ class SyncService {
       _lastErrorMessage = 'Could not approve this delete request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not approve this delete request.';
       return null;
     } catch (_) {
@@ -3873,8 +4025,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to deny delete requests.';
       return false;
@@ -3884,14 +4037,13 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'bulk-delete-requests/$requestId/deny/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not deny this delete request.';
       return false;
     } catch (_) {
@@ -3911,15 +4063,18 @@ class SyncService {
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
-      final response = await _dio.post('auth/recover-primary-device/', data: {
-        'username': username.trim(),
-        'password': password,
-        'email_code': emailCode.trim(),
-        'recovery_code': _normalizeRecoveryCode(recoveryCode),
-        'device_id': deviceId,
-        'device_label': deviceLabel,
-        'device_kind': _deviceKind(),
-      });
+      final response = await _dio.post(
+        'auth/recover-primary-device/',
+        data: {
+          'username': username.trim(),
+          'password': password,
+          'email_code': emailCode.trim(),
+          'recovery_code': _normalizeRecoveryCode(recoveryCode),
+          'device_id': deviceId,
+          'device_label': deviceLabel,
+          'device_kind': _deviceKind(),
+        },
+      );
       final data = Map<String, dynamic>.from(response.data as Map);
       if (data['success'] == true) {
         await _applyAuthenticatedResponse(
@@ -3931,7 +4086,8 @@ class SyncService {
       }
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Primary-device recovery failed.';
       return false;
     } catch (_) {
@@ -3944,8 +4100,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in to manage devices.';
       return null;
@@ -3955,9 +4112,7 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'device-sessions/revoke-others/',
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
       );
 
@@ -3968,7 +4123,8 @@ class SyncService {
       _lastErrorMessage = 'Could not sign out the other devices.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage = _extractServerError(e.response?.data) ??
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ??
           'Could not sign out the other devices.';
       return null;
     } catch (e) {
@@ -3981,8 +4137,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       return false;
     }
@@ -3993,13 +4150,8 @@ class SyncService {
       final response = await _requestWithRetry(
         (accessToken) => _dio.post(
           'device-sessions/heartbeat/',
-          data: {
-            'device_id': deviceId,
-            'device_label': deviceLabel,
-          },
-          options: Options(headers: {
-            'Authorization': 'Bearer $accessToken',
-          }),
+          data: {'device_id': deviceId, 'device_label': deviceLabel},
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),
         clearSessionOnRefreshFailure: false,
       );
@@ -4027,8 +4179,9 @@ class SyncService {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     if (token == null || token.isEmpty) {
       _lastErrorMessage = 'You need to be signed in.';
       return false;
@@ -4038,26 +4191,23 @@ class SyncService {
   }
 
   Future<void> logout({bool notifyServer = true}) async {
-    final currentVaultUser =
-        await _secureStorage.read(SecureStorageService.currentUserKey);
+    final currentVaultUser = await _secureStorage.read(
+      SecureStorageService.currentUserKey,
+    );
 
     if (notifyServer) {
       try {
         await _updateAuthHeader();
-        final token =
-            await _secureStorage.read(SecureStorageService.accessTokenKey);
+        final token = await _secureStorage.read(
+          SecureStorageService.accessTokenKey,
+        );
         if (token != null && token.isNotEmpty) {
           final deviceId = await getOrCreateDeviceId();
           final deviceLabel = await _buildDeviceLabel();
           await _dio.post(
             'device-sessions/logout-current/',
-            data: {
-              'device_id': deviceId,
-              'device_label': deviceLabel,
-            },
-            options: Options(headers: {
-              'Authorization': 'Bearer $token',
-            }),
+            data: {'device_id': deviceId, 'device_label': deviceLabel},
+            options: Options(headers: {'Authorization': 'Bearer $token'}),
           );
         }
       } catch (_) {}
@@ -4080,8 +4230,9 @@ class SyncService {
   }
 
   Future<bool> isLoggedIn() async {
-    final token =
-        await _secureStorage.read(SecureStorageService.accessTokenKey);
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
     return token != null && token.isNotEmpty;
   }
 

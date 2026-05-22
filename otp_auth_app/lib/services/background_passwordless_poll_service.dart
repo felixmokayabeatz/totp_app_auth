@@ -24,9 +24,7 @@ void passwordlessApprovalBackgroundCallbackDispatcher() {
     try {
       await BackgroundPasswordlessPollService().runBackgroundPoll();
     } catch (error, stackTrace) {
-      debugPrint(
-        'Background passwordless poll failed: $error\n$stackTrace',
-      );
+      debugPrint('Background passwordless poll failed: $error\n$stackTrace');
     }
 
     return true;
@@ -65,9 +63,7 @@ class BackgroundPasswordlessPollService {
     await initialization;
   }
 
-  Future<void> syncRegistration({
-    required bool enabled,
-  }) async {
+  Future<void> syncRegistration({required bool enabled}) async {
     if (!Platform.isAndroid) {
       return;
     }
@@ -86,9 +82,7 @@ class BackgroundPasswordlessPollService {
       taskName,
       frequency: _minimumFrequency,
       initialDelay: _initialDelay,
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-      ),
+      constraints: Constraints(networkType: NetworkType.connected),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
       backoffPolicy: BackoffPolicy.linear,
       backoffPolicyDelay: const Duration(minutes: 1),
@@ -113,10 +107,11 @@ class BackgroundPasswordlessPollService {
 
     final sessions = await syncService.getActiveDeviceSessions();
     final currentSession = sessions.cast<DeviceSessionInfo?>().firstWhere(
-          (session) => session?.isCurrent == true,
-          orElse: () => null,
-        );
-    final canShowPasswordlessNotification = currentSession != null &&
+      (session) => session?.isCurrent == true,
+      orElse: () => null,
+    );
+    final canShowPasswordlessNotification =
+        currentSession != null &&
         currentSession.isPrimary &&
         currentSession.deviceKind == 'mobile';
 
@@ -147,7 +142,7 @@ class BackgroundPasswordlessPollService {
 
     final requesterDeviceLabel =
         pendingRequest['requester_device_label']?.toString() ??
-            'another device';
+        'another device';
     await approvalNotifications.showPasswordlessApprovalNotification(
       requestId: requestId,
       requesterDeviceLabel: requesterDeviceLabel,

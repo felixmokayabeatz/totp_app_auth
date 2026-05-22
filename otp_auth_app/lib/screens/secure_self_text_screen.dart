@@ -157,10 +157,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Delete message',
-          style: TextStyle(color: _textPrimary),
-        ),
+        title: Text('Delete message', style: TextStyle(color: _textPrimary)),
         content: Text(
           'Delete this secure self text?',
           style: TextStyle(color: _textSecondary),
@@ -272,14 +269,8 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                     }
                   },
                   itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: 'copy',
-                      child: Text('Copy message'),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Text('Delete'),
-                    ),
+                    PopupMenuItem(value: 'copy', child: Text('Copy message')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete')),
                   ],
                 ),
               ],
@@ -344,52 +335,50 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : box == null
-                    ? Center(
-                        child: Text(
-                          'Secure text vault unavailable.',
-                          style: TextStyle(color: _textSecondary),
-                        ),
-                      )
-                    : ValueListenableBuilder(
-                        valueListenable: box.listenable(),
-                        builder: (context, Box<SecureMessage> messageBox, _) {
-                          final messages = messageBox.values.toList()
-                            ..sort(
-                                (a, b) => a.createdAt.compareTo(b.createdAt));
-                          if (messages.isEmpty) {
-                            return _buildEmptyState();
-                          }
+                ? Center(
+                    child: Text(
+                      'Secure text vault unavailable.',
+                      style: TextStyle(color: _textSecondary),
+                    ),
+                  )
+                : ValueListenableBuilder(
+                    valueListenable: box.listenable(),
+                    builder: (context, Box<SecureMessage> messageBox, _) {
+                      final messages = messageBox.values.toList()
+                        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+                      if (messages.isEmpty) {
+                        return _buildEmptyState();
+                      }
 
-                          final userId = _vaultIdentity;
-                          if (userId == null || userId.isEmpty) {
-                            return const Center(
-                                child: CircularProgressIndicator());
-                          }
+                      final userId = _vaultIdentity;
+                      if (userId == null || userId.isEmpty) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                          return ListView(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                            children: [
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 14),
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: _cardColor,
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                child: Text(
-                                  'This is your private self-text feed. Messages stay tied to your own BeatzLock account, sync only through encrypted account data, and clear themselves after 30 minutes.',
-                                  style: TextStyle(
-                                    color: _textSecondary,
-                                    height: 1.45,
-                                  ),
-                                ),
+                      return ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: _cardColor,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Text(
+                              'This is your private self-text feed. Messages stay tied to your own BeatzLock account, sync only through encrypted account data, and clear themselves after 30 minutes.',
+                              style: TextStyle(
+                                color: _textSecondary,
+                                height: 1.45,
                               ),
-                              for (final message in messages)
-                                _buildMessageBubble(message, userId),
-                            ],
-                          );
-                        },
-                      ),
+                            ),
+                          ),
+                          for (final message in messages)
+                            _buildMessageBubble(message, userId),
+                        ],
+                      );
+                    },
+                  ),
           ),
           SafeArea(
             top: false,
@@ -399,8 +388,9 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                 color: _cardColor,
                 boxShadow: [
                   BoxShadow(
-                    color:
-                        Colors.black.withValues(alpha: _isDark ? 0.22 : 0.06),
+                    color: Colors.black.withValues(
+                      alpha: _isDark ? 0.22 : 0.06,
+                    ),
                     blurRadius: 16,
                     offset: const Offset(0, -4),
                   ),

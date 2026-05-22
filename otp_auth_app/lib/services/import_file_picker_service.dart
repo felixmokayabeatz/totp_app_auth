@@ -17,8 +17,9 @@ class PickedImportFile {
 }
 
 class ImportFilePickerService {
-  static const MethodChannel _channel =
-      MethodChannel('com.beatzlock.otp/file_picker');
+  static const MethodChannel _channel = MethodChannel(
+    'com.beatzlock.otp/file_picker',
+  );
 
   bool get canPickOtpImportFile => Platform.isAndroid || Platform.isWindows;
   bool get canPickPasswordImportFile =>
@@ -29,9 +30,7 @@ class ImportFilePickerService {
       return _pickAndroidImportFile('pickImportFile');
     }
     if (Platform.isWindows) {
-      return _pickWindowsImportFile(
-        confirmButtonText: 'Choose Import File',
-      );
+      return _pickWindowsImportFile(confirmButtonText: 'Choose Import File');
     }
     return null;
   }
@@ -41,9 +40,7 @@ class ImportFilePickerService {
       return _pickAndroidImportFile('pickPasswordImportFile');
     }
     if (Platform.isWindows) {
-      return _pickWindowsImportFile(
-        confirmButtonText: 'Import passwords',
-      );
+      return _pickWindowsImportFile(confirmButtonText: 'Import passwords');
     }
     return null;
   }
@@ -56,8 +53,9 @@ class ImportFilePickerService {
     final mimeType = payload['mimeType']?.toString().trim() ?? '';
     final bytes = _asBytes(payload['bytes']);
     return PickedImportFile(
-      fileName:
-          (fileName == null || fileName.isEmpty) ? 'import.txt' : fileName,
+      fileName: (fileName == null || fileName.isEmpty)
+          ? 'import.txt'
+          : fileName,
       mimeType: mimeType,
       content: _decodeText(bytes),
     );

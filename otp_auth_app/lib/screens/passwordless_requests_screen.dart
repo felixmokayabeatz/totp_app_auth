@@ -6,11 +6,7 @@ import '../models/device_session_info.dart';
 import '../services/app_lock_service.dart';
 import '../services/sync_service.dart';
 
-enum _PasswordlessApprovalMode {
-  cancel,
-  approveOnly,
-  unlockAndTransfer,
-}
+enum _PasswordlessApprovalMode { cancel, approveOnly, unlockAndTransfer }
 
 class PasswordlessRequestsScreen extends StatefulWidget {
   const PasswordlessRequestsScreen({
@@ -84,7 +80,8 @@ class _PasswordlessRequestsScreenState
     }
 
     setState(() {
-      _canManageLogs = currentSession?.isPrimary == true &&
+      _canManageLogs =
+          currentSession?.isPrimary == true &&
           currentSession?.deviceKind == 'mobile';
     });
   }
@@ -104,8 +101,9 @@ class _PasswordlessRequestsScreenState
             .map((item) => item['id']?.toString() ?? '')
             .where((id) => id.isNotEmpty)
             .toSet();
-        _selectedCodes
-            .removeWhere((requestId, _) => !requestIds.contains(requestId));
+        _selectedCodes.removeWhere(
+          (requestId, _) => !requestIds.contains(requestId),
+        );
         for (final item in requests) {
           final requestId = item['id']?.toString() ?? '';
           if (requestId.isEmpty) continue;
@@ -186,8 +184,9 @@ class _PasswordlessRequestsScreenState
 
     final requesterLabel =
         item['requester_device_label']?.toString().trim() ?? '';
-    final targetDeviceLabel =
-        requesterLabel.isNotEmpty ? requesterLabel : 'the other device';
+    final targetDeviceLabel = requesterLabel.isNotEmpty
+        ? requesterLabel
+        : 'the other device';
     final syncEnabled = await _syncService.isSyncEnabled();
     if (!mounted) return _PasswordlessApprovalMode.cancel;
 
@@ -204,8 +203,9 @@ class _PasswordlessRequestsScreenState
           canPop: false,
           child: AlertDialog(
             backgroundColor: _cardColor,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: Text(
               'Unlock Sync For Approval',
               style: TextStyle(color: _textPrimary),
@@ -218,18 +218,15 @@ class _PasswordlessRequestsScreenState
                   Text(
                     syncEnabled
                         ? 'Cloud sync is locked on this primary phone right '
-                            'now. Enter your account password here to unlock '
-                            'sync on this phone and let $targetDeviceLabel '
-                            'start syncing immediately after approval.'
+                              'now. Enter your account password here to unlock '
+                              'sync on this phone and let $targetDeviceLabel '
+                              'start syncing immediately after approval.'
                         : 'Cloud sync is not unlocked on this primary phone '
-                            'right now. Enter your account password here if '
-                            'you want to unlock sync on this phone too and '
-                            'let $targetDeviceLabel start syncing '
-                            'immediately after approval.',
-                    style: TextStyle(
-                      color: _textSecondary,
-                      height: 1.45,
-                    ),
+                              'right now. Enter your account password here if '
+                              'you want to unlock sync on this phone too and '
+                              'let $targetDeviceLabel start syncing '
+                              'immediately after approval.',
+                    style: TextStyle(color: _textSecondary, height: 1.45),
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -305,7 +302,8 @@ class _PasswordlessRequestsScreenState
 
                         setDialogState(() {
                           isSubmitting = false;
-                          errorText = _syncService.lastErrorMessage ??
+                          errorText =
+                              _syncService.lastErrorMessage ??
                               'Could not unlock sync on this phone.';
                         });
                       },
@@ -359,8 +357,8 @@ class _PasswordlessRequestsScreenState
 
     final successMessage = approve
         ? approvalMode == _PasswordlessApprovalMode.unlockAndTransfer
-            ? 'Sign-in request approved and sync will unlock on that device too.'
-            : 'Sign-in request approved.'
+              ? 'Sign-in request approved and sync will unlock on that device too.'
+              : 'Sign-in request approved.'
         : 'Sign-in request denied.';
 
     if (success && approve && widget.closeOnSuccessfulApproval && mounted) {
@@ -373,15 +371,16 @@ class _PasswordlessRequestsScreenState
         content: Text(
           success
               ? (approve
-                  ? approvalMode == _PasswordlessApprovalMode.unlockAndTransfer
-                      ? 'Sign-in request approved and sync will unlock on '
-                          'that device too.'
-                      : 'Sign-in request approved. That device may still '
-                          'need the account password to unlock encrypted '
-                          'sync.'
-                  : successMessage)
+                    ? approvalMode ==
+                              _PasswordlessApprovalMode.unlockAndTransfer
+                          ? 'Sign-in request approved and sync will unlock on '
+                                'that device too.'
+                          : 'Sign-in request approved. That device may still '
+                                'need the account password to unlock encrypted '
+                                'sync.'
+                    : successMessage)
               : (_syncService.lastErrorMessage ??
-                  'Could not update this sign-in request.'),
+                    'Could not update this sign-in request.'),
         ),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -405,8 +404,10 @@ class _PasswordlessRequestsScreenState
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:
-            Text('Delete Sign-in Log', style: TextStyle(color: _textPrimary)),
+        title: Text(
+          'Delete Sign-in Log',
+          style: TextStyle(color: _textPrimary),
+        ),
         content: Text(
           'Delete the encrypted sign-in approval log for $label?',
           style: TextStyle(color: _textSecondary),
@@ -445,7 +446,7 @@ class _PasswordlessRequestsScreenState
           success
               ? 'Encrypted sign-in log deleted.'
               : (_syncService.lastErrorMessage ??
-                  'Could not delete this sign-in log.'),
+                    'Could not delete this sign-in log.'),
         ),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -463,8 +464,10 @@ class _PasswordlessRequestsScreenState
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:
-            Text('Clear Sign-in Logs', style: TextStyle(color: _textPrimary)),
+        title: Text(
+          'Clear Sign-in Logs',
+          style: TextStyle(color: _textPrimary),
+        ),
         content: Text(
           'Clear all encrypted sign-in approval logs while keeping any still-pending requests?',
           style: TextStyle(color: _textSecondary),
@@ -504,7 +507,7 @@ class _PasswordlessRequestsScreenState
           success
               ? 'Cleared $clearedCount encrypted sign-in log${clearedCount == 1 ? '' : 's'}.'
               : (_syncService.lastErrorMessage ??
-                  'Could not clear the sign-in logs.'),
+                    'Could not clear the sign-in logs.'),
         ),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -535,9 +538,7 @@ class _PasswordlessRequestsScreenState
         ),
         minimumSize: const Size.fromHeight(88),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       child: Text(
         choice,
@@ -566,8 +567,8 @@ class _PasswordlessRequestsScreenState
               onPressed: _isActing
                   ? null
                   : () => setState(() {
-                        _selectedCodes[requestId] = choices[index];
-                      }),
+                      _selectedCodes[requestId] = choices[index];
+                    }),
             ),
           ),
           if (index != choices.length - 1) const SizedBox(width: 10),
@@ -728,10 +729,10 @@ class _PasswordlessRequestsScreenState
                     onPressed: _isActing || selectedCode == null
                         ? null
                         : () => _handleRequest(
-                              item,
-                              approve: true,
-                              selectedCode: selectedCode,
-                            ),
+                            item,
+                            approve: true,
+                            selectedCode: selectedCode,
+                          ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       foregroundColor: Colors.white,
@@ -842,8 +843,11 @@ class _PasswordlessRequestsScreenState
                           padding: const EdgeInsets.all(12),
                           child: Column(
                             children: [
-                              Icon(Icons.phonelink_lock_rounded,
-                                  size: 52, color: _accent),
+                              Icon(
+                                Icons.phonelink_lock_rounded,
+                                size: 52,
+                                color: _accent,
+                              ),
                               const SizedBox(height: 16),
                               Text(
                                 'No sign-in approvals yet',

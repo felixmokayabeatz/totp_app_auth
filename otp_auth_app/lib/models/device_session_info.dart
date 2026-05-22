@@ -44,11 +44,14 @@ class DeviceSessionInfo {
       pushReady: json['push_ready'] == true,
       pushStatusText: json['push_status_text']?.toString() ?? '',
       pushPlatform: json['push_platform']?.toString() ?? '',
-      pushTokenUpdatedAt:
-          DateTime.tryParse(json['push_token_updated_at']?.toString() ?? ''),
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+      pushTokenUpdatedAt: DateTime.tryParse(
+        json['push_token_updated_at']?.toString() ?? '',
+      ),
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
-      lastSeenAt: DateTime.tryParse(json['last_seen_at']?.toString() ?? '') ??
+      lastSeenAt:
+          DateTime.tryParse(json['last_seen_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }

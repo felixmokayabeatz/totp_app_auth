@@ -120,13 +120,19 @@ class SecureStorageService {
   }
 
   List<int> _xorWithKeystream(
-      List<int> input, List<int> keyBytes, List<int> nonce) {
+    List<int> input,
+    List<int> keyBytes,
+    List<int> nonce,
+  ) {
     final output = <int>[];
     var blockIndex = 0;
 
     while (output.length < input.length) {
-      final keystreamBlock = sha256.convert(
-          [...keyBytes, ...nonce, ...utf8.encode(':$blockIndex')]).bytes;
+      final keystreamBlock = sha256.convert([
+        ...keyBytes,
+        ...nonce,
+        ...utf8.encode(':$blockIndex'),
+      ]).bytes;
       for (final byte in keystreamBlock) {
         if (output.length >= input.length) break;
         output.add(input[output.length] ^ byte);
@@ -140,7 +146,8 @@ class SecureStorageService {
   String _deriveStorageKey() {
     final username =
         Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
-    final homeDir = Platform.environment['USERPROFILE'] ??
+    final homeDir =
+        Platform.environment['USERPROFILE'] ??
         Platform.environment['HOME'] ??
         '';
     final seed =

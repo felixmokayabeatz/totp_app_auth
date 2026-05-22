@@ -43,7 +43,8 @@ class AppRating {
       platform: json['platform']?.toString() ?? 'unknown',
       platformDisplay:
           json['platform_display']?.toString() ?? 'Unknown platform',
-      displayName: json['display_name']?.toString() ??
+      displayName:
+          json['display_name']?.toString() ??
           json['display_name_or_anonymous']?.toString() ??
           'Anonymous user',
       stars: int.tryParse(json['stars']?.toString() ?? '') ?? 5,
@@ -56,17 +57,15 @@ class AppRating {
       adminReply: json['admin_reply']?.toString() ?? '',
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
       updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
-      adminRepliedAt:
-          DateTime.tryParse(json['admin_replied_at']?.toString() ?? ''),
+      adminRepliedAt: DateTime.tryParse(
+        json['admin_replied_at']?.toString() ?? '',
+      ),
     );
   }
 }
 
 class AppRatingSummary {
-  const AppRatingSummary({
-    required this.average,
-    required this.count,
-  });
+  const AppRatingSummary({required this.average, required this.count});
 
   final double average;
   final int count;
@@ -80,10 +79,7 @@ class AppRatingSummary {
 }
 
 class AppRatingLookup {
-  const AppRatingLookup({
-    required this.rating,
-    required this.displayName,
-  });
+  const AppRatingLookup({required this.rating, required this.displayName});
 
   final AppRating? rating;
   final String displayName;
@@ -91,13 +87,13 @@ class AppRatingLookup {
 
 class AppRatingService {
   AppRatingService()
-      : _dio = Dio(
-          BaseOptions(
-            connectTimeout: const Duration(seconds: 20),
-            receiveTimeout: const Duration(seconds: 20),
-            headers: {'Content-Type': 'application/json'},
-          ),
-        );
+    : _dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(seconds: 20),
+          headers: {'Content-Type': 'application/json'},
+        ),
+      );
 
   final Dio _dio;
 
@@ -107,10 +103,7 @@ class AppRatingService {
   }) async {
     final response = await _dio.get(
       AppConfig.myRatingApiUrl,
-      queryParameters: {
-        'reviewer_key': reviewerKey,
-        'platform': platform,
-      },
+      queryParameters: {'reviewer_key': reviewerKey, 'platform': platform},
     );
 
     if (response.statusCode == 200 && response.data is Map) {
@@ -123,17 +116,15 @@ class AppRatingService {
           displayName: displayName,
         );
       }
-      return AppRatingLookup(
-        rating: null,
-        displayName: displayName,
-      );
+      return AppRatingLookup(rating: null, displayName: displayName);
     }
 
     throw StateError('Could not load app rating.');
   }
 
-  Future<AppRatingSummary> fetchPlatformSummary(
-      {required String platform}) async {
+  Future<AppRatingSummary> fetchPlatformSummary({
+    required String platform,
+  }) async {
     final response = await _dio.get(
       AppConfig.ratingsApiUrl,
       queryParameters: {'platform': platform},
@@ -200,10 +191,7 @@ class AppRatingService {
   }) async {
     final response = await _dio.post(
       AppConfig.ratingDeleteApiUrl,
-      data: {
-        'reviewer_key': reviewerKey,
-        'platform': platform,
-      },
+      data: {'reviewer_key': reviewerKey, 'platform': platform},
     );
 
     if (response.statusCode == 200 && response.data is Map) {

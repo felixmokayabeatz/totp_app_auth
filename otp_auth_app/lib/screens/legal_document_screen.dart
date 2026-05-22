@@ -94,8 +94,9 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color:
-                          Colors.black.withValues(alpha: _isDark ? 0.2 : 0.05),
+                      color: Colors.black.withValues(
+                        alpha: _isDark ? 0.2 : 0.05,
+                      ),
                       blurRadius: 12,
                       offset: const Offset(0, 3),
                     ),
@@ -123,10 +124,12 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                       accent: _accent,
                       textPrimary: _textPrimary,
                       textSecondary: _textSecondary,
-                      surfaceColor:
-                          _isDark ? Colors.white10 : Colors.grey.shade50,
-                      borderColor:
-                          _isDark ? Colors.white12 : Colors.grey.shade200,
+                      surfaceColor: _isDark
+                          ? Colors.white10
+                          : Colors.grey.shade50,
+                      borderColor: _isDark
+                          ? Colors.white12
+                          : Colors.grey.shade200,
                     ),
                     const SizedBox(height: 20),
                     SizedBox(
@@ -218,9 +221,7 @@ class _LegalHtmlContent extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final block in blocks) _buildBlock(block),
-      ],
+      children: [for (final block in blocks) _buildBlock(block)],
     );
   }
 
@@ -290,8 +291,9 @@ class _LegalHtmlContent extends StatelessWidget {
 
     if (block.isListItem) {
       final style = TextStyle(color: textPrimary, fontSize: 14, height: 1.55);
-      final marker =
-          block.orderedIndex == null ? '-' : '${block.orderedIndex}.';
+      final marker = block.orderedIndex == null
+          ? '-'
+          : '${block.orderedIndex}.';
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -390,11 +392,7 @@ class _LegalHtmlContent extends StatelessWidget {
 }
 
 class _HtmlBlock {
-  const _HtmlBlock({
-    required this.tag,
-    required this.html,
-    this.orderedIndex,
-  });
+  const _HtmlBlock({required this.tag, required this.html, this.orderedIndex});
 
   final String tag;
   final String html;
@@ -415,14 +413,18 @@ class _HtmlParser {
     r'<(script|style)[\s\S]*?</\1>',
     caseSensitive: false,
   );
-  static final RegExp _commentPattern =
-      RegExp(r'<!--[\s\S]*?-->', caseSensitive: false);
+  static final RegExp _commentPattern = RegExp(
+    r'<!--[\s\S]*?-->',
+    caseSensitive: false,
+  );
   static final RegExp _blockPattern = RegExp(
     r'<(h[1-6]|p|div|blockquote|pre|ul|ol)[^>]*>([\s\S]*?)</\1>|<hr\s*/?>',
     caseSensitive: false,
   );
-  static final RegExp _liPattern =
-      RegExp(r'<li[^>]*>([\s\S]*?)</li>', caseSensitive: false);
+  static final RegExp _liPattern = RegExp(
+    r'<li[^>]*>([\s\S]*?)</li>',
+    caseSensitive: false,
+  );
   static final RegExp _tagPattern = RegExp(r'<[^>]+>');
 
   static List<_HtmlBlock> parseBlocks(String rawHtml) {
@@ -503,15 +505,15 @@ class _HtmlParser {
 
   static String plainText(String html) {
     return _decode(
-      _clean(html)
-          .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-          .replaceAll(
-            RegExp(r'</p>|</div>|</li>|</tr>', caseSensitive: false),
-            '\n',
-          )
-          .replaceAll(RegExp(r'</td>|</th>', caseSensitive: false), '  ')
-          .replaceAll(_tagPattern, ' '),
-    )
+          _clean(html)
+              .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+              .replaceAll(
+                RegExp(r'</p>|</div>|</li>|</tr>', caseSensitive: false),
+                '\n',
+              )
+              .replaceAll(RegExp(r'</td>|</th>', caseSensitive: false), '  ')
+              .replaceAll(_tagPattern, ' '),
+        )
         .split('\n')
         .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
         .where((line) => line.isNotEmpty)
@@ -566,13 +568,9 @@ class _HtmlParser {
     var nextStyle = stack.last.style;
 
     if (tag == 'strong') {
-      nextStyle = nextStyle.merge(
-        const TextStyle(fontWeight: FontWeight.w800),
-      );
+      nextStyle = nextStyle.merge(const TextStyle(fontWeight: FontWeight.w800));
     } else if (tag == 'em') {
-      nextStyle = nextStyle.merge(
-        const TextStyle(fontStyle: FontStyle.italic),
-      );
+      nextStyle = nextStyle.merge(const TextStyle(fontStyle: FontStyle.italic));
     } else if (tag == 'u') {
       nextStyle = nextStyle.merge(
         const TextStyle(decoration: TextDecoration.underline),
@@ -685,8 +683,9 @@ class _HtmlParser {
       return Color(int.parse('FF$hex', radix: 16));
     }
 
-    final rgbMatch =
-        RegExp(r'rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)').firstMatch(value);
+    final rgbMatch = RegExp(
+      r'rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)',
+    ).firstMatch(value);
     if (rgbMatch != null) {
       final red = int.parse(rgbMatch.group(1)!);
       final green = int.parse(rgbMatch.group(2)!);
@@ -708,13 +707,14 @@ class _HtmlParser {
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
-      final code = int.tryParse(match.group(1) ?? '');
-      if (code == null) return match.group(0) ?? '';
-      return String.fromCharCode(code);
-    }).replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
-      final code = int.tryParse(match.group(1) ?? '', radix: 16);
-      if (code == null) return match.group(0) ?? '';
-      return String.fromCharCode(code);
-    });
+          final code = int.tryParse(match.group(1) ?? '');
+          if (code == null) return match.group(0) ?? '';
+          return String.fromCharCode(code);
+        })
+        .replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
+          final code = int.tryParse(match.group(1) ?? '', radix: 16);
+          if (code == null) return match.group(0) ?? '';
+          return String.fromCharCode(code);
+        });
   }
 }

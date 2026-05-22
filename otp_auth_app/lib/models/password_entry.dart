@@ -44,9 +44,9 @@ class PasswordEntry {
     required this.createdAt,
     DateTime? updatedAt,
     String? userId,
-  })  : encryptedPassword = '',
-        encryptedNote = null,
-        updatedAt = updatedAt ?? createdAt {
+  }) : encryptedPassword = '',
+       encryptedNote = null,
+       updatedAt = updatedAt ?? createdAt {
     if (userId != null && userId.isNotEmpty) {
       setPassword(password, userId);
       setNote(note, userId);
@@ -60,8 +60,10 @@ class PasswordEntry {
 
   void setPassword(String password, String userId) {
     _plainPassword = password;
-    encryptedPassword =
-        EncryptionService.encryptPasswordEntrySecret(password, userId);
+    encryptedPassword = EncryptionService.encryptPasswordEntrySecret(
+      password,
+      userId,
+    );
     touch();
   }
 

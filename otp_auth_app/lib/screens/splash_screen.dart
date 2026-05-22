@@ -81,8 +81,10 @@ class _SplashScreenState extends State<SplashScreen>
         await secureStorage.read(SecureStorageService.userIdKey) ?? '';
 
     if (!mounted) return;
-    await Provider.of<AuthProvider>(context, listen: false)
-        .setUserData(username, email, userId);
+    await Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    ).setUserData(username, email, userId);
 
     if (await syncService.isSyncEnabled()) {
       await syncService.downloadAndMergeAccounts();
@@ -142,8 +144,9 @@ class _SplashScreenState extends State<SplashScreen>
                             width: 92,
                             height: 92,
                             decoration: BoxDecoration(
-                              color:
-                                  colorScheme.primary.withValues(alpha: 0.12),
+                              color: colorScheme.primary.withValues(
+                                alpha: 0.12,
+                              ),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(

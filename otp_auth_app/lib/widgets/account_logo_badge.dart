@@ -60,11 +60,7 @@ class AccountLogoBadge extends StatelessWidget {
       );
     }
 
-    return Icon(
-      brand.icon,
-      color: brand.foregroundColor,
-      size: iconSize,
-    );
+    return Icon(brand.icon, color: brand.foregroundColor, size: iconSize);
   }
 
   String? _resolveLogoDomain(String service, String? issuer) {
@@ -82,9 +78,10 @@ class AccountLogoBadge extends StatelessWidget {
       final mapped = _knownDomains[cleaned];
       if (mapped != null) return mapped;
 
-      for (final token in cleaned
-          .split(RegExp(r'[^a-z0-9.]+'))
-          .where((token) => token.isNotEmpty)) {
+      for (final token
+          in cleaned
+              .split(RegExp(r'[^a-z0-9.]+'))
+              .where((token) => token.isNotEmpty)) {
         final tokenMatch = _knownDomains[token];
         if (tokenMatch != null) {
           return tokenMatch;
@@ -146,11 +143,13 @@ class AccountLogoBadge extends StatelessWidget {
 
     final labels = normalized.split('.');
     if (labels.length < 2) return false;
-    if (labels.any((label) =>
-        label.isEmpty ||
-        label.startsWith('-') ||
-        label.endsWith('-') ||
-        !RegExp(r'^[a-z0-9-]+$').hasMatch(label))) {
+    if (labels.any(
+      (label) =>
+          label.isEmpty ||
+          label.startsWith('-') ||
+          label.endsWith('-') ||
+          !RegExp(r'^[a-z0-9-]+$').hasMatch(label),
+    )) {
       return false;
     }
 

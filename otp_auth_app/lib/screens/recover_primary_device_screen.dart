@@ -63,9 +63,11 @@ class _RecoverPrimaryDeviceScreenState
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(sent
-            ? 'Email code sent. Check the email on your BeatzLock account.'
-            : (_syncService.lastErrorMessage ?? 'Could not send email code.')),
+        content: Text(
+          sent
+              ? 'Email code sent. Check the email on your BeatzLock account.'
+              : (_syncService.lastErrorMessage ?? 'Could not send email code.'),
+        ),
         backgroundColor: sent ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
       ),
@@ -80,7 +82,8 @@ class _RecoverPrimaryDeviceScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Enter your username, password, 6-digit email code, and 10-character recovery code.'),
+            'Enter your username, password, 6-digit email code, and 10-character recovery code.',
+          ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -106,7 +109,8 @@ class _RecoverPrimaryDeviceScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-            _syncService.lastErrorMessage ?? 'Primary-device recovery failed.'),
+          _syncService.lastErrorMessage ?? 'Primary-device recovery failed.',
+        ),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
       ),
@@ -171,10 +175,13 @@ class _RecoverPrimaryDeviceScreenState
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
-                          icon: Icon(_obscurePassword
-                              ? Icons.visibility_off
-                              : Icons.visibility),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
                         ),
                       ),
                     ),

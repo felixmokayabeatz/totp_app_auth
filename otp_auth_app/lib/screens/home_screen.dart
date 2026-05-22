@@ -83,10 +83,12 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
-    _approvalNotificationService.passwordlessOpenSignal
-        .addListener(_handlePasswordlessNotificationSignal);
-    _approvalNotificationService.passwordlessRequestSignal
-        .addListener(_handleForegroundPasswordlessRequestSignal);
+    _approvalNotificationService.passwordlessOpenSignal.addListener(
+      _handlePasswordlessNotificationSignal,
+    );
+    _approvalNotificationService.passwordlessRequestSignal.addListener(
+      _handleForegroundPasswordlessRequestSignal,
+    );
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
@@ -219,8 +221,8 @@ class _HomeScreenState extends State<HomeScreen>
           )
           .closed
           .whenComplete(() {
-        _offlineBackupReminderVisible = false;
-      });
+            _offlineBackupReminderVisible = false;
+          });
     });
   }
 
@@ -236,8 +238,9 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
 
     setState(() {
-      _unreadNotificationCount =
-          notifications.where((item) => !item.isRead).length;
+      _unreadNotificationCount = notifications
+          .where((item) => !item.isRead)
+          .length;
     });
   }
 
@@ -259,8 +262,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _refreshPasswordlessApprovalCapability() async {
     if (!mounted || !await _syncService.isLoggedIn()) {
-      await BackgroundPasswordlessPollService()
-          .syncRegistration(enabled: false);
+      await BackgroundPasswordlessPollService().syncRegistration(
+        enabled: false,
+      );
       if (mounted) {
         setState(() {
           _canShowPasswordlessPrompt = false;
@@ -273,12 +277,13 @@ class _HomeScreenState extends State<HomeScreen>
     final sessions = await _syncService.getActiveDeviceSessions();
     if (!mounted) return;
     final currentSession = sessions.cast<DeviceSessionInfo?>().firstWhere(
-          (session) => session?.isCurrent == true,
-          orElse: () => null,
-        );
+      (session) => session?.isCurrent == true,
+      orElse: () => null,
+    );
     final canShowBulkDelete =
         currentSession != null && currentSession.isPrimary;
-    final canShowPasswordless = canShowBulkDelete &&
+    final canShowPasswordless =
+        canShowBulkDelete &&
         (Platform.isAndroid || Platform.isIOS) &&
         currentSession.deviceKind == 'mobile';
 
@@ -380,9 +385,8 @@ class _HomeScreenState extends State<HomeScreen>
       final result = await Navigator.push<String?>(
         context,
         MaterialPageRoute(
-          builder: (_) => const PasswordlessRequestsScreen(
-            closeOnSuccessfulApproval: true,
-          ),
+          builder: (_) =>
+              const PasswordlessRequestsScreen(closeOnSuccessfulApproval: true),
         ),
       );
       if (!mounted) return;
@@ -492,8 +496,8 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
 
-      final status =
-          (refreshedItem['status']?.toString() ?? 'pending').toLowerCase();
+      final status = (refreshedItem['status']?.toString() ?? 'pending')
+          .toLowerCase();
       if (status != 'pending') {
         dialogRefreshTimer?.cancel();
         dialogClosed = true;
@@ -538,8 +542,9 @@ class _HomeScreenState extends State<HomeScreen>
           final isDark = theme.brightness == Brightness.dark;
           final surfaceColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
           final softAccent = _accent.withValues(alpha: isDark ? 0.18 : 0.08);
-          final textPrimary =
-              isDark ? Colors.white : theme.colorScheme.onSurface;
+          final textPrimary = isDark
+              ? Colors.white
+              : theme.colorScheme.onSurface;
 
           Widget buildChoiceButton(String choice) {
             final isSelected = selectedCode == choice;
@@ -556,8 +561,10 @@ class _HomeScreenState extends State<HomeScreen>
                   width: isSelected ? 2 : 1.4,
                 ),
                 minimumSize: const Size.fromHeight(72),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 14,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18),
                 ),
@@ -581,10 +588,7 @@ class _HomeScreenState extends State<HomeScreen>
               alignment: WrapAlignment.center,
               children: [
                 for (final choice in choices)
-                  SizedBox(
-                    width: 150,
-                    child: buildChoiceButton(choice),
-                  ),
+                  SizedBox(width: 150, child: buildChoiceButton(choice)),
               ],
             );
           }
@@ -592,8 +596,9 @@ class _HomeScreenState extends State<HomeScreen>
           return AlertDialog(
             scrollable: true,
             backgroundColor: surfaceColor,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: const Text('Passwordless sign-in request'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -623,8 +628,9 @@ class _HomeScreenState extends State<HomeScreen>
             actions: [
               TextButton(
                 onPressed: () async {
-                  final success =
-                      await _syncService.denyPasswordlessRequest(requestId);
+                  final success = await _syncService.denyPasswordlessRequest(
+                    requestId,
+                  );
                   if (!dialogContext.mounted) return;
                   dialogClosed = true;
                   Navigator.pop(dialogContext);
@@ -632,7 +638,7 @@ class _HomeScreenState extends State<HomeScreen>
                     success
                         ? 'Denied $label.'
                         : (_syncService.lastErrorMessage ??
-                            'Could not deny that sign-in request.'),
+                              'Could not deny that sign-in request.'),
                     success ? Colors.orange : Colors.red,
                   );
                 },
@@ -645,11 +651,11 @@ class _HomeScreenState extends State<HomeScreen>
                         final unlocked = await _appLockService
                             .authenticateToUnlock(dialogContext);
                         if (!dialogContext.mounted || !unlocked) return;
-                        final success =
-                            await _syncService.approvePasswordlessRequest(
-                          requestId,
-                          selectedCode: selectedCode!,
-                        );
+                        final success = await _syncService
+                            .approvePasswordlessRequest(
+                              requestId,
+                              selectedCode: selectedCode!,
+                            );
                         if (!dialogContext.mounted) return;
                         dialogClosed = true;
                         Navigator.pop(dialogContext);
@@ -657,7 +663,7 @@ class _HomeScreenState extends State<HomeScreen>
                           success
                               ? 'Approved $label.'
                               : (_syncService.lastErrorMessage ??
-                                  'Could not approve that sign-in request.'),
+                                    'Could not approve that sign-in request.'),
                           success ? const Color(0xFF10B981) : Colors.red,
                         );
                       },
@@ -689,9 +695,7 @@ class _HomeScreenState extends State<HomeScreen>
     final startDate = DateTime.tryParse(
       item['range_start_date']?.toString() ?? '',
     );
-    final endDate = DateTime.tryParse(
-      item['range_end_date']?.toString() ?? '',
-    );
+    final endDate = DateTime.tryParse(item['range_end_date']?.toString() ?? '');
 
     final approved = await showDialog<bool>(
       context: context,
@@ -720,20 +724,18 @@ class _HomeScreenState extends State<HomeScreen>
               'Date range: ${_formatAbsoluteDate(startDate ?? DateTime.now())} '
               'to ${_formatAbsoluteDate(endDate ?? DateTime.now())}',
               style: TextStyle(
-                color: Theme.of(dialogContext)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.78),
+                color: Theme.of(
+                  dialogContext,
+                ).colorScheme.onSurface.withValues(alpha: 0.78),
               ),
             ),
             const SizedBox(height: 10),
             Text(
               'Approve this only if you started the delete request yourself.',
               style: TextStyle(
-                color: Theme.of(dialogContext)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.78),
+                color: Theme.of(
+                  dialogContext,
+                ).colorScheme.onSurface.withValues(alpha: 0.78),
                 height: 1.35,
               ),
             ),
@@ -765,7 +767,7 @@ class _HomeScreenState extends State<HomeScreen>
         denied
             ? 'Denied delete request from $label.'
             : (_syncService.lastErrorMessage ??
-                'Could not deny that delete request.'),
+                  'Could not deny that delete request.'),
         denied ? Colors.orange : Colors.red,
       );
       return;
@@ -828,10 +830,9 @@ class _HomeScreenState extends State<HomeScreen>
             Text(
               'Approve this only if you started the request. BeatzLock will generate the required Recovery Codes PDF and save it to this device Downloads folder.',
               style: TextStyle(
-                color: Theme.of(dialogContext)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.78),
+                color: Theme.of(
+                  dialogContext,
+                ).colorScheme.onSurface.withValues(alpha: 0.78),
                 height: 1.35,
               ),
             ),
@@ -857,14 +858,15 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted || !unlocked) return;
 
     if (!approved) {
-      final denied =
-          await _syncService.denyBackupCodeGenerationRequest(requestId);
+      final denied = await _syncService.denyBackupCodeGenerationRequest(
+        requestId,
+      );
       if (!mounted) return;
       _showSnackBar(
         denied
             ? 'Denied the Recovery Codes PDF request from $label.'
             : (_syncService.lastErrorMessage ??
-                'Could not deny that Recovery Codes PDF request.'),
+                  'Could not deny that Recovery Codes PDF request.'),
         denied ? Colors.orange : Colors.red,
       );
       return;
@@ -898,8 +900,9 @@ class _HomeScreenState extends State<HomeScreen>
     final isDark = theme.brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
-    final textSecondary =
-        isDark ? Colors.white70 : theme.colorScheme.onSurfaceVariant;
+    final textSecondary = isDark
+        ? Colors.white70
+        : theme.colorScheme.onSurfaceVariant;
 
     await showDialog<void>(
       context: context,
@@ -977,8 +980,8 @@ class _HomeScreenState extends State<HomeScreen>
     }
     final primaryLabel =
         (status['primary_device_label']?.toString().trim() ?? '').isEmpty
-            ? 'your primary device'
-            : status['primary_device_label'].toString().trim();
+        ? 'your primary device'
+        : status['primary_device_label'].toString().trim();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted ||
@@ -995,8 +998,9 @@ class _HomeScreenState extends State<HomeScreen>
           builder: (dialogContext) {
             final theme = Theme.of(dialogContext);
             final isDark = theme.brightness == Brightness.dark;
-            final surfaceColor =
-                isDark ? const Color(0xFF1E1E32) : Colors.white;
+            final surfaceColor = isDark
+                ? const Color(0xFF1E1E32)
+                : Colors.white;
             final textColor = theme.colorScheme.onSurface;
             final mutedColor = theme.colorScheme.onSurfaceVariant;
 
@@ -1025,12 +1029,9 @@ class _HomeScreenState extends State<HomeScreen>
                       isPrimary
                           ? 'This is your primary device, so you need to save the Recovery Codes PDF here before continuing.'
                           : hasPendingRequest
-                              ? 'A Recovery Codes PDF request is already waiting on $primaryLabel.'
-                              : '$primaryLabel is your primary device. Send a request there so it can generate and save the Recovery Codes PDF.',
-                      style: TextStyle(
-                        color: mutedColor,
-                        height: 1.35,
-                      ),
+                          ? 'A Recovery Codes PDF request is already waiting on $primaryLabel.'
+                          : '$primaryLabel is your primary device. Send a request there so it can generate and save the Recovery Codes PDF.',
+                      style: TextStyle(color: mutedColor, height: 1.35),
                     ),
                   ],
                 ),
@@ -1082,8 +1083,8 @@ class _HomeScreenState extends State<HomeScreen>
         }
 
         if (action == 'request') {
-          final requestedPrimaryLabel =
-              await _syncService.createBackupCodeGenerationRequest();
+          final requestedPrimaryLabel = await _syncService
+              .createBackupCodeGenerationRequest();
           if (!mounted) return;
           if (requestedPrimaryLabel == null) {
             _showSnackBar(
@@ -1111,7 +1112,8 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _initUserBox() async {
     _userBox = await _syncService.getUserBox();
     debugPrint(
-        'User box: ${await _syncService.getCurrentUserBoxName()} has ${_userBox?.length ?? 0} accounts');
+      'User box: ${await _syncService.getCurrentUserBoxName()} has ${_userBox?.length ?? 0} accounts',
+    );
     if (mounted) {
       setState(() {});
     }
@@ -1216,19 +1218,22 @@ class _HomeScreenState extends State<HomeScreen>
       runSpacing: 6,
       children: [
         _headerAction(
-            _allBlurred
-                ? Icons.visibility_rounded
-                : Icons.visibility_off_rounded,
-            _toggleBlurAll,
-            tooltip: _allBlurred ? 'Show codes' : 'Hide codes'),
+          _allBlurred ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+          _toggleBlurAll,
+          tooltip: _allBlurred ? 'Show codes' : 'Hide codes',
+        ),
         if (!authProvider.isAuthenticated)
           _headerAction(
             Icons.login_rounded,
             _openLoginForSync,
             tooltip: 'Sign in to sync',
           ),
-        _headerAction(Icons.sync_rounded, _syncData,
-            tooltip: 'Sync', loading: _isSyncing),
+        _headerAction(
+          Icons.sync_rounded,
+          _syncData,
+          tooltip: 'Sync',
+          loading: _isSyncing,
+        ),
         _headerAction(
           Icons.delete_sweep_rounded,
           _showBulkDeleteByDateDialog,
@@ -1254,9 +1259,7 @@ class _HomeScreenState extends State<HomeScreen>
             }
             await Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const NotificationsScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
             );
             await _loadUnreadNotificationCount();
           },
@@ -1273,12 +1276,12 @@ class _HomeScreenState extends State<HomeScreen>
           await _checkBackupCodeRequirement();
         }, tooltip: 'Settings'),
         _headerAction(
-            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-            () => Provider.of<ThemeProvider>(context, listen: false)
-                .toggleTheme(
-                    platformBrightness:
-                        MediaQuery.platformBrightnessOf(context)),
-            tooltip: 'Theme'),
+          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          () => Provider.of<ThemeProvider>(context, listen: false).toggleTheme(
+            platformBrightness: MediaQuery.platformBrightnessOf(context),
+          ),
+          tooltip: 'Theme',
+        ),
       ],
     );
 
@@ -1295,9 +1298,10 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         boxShadow: [
           BoxShadow(
-              color: _accent.withValues(alpha: isDark ? 0.28 : 0.22),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
+            color: _accent.withValues(alpha: isDark ? 0.28 : 0.22),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: SafeArea(
@@ -1317,8 +1321,10 @@ class _HomeScreenState extends State<HomeScreen>
                         );
                         return;
                       }
-                      final result = await Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => ProfileScreen()));
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ProfileScreen()),
+                      );
                       if (result == true) _loadProfileData();
                     },
                     child: Container(
@@ -1327,11 +1333,13 @@ class _HomeScreenState extends State<HomeScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            width: 2),
+                          color: Colors.white.withValues(alpha: 0.3),
+                          width: 2,
+                        ),
                       ),
                       child: ClipOval(
-                        child: _profilePhotoUrl != null &&
+                        child:
+                            _profilePhotoUrl != null &&
                                 _profilePhotoUrl!.isNotEmpty
                             ? Image.network(
                                 '${AppConfig.mediaUrl}${_profilePhotoUrl!.replaceFirst('/media/', '')}',
@@ -1340,14 +1348,20 @@ class _HomeScreenState extends State<HomeScreen>
                                 height: 40,
                                 errorBuilder: (_, __, ___) => Container(
                                   color: Colors.white.withValues(alpha: 0.2),
-                                  child: const Icon(Icons.person,
-                                      color: Colors.white, size: 20),
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
                               )
                             : Container(
                                 color: Colors.white.withValues(alpha: 0.2),
-                                child: const Icon(Icons.person,
-                                    color: Colors.white, size: 20),
+                                child: const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
                               ),
                       ),
                     ),
@@ -1358,25 +1372,34 @@ class _HomeScreenState extends State<HomeScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('BeatzLock',
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: 0.3)),
+                        const Text(
+                          'BeatzLock',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
                         Row(
                           children: [
                             Flexible(
-                              child: Text(_username ?? 'Two-Factor Security',
-                                  style: const TextStyle(
-                                      fontSize: 10, color: Colors.white60),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1),
+                              child: Text(
+                                _username ?? 'Two-Factor Security',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white60,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
                             ),
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 2),
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(8),
@@ -1384,9 +1407,10 @@ class _HomeScreenState extends State<HomeScreen>
                               child: Text(
                                 '$accountCount',
                                 style: const TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.white70,
-                                    fontWeight: FontWeight.w600),
+                                  fontSize: 9,
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -1399,10 +1423,7 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               if (!isWideScreen) ...[
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: actionButtons,
-                ),
+                Align(alignment: Alignment.centerRight, child: actionButtons),
               ],
             ],
           ),
@@ -1411,8 +1432,13 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _headerAction(IconData icon, VoidCallback onTap,
-      {String? tooltip, bool loading = false, int badgeCount = 0}) {
+  Widget _headerAction(
+    IconData icon,
+    VoidCallback onTap, {
+    String? tooltip,
+    bool loading = false,
+    int badgeCount = 0,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Tooltip(
@@ -1436,7 +1462,9 @@ class _HomeScreenState extends State<HomeScreen>
                     ? const Padding(
                         padding: EdgeInsets.all(8),
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : Icon(icon, color: Colors.white, size: 18),
               ),
@@ -1445,8 +1473,10 @@ class _HomeScreenState extends State<HomeScreen>
                   top: -4,
                   right: -4,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEF4444),
                       borderRadius: BorderRadius.circular(999),
@@ -1492,25 +1522,30 @@ class _HomeScreenState extends State<HomeScreen>
                 border: Border.all(color: _accent.withValues(alpha: 0.16)),
                 boxShadow: [
                   BoxShadow(
-                      color: _accent.withValues(alpha: isDark ? 0.14 : 0.08),
-                      blurRadius: 14,
-                      offset: const Offset(0, 2))
+                    color: _accent.withValues(alpha: isDark ? 0.14 : 0.08),
+                    blurRadius: 14,
+                    offset: const Offset(0, 2),
+                  ),
                 ],
               ),
               child: TextField(
                 style: TextStyle(
-                    color: isDark ? Colors.white : const Color(0xFF1A1A2E),
-                    fontSize: 14),
+                  color: isDark ? Colors.white : const Color(0xFF1A1A2E),
+                  fontSize: 14,
+                ),
                 onChanged: (v) =>
                     setState(() => _searchQuery = v.toLowerCase()),
                 decoration: InputDecoration(
                   hintText: 'Search accounts',
                   hintStyle: TextStyle(
-                      color: isDark ? Colors.white38 : Colors.grey[400],
-                      fontSize: 14),
-                  prefixIcon: Icon(Icons.search_rounded,
-                      color: _accent.withValues(alpha: isDark ? 0.82 : 0.66),
-                      size: 20),
+                    color: isDark ? Colors.white38 : Colors.grey[400],
+                    fontSize: 14,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: _accent.withValues(alpha: isDark ? 0.82 : 0.66),
+                    size: 20,
+                  ),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -1580,15 +1615,21 @@ class _HomeScreenState extends State<HomeScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.add_rounded,
-                        color: Colors.white, size: 20),
+                    const Icon(
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     if (isWideScreen) ...[
                       const SizedBox(width: 6),
-                      const Text('Add',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700)),
+                      const Text(
+                        'Add',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -1604,7 +1645,8 @@ class _HomeScreenState extends State<HomeScreen>
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-          builder: (_) => AddAccountScreen(startScanning: startScanning)),
+        builder: (_) => AddAccountScreen(startScanning: startScanning),
+      ),
     );
     if (result == true) {
       await _initUserBox();
@@ -1617,8 +1659,9 @@ class _HomeScreenState extends State<HomeScreen>
           content: const Text('Success. Account added.'),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -1690,10 +1733,13 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (_searchQuery.isNotEmpty) {
       accounts = accounts
-          .where((a) =>
-              a.service.toLowerCase().contains(_searchQuery) ||
-              (a.accountLabel?.toLowerCase().contains(_searchQuery) ?? false) ||
-              (a.issuer?.toLowerCase().contains(_searchQuery) ?? false))
+          .where(
+            (a) =>
+                a.service.toLowerCase().contains(_searchQuery) ||
+                (a.accountLabel?.toLowerCase().contains(_searchQuery) ??
+                    false) ||
+                (a.issuer?.toLowerCase().contains(_searchQuery) ?? false),
+          )
           .toList();
     }
 
@@ -1710,23 +1756,30 @@ class _HomeScreenState extends State<HomeScreen>
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 20)
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 20,
+                  ),
                 ],
               ),
               child: Icon(Icons.security_rounded, size: 40, color: _accent),
             ),
             const SizedBox(height: 20),
-            Text('No accounts yet',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white70 : const Color(0xFF1A1A2E))),
+            Text(
+              'No accounts yet',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white70 : const Color(0xFF1A1A2E),
+              ),
+            ),
             const SizedBox(height: 6),
-            Text('Tap Add to get started',
-                style: TextStyle(
-                    color: isDark ? Colors.white38 : Colors.grey[500],
-                    fontSize: 13)),
+            Text(
+              'Tap Add to get started',
+              style: TextStyle(
+                color: isDark ? Colors.white38 : Colors.grey[500],
+                fontSize: 13,
+              ),
+            ),
           ],
         ),
       );
@@ -1777,10 +1830,12 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   boxShadow: [
                     BoxShadow(
-                        color: (isDark ? Colors.black : _accent)
-                            .withValues(alpha: isDark ? 0.22 : 0.07),
-                        blurRadius: 16,
-                        offset: const Offset(0, 3))
+                      color: (isDark ? Colors.black : _accent).withValues(
+                        alpha: isDark ? 0.22 : 0.07,
+                      ),
+                      blurRadius: 16,
+                      offset: const Offset(0, 3),
+                    ),
                   ],
                 ),
                 child: Padding(
@@ -1798,32 +1853,40 @@ class _HomeScreenState extends State<HomeScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(account.service,
-                                    style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: isDark
-                                            ? Colors.white
-                                            : const Color(0xFF1A1A2E)),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis),
+                                Text(
+                                  account.service,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF1A1A2E),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 if (accountSubtitle != null)
-                                  Text(accountSubtitle,
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark
-                                              ? Colors.white38
-                                              : Colors.grey[500]),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis),
+                                  Text(
+                                    accountSubtitle,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.grey[500],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 // Added date
                                 Row(
                                   children: [
-                                    Icon(Icons.calendar_today,
-                                        size: 10,
-                                        color: isDark
-                                            ? Colors.white38
-                                            : Colors.grey[400]),
+                                    Icon(
+                                      Icons.calendar_today,
+                                      size: 10,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.grey[400],
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
                                       'Added $addedDate',
@@ -1845,7 +1908,9 @@ class _HomeScreenState extends State<HomeScreen>
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
                                 decoration: BoxDecoration(
                                   color: isExpiring
                                       ? Colors.red.withValues(alpha: 0.1)
@@ -1869,8 +1934,8 @@ class _HomeScreenState extends State<HomeScreen>
                                       color: isExpiring
                                           ? Colors.red
                                           : (isDark
-                                              ? Colors.white
-                                              : const Color(0xFF1A1A2E)),
+                                                ? Colors.white
+                                                : const Color(0xFF1A1A2E)),
                                       letterSpacing: 3,
                                       fontFamily: 'monospace',
                                     ),
@@ -1878,15 +1943,18 @@ class _HomeScreenState extends State<HomeScreen>
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text('${timer}s',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: isExpiring
-                                          ? Colors.red
-                                          : (isDark
-                                              ? Colors.white38
-                                              : Colors.grey[500]))),
+                              Text(
+                                '${timer}s',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: isExpiring
+                                      ? Colors.red
+                                      : (isDark
+                                            ? Colors.white38
+                                            : Colors.grey[500]),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -1896,10 +1964,12 @@ class _HomeScreenState extends State<HomeScreen>
                         borderRadius: BorderRadius.circular(4),
                         child: LinearProgressIndicator(
                           value: timer / 30,
-                          backgroundColor:
-                              _accent.withValues(alpha: isDark ? 0.14 : 0.10),
+                          backgroundColor: _accent.withValues(
+                            alpha: isDark ? 0.14 : 0.10,
+                          ),
                           valueColor: AlwaysStoppedAnimation<Color>(
-                              isExpiring ? Colors.red : _accent),
+                            isExpiring ? Colors.red : _accent,
+                          ),
                           minHeight: 4,
                         ),
                       ),
@@ -1908,15 +1978,20 @@ class _HomeScreenState extends State<HomeScreen>
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          _accountAction(Icons.copy_rounded, 'Copy',
-                              () => _copyToClipboard(otp), isDark),
+                          _accountAction(
+                            Icons.copy_rounded,
+                            'Copy',
+                            () => _copyToClipboard(otp),
+                            isDark,
+                          ),
                           _accountAction(
                             isBlurred
                                 ? Icons.visibility_rounded
                                 : Icons.visibility_off_rounded,
                             isBlurred ? 'Show' : 'Hide',
                             () => setState(
-                                () => blurredCodes[account.id] = !isBlurred),
+                              () => blurredCodes[account.id] = !isBlurred,
+                            ),
                             isDark,
                           ),
                           _accountAction(
@@ -1935,7 +2010,9 @@ class _HomeScreenState extends State<HomeScreen>
                             Icons.delete_outline_rounded,
                             'Delete',
                             () => _showDeleteAccountDialog(
-                                account.id, account.service),
+                              account.id,
+                              account.service,
+                            ),
                             isDark,
                             destructive: true,
                           ),
@@ -2044,10 +2121,7 @@ class _HomeScreenState extends State<HomeScreen>
     return '${local.year}-$month-$day';
   }
 
-  List<OTPAccount> _accountsInDateRange(
-    DateTime startDate,
-    DateTime endDate,
-  ) {
+  List<OTPAccount> _accountsInDateRange(DateTime startDate, DateTime endDate) {
     final box = _userBox;
     if (box == null) return const [];
 
@@ -2074,8 +2148,10 @@ class _HomeScreenState extends State<HomeScreen>
     required DateTime startDate,
     required DateTime endDate,
   }) async {
-    final username = await SecureStorageService()
-            .read(SecureStorageService.currentUserKey) ??
+    final username =
+        await SecureStorageService().read(
+          SecureStorageService.currentUserKey,
+        ) ??
         '';
     if (username.isEmpty) {
       _showSnackBar('Sign in first to verify this cloud deletion.', Colors.red);
@@ -2099,8 +2175,9 @@ class _HomeScreenState extends State<HomeScreen>
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           backgroundColor: Theme.of(dialogContext).brightness == Brightness.dark
               ? const Color(0xFF1E1E32)
               : Colors.white,
@@ -2225,12 +2302,14 @@ class _HomeScreenState extends State<HomeScreen>
           final start = _dateOnly(startDate);
           final end = _dateOnly(endDate);
           final validRange = !end.isBefore(start);
-          final matchCount =
-              validRange ? _accountsInDateRange(start, end).length : 0;
+          final matchCount = validRange
+              ? _accountsInDateRange(start, end).length
+              : 0;
 
           return AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
+            ),
             backgroundColor: Theme.of(context).brightness == Brightness.dark
                 ? const Color(0xFF1E1E32)
                 : Colors.white,
@@ -2301,8 +2380,9 @@ class _HomeScreenState extends State<HomeScreen>
                         onPressed: () {
                           final today = DateTime(now.year, now.month, now.day);
                           setDialogState(() {
-                            startDate =
-                                today.subtract(const Duration(days: 29));
+                            startDate = today.subtract(
+                              const Duration(days: 29),
+                            );
                             endDate = today;
                           });
                         },
@@ -2335,8 +2415,8 @@ class _HomeScreenState extends State<HomeScreen>
                       color: !validRange
                           ? Colors.red
                           : Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white70
-                              : Colors.grey.shade700,
+                          ? Colors.white70
+                          : Colors.grey.shade700,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -2351,17 +2431,18 @@ class _HomeScreenState extends State<HomeScreen>
               ElevatedButton(
                 onPressed: validRange && matchCount > 0
                     ? () => Navigator.pop(
-                          dialogContext,
-                          _BulkDeleteDateResult(
-                            startDate: start,
-                            endDate: end,
-                            deleteEverywhere: deleteEverywhere,
-                          ),
-                        )
+                        dialogContext,
+                        _BulkDeleteDateResult(
+                          startDate: start,
+                          endDate: end,
+                          deleteEverywhere: deleteEverywhere,
+                        ),
+                      )
                     : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      deleteEverywhere ? Colors.red : Colors.orange,
+                  backgroundColor: deleteEverywhere
+                      ? Colors.red
+                      : Colors.orange,
                   foregroundColor: Colors.white,
                 ),
                 child: Text(
@@ -2541,8 +2622,9 @@ class _HomeScreenState extends State<HomeScreen>
                         ? () => Navigator.pop(dialogContext, true)
                         : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          deleteEverywhere ? Colors.red : Colors.orange,
+                      backgroundColor: deleteEverywhere
+                          ? Colors.red
+                          : Colors.orange,
                       foregroundColor: Colors.white,
                     ),
                     child: Text(
@@ -2587,21 +2669,32 @@ class _HomeScreenState extends State<HomeScreen>
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: cardColor,
-        title: Row(children: [
-          const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 24),
-          const SizedBox(width: 10),
-          Text('Delete "$serviceName"',
+        title: Row(
+          children: [
+            const Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.red,
+              size: 24,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Delete "$serviceName"',
               style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold)),
-        ]),
+                color: textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Where should this account be deleted?',
-                style: TextStyle(color: textSecondary, fontSize: 13)),
+            Text(
+              'Where should this account be deleted?',
+              style: TextStyle(color: textSecondary, fontSize: 13),
+            ),
             const SizedBox(height: 16),
             _deleteOptionTile(
               icon: Icons.phone_android_rounded,
@@ -2655,16 +2748,24 @@ class _HomeScreenState extends State<HomeScreen>
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             backgroundColor: cardColor,
-            title: Row(children: [
-              const Icon(Icons.warning_amber_rounded,
-                  color: Colors.orange, size: 24),
-              const SizedBox(width: 10),
-              Text('Sync Warning',
-                  style: TextStyle(color: textPrimary, fontSize: 17)),
-            ]),
+            title: Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Sync Warning',
+                  style: TextStyle(color: textPrimary, fontSize: 17),
+                ),
+              ],
+            ),
             content: Text(
               'Cloud sync is currently ENABLED.\n\n'
               'If you delete this account locally only, it may be restored from the cloud when you sync.\n\n'
@@ -2680,8 +2781,9 @@ class _HomeScreenState extends State<HomeScreen>
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white),
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
                 child: const Text('Delete Locally'),
               ),
             ],
@@ -2709,7 +2811,12 @@ class _HomeScreenState extends State<HomeScreen>
       // Show final confirmation with "DELETE" typing
       if (!mounted) return;
       final confirmed = await _showDeleteConfirmationDialog(
-          context, serviceName, cardColor, textPrimary, textSecondary);
+        context,
+        serviceName,
+        cardColor,
+        textPrimary,
+        textSecondary,
+      );
       if (!confirmed) return;
 
       _showSnackBar('Deleting everywhere', Colors.grey);
@@ -2728,11 +2835,12 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<bool> _showDeleteConfirmationDialog(
-      BuildContext context,
-      String serviceName,
-      Color cardColor,
-      Color textPrimary,
-      Color textSecondary) async {
+    BuildContext context,
+    String serviceName,
+    Color cardColor,
+    Color textPrimary,
+    Color textSecondary,
+  ) async {
     var confirmationText = '';
 
     return await showDialog<bool>(
@@ -2741,18 +2849,27 @@ class _HomeScreenState extends State<HomeScreen>
           builder: (_) => StatefulBuilder(
             builder: (context, setState) => AlertDialog(
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
+                borderRadius: BorderRadius.circular(20),
+              ),
               backgroundColor: cardColor,
-              title: Row(children: [
-                const Icon(Icons.warning_amber_rounded,
-                    color: Colors.red, size: 28),
-                const SizedBox(width: 10),
-                Text('PERMANENT DELETION',
+              title: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.red,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'PERMANENT DELETION',
                     style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold)),
-              ]),
+                      color: Colors.red,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2760,9 +2877,10 @@ class _HomeScreenState extends State<HomeScreen>
                   Text(
                     'This action is IRREVERSIBLE and will delete "$serviceName" from ALL your devices and the cloud.',
                     style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500),
+                      color: textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Container(
@@ -2770,8 +2888,9 @@ class _HomeScreenState extends State<HomeScreen>
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border:
-                          Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Colors.red.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Column(
                       children: [
@@ -2780,9 +2899,10 @@ class _HomeScreenState extends State<HomeScreen>
                         Text(
                           'This cannot be undone!',
                           style: TextStyle(
-                              color: Colors.red,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold),
+                            color: Colors.red,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -2813,12 +2933,15 @@ class _HomeScreenState extends State<HomeScreen>
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: BorderSide(
-                            color: Colors.red.withValues(alpha: 0.5)),
+                          color: Colors.red.withValues(alpha: 0.5),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide:
-                            const BorderSide(color: Colors.red, width: 2),
+                        borderSide: const BorderSide(
+                          color: Colors.red,
+                          width: 2,
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(vertical: 16),
                     ),
@@ -2874,8 +2997,9 @@ class _HomeScreenState extends State<HomeScreen>
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10)),
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Icon(icon, color: color, size: 18),
             ),
             const SizedBox(width: 12),
@@ -2883,19 +3007,29 @@ class _HomeScreenState extends State<HomeScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          color: color)),
-                  Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 11, color: color.withValues(alpha: 0.7))),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: color,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: color.withValues(alpha: 0.7),
+                    ),
+                  ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded,
-                color: color.withValues(alpha: 0.5), size: 18),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: color.withValues(alpha: 0.5),
+              size: 18,
+            ),
           ],
         ),
       ),
@@ -2909,8 +3043,12 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _accountAction(
-      IconData icon, String label, VoidCallback onTap, bool isDark,
-      {bool destructive = false}) {
+    IconData icon,
+    String label,
+    VoidCallback onTap,
+    bool isDark, {
+    bool destructive = false,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -2920,8 +3058,8 @@ class _HomeScreenState extends State<HomeScreen>
           color: destructive
               ? Colors.red.withValues(alpha: 0.08)
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.grey[50]),
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.grey[50]),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: destructive
@@ -2932,19 +3070,24 @@ class _HomeScreenState extends State<HomeScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 15,
+            Icon(
+              icon,
+              size: 15,
+              color: destructive
+                  ? Colors.red
+                  : (isDark ? Colors.white60 : Colors.grey[600]),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
                 color: destructive
                     ? Colors.red
-                    : (isDark ? Colors.white60 : Colors.grey[600])),
-            const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: destructive
-                        ? Colors.red
-                        : (isDark ? Colors.white60 : Colors.grey[600]))),
+                    : (isDark ? Colors.white60 : Colors.grey[600]),
+              ),
+            ),
           ],
         ),
       ),
@@ -3002,8 +3145,9 @@ class _HomeScreenState extends State<HomeScreen>
 
     final syncEnabled = await _syncService.isSyncEnabled();
     if (syncEnabled) {
-      final synced =
-          await _syncService.syncAccounts(preferLocalTitleChanges: true);
+      final synced = await _syncService.syncAccounts(
+        preferLocalTitleChanges: true,
+      );
       if (!mounted) return;
       _showSnackBar(
         synced
@@ -3054,8 +3198,10 @@ class _HomeScreenState extends State<HomeScreen>
     final syncEnabled = await _syncService.isSyncEnabled();
 
     if (!syncEnabled) {
-      _showSnackBar('Sync is disabled. Enable it in Settings -> Sync to Cloud',
-          Colors.orange);
+      _showSnackBar(
+        'Sync is disabled. Enable it in Settings -> Sync to Cloud',
+        Colors.orange,
+      );
       return;
     }
 
@@ -3071,9 +3217,9 @@ class _HomeScreenState extends State<HomeScreen>
         _showSnackBar('Sync completed!', Colors.green);
       } else {
         _showSnackBar(
-            _syncService.lastErrorMessage ??
-                'No internet or server unavailable',
-            Colors.orange);
+          _syncService.lastErrorMessage ?? 'No internet or server unavailable',
+          Colors.orange,
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -3089,22 +3235,27 @@ class _HomeScreenState extends State<HomeScreen>
   void _showSnackBar(String message, Color color) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(
-            color == Colors.green || color == const Color(0xFF10B981)
-                ? Icons.check_circle_rounded
-                : Icons.info_rounded,
-            color: Colors.white,
-            size: 20),
-        const SizedBox(width: 10),
-        Expanded(child: Text(message)),
-      ]),
-      backgroundColor: color,
-      duration: const Duration(seconds: 3),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              color == Colors.green || color == const Color(0xFF10B981)
+                  ? Icons.check_circle_rounded
+                  : Icons.info_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   Future<T> _runWithBlockingProgress<T>({
@@ -3126,8 +3277,8 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               backgroundColor:
                   Theme.of(dialogContext).brightness == Brightness.dark
-                      ? const Color(0xFF1E1E32)
-                      : Colors.white,
+                  ? const Color(0xFF1E1E32)
+                  : Colors.white,
               content: Row(
                 children: [
                   const SizedBox(
@@ -3167,10 +3318,12 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     _animationController.dispose();
     _passwordlessPollTimer?.cancel();
-    _approvalNotificationService.passwordlessOpenSignal
-        .removeListener(_handlePasswordlessNotificationSignal);
-    _approvalNotificationService.passwordlessRequestSignal
-        .removeListener(_handleForegroundPasswordlessRequestSignal);
+    _approvalNotificationService.passwordlessOpenSignal.removeListener(
+      _handlePasswordlessNotificationSignal,
+    );
+    _approvalNotificationService.passwordlessRequestSignal.removeListener(
+      _handleForegroundPasswordlessRequestSignal,
+    );
     super.dispose();
   }
 }

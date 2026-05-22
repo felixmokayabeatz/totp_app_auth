@@ -30,7 +30,8 @@ class AppNotificationItem {
       details: json['details']?.toString() ?? '',
       preview: json['preview']?.toString() ?? '',
       isRead: json['is_read'] == true,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
       readAt: DateTime.tryParse(json['read_at']?.toString() ?? ''),
     );

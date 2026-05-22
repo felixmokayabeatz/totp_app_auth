@@ -71,8 +71,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     setState(() {
       _notifications = notifications;
-      _errorMessage =
-          notifications.isEmpty ? _syncService.lastErrorMessage : null;
+      _errorMessage = notifications.isEmpty
+          ? _syncService.lastErrorMessage
+          : null;
       _isLoading = false;
     });
   }
@@ -155,7 +156,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           success
               ? 'Marked $markedCount notification${markedCount == 1 ? '' : 's'} as read.'
               : (_syncService.lastErrorMessage ??
-                  'Could not mark notifications as read.'),
+                    'Could not mark notifications as read.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -290,7 +291,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           success
               ? 'Cleared $deletedCount notification${deletedCount == 1 ? '' : 's'}.'
               : (_syncService.lastErrorMessage ??
-                  'Could not clear notifications.'),
+                    'Could not clear notifications.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -484,8 +485,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color:
-                        Colors.black.withValues(alpha: _isDark ? 0.18 : 0.05),
+                    color: Colors.black.withValues(
+                      alpha: _isDark ? 0.18 : 0.05,
+                    ),
                     blurRadius: 12,
                     offset: const Offset(0, 3),
                   ),
@@ -588,10 +590,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 class NotificationDetailScreen extends StatefulWidget {
   final AppNotificationItem notification;
 
-  const NotificationDetailScreen({
-    super.key,
-    required this.notification,
-  });
+  const NotificationDetailScreen({super.key, required this.notification});
 
   @override
   State<NotificationDetailScreen> createState() =>
@@ -621,8 +620,9 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   }
 
   Future<void> _loadDetail() async {
-    final detail =
-        await _syncService.getNotificationDetail(widget.notification.id);
+    final detail = await _syncService.getNotificationDetail(
+      widget.notification.id,
+    );
     if (!mounted) return;
 
     setState(() {

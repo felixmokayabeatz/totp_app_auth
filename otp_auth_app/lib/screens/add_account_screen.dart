@@ -95,7 +95,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                 label: Text(
                   _isScanning ? 'Manual' : 'Scan',
                   style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600),
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -190,7 +192,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                   label: Text(
                     'Enter manually instead',
                     style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -235,28 +239,30 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           return;
         }
 
-        await _saveImportedEntries(
-          importedEntries,
-          sourceLabel: 'scanned QR',
-        );
+        await _saveImportedEntries(importedEntries, sourceLabel: 'scanned QR');
       } else {
         // Not a valid OTP auth QR code
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.warning_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Expanded(
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.warning_rounded, color: Colors.white, size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
                     child: Text(
-                        'Invalid QR code. Please scan a valid OTP setup QR.')),
-              ],
+                      'Invalid QR code. Please scan a valid OTP setup QR.',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ));
+          );
         }
         _isProcessingQR = false;
         await _restartScanner();
@@ -264,11 +270,13 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     } catch (e) {
       debugPrint('QR parse error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed to parse QR code'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to parse QR code'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
       _isProcessingQR = false;
       await _restartScanner();
@@ -374,8 +382,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     final content = entries.length == 1
         ? _formatEntrySummary(entries.first)
         : entries.take(5).map(_formatEntrySummary).join('\n');
-    final overflow =
-        entries.length > 5 ? '\n...and ${entries.length - 5} more' : '';
+    final overflow = entries.length > 5
+        ? '\n...and ${entries.length - 5} more'
+        : '';
 
     return showDialog<bool>(
       context: context,
@@ -406,25 +415,32 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     List<OTPImportEntry> entries, {
     String? sourceLabel,
   }) async {
-    final userId = await SecureStorageService()
-            .read(SecureStorageService.currentUserKey) ??
-        await SecureStorageService()
-            .read(SecureStorageService.localVaultUserKey) ??
+    final userId =
+        await SecureStorageService().read(
+          SecureStorageService.currentUserKey,
+        ) ??
+        await SecureStorageService().read(
+          SecureStorageService.localVaultUserKey,
+        ) ??
         'default_user';
     final syncService = SyncService();
     final userBox = await syncService.getUserBox();
     final isSignedIn = await syncService.isLoggedIn();
     final shouldSync = isSignedIn && await syncService.isSyncEnabled();
     final existingKeys = userBox.values
-        .map((account) =>
-            _accountIdentityKey(account.service, account.accountLabel))
+        .map(
+          (account) =>
+              _accountIdentityKey(account.service, account.accountLabel),
+        )
         .toSet();
     var importedCount = 0;
     var skippedCount = 0;
 
     for (final entry in entries) {
-      final identityKey =
-          _accountIdentityKey(entry.service, entry.accountLabel);
+      final identityKey = _accountIdentityKey(
+        entry.service,
+        entry.accountLabel,
+      );
       if (existingKeys.contains(identityKey)) {
         skippedCount++;
         continue;
@@ -553,7 +569,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   elevation: 0,
                 ),
                 child: Text(
@@ -597,8 +614,9 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             child: Text(
               message,
               style: TextStyle(
-                  fontSize: 13,
-                  color: _isDark ? Colors.white70 : Colors.grey[700]),
+                fontSize: 13,
+                color: _isDark ? Colors.white70 : Colors.grey[700],
+              ),
             ),
           ),
         ],
@@ -620,9 +638,10 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: Offset(0, 2)),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
         ],
       ),
       child: TextFormField(
@@ -635,21 +654,27 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(
-              color: _isDark ? Colors.white38 : Colors.grey[500], fontSize: 13),
+            color: _isDark ? Colors.white38 : Colors.grey[500],
+            fontSize: 13,
+          ),
           hintText: hint,
           hintStyle: TextStyle(
-              color: _isDark ? Colors.white24 : Colors.grey[400], fontSize: 13),
+            color: _isDark ? Colors.white24 : Colors.grey[400],
+            fontSize: 13,
+          ),
           prefixIcon: Icon(icon, color: _accent, size: 20),
           suffixIcon: suffix,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide:
-                BorderSide(color: _isDark ? Colors.white12 : Colors.grey[200]!),
+            borderSide: BorderSide(
+              color: _isDark ? Colors.white12 : Colors.grey[200]!,
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide:
-                BorderSide(color: _isDark ? Colors.white12 : Colors.grey[200]!),
+            borderSide: BorderSide(
+              color: _isDark ? Colors.white12 : Colors.grey[200]!,
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
@@ -667,10 +692,13 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   void _saveAccount() async {
     if (_formKey.currentState!.validate()) {
-      final userId = await SecureStorageService()
-              .read(SecureStorageService.currentUserKey) ??
-          await SecureStorageService()
-              .read(SecureStorageService.localVaultUserKey) ??
+      final userId =
+          await SecureStorageService().read(
+            SecureStorageService.currentUserKey,
+          ) ??
+          await SecureStorageService().read(
+            SecureStorageService.localVaultUserKey,
+          ) ??
           'default_user';
       final syncService = SyncService();
       final isSignedIn = await syncService.isLoggedIn();
@@ -689,15 +717,20 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       );
 
       if (exists) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(accountLabel.isEmpty
-              ? 'An account for "$serviceName" already exists'
-              : 'An account for "$serviceName" and "$accountLabel" already exists'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              accountLabel.isEmpty
+                  ? 'An account for "$serviceName" already exists'
+                  : 'An account for "$serviceName" and "$accountLabel" already exists',
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
         return;
       }
 
@@ -705,11 +738,13 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       final rawSecret = _secretController.text.replaceAll(RegExp(r'\s+'), '');
 
       if (rawSecret.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Invalid secret key'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Invalid secret key'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         return;
       }
 
@@ -825,24 +860,48 @@ class _ScannerOverlayPainter extends CustomPainter {
 
     // top-left
     canvas.drawLine(
-        Offset(left + r, top), Offset(left + r + cLen, top), cornerPaint);
+      Offset(left + r, top),
+      Offset(left + r + cLen, top),
+      cornerPaint,
+    );
     canvas.drawLine(
-        Offset(left, top + r), Offset(left, top + r + cLen), cornerPaint);
+      Offset(left, top + r),
+      Offset(left, top + r + cLen),
+      cornerPaint,
+    );
     // top-right
-    canvas.drawLine(Offset(left + frameSize - r, top),
-        Offset(left + frameSize - r - cLen, top), cornerPaint);
-    canvas.drawLine(Offset(left + frameSize, top + r),
-        Offset(left + frameSize, top + r + cLen), cornerPaint);
+    canvas.drawLine(
+      Offset(left + frameSize - r, top),
+      Offset(left + frameSize - r - cLen, top),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(left + frameSize, top + r),
+      Offset(left + frameSize, top + r + cLen),
+      cornerPaint,
+    );
     // bottom-left
-    canvas.drawLine(Offset(left + r, top + frameSize),
-        Offset(left + r + cLen, top + frameSize), cornerPaint);
-    canvas.drawLine(Offset(left, top + frameSize - r),
-        Offset(left, top + frameSize - r - cLen), cornerPaint);
+    canvas.drawLine(
+      Offset(left + r, top + frameSize),
+      Offset(left + r + cLen, top + frameSize),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(left, top + frameSize - r),
+      Offset(left, top + frameSize - r - cLen),
+      cornerPaint,
+    );
     // bottom-right
-    canvas.drawLine(Offset(left + frameSize - r, top + frameSize),
-        Offset(left + frameSize - r - cLen, top + frameSize), cornerPaint);
-    canvas.drawLine(Offset(left + frameSize, top + frameSize - r),
-        Offset(left + frameSize, top + frameSize - r - cLen), cornerPaint);
+    canvas.drawLine(
+      Offset(left + frameSize - r, top + frameSize),
+      Offset(left + frameSize - r - cLen, top + frameSize),
+      cornerPaint,
+    );
+    canvas.drawLine(
+      Offset(left + frameSize, top + frameSize - r),
+      Offset(left + frameSize, top + frameSize - r - cLen),
+      cornerPaint,
+    );
   }
 
   @override

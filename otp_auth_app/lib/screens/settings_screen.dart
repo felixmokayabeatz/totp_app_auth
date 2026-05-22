@@ -197,8 +197,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
       return;
@@ -210,8 +211,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: const Text('You are already on the latest version.'),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
       return;
@@ -268,8 +270,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text(result.message),
             backgroundColor: const Color(0xFF10B981),
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
         return;
@@ -281,8 +284,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text(result.message),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
         return;
@@ -300,8 +304,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           backgroundColor: opened ? Colors.orange : Colors.red,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
       return;
@@ -463,8 +468,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
 
       final signedIn = await _syncService.isLoggedIn();
-      final currentSession =
-          signedIn ? await _syncService.getCurrentDeviceSession() : null;
+      final currentSession = signedIn
+          ? await _syncService.getCurrentDeviceSession()
+          : null;
       if (!mounted) return;
       final isPrimaryDevice = !signedIn || currentSession?.isPrimary == true;
 
@@ -519,8 +525,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       signedIn
                           ? (isPrimaryDevice
-                              ? 'This is your primary device, so you can restore or delete any restore point here.'
-                              : 'You can view restore points on this device, but only your primary device can restore or delete them.')
+                                ? 'This is your primary device, so you can restore or delete any restore point here.'
+                                : 'You can view restore points on this device, but only your primary device can restore or delete them.')
                           : 'Offline vault restore points can be restored on this device.',
                       style: TextStyle(
                         color: _textSecondary,
@@ -598,7 +604,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         ? () async {
                                             final deleted =
                                                 await _deleteOtpSnapshot(
-                                                    snapshot);
+                                                  snapshot,
+                                                );
                                             if (!deleted ||
                                                 !dialogContext.mounted) {
                                               return;
@@ -612,7 +619,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           }
                                         : null,
                                     icon: const Icon(
-                                        Icons.delete_outline_rounded),
+                                      Icons.delete_outline_rounded,
+                                    ),
                                     label: const Text('Delete'),
                                   ),
                                 ],
@@ -650,9 +658,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _dismissVaultRestorePointsLoadingDialog();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text(
-            'Could not load vault restore points right now.',
-          ),
+          content: const Text('Could not load vault restore points right now.'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -761,9 +767,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         backgroundColor: const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -798,16 +802,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
-        title: Text('Restore Vault Snapshot',
-            style: TextStyle(color: _textPrimary)),
+        title: Text(
+          'Restore Vault Snapshot',
+          style: TextStyle(color: _textPrimary),
+        ),
         content: Text(
           'Restore your vault to ${_formatSnapshotDate(snapshot.createdAt)}? '
           'This will replace the current OTP accounts and password entries on this device.',
-          style: TextStyle(
-            color: _textSecondary,
-            fontSize: 13,
-            height: 1.4,
-          ),
+          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -852,17 +854,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text(
           syncEnabled
               ? (result.syncedToCloud
-                  ? 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
-                  : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
+                    ? 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
+                    : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
               : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
         ),
         backgroundColor: (!syncEnabled || result.syncedToCloud)
             ? const Color(0xFF10B981)
             : Colors.orange,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -903,11 +903,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         content: Text(
           'Delete the vault restore point from ${_formatSnapshotDate(snapshot.createdAt)}? This removes it from this device and the encrypted server copy.',
-          style: TextStyle(
-            color: _textSecondary,
-            fontSize: 13,
-            height: 1.4,
-          ),
+          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -940,9 +936,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         backgroundColor: deleted ? Colors.red : Colors.orange,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
     return deleted;
@@ -966,11 +960,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: AppBar(
-        title: const Text('Settings',
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-                color: Colors.white)),
+        title: const Text(
+          'Settings',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: Colors.white,
+          ),
+        ),
         backgroundColor: _accent,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -986,9 +983,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           _sectionLabel('Appearance'),
           _settingsCard([
-            _themeModeTile(
-              themeProvider: themeProvider,
-            ),
+            _themeModeTile(themeProvider: themeProvider),
             _dividerLine(),
             _tappableTile(
               icon: Icons.palette_rounded,
@@ -1012,7 +1007,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: _accent))
+                        strokeWidth: 2,
+                        color: _accent,
+                      ),
+                    )
                   : null,
               onTap: _isDownloadingBackupCodes ? null : _downloadBackupCodes,
             ),
@@ -1027,8 +1025,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: authProvider.isAuthenticated
                   ? _loadBackupCodeStatus
                   : () => _requireSignedIn(
-                        'Recovery codes are available after you sign in.',
-                      ),
+                      'Recovery codes are available after you sign in.',
+                    ),
             ),
             _dividerLine(),
             _tappableTile(
@@ -1046,8 +1044,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     )
                   : null,
-              onTap:
-                  _isLoadingVaultRestorePoints ? null : _showOtpRestorePoints,
+              onTap: _isLoadingVaultRestorePoints
+                  ? null
+                  : _showOtpRestorePoints,
             ),
             _dividerLine(),
             _tappableTile(
@@ -1070,15 +1069,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated =
-                    await _appLockService.authenticateToUnlock(context);
+                final authenticated = await _appLockService
+                    .authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const PasswordsScreen(
-                      openImportOnStart: true,
-                    ),
+                    builder: (_) =>
+                        const PasswordsScreen(openImportOnStart: true),
                   ),
                 );
               },
@@ -1097,14 +1095,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated =
-                    await _appLockService.authenticateToUnlock(context);
+                final authenticated = await _appLockService
+                    .authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const PasswordsScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const PasswordsScreen()),
                 );
               },
             ),
@@ -1122,8 +1118,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated =
-                    await _appLockService.authenticateToUnlock(context);
+                final authenticated = await _appLockService
+                    .authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
@@ -1141,8 +1137,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub:
                   'Always on. BeatzLock now requires device security or an app PIN every time you reopen it.',
               trailing: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(999),
@@ -1172,25 +1170,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: !authProvider.isAuthenticated
                   ? 'Sign in to sync across devices'
                   : _syncLockedOnThisDevice
-                      ? 'Unlock sync on this device first'
-                      : _syncEnabled
-                          ? 'Manually sync with cloud'
-                          : 'Cloud sync is disabled',
+                  ? 'Unlock sync on this device first'
+                  : _syncEnabled
+                  ? 'Manually sync with cloud'
+                  : 'Cloud sync is disabled',
               trailing: _isSyncing
                   ? SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: _accent))
+                        strokeWidth: 2,
+                        color: _accent,
+                      ),
+                    )
                   : (_syncEnabled && !_syncLockedOnThisDevice
-                      ? null
-                      : const Icon(Icons.lock_outline,
-                          size: 16, color: Colors.grey)),
+                        ? null
+                        : const Icon(
+                            Icons.lock_outline,
+                            size: 16,
+                            color: Colors.grey,
+                          )),
               onTap: !authProvider.isAuthenticated
                   ? _openLoginForSync
                   : (_syncLockedOnThisDevice
-                      ? _unlockSyncOnThisDevice
-                      : _syncNow),
+                        ? _unlockSyncOnThisDevice
+                        : _syncNow),
             ),
             if (authProvider.isAuthenticated && _syncLockedOnThisDevice) ...[
               _dividerLine(),
@@ -1211,9 +1215,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: _syncLockedOnThisDevice
                   ? 'Unlock this device first to resume cloud sync'
                   : _syncEnabled
-                      ? 'Accounts sync automatically'
-                      : 'Sync disabled - local only',
-              value: authProvider.isAuthenticated &&
+                  ? 'Accounts sync automatically'
+                  : 'Sync disabled - local only',
+              value:
+                  authProvider.isAuthenticated &&
                   _syncEnabled &&
                   !_syncLockedOnThisDevice,
               onChanged: (val) async {
@@ -1232,16 +1237,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 await _syncService.setSyncEnabled(val);
                 if (!context.mounted) return;
                 setState(() => _syncEnabled = val);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(val
-                      ? 'Cloud sync enabled on all devices'
-                      : 'Cloud sync disabled on all devices'),
-                  backgroundColor:
-                      val ? const Color(0xFF10B981) : Colors.orange,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      val
+                          ? 'Cloud sync enabled on all devices'
+                          : 'Cloud sync disabled on all devices',
+                    ),
+                    backgroundColor: val
+                        ? const Color(0xFF10B981)
+                        : Colors.orange,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
               },
             ),
           ]),
@@ -1272,7 +1283,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: 'Update your password',
               onTap: () async {
                 if (await _requireSignedIn(
-                    'Password changes are available after you sign in.')) {
+                  'Password changes are available after you sign in.',
+                )) {
                   _showChangePasswordDialog();
                 }
               },
@@ -1284,7 +1296,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: 'See where your account is signed in',
               onTap: () async {
                 if (!await _requireSignedIn(
-                    'Device sessions are available after you sign in.')) {
+                  'Device sessions are available after you sign in.',
+                )) {
                   return;
                 }
                 if (!context.mounted) return;
@@ -1309,8 +1322,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated =
-                    await _appLockService.authenticateToUnlock(context);
+                final authenticated = await _appLockService
+                    .authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 final changed = await Navigator.push<bool>(
                   context,
@@ -1323,8 +1336,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content:
-                        const Text('This device is now your primary device.'),
+                    content: const Text(
+                      'This device is now your primary device.',
+                    ),
                     backgroundColor: const Color(0xFF10B981),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -1341,7 +1355,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: 'Approve passwordless sign-ins from your primary phone',
               onTap: () async {
                 if (!await _requireSignedIn(
-                    'Passwordless sign-in approvals are available after you sign in.')) {
+                  'Passwordless sign-in approvals are available after you sign in.',
+                )) {
                   return;
                 }
                 if (!context.mounted) return;
@@ -1360,7 +1375,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: 'View recent security activity',
               onTap: () async {
                 if (!await _requireSignedIn(
-                    'Notifications are available after you sign in.')) {
+                  'Notifications are available after you sign in.',
+                )) {
                   return;
                 }
                 if (!context.mounted) return;
@@ -1439,8 +1455,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.star_outline_rounded,
               label: 'Rate the App',
               sub: 'Love it? Leave a review',
-              trailing:
-                  const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
+              trailing: const Icon(
+                Icons.star_rounded,
+                color: Colors.amber,
+                size: 20,
+              ),
               onTap: _openRateApp,
             ),
           ]),
@@ -1456,15 +1475,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const TextSpan(text: 'Developed with love '),
                 WidgetSpan(
                   alignment: PlaceholderAlignment.middle,
-                  child: Icon(
-                    Icons.favorite_rounded,
-                    size: 14,
-                    color: _accent,
-                  ),
+                  child: Icon(Icons.favorite_rounded, size: 14, color: _accent),
                 ),
-                TextSpan(
-                  text: ' by Felix Mokaya © ${DateTime.now().year}',
-                ),
+                TextSpan(text: ' by Felix Mokaya © ${DateTime.now().year}'),
               ],
             ),
             textAlign: TextAlign.center,
@@ -1484,24 +1497,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(
-              onPressed:
-                  authProvider.isAuthenticated ? _logout : _openLoginForSync,
-              icon: Icon(authProvider.isAuthenticated
-                  ? Icons.logout_rounded
-                  : Icons.login_rounded),
+              onPressed: authProvider.isAuthenticated
+                  ? _logout
+                  : _openLoginForSync,
+              icon: Icon(
+                authProvider.isAuthenticated
+                    ? Icons.logout_rounded
+                    : Icons.login_rounded,
+              ),
               label: Text(
-                  authProvider.isAuthenticated
-                      ? 'Sign out to offline mode'
-                      : 'Sign in for sync',
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+                authProvider.isAuthenticated
+                    ? 'Sign out to offline mode'
+                    : 'Sign in for sync',
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: authProvider.isAuthenticated
                     ? Colors.red.shade600
                     : _accent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 elevation: 0,
               ),
             ),
@@ -1527,8 +1547,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       messenger.showSnackBar(
         const SnackBar(
-            content: Text('PIN changed successfully'),
-            backgroundColor: Colors.green),
+          content: Text('PIN changed successfully'),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
@@ -1537,10 +1558,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => LegalDocumentScreen(
-          type: type,
-          fallbackTitle: title,
-        ),
+        builder: (_) => LegalDocumentScreen(type: type, fallbackTitle: title),
       ),
     );
   }
@@ -1560,7 +1578,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _unlockSyncOnThisDevice() async {
     if (!await _requireSignedIn(
-        'Unlocking sync is available after you sign in.')) {
+      'Unlocking sync is available after you sign in.',
+    )) {
       return;
     }
     if (!mounted) return;
@@ -1575,8 +1594,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           backgroundColor: _cardColor,
           title: Text(
             'Unlock Sync On This Device',
@@ -1609,8 +1629,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed:
-                  isSubmitting ? null : () => Navigator.pop(dialogContext),
+              onPressed: isSubmitting
+                  ? null
+                  : () => Navigator.pop(dialogContext),
               child: const Text('Not now'),
             ),
             ElevatedButton(
@@ -1642,7 +1663,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       setDialogState(() {
                         isSubmitting = false;
-                        errorText = _syncService.lastErrorMessage ??
+                        errorText =
+                            _syncService.lastErrorMessage ??
                             'Could not unlock sync on this device.';
                       });
                     },
@@ -1763,8 +1785,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final displayNameController = TextEditingController();
     displayNameController.text =
         (existingRating?.displayName == 'Anonymous user'
-            ? ''
-            : (existingRating?.displayName ?? savedDisplayName));
+        ? ''
+        : (existingRating?.displayName ?? savedDisplayName));
     commentController.text = existingRating?.comment ?? '';
     suggestionController.text = existingRating?.suggestion ?? '';
 
@@ -1778,8 +1800,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           backgroundColor: _cardColor,
           title: Text('Rate BeatzLock', style: TextStyle(color: _textPrimary)),
           content: SizedBox(
@@ -1813,7 +1836,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (platformSummary != null) ...[
                           const SizedBox(height: 14),
                           _buildPlatformSummaryCard(
-                            platformLabel: existingRating?.platformDisplay ??
+                            platformLabel:
+                                existingRating?.platformDisplay ??
                                 _platformLabelFromSlug(currentPlatform),
                             summary: platformSummary,
                           ),
@@ -1843,9 +1867,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               onPressed: isSubmitting
                                   ? null
                                   : () => setDialogState(() {
-                                        selectedStars = star;
-                                        errorText = null;
-                                      }),
+                                      selectedStars = star;
+                                      errorText = null;
+                                    }),
                               icon: Icon(
                                 selected
                                     ? Icons.star_rounded
@@ -1885,7 +1909,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Text(
                             errorText!,
                             style: const TextStyle(
-                                color: Colors.red, fontSize: 12),
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ],
@@ -1983,8 +2009,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ? 'Your review for this platform was deleted.'
                                     : 'No review was found for this platform.',
                               ),
-                              backgroundColor:
-                                  deleted ? Colors.orange : _accent,
+                              backgroundColor: deleted
+                                  ? Colors.orange
+                                  : _accent,
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -2009,19 +2036,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           color: Colors.red,
                         ),
                       )
-                    : const Text(
-                        'Delete',
-                        style: TextStyle(color: Colors.red),
-                      ),
+                    : const Text('Delete', style: TextStyle(color: Colors.red)),
               ),
             if (existingRating != null && !isEditing)
               ElevatedButton(
                 onPressed: (isSubmitting || isDeleting)
                     ? null
                     : () => setDialogState(() {
-                          isEditing = true;
-                          errorText = null;
-                        }),
+                        isEditing = true;
+                        errorText = null;
+                      }),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
@@ -2051,8 +2075,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                         try {
                           final packageInfo = await PackageInfo.fromPlatform();
-                          final deviceLabel =
-                              await _syncService.getCurrentDeviceLabel();
+                          final deviceLabel = await _syncService
+                              .getCurrentDeviceLabel();
                           final storage = SecureStorageService();
                           await _appRatingService.submitRating(
                             reviewerKey: reviewerKey,
@@ -2064,14 +2088,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             appVersion: packageInfo.version,
                             buildNumber: packageInfo.buildNumber,
                             deviceLabel: deviceLabel,
-                            accountUserId: await storage
-                                    .read(SecureStorageService.userIdKey) ??
+                            accountUserId:
+                                await storage.read(
+                                  SecureStorageService.userIdKey,
+                                ) ??
                                 '',
-                            accountEmail: await storage
-                                    .read(SecureStorageService.userEmailKey) ??
+                            accountEmail:
+                                await storage.read(
+                                  SecureStorageService.userEmailKey,
+                                ) ??
                                 '',
-                            accountUsername: await storage.read(
-                                    SecureStorageService.currentUserKey) ??
+                            accountUsername:
+                                await storage.read(
+                                  SecureStorageService.currentUserKey,
+                                ) ??
                                 '',
                           );
 
@@ -2081,9 +2111,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(existingRating == null
-                                  ? 'Thanks for the review!'
-                                  : 'Your review was updated.'),
+                              content: Text(
+                                existingRating == null
+                                    ? 'Thanks for the review!'
+                                    : 'Your review was updated.',
+                              ),
                               backgroundColor: const Color(0xFF10B981),
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(
@@ -2233,7 +2265,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<String> _ratingReviewerKey() async {
     final storage = SecureStorageService();
-    final rawUser = (await storage.read(SecureStorageService.userIdKey)) ??
+    final rawUser =
+        (await storage.read(SecureStorageService.userIdKey)) ??
         (await storage.read(SecureStorageService.userEmailKey)) ??
         (await storage.read(SecureStorageService.currentUserKey));
     if (rawUser == null || rawUser.trim().isEmpty) {
@@ -2268,25 +2301,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
         if (rating.comment.isNotEmpty) ...[
           const SizedBox(height: 14),
-          Text('Comment',
-              style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700)),
+          Text(
+            'Comment',
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(rating.comment,
-              style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5)),
+          Text(
+            rating.comment,
+            style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5),
+          ),
         ],
         if (rating.suggestion.isNotEmpty) ...[
           const SizedBox(height: 14),
-          Text('Suggestion',
-              style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700)),
+          Text(
+            'Suggestion',
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(rating.suggestion,
-              style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5)),
+          Text(
+            rating.suggestion,
+            style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5),
+          ),
         ],
       ],
     );
@@ -2304,8 +2347,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         color: const Color(0xFF16A34A).withValues(alpha: _isDark ? 0.16 : 0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color:
-              const Color(0xFF16A34A).withValues(alpha: _isDark ? 0.34 : 0.22),
+          color: const Color(
+            0xFF16A34A,
+          ).withValues(alpha: _isDark ? 0.34 : 0.22),
         ),
       ),
       child: Column(
@@ -2344,11 +2388,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           Text(
             rating.adminReply,
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 13,
-              height: 1.5,
-            ),
+            style: TextStyle(color: _textPrimary, fontSize: 13, height: 1.5),
           ),
         ],
       ),
@@ -2362,15 +2402,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           SizedBox(
             width: 96,
-            child: Text(label,
-                style: TextStyle(color: _textSecondary, fontSize: 12)),
+            child: Text(
+              label,
+              style: TextStyle(color: _textSecondary, fontSize: 12),
+            ),
           ),
           Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    color: _textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
+            child: Text(
+              value,
+              style: TextStyle(
+                color: _textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -2460,11 +2505,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           backgroundColor: _cardColor,
-          title: Text('Import OTP Accounts',
-              style: TextStyle(color: _textPrimary)),
+          title: Text(
+            'Import OTP Accounts',
+            style: TextStyle(color: _textPrimary),
+          ),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -2496,8 +2544,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 if (imported == true && mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content:
-                                          const Text('Success. Account added.'),
+                                      content: const Text(
+                                        'Success. Account added.',
+                                      ),
                                       backgroundColor: const Color(0xFF10B981),
                                       behavior: SnackBarBehavior.floating,
                                       shape: RoundedRectangleBorder(
@@ -2526,8 +2575,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 });
 
                                 try {
-                                  final file =
-                                      await filePicker.pickOtpImportFile();
+                                  final file = await filePicker
+                                      .pickOtpImportFile();
                                   if (!dialogContext.mounted) return;
 
                                   if (file == null) {
@@ -2607,8 +2656,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 4),
                           Text(
                             '${selectedEntries.length} account${selectedEntries.length == 1 ? '' : 's'} ready to import',
-                            style:
-                                TextStyle(color: _textSecondary, fontSize: 12),
+                            style: TextStyle(
+                              color: _textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -2627,8 +2678,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed:
-                  isImporting ? null : () => Navigator.pop(dialogContext),
+              onPressed: isImporting
+                  ? null
+                  : () => Navigator.pop(dialogContext),
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
             ElevatedButton(
@@ -2687,14 +2739,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String? sourceLabel,
   }) async {
     final storage = SecureStorageService();
-    final userId = await storage.read(SecureStorageService.currentUserKey) ??
+    final userId =
+        await storage.read(SecureStorageService.currentUserKey) ??
         await storage.read(SecureStorageService.localVaultUserKey) ??
         'default_user';
     final userBox = await _syncService.getUserBox();
     final isSignedIn = await _syncService.isLoggedIn();
     final existingKeys = userBox.values
         .map(
-            (account) => _otpIdentityKey(account.service, account.accountLabel))
+          (account) => _otpIdentityKey(account.service, account.accountLabel),
+        )
         .toSet();
     var importedCount = 0;
     var skippedCount = 0;
@@ -2759,8 +2813,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!authenticated) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              const Text('Unlock with device security or your app PIN first.'),
+          content: const Text(
+            'Unlock with device security or your app PIN first.',
+          ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -2849,18 +2904,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
-        title: Row(children: [
-          const Icon(Icons.warning_rounded, color: Colors.red, size: 24),
-          const SizedBox(width: 10),
-          Text('Clear All Data',
-              style: TextStyle(color: _textPrimary, fontSize: 17)),
-        ]),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_rounded, color: Colors.red, size: 24),
+            const SizedBox(width: 10),
+            Text(
+              'Clear All Data',
+              style: TextStyle(color: _textPrimary, fontSize: 17),
+            ),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('This will permanently delete ALL your OTP accounts.',
-                style: TextStyle(color: _textSecondary, fontSize: 13)),
+            Text(
+              'This will permanently delete ALL your OTP accounts.',
+              style: TextStyle(color: _textSecondary, fontSize: 13),
+            ),
             const SizedBox(height: 16),
             _deleteOptionTile(
               icon: Icons.phone_android_rounded,
@@ -2896,24 +2957,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           backgroundColor: _cardColor,
-          title:
-              Text('Delete local copy?', style: TextStyle(color: _textPrimary)),
+          title: Text(
+            'Delete local copy?',
+            style: TextStyle(color: _textPrimary),
+          ),
           content: Text(
             'All accounts will be removed from this device. You can re-sync from cloud later.',
             style: TextStyle(color: _textSecondary, fontSize: 13),
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white),
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Delete Local'),
             ),
           ],
@@ -2924,13 +2990,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _otpVaultSnapshotService.captureSnapshot(reason: 'pre_delete_all');
       await _syncService.deleteAllLocalOnly();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text(
-            'All accounts removed from this device. Sync to restore.'),
-        backgroundColor: Colors.orange,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'All accounts removed from this device. Sync to restore.',
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
       Navigator.pop(context);
       return;
     }
@@ -2941,11 +3012,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           backgroundColor: _cardColor,
-          title:
-              Text('Sign in required', style: TextStyle(color: _textPrimary)),
+          title: Text(
+            'Sign in required',
+            style: TextStyle(color: _textPrimary),
+          ),
           content: Text(
             'Cloud deletion is not possible while you are using BeatzLock offline. You can delete the local copy on this device, or sign in first to delete synced accounts everywhere.',
             style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
@@ -2972,18 +3046,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    final username = await SecureStorageService()
-            .read(SecureStorageService.currentUserKey) ??
+    final username =
+        await SecureStorageService().read(
+          SecureStorageService.currentUserKey,
+        ) ??
         '';
 
     final otpSent = await _syncService.sendDeleteOtp(username);
     if (!otpSent) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:
-            Text('Failed to send verification code. Check your connection.'),
-        backgroundColor: Colors.red,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Failed to send verification code. Check your connection.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -2994,11 +3073,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           backgroundColor: _cardColor,
-          title:
-              Text('Confirm Deletion', style: TextStyle(color: _textPrimary)),
+          title: Text(
+            'Confirm Deletion',
+            style: TextStyle(color: _textPrimary),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -3022,9 +3104,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      fontSize: 24,
-                      letterSpacing: 4,
-                      fontWeight: FontWeight.bold),
+                    fontSize: 24,
+                    letterSpacing: 4,
+                    fontWeight: FontWeight.bold,
+                  ),
                   keyboardType: TextInputType.number,
                   maxLength: 6,
                   decoration: const InputDecoration(
@@ -3047,15 +3130,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red, foregroundColor: Colors.white),
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () async {
                 final code = otpCode.trim();
                 if (code.length != 6) {
-                  ScaffoldMessenger.of(dialogContext)
-                      .showSnackBar(const SnackBar(
-                    content: Text('Enter the 6-digit code'),
-                    backgroundColor: Colors.red,
-                  ));
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter the 6-digit code'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                   return;
                 }
                 final ok = await _syncService.verifyDeleteOtp(username, code);
@@ -3071,10 +3157,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (verified != true) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Invalid code – deletion cancelled'),
-        backgroundColor: Colors.red,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid code – deletion cancelled'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -3082,17 +3170,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ok = await _syncService.deleteAllEverywhere();
     if (!mounted) return;
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('All accounts deleted everywhere'),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All accounts deleted everywhere'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       Navigator.pop(context);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Failed to delete from cloud – try again'),
-        backgroundColor: Colors.red,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to delete from cloud – try again'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -3119,8 +3211,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10)),
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Icon(icon, color: color, size: 18),
             ),
             const SizedBox(width: 12),
@@ -3128,20 +3221,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          color: color)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: color,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 11, color: color.withValues(alpha: 0.7))),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: color.withValues(alpha: 0.7),
+                    ),
+                  ),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded,
-                color: color.withValues(alpha: 0.5), size: 18),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: color.withValues(alpha: 0.5),
+              size: 18,
+            ),
           ],
         ),
       ),
@@ -3204,7 +3307,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const nu = '23456789';
       const sy = r'!@#$%^&*()_+-=[]{}|;:,.<>?';
       final random = DateTime.now().millisecondsSinceEpoch;
-      String pw = up[random % up.length] +
+      String pw =
+          up[random % up.length] +
           lo[(random + 1) % lo.length] +
           nu[(random + 2) % nu.length] +
           sy[(random + 3) % sy.length];
@@ -3227,118 +3331,158 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Text(show2FA ? 'Verify 2FA Code' : 'Change Password'),
           content: SizedBox(
             width: 350,
             child: show2FA
-                ? Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.email_outlined, size: 50, color: _accent),
-                    const SizedBox(height: 16),
-                    Text('A verification code has been sent to your email',
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.email_outlined, size: 50, color: _accent),
+                      const SizedBox(height: 16),
+                      Text(
+                        'A verification code has been sent to your email',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, color: _textSecondary)),
-                    const SizedBox(height: 20),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: _isDark ? Colors.white12 : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border:
-                            Border.all(color: _accent.withValues(alpha: 0.3)),
+                        style: TextStyle(fontSize: 13, color: _textSecondary),
                       ),
-                      child: TextField(
-                        controller: otpCodeController,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
+                      const SizedBox(height: 20),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _isDark ? Colors.white12 : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: TextField(
+                          controller: otpCodeController,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
                             fontSize: 24,
                             letterSpacing: 4,
-                            fontWeight: FontWeight.bold),
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        decoration: const InputDecoration(
-                          hintText: 'Enter 6-digit code',
-                          hintStyle: TextStyle(fontSize: 16, letterSpacing: 0),
-                          border: InputBorder.none,
-                          counterText: '',
-                          contentPadding: EdgeInsets.symmetric(vertical: 16),
+                            fontWeight: FontWeight.bold,
+                          ),
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          decoration: const InputDecoration(
+                            hintText: 'Enter 6-digit code',
+                            hintStyle: TextStyle(
+                              fontSize: 16,
+                              letterSpacing: 0,
+                            ),
+                            border: InputBorder.none,
+                            counterText: '',
+                            contentPadding: EdgeInsets.symmetric(vertical: 16),
+                          ),
                         ),
                       ),
-                    ),
-                  ])
-                : Column(mainAxisSize: MainAxisSize.min, children: [
-                    _pwField(
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _pwField(
                         currentPasswordController,
                         'Current Password',
                         obscureCurrent,
-                        () => setState(() => obscureCurrent = !obscureCurrent)),
-                    const SizedBox(height: 16),
-                    _pwField(newPasswordController, 'New Password', obscureNew,
+                        () => setState(() => obscureCurrent = !obscureCurrent),
+                      ),
+                      const SizedBox(height: 16),
+                      _pwField(
+                        newPasswordController,
+                        'New Password',
+                        obscureNew,
                         () => setState(() => obscureNew = !obscureNew),
-                        onChange: () => checkStrength(setState)),
-                    if (newPasswordController.text.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(
-                            child: LinearProgressIndicator(
+                        onChange: () => checkStrength(setState),
+                      ),
+                      if (newPasswordController.text.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: LinearProgressIndicator(
                                 value: passwordStrength,
                                 backgroundColor: Colors.grey.shade300,
                                 valueColor: AlwaysStoppedAnimation<Color>(
-                                    passwordStrengthColor),
+                                  passwordStrengthColor,
+                                ),
                                 minHeight: 4,
-                                borderRadius: BorderRadius.circular(2))),
-                        const SizedBox(width: 8),
-                        Text(passwordStrengthText,
-                            style: TextStyle(
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              passwordStrengthText,
+                              style: TextStyle(
                                 color: passwordStrengthColor,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 12)),
-                      ]),
-                    ],
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      Icon(Icons.format_size, size: 18, color: _accent),
-                      const SizedBox(width: 8),
-                      Text('Length: ${passwordLength.toInt()}',
-                          style: TextStyle(
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.format_size, size: 18, color: _accent),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Length: ${passwordLength.toInt()}',
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
-                              color: _accent)),
-                      Expanded(
-                          child: Slider(
-                        value: passwordLength,
-                        min: 8,
-                        max: 20,
-                        divisions: 12,
-                        activeColor: _accent,
-                        inactiveColor: Colors.grey.shade300,
-                        onChanged: (v) => setState(() => passwordLength = v),
-                      )),
-                    ]),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () {
-                          final pw = generatePassword(passwordLength.toInt());
-                          setState(() {
-                            newPasswordController.text = pw;
-                            confirmPasswordController.text = pw;
-                            checkStrength(setState);
-                          });
-                        },
-                        icon:
-                            Icon(Icons.auto_awesome, size: 16, color: _accent),
-                        label: Text('Suggest strong password',
-                            style: TextStyle(fontSize: 12, color: _accent)),
+                              color: _accent,
+                            ),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: passwordLength,
+                              min: 8,
+                              max: 20,
+                              divisions: 12,
+                              activeColor: _accent,
+                              inactiveColor: Colors.grey.shade300,
+                              onChanged: (v) =>
+                                  setState(() => passwordLength = v),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    _pwField(
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            final pw = generatePassword(passwordLength.toInt());
+                            setState(() {
+                              newPasswordController.text = pw;
+                              confirmPasswordController.text = pw;
+                              checkStrength(setState);
+                            });
+                          },
+                          icon: Icon(
+                            Icons.auto_awesome,
+                            size: 16,
+                            color: _accent,
+                          ),
+                          label: Text(
+                            'Suggest strong password',
+                            style: TextStyle(fontSize: 12, color: _accent),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _pwField(
                         confirmPasswordController,
                         'Confirm New Password',
                         obscureConfirm,
-                        () => setState(() => obscureConfirm = !obscureConfirm)),
-                  ]),
+                        () => setState(() => obscureConfirm = !obscureConfirm),
+                      ),
+                    ],
+                  ),
           ),
           actions: [
             TextButton(
@@ -3349,99 +3493,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10))),
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
               onPressed: show2FA
                   ? () async {
                       if (otpCodeController.text.length != 6) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Enter 6-digit code'),
-                                backgroundColor: Colors.red));
+                          const SnackBar(
+                            content: Text('Enter 6-digit code'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                         return;
                       }
-                      final username = await SecureStorageService()
-                              .read(SecureStorageService.currentUserKey) ??
+                      final username =
+                          await SecureStorageService().read(
+                            SecureStorageService.currentUserKey,
+                          ) ??
                           '';
                       final valid = await _syncService.verify2FACode(
-                          username, otpCodeController.text);
+                        username,
+                        otpCodeController.text,
+                      );
                       if (!context.mounted) return;
                       if (valid) {
                         final changed = await _syncService.changePassword(
-                            currentPasswordController.text,
-                            newPasswordController.text);
+                          currentPasswordController.text,
+                          newPasswordController.text,
+                        );
                         if (!context.mounted) return;
                         Navigator.pop(context);
                         if (changed) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      'Password changed! Please login again.'),
-                                  backgroundColor: Colors.green));
+                            const SnackBar(
+                              content: Text(
+                                'Password changed! Please login again.',
+                              ),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
                           Future.delayed(const Duration(seconds: 2), _logout);
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Failed to change password'),
-                                  backgroundColor: Colors.red));
+                            const SnackBar(
+                              content: Text('Failed to change password'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
                         }
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Invalid code'),
-                                backgroundColor: Colors.red));
+                          const SnackBar(
+                            content: Text('Invalid code'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                       }
                     }
                   : () async {
                       if (currentPasswordController.text.isEmpty ||
                           newPasswordController.text.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Fill all fields'),
-                                backgroundColor: Colors.red));
+                          const SnackBar(
+                            content: Text('Fill all fields'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                         return;
                       }
                       if (newPasswordController.text.length < 8) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Min 8 characters'),
-                                backgroundColor: Colors.red));
+                          const SnackBar(
+                            content: Text('Min 8 characters'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                         return;
                       }
                       if (newPasswordController.text !=
                           confirmPasswordController.text) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Passwords don\'t match'),
-                                backgroundColor: Colors.red));
+                          const SnackBar(
+                            content: Text('Passwords don\'t match'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                         return;
                       }
                       if (passwordStrength < 0.5) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Use a stronger password'),
-                                backgroundColor: Colors.red));
+                          const SnackBar(
+                            content: Text('Use a stronger password'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                         return;
                       }
-                      final username = await SecureStorageService()
-                              .read(SecureStorageService.currentUserKey) ??
+                      final username =
+                          await SecureStorageService().read(
+                            SecureStorageService.currentUserKey,
+                          ) ??
                           '';
                       final sent = await _syncService.send2FACode(
-                          username, currentPasswordController.text);
+                        username,
+                        currentPasswordController.text,
+                      );
                       if (!context.mounted) return;
                       if (sent) {
                         setState(() => show2FA = true);
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Code sent to your email'),
-                                backgroundColor: Colors.green));
+                          const SnackBar(
+                            content: Text('Code sent to your email'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Invalid current password'),
-                                backgroundColor: Colors.red));
+                          const SnackBar(
+                            content: Text('Invalid current password'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                       }
                     },
               child: Text(show2FA ? 'Verify & Change' : 'Send Code'),
@@ -3452,9 +3628,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _pwField(TextEditingController ctrl, String label, bool obscure,
-      VoidCallback toggleObscure,
-      {VoidCallback? onChange}) {
+  Widget _pwField(
+    TextEditingController ctrl,
+    String label,
+    bool obscure,
+    VoidCallback toggleObscure, {
+    VoidCallback? onChange,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: _isDark ? Colors.white12 : Colors.grey.shade50,
@@ -3470,13 +3650,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           labelStyle: TextStyle(color: _textSecondary),
           prefixIcon: Icon(Icons.lock_outline, color: _accent),
           suffixIcon: IconButton(
-            icon: Icon(obscure ? Icons.visibility_off : Icons.visibility,
-                color: _textSecondary),
+            icon: Icon(
+              obscure ? Icons.visibility_off : Icons.visibility,
+              color: _textSecondary,
+            ),
             onPressed: toggleObscure,
           ),
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
         ),
       ),
     );
@@ -3501,14 +3685,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: _accent.withValues(alpha: _isDark ? 0.18 : 0.14)),
+        border: Border.all(
+          color: _accent.withValues(alpha: _isDark ? 0.18 : 0.14),
+        ),
         boxShadow: [
           BoxShadow(
-              color: (_isDark ? Colors.black : _accent)
-                  .withValues(alpha: _isDark ? 0.24 : 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 3))
+            color: (_isDark ? Colors.black : _accent).withValues(
+              alpha: _isDark ? 0.24 : 0.08,
+            ),
+            blurRadius: 16,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
       child: Row(
@@ -3534,11 +3721,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       fit: BoxFit.cover,
                       width: 52,
                       height: 52,
-                      errorBuilder: (_, __, ___) => Icon(
-                        Icons.person_rounded,
-                        color: _accent,
-                        size: 28,
-                      ),
+                      errorBuilder: (_, __, ___) =>
+                          Icon(Icons.person_rounded, color: _accent, size: 28),
                     )
                   : Icon(Icons.person_rounded, color: _accent, size: 28),
             ),
@@ -3549,21 +3733,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    authProvider.isAuthenticated
-                        ? (authProvider.userEmail ?? 'Signed in')
-                        : 'Offline vault',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: _textPrimary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                  authProvider.isAuthenticated
+                      ? (authProvider.userEmail ?? 'Signed in')
+                      : 'Offline vault',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: _textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
                 Text(
-                    authProvider.isAuthenticated
-                        ? 'Automatic sync enabled'
-                        : 'Local codes only',
-                    style: TextStyle(fontSize: 12, color: _textSecondary)),
+                  authProvider.isAuthenticated
+                      ? 'Automatic sync enabled'
+                      : 'Local codes only',
+                  style: TextStyle(fontSize: 12, color: _textSecondary),
+                ),
               ],
             ),
           ),
@@ -3573,22 +3760,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: const Color(0xFF10B981).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                color: const Color(0xFF10B981).withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                        shape: BoxShape.circle, color: Color(0xFF10B981))),
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
                 const SizedBox(width: 5),
-                Text(authProvider.isAuthenticated ? 'Synced' : 'Offline',
-                    style: const TextStyle(
-                        color: Color(0xFF10B981),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  authProvider.isAuthenticated ? 'Synced' : 'Offline',
+                  style: const TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -3600,12 +3794,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _sectionLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 10),
-      child: Text(text.toUpperCase(),
-          style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: _textSecondary,
-              letterSpacing: 1.0)),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: _textSecondary,
+          letterSpacing: 1.0,
+        ),
+      ),
     );
   }
 
@@ -3614,14 +3811,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: _accent.withValues(alpha: _isDark ? 0.14 : 0.08)),
+        border: Border.all(
+          color: _accent.withValues(alpha: _isDark ? 0.14 : 0.08),
+        ),
         boxShadow: [
           BoxShadow(
-              color: (_isDark ? Colors.black : _accent)
-                  .withValues(alpha: _isDark ? 0.22 : 0.045),
-              blurRadius: 14,
-              offset: const Offset(0, 3))
+            color: (_isDark ? Colors.black : _accent).withValues(
+              alpha: _isDark ? 0.22 : 0.045,
+            ),
+            blurRadius: 14,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
       child: Column(children: children),
@@ -3637,24 +3837,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          _iconBox(mode == ThemeMode.system
-              ? Icons.brightness_auto_rounded
-              : mode == ThemeMode.dark
-                  ? Icons.dark_mode_rounded
-                  : Icons.light_mode_rounded),
+          _iconBox(
+            mode == ThemeMode.system
+                ? Icons.brightness_auto_rounded
+                : mode == ThemeMode.dark
+                ? Icons.dark_mode_rounded
+                : Icons.light_mode_rounded,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Theme',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: _textPrimary)),
+                Text(
+                  'Theme',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: _textPrimary,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(_themeModeSubtitle(mode),
-                    style: TextStyle(fontSize: 12, color: _textSecondary)),
+                Text(
+                  _themeModeSubtitle(mode),
+                  style: TextStyle(fontSize: 12, color: _textSecondary),
+                ),
                 const SizedBox(height: 10),
                 SegmentedButton<ThemeMode>(
                   showSelectedIcon: false,
@@ -3713,14 +3920,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: _textPrimary)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: _textPrimary,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(sub,
-                    style: TextStyle(fontSize: 12, color: _textSecondary)),
+                Text(
+                  sub,
+                  style: TextStyle(fontSize: 12, color: _textSecondary),
+                ),
               ],
             ),
           ),
@@ -3760,11 +3972,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: color)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: color,
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Text(sub, style: TextStyle(fontSize: 12, color: subColor)),
                 ],
@@ -3772,9 +3987,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             trailing ??
                 (onTap != null
-                    ? Icon(Icons.chevron_right_rounded,
+                    ? Icon(
+                        Icons.chevron_right_rounded,
                         color: _isDark ? Colors.white24 : Colors.grey.shade300,
-                        size: 20)
+                        size: 20,
+                      )
                     : const SizedBox.shrink()),
           ],
         ),
@@ -3809,7 +4026,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         color: color,
         shape: BoxShape.circle,
         border: Border.all(
-            color: _isDark ? Colors.white24 : Colors.grey.shade200, width: 2),
+          color: _isDark ? Colors.white24 : Colors.grey.shade200,
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
             color: color.withValues(alpha: 0.24),
@@ -4239,27 +4458,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
         decoration: BoxDecoration(
-            color: _cardColor,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(20))),
+          color: _cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
-                child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: _isDark ? Colors.white24 : Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2)))),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: _isDark ? Colors.white24 : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
-            Text('Accent Color',
-                style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    color: _textPrimary)),
+            Text(
+              'Accent Color',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: _textPrimary,
+              ),
+            ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 14,
@@ -4288,7 +4513,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               : Colors.transparent,
                           blurRadius: 14,
                           offset: const Offset(0, 4),
-                        )
+                        ),
                       ],
                     ),
                     child: Container(
@@ -4298,8 +4523,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         border: Border.all(color: Colors.white, width: 2),
                       ),
                       child: selected
-                          ? const Icon(Icons.check_rounded,
-                              color: Colors.white, size: 20)
+                          ? const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            )
                           : null,
                     ),
                   ),
@@ -4320,12 +4548,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!_syncEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Sync is disabled. Enable "Sync to Cloud" first.'),
-        backgroundColor: Colors.orange,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Sync is disabled. Enable "Sync to Cloud" first.',
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
       return;
     }
 
@@ -4334,17 +4568,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() => _isSyncing = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-        success
-            ? 'Sync complete'
-            : (_syncService.lastErrorMessage ??
-                'Sync failed. Check your internet connection.'),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Sync complete'
+              : (_syncService.lastErrorMessage ??
+                    'Sync failed. Check your internet connection.'),
+        ),
+        backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
-      backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    ));
+    );
   }
 
   void _logout() async {
@@ -4354,16 +4590,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text('Logout', style: TextStyle(color: _textPrimary)),
-        content: Text('Your codes will remain saved on this device.',
-            style: TextStyle(color: _textSecondary, fontSize: 13)),
+        content: Text(
+          'Your codes will remain saved on this device.',
+          style: TextStyle(color: _textSecondary, fontSize: 13),
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: _accent, foregroundColor: Colors.white),
+              backgroundColor: _accent,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Logout'),
           ),
         ],

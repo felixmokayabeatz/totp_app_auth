@@ -18,8 +18,8 @@ class OTPService {
     if (_cachedUserId != null) return _cachedUserId!;
     _cachedUserId =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
-            'default_user';
+        await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
+        'default_user';
     return _cachedUserId!;
   }
 
@@ -48,8 +48,10 @@ class OTPService {
       final userId = await getCurrentUserId();
       final secret = _safeDecrypt(encryptedSecret, userId);
 
-      final cleanSecret =
-          secret.toUpperCase().replaceAll(RegExp(r'[^A-Z2-7]'), '');
+      final cleanSecret = secret.toUpperCase().replaceAll(
+        RegExp(r'[^A-Z2-7]'),
+        '',
+      );
 
       if (cleanSecret.isEmpty) {
         debugPrint('Empty secret after cleaning');
@@ -67,7 +69,8 @@ class OTPService {
       final hash = hmac.convert(counterBytes.buffer.asUint8List());
 
       final offset = hash.bytes[19] & 0xf;
-      final code = ((hash.bytes[offset] & 0x7f) << 24) |
+      final code =
+          ((hash.bytes[offset] & 0x7f) << 24) |
           ((hash.bytes[offset + 1] & 0xff) << 16) |
           ((hash.bytes[offset + 2] & 0xff) << 8) |
           (hash.bytes[offset + 3] & 0xff);

@@ -37,7 +37,8 @@ class BiometricService {
       );
     } on LocalAuthException catch (e) {
       debugPrint(
-          'Device auth local_auth error: ${e.code.name} ${e.description}');
+        'Device auth local_auth error: ${e.code.name} ${e.description}',
+      );
       return false;
     } on PlatformException catch (e) {
       debugPrint('Device auth platform error: ${e.code} ${e.message}');
@@ -140,8 +141,9 @@ class BiometricService {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text('Enter PIN'),
           content: Column(
             mainAxisSize: MainAxisSize.min,

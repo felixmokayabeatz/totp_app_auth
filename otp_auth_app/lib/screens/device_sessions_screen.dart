@@ -120,7 +120,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           success
               ? '${session.deviceLabel} was signed out.'
               : (_syncService.lastErrorMessage ??
-                  'Could not sign out this device.'),
+                    'Could not sign out this device.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -151,8 +151,10 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Sign Out Other Devices',
-            style: TextStyle(color: _textPrimary)),
+        title: Text(
+          'Sign Out Other Devices',
+          style: TextStyle(color: _textPrimary),
+        ),
         content: Text(
           'This will sign out other devices but keep your current device and the primary device active.',
           style: TextStyle(color: _textSecondary),
@@ -188,7 +190,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           success
               ? 'Signed out $revokedCount other device${revokedCount == 1 ? '' : 's'}.'
               : (_syncService.lastErrorMessage ??
-                  'Could not sign out the other devices.'),
+                    'Could not sign out the other devices.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -211,8 +213,9 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           backgroundColor: _cardColor,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Text(
             'Confirm Primary Device',
             style: TextStyle(color: _textPrimary),
@@ -294,8 +297,10 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
     if (password == null) return;
 
     setState(() => _primaryUpdateSessionId = session.id);
-    final success =
-        await _syncService.setPrimaryDeviceSession(session.id, password);
+    final success = await _syncService.setPrimaryDeviceSession(
+      session.id,
+      password,
+    );
     if (!mounted) return;
 
     setState(() => _primaryUpdateSessionId = null);
@@ -305,7 +310,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           success
               ? '${session.deviceLabel} is now your primary device.'
               : (_syncService.lastErrorMessage ??
-                  'Could not set the primary device.'),
+                    'Could not set the primary device.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -366,9 +371,9 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
         .where((session) => !session.isCurrent && !session.isPrimary)
         .length;
     final primarySession = _sessions.cast<DeviceSessionInfo?>().firstWhere(
-          (session) => session?.isPrimary == true,
-          orElse: () => null,
-        );
+      (session) => session?.isPrimary == true,
+      orElse: () => null,
+    );
     final canChangePrimaryDevice = _canChangePrimaryDevice;
 
     return Container(
@@ -553,8 +558,10 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
               ),
               if (session.isPrimary)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
@@ -572,8 +579,10 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
                 const SizedBox(width: 8),
               if (session.isCurrent)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF10B981).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),

@@ -100,7 +100,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
     if (result == null) {
       setState(() {
         _isStarting = false;
-        _errorMessage = _syncService.lastErrorMessage ??
+        _errorMessage =
+            _syncService.lastErrorMessage ??
             'Passwordless sign-in could not be started.';
       });
       return;
@@ -120,7 +121,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
     if (requestId.isEmpty) {
       setState(() {
         _isStarting = false;
-        _errorMessage = result['error']?.toString() ??
+        _errorMessage =
+            result['error']?.toString() ??
             _syncService.lastErrorMessage ??
             'Passwordless sign-in could not be started.';
       });
@@ -138,7 +140,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
       _primaryDeviceLabel = result['primary_device_label']?.toString();
       _pushStatusMessage = result['push_status_message']?.toString();
       _pushStatusReason = result['push_status_reason']?.toString();
-      _statusMessage = result['message']?.toString() ??
+      _statusMessage =
+          result['message']?.toString() ??
           'Open BeatzLock on your primary phone and approve this sign-in there.';
     });
 
@@ -168,9 +171,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
     if (status == 'pending') {
       setState(() {
         _code = result['verification_code']?.toString() ?? _code;
-        _codeExpiresAt = DateTime.tryParse(
-              result['code_expires_at']?.toString() ?? '',
-            ) ??
+        _codeExpiresAt =
+            DateTime.tryParse(result['code_expires_at']?.toString() ?? '') ??
             _codeExpiresAt;
       });
       return;
@@ -183,7 +185,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
     }
 
     setState(() {
-      _errorMessage = result['error']?.toString() ??
+      _errorMessage =
+          result['error']?.toString() ??
           _syncService.lastErrorMessage ??
           'Passwordless sign-in could not be completed.';
     });
@@ -236,8 +239,11 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.phonelink_lock_rounded,
-                            size: 54, color: _accent),
+                        Icon(
+                          Icons.phonelink_lock_rounded,
+                          size: 54,
+                          color: _accent,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'Approve on your primary phone',
@@ -301,10 +307,10 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                                                 .isNotEmpty
                                         ? _pushStatusMessage!
                                         : 'Check the primary phone to approve. '
-                                            'If BeatzLock is closed there, the request should '
-                                            'appear in the notification bar. If it is already '
-                                            'open, the approval prompt should appear right '
-                                            'inside the app.'),
+                                              'If BeatzLock is closed there, the request should '
+                                              'appear in the notification bar. If it is already '
+                                              'open, the approval prompt should appear right '
+                                              'inside the app.'),
                                     style: TextStyle(
                                       color: _pushStatusReason == 'sent'
                                           ? _textSecondary
@@ -326,7 +332,9 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 18),
+                              horizontal: 16,
+                              vertical: 18,
+                            ),
                             decoration: BoxDecoration(
                               color: _isDark
                                   ? Colors.white.withValues(alpha: 0.05)

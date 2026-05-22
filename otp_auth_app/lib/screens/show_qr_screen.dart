@@ -52,8 +52,10 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
   void initState() {
     super.initState();
     _refreshOtp();
-    _otpTimer =
-        Timer.periodic(const Duration(seconds: 1), (_) => _refreshOtp());
+    _otpTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _refreshOtp(),
+    );
   }
 
   @override
@@ -87,22 +89,19 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     final accountDescriptor = accountLabel.isNotEmpty
         ? '${accountLabel.contains('@') ? 'Email' : 'Account'}: $accountLabel'
         : widget.issuer ?? 'Authenticator setup';
-    final query = Uri(queryParameters: {
-      'secret': _base32Secret,
-      'issuer': issuer,
-    }).query;
+    final query = Uri(
+      queryParameters: {'secret': _base32Secret, 'issuer': issuer},
+    ).query;
     final otpUrl = 'otpauth://totp/${Uri.encodeComponent(label)}?$query';
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
+      backgroundColor: isDark
+          ? const Color(0xFF0F0F1A)
+          : const Color(0xFFF0F2FF),
       appBar: AppBar(
         title: const Text(
           'QR Code',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: colorScheme.primary,
         elevation: 0,
@@ -125,8 +124,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
             final outerPadding = constraints.maxWidth >= 1200
                 ? 32.0
                 : constraints.maxWidth >= 700
-                    ? 24.0
-                    : 16.0;
+                ? 24.0
+                : 16.0;
 
             final serviceCard = _buildPanel(
               context,
@@ -156,10 +155,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         const SizedBox(height: 3),
                         Text(
                           accountDescriptor,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: mutedText,
-                          ),
+                          style: TextStyle(fontSize: 13, color: mutedText),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -211,8 +207,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
-                                  color: colorScheme.outlineVariant
-                                      .withValues(alpha: 0.35),
+                                  color: colorScheme.outlineVariant.withValues(
+                                    alpha: 0.35,
+                                  ),
                                 ),
                               ),
                               child: _QrCodeView(
@@ -267,7 +264,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.05)
@@ -276,8 +275,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.qr_code_scanner_rounded,
-                            size: 18, color: colorScheme.primary),
+                        Icon(
+                          Icons.qr_code_scanner_rounded,
+                          size: 18,
+                          color: colorScheme.primary,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -292,7 +294,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.05)
@@ -301,8 +305,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.qr_code_scanner_rounded,
-                            size: 18, color: colorScheme.primary),
+                        Icon(
+                          Icons.qr_code_scanner_rounded,
+                          size: 18,
+                          color: colorScheme.primary,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -356,8 +363,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                             : () {
                                 _revealSensitiveInfo();
                               },
-                        tooltip:
-                            _isSecretRevealed ? 'Hide secret' : 'Reveal secret',
+                        tooltip: _isSecretRevealed
+                            ? 'Hide secret'
+                            : 'Reveal secret',
                       ),
                     ],
                   ),
@@ -379,8 +387,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                         border: Border.all(
                           color: isDark
                               ? Colors.white.withValues(alpha: 0.08)
-                              : colorScheme.outlineVariant
-                                  .withValues(alpha: 0.4),
+                              : colorScheme.outlineVariant.withValues(
+                                  alpha: 0.4,
+                                ),
                         ),
                       ),
                       child: _isSecretRevealed
@@ -397,8 +406,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(Icons.lock_outline_rounded,
-                                    color: mutedText, size: 22),
+                                Icon(
+                                  Icons.lock_outline_rounded,
+                                  color: mutedText,
+                                  size: 22,
+                                ),
                                 const SizedBox(height: 10),
                                 Text(
                                   'Enter PIN to reveal',
@@ -460,8 +472,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                               : Colors.white,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: colorScheme.outlineVariant
-                                .withValues(alpha: 0.35),
+                            color: colorScheme.outlineVariant.withValues(
+                              alpha: 0.35,
+                            ),
                           ),
                         ),
                         child: Column(
@@ -481,8 +494,10 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                 ),
                                 IconButton(
                                   onPressed: _copyAdvancedSecret,
-                                  icon:
-                                      const Icon(Icons.copy_rounded, size: 18),
+                                  icon: const Icon(
+                                    Icons.copy_rounded,
+                                    size: 18,
+                                  ),
                                   tooltip: 'Copy advanced Base64',
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -520,8 +535,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.warning_amber_rounded,
-                            color: Color(0xFFF59E0B), size: 18),
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFF59E0B),
+                          size: 18,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -546,19 +564,17 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: isDark
-                      ? [
-                          const Color(0xFF141629),
-                          const Color(0xFF0F0F1A),
-                        ]
-                      : [
-                          const Color(0xFFF7F8FA),
-                          const Color(0xFFEDEFF3),
-                        ],
+                      ? [const Color(0xFF141629), const Color(0xFF0F0F1A)]
+                      : [const Color(0xFFF7F8FA), const Color(0xFFEDEFF3)],
                 ),
               ),
               child: SingleChildScrollView(
-                padding:
-                    EdgeInsets.fromLTRB(outerPadding, 20, outerPadding, 28),
+                padding: EdgeInsets.fromLTRB(
+                  outerPadding,
+                  20,
+                  outerPadding,
+                  28,
+                ),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1100),
@@ -730,8 +746,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   color: isExpiring
                       ? Colors.red
                       : (isDark
-                          ? Colors.white60
-                          : colorScheme.onSurfaceVariant),
+                            ? Colors.white60
+                            : colorScheme.onSurfaceVariant),
                 ),
               ),
             ],
@@ -833,8 +849,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         backgroundColor: isDark ? const Color(0xFF1E1E32) : Colors.white,
         title: Row(
           children: [
-            Icon(Icons.help_outline,
-                color: Theme.of(context).colorScheme.primary, size: 24),
+            Icon(
+              Icons.help_outline,
+              color: Theme.of(context).colorScheme.primary,
+              size: 24,
+            ),
             const SizedBox(width: 10),
             const Text('About Secret Key'),
           ],

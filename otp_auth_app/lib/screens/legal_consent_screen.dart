@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 import 'legal_document_screen.dart';
 
 class LegalConsentScreen extends StatefulWidget {
-  const LegalConsentScreen({
-    super.key,
-    required this.onAccepted,
-  });
+  const LegalConsentScreen({super.key, required this.onAccepted});
 
   final Future<void> Function() onAccepted;
 
@@ -22,10 +19,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => LegalDocumentScreen(
-          type: type,
-          fallbackTitle: title,
-        ),
+        builder: (_) => LegalDocumentScreen(type: type, fallbackTitle: title),
       ),
     );
   }
@@ -58,10 +52,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              colorScheme.primary,
-              colorScheme.secondary,
-            ],
+            colors: [colorScheme.primary, colorScheme.secondary],
           ),
         ),
         child: SafeArea(
@@ -88,8 +79,9 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                   width: 72,
                                   height: 72,
                                   decoration: BoxDecoration(
-                                    color: colorScheme.primary
-                                        .withValues(alpha: 0.12),
+                                    color: colorScheme.primary.withValues(
+                                      alpha: 0.12,
+                                    ),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
@@ -137,8 +129,9 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                   setState(() => _accepted = !_accepted);
                                 },
                                 child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
                                   child: Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -154,15 +147,16 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 12),
+                                          padding: const EdgeInsets.only(
+                                            top: 12,
+                                          ),
                                           child: Text(
                                             'I have read and agree to the Terms of Service and Privacy Policy.',
-                                            style:
-                                                textTheme.bodyMedium?.copyWith(
-                                              color: colorScheme.onSurface,
-                                              height: 1.35,
-                                            ),
+                                            style: textTheme.bodyMedium
+                                                ?.copyWith(
+                                                  color: colorScheme.onSurface,
+                                                  height: 1.35,
+                                                ),
                                           ),
                                         ),
                                       ),
@@ -174,8 +168,9 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                               SizedBox(
                                 width: double.infinity,
                                 child: FilledButton.icon(
-                                  onPressed:
-                                      _accepted && !_isSaving ? _accept : null,
+                                  onPressed: _accepted && !_isSaving
+                                      ? _accept
+                                      : null,
                                   icon: _isSaving
                                       ? const SizedBox(
                                           width: 18,

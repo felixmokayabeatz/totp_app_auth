@@ -13,19 +13,22 @@ class ProfileService {
   final SecureStorageService _secureStorage = SecureStorageService();
 
   ProfileService() {
-    _dio = Dio(BaseOptions(
-      baseUrl: AppConfig.apiUrl, // Use config
-      connectTimeout: Duration(seconds: 30),
-      receiveTimeout: Duration(seconds: 30),
-    ));
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: AppConfig.apiUrl, // Use config
+        connectTimeout: Duration(seconds: 30),
+        receiveTimeout: Duration(seconds: 30),
+      ),
+    );
   }
 
   Future<bool> _refreshToken() async {
     if (_isRefreshing) return false;
 
     _isRefreshing = true;
-    final refreshToken =
-        await _secureStorage.read(SecureStorageService.refreshTokenKey);
+    final refreshToken = await _secureStorage.read(
+      SecureStorageService.refreshTokenKey,
+    );
 
     if (refreshToken == null) {
       _isRefreshing = false;
@@ -34,14 +37,17 @@ class ProfileService {
 
     try {
       debugPrint('Refreshing token for profile service...');
-      final response = await _dio.post('token/refresh/', data: {
-        'refresh': refreshToken,
-      });
+      final response = await _dio.post(
+        'token/refresh/',
+        data: {'refresh': refreshToken},
+      );
 
       if (response.statusCode == 200) {
         final newAccessToken = response.data['access'];
         await _secureStorage.write(
-            SecureStorageService.accessTokenKey, newAccessToken);
+          SecureStorageService.accessTokenKey,
+          newAccessToken,
+        );
         debugPrint('Token refreshed successfully for profile service');
         _isRefreshing = false;
         return true;
@@ -56,7 +62,8 @@ class ProfileService {
   }
 
   Future<Response> _requestWithRetry(
-      Future<Response> Function() request) async {
+    Future<Response> Function() request,
+  ) async {
     try {
       return await request();
     } on DioException catch (e) {
@@ -85,15 +92,17 @@ class ProfileService {
 
     try {
       debugPrint('Making profile request...');
-      final response = await _requestWithRetry(() => _dio.get(
-            'profile/my_profile/',
-            options: Options(
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Content-Type': 'application/json',
-              },
-            ),
-          ));
+      final response = await _requestWithRetry(
+        () => _dio.get(
+          'profile/my_profile/',
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          ),
+        ),
+      );
 
       debugPrint('Profile response status: ${response.statusCode}');
 
@@ -126,15 +135,13 @@ class ProfileService {
       });
 
       debugPrint('Uploading photo...');
-      final response = await _requestWithRetry(() => _dio.post(
-            'profile/update_profile/',
-            data: formData,
-            options: Options(
-              headers: {
-                'Authorization': 'Bearer $token',
-              },
-            ),
-          ));
+      final response = await _requestWithRetry(
+        () => _dio.post(
+          'profile/update_profile/',
+          data: formData,
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        ),
+      );
 
       debugPrint('Upload response status: ${response.statusCode}');
 
@@ -158,16 +165,18 @@ class ProfileService {
 
     try {
       debugPrint('Updating bio...');
-      final response = await _requestWithRetry(() => _dio.post(
-            'profile/update_profile/',
-            data: {'bio': bio},
-            options: Options(
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Content-Type': 'application/json',
-              },
-            ),
-          ));
+      final response = await _requestWithRetry(
+        () => _dio.post(
+          'profile/update_profile/',
+          data: {'bio': bio},
+          options: Options(
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          ),
+        ),
+      );
 
       debugPrint('Bio update response status: ${response.statusCode}');
 

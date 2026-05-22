@@ -47,7 +47,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       _userEmail = 'No email';
       _username = 'User';
     });
-    final email = await secureStorage.read(SecureStorageService.userEmailKey) ??
+    final email =
+        await secureStorage.read(SecureStorageService.userEmailKey) ??
         'No email';
     final username =
         await secureStorage.read(SecureStorageService.currentUserKey) ?? 'User';
@@ -194,9 +195,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           maxLines: 3,
           decoration: InputDecoration(
             hintText: 'Tell something about yourself...',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
         actions: [
@@ -226,10 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       appBar: AppBar(
         title: Text(
           'Profile',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: _accent,
         elevation: 0,
@@ -280,26 +276,26 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         height: 120,
                                       )
                                     : (_profileImageUrl != null &&
-                                            _profileImageUrl!.isNotEmpty
-                                        ? Image.network(
-                                            '${AppConfig.mediaUrl}${_profileImageUrl!.replaceFirst('/media/', '')}',
-                                            fit: BoxFit.cover,
-                                            width: 120,
-                                            height: 120,
-                                            errorBuilder:
-                                                (context, error, stackTrace) {
-                                              return Icon(
-                                                Icons.person,
-                                                size: 50,
-                                                color: Colors.white,
-                                              );
-                                            },
-                                          )
-                                        : Icon(
-                                            Icons.person,
-                                            size: 50,
-                                            color: Colors.white,
-                                          )),
+                                              _profileImageUrl!.isNotEmpty
+                                          ? Image.network(
+                                              '${AppConfig.mediaUrl}${_profileImageUrl!.replaceFirst('/media/', '')}',
+                                              fit: BoxFit.cover,
+                                              width: 120,
+                                              height: 120,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                    return Icon(
+                                                      Icons.person,
+                                                      size: 50,
+                                                      color: Colors.white,
+                                                    );
+                                                  },
+                                            )
+                                          : Icon(
+                                              Icons.person,
+                                              size: 50,
+                                              color: Colors.white,
+                                            )),
                               ),
                             ),
                             // Edit Button
@@ -384,8 +380,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color:
-                                    isDark ? Colors.white : Color(0xFF1A1A2E),
+                                color: isDark
+                                    ? Colors.white
+                                    : Color(0xFF1A1A2E),
                               ),
                             ),
                             IconButton(
@@ -444,7 +441,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                         _infoRow(Icons.email, 'Email', _userEmail, isDark),
                         _infoRow(Icons.person, 'Username', _username, isDark),
                         _infoRow(
-                            Icons.security, '2FA Status', 'Enabled', isDark),
+                          Icons.security,
+                          '2FA Status',
+                          'Enabled',
+                          isDark,
+                        ),
                       ],
                     ),
                   ),

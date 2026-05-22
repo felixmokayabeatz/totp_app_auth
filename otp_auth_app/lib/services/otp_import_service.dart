@@ -24,10 +24,7 @@ class OTPImportService {
     return preserveDuplicates ? entries : _dedupe(entries);
   }
 
-  List<OTPImportEntry> parse(
-    String input, {
-    bool preserveDuplicates = false,
-  }) {
+  List<OTPImportEntry> parse(String input, {bool preserveDuplicates = false}) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return const [];
 
@@ -106,16 +103,14 @@ class OTPImportService {
         continue;
       }
 
-      final uriEntries = _extractUriEntries(
-        row,
-        uriIndex: uriIndex,
-      );
+      final uriEntries = _extractUriEntries(row, uriIndex: uriIndex);
       if (uriEntries.isNotEmpty) {
         entries.addAll(uriEntries);
         continue;
       }
 
-      final resolvedSecretIndex = secretIndex ??
+      final resolvedSecretIndex =
+          secretIndex ??
           row.indexWhere((cell) => _isBase32Secret(_cleanSecret(cell)));
       if (resolvedSecretIndex < 0 || resolvedSecretIndex >= row.length) {
         continue;
@@ -124,12 +119,14 @@ class OTPImportService {
       final secret = _cleanSecret(row[resolvedSecretIndex]);
       if (!_isBase32Secret(secret)) continue;
 
-      final service = _readCell(row, serviceIndex) ??
+      final service =
+          _readCell(row, serviceIndex) ??
           _readCell(row, issuerIndex) ??
           (resolvedSecretIndex == 0 ? null : row.first.trim());
       if (service == null || service.trim().isEmpty) continue;
 
-      final accountLabel = _readCell(row, accountIndex) ??
+      final accountLabel =
+          _readCell(row, accountIndex) ??
           _guessAccountLabel(row, resolvedSecretIndex, service);
 
       entries.add(
@@ -343,10 +340,7 @@ class OTPImportService {
     return passwordSignals >= 1 && otpSignals == 0;
   }
 
-  List<OTPImportEntry> _extractUriEntries(
-    List<String> row, {
-    int? uriIndex,
-  }) {
+  List<OTPImportEntry> _extractUriEntries(List<String> row, {int? uriIndex}) {
     final candidates = <String>[];
     if (uriIndex != null && uriIndex >= 0 && uriIndex < row.length) {
       final direct = row[uriIndex].trim();
@@ -390,14 +384,16 @@ class OTPImportService {
       final rawItems = decoded is List
           ? decoded
           : decoded is Map && decoded['accounts'] is List
-              ? decoded['accounts'] as List
-              : const [];
+          ? decoded['accounts'] as List
+          : const [];
 
       return rawItems
           .whereType<Map>()
           .expand(_entriesFromJsonItem)
-          .where((entry) =>
-              entry.service.isNotEmpty && _isBase32Secret(entry.secret))
+          .where(
+            (entry) =>
+                entry.service.isNotEmpty && _isBase32Secret(entry.secret),
+          )
           .toList();
     } catch (_) {
       return const [];
@@ -428,14 +424,16 @@ class OTPImportService {
       return const [];
     }
 
-    final secret = _cleanSecret(_firstNonEmpty([
-          normalized['secret'],
-          normalized['secret key'],
-          normalized['otp secret'],
-          normalized['totp secret'],
-          normalized['totp_secret'],
-        ]) ??
-        '');
+    final secret = _cleanSecret(
+      _firstNonEmpty([
+            normalized['secret'],
+            normalized['secret key'],
+            normalized['otp secret'],
+            normalized['totp secret'],
+            normalized['totp_secret'],
+          ]) ??
+          '',
+    );
     final service = _firstNonEmpty([
       normalized['service'],
       normalized['issuer'],
