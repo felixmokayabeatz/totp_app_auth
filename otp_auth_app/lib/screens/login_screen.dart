@@ -1332,7 +1332,8 @@ class _LoginScreenState extends State<LoginScreen> {
     await authProvider.setUserData(currentUsername, email, userId);
     if (!mounted) return;
 
-    unawaited(PushMessagingService().syncCurrentPushTokenIfPossible(force: true));
+    unawaited(
+        PushMessagingService().syncCurrentPushTokenIfPossible(force: true));
 
     if (widget.returnToPreviousOnOffline && Navigator.of(context).canPop()) {
       Navigator.of(context).pop(true);

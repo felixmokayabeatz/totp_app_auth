@@ -363,10 +363,7 @@ class _PasswordlessRequestsScreenState
             : 'Sign-in request approved.'
         : 'Sign-in request denied.';
 
-    if (success &&
-        approve &&
-        widget.closeOnSuccessfulApproval &&
-        mounted) {
+    if (success && approve && widget.closeOnSuccessfulApproval && mounted) {
       Navigator.pop(context, successMessage);
       return;
     }

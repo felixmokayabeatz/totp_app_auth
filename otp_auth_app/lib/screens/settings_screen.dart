@@ -230,10 +230,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (result.started) {
         if (result.requiresAppExit) {
-          final continueUpdate =
-              await _showReadyToCloseForUpdateDialog(result.message);
-          if (!mounted || continueUpdate != true) return;
-
           try {
             unawaited(_showInstallingUpdateDialog());
             await Future<void>.delayed(const Duration(milliseconds: 300));
@@ -354,7 +350,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String get _updateDialogMessage {
     if (_appUpdateService.canSelfUpdate) {
-      return 'BeatzLock can download this update now. When the download finishes, click OK to close the app and continue the update on Windows or Linux/Kali.';
+      return 'BeatzLock can download this update now. When the download finishes, the app will close and the installer will open.';
     }
     if (_appUpdateService.canDownloadUpdateInApp && _isAndroidUpdateDownload) {
       return 'BeatzLock can download the APK to your Downloads folder from settings. Open the saved APK from Downloads to install it.';
@@ -380,7 +376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isAndroidUpdateDownload) {
       return 'Downloading the APK to your Downloads folder. The rate shown is the average transfer speed. Open it from Downloads after the transfer finishes to install the update.';
     }
-    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will ask for one more OK before the app closes and the update begins.';
+    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will close and open the installer.';
   }
 
   String _backupCodeStatusSubtitle() {
@@ -4172,43 +4168,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<bool?> _showReadyToCloseForUpdateDialog(String message) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: _cardColor,
-        title: Row(
-          children: [
-            Icon(Icons.check_circle_outline_rounded, color: _accent),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Update Ready',
-                style: TextStyle(color: _textPrimary, fontSize: 18),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          message,
-          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Later'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _showInstallingUpdateDialog() {
     return showDialog<void>(
       context: context,
@@ -4222,7 +4181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Installing Update',
+                'Opening Installer',
                 style: TextStyle(color: _textPrimary, fontSize: 18),
               ),
             ),
@@ -4241,7 +4200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 14),
             Expanded(
               child: Text(
-                'BeatzLock is closing so the update can install and restart the app.',
+                'BeatzLock is closing so the installer can open.',
                 style: TextStyle(
                   color: _textSecondary,
                   fontSize: 13,

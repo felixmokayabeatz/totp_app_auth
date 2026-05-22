@@ -217,7 +217,7 @@ class AppUpdateService {
       await _prepareDesktopUpdate(installerPath);
       return const AppSelfUpdateResult(
         started: true,
-        message: 'Update is ready. Click OK to install and restart BeatzLock.',
+        message: 'Update downloaded. Opening the installer now.',
         requiresAppExit: true,
       );
     } on DioException catch (e) {
@@ -406,14 +406,7 @@ class AppUpdateService {
   Future<void> _prepareDesktopUpdate(String installerPath) async {
     if (Platform.isWindows) {
       _pendingLauncherExecutable = installerPath;
-      _pendingLauncherArguments = [
-        '/SP-',
-        '/VERYSILENT',
-        '/SUPPRESSMSGBOXES',
-        '/NORESTART',
-        '/CLOSEAPPLICATIONS',
-        '/RESTARTAPPLICATIONS',
-      ];
+      _pendingLauncherArguments = const [];
       return;
     }
 

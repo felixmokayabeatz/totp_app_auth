@@ -296,7 +296,9 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                                 Expanded(
                                   child: Text(
                                     (_pushStatusMessage != null &&
-                                            _pushStatusMessage!.trim().isNotEmpty
+                                            _pushStatusMessage!
+                                                .trim()
+                                                .isNotEmpty
                                         ? _pushStatusMessage!
                                         : 'Check the primary phone to approve. '
                                             'If BeatzLock is closed there, the request should '

@@ -104,6 +104,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _updateCheckInProgress = false;
   bool _sessionHeartbeatInProgress = false;
   bool _openingRequiredUpdate = false;
+  bool _openingRequiredDownloadPage = false;
   bool _sessionReady = false;
   bool _legalConsentAccepted = true;
   bool _onboardingCompleted = true;
@@ -300,10 +301,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             });
           },
         );
-        if (result.started) return;
+        if (result.started) {
+          if (result.requiresAppExit) {
+            await _appUpdateService.launchPreparedUpdateAndExit();
+          }
+          return;
+        }
         debugPrint('Self-update failed: ${result.message}');
       }
 
+      final opened = await _appUpdateService.openUpdate(info);
+      if (!opened) {
+        debugPrint('Failed to open manual update download page.');
+      }
+    } catch (e) {
+      debugPrint('Required update install failed: $e');
       final opened = await _appUpdateService.openUpdate(info);
       if (!opened) {
         debugPrint('Failed to open manual update download page.');
@@ -315,6 +327,73 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           _requiredUpdateProgress = null;
         });
       }
+    }
+  }
+
+  Future<void> _openRequiredManualDownloadPage() async {
+    final info = _requiredUpdateInfo;
+    final dialogContext = _navigatorKey.currentContext;
+    if (info == null ||
+        _openingRequiredDownloadPage ||
+        dialogContext == null ||
+        !dialogContext.mounted) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: dialogContext,
+      builder: (context) => AlertDialog(
+        title: const Text('Open Browser?'),
+        content: const Text(
+          'This will open the BeatzLock manual download page in your browser so you can choose and download an installer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _openingRequiredDownloadPage = true;
+    });
+
+    var opened = false;
+    try {
+      opened = await _appUpdateService.openManualDownloadPage(info);
+    } catch (e) {
+      debugPrint('Required update manual download page failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _openingRequiredDownloadPage = false;
+        });
+      }
+    }
+    if (!mounted) return;
+
+    final currentContext = _navigatorKey.currentContext;
+    if (currentContext != null && currentContext.mounted) {
+      ScaffoldMessenger.of(currentContext).showSnackBar(
+        SnackBar(
+          content: Text(
+            opened
+                ? 'Opening the manual download page.'
+                : 'Could not open the manual download page.',
+          ),
+          backgroundColor: opened
+              ? Theme.of(currentContext).colorScheme.primary
+              : Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -534,9 +613,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   ? _RequiredUpdateScreen(
                       info: _requiredUpdateInfo!,
                       isOpeningUpdate: _openingRequiredUpdate,
+                      isOpeningDownloadPage: _openingRequiredDownloadPage,
                       canSelfUpdate: _appUpdateService.canSelfUpdate,
                       updateProgress: _requiredUpdateProgress,
                       onUpdateNow: _openRequiredUpdate,
+                      onOpenManualDownloadPage: _openRequiredManualDownloadPage,
                       onRefreshStatus: _refreshUpdateStatus,
                     )
                   : !_legalConsentAccepted
@@ -568,17 +649,21 @@ class _RequiredUpdateScreen extends StatelessWidget {
   const _RequiredUpdateScreen({
     required this.info,
     required this.isOpeningUpdate,
+    required this.isOpeningDownloadPage,
     required this.canSelfUpdate,
     required this.updateProgress,
     required this.onUpdateNow,
+    required this.onOpenManualDownloadPage,
     required this.onRefreshStatus,
   });
 
   final AppUpdateInfo info;
   final bool isOpeningUpdate;
+  final bool isOpeningDownloadPage;
   final bool canSelfUpdate;
   final AppDownloadProgress? updateProgress;
   final Future<void> Function() onUpdateNow;
+  final Future<void> Function() onOpenManualDownloadPage;
   final Future<void> Function() onRefreshStatus;
 
   @override
@@ -715,9 +800,25 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                   label: Text(
                                     isOpeningUpdate
                                         ? (canSelfUpdate
-                                            ? 'Installing update...'
+                                            ? 'Downloading update...'
                                             : 'Opening download...')
                                         : 'Update now',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed:
+                                      (isOpeningUpdate || isOpeningDownloadPage)
+                                          ? null
+                                          : onOpenManualDownloadPage,
+                                  icon: const Icon(Icons.open_in_new_rounded),
+                                  label: Text(
+                                    isOpeningDownloadPage
+                                        ? 'Opening download page...'
+                                        : 'Open download page',
                                   ),
                                 ),
                               ),
@@ -766,7 +867,7 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                 const SizedBox(height: 8),
                                 Text(
                                   updateProgress?.sizeLabel ??
-                                      'Downloaded: 0 MB',
+                                      'Downloaded: 0 MiB',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
