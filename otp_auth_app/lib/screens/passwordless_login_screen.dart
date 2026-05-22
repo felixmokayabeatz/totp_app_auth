@@ -420,7 +420,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
 
   int _secondsUntilRefresh() {
     final expiresAt = _codeExpiresAt;
-    if (expiresAt == null) return 30;
+    if (expiresAt == null) return 60;
     final milliseconds = expiresAt.difference(DateTime.now()).inMilliseconds;
     if (milliseconds <= 0) return 0;
     return ((milliseconds + 999) / 1000).floor();

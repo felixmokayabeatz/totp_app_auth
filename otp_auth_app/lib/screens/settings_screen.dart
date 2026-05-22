@@ -164,19 +164,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _isCheckingForUpdates = true;
     });
 
-    final info = await _appUpdateService.checkForUpdate();
-    if (!mounted) return;
-
-    setState(() {
-      _updateInfo = info;
-      if ((_appVersionLabel == '...' ||
-              _appVersionLabel == 'Version unavailable') &&
-          info != null &&
-          info.currentVersion.trim().isNotEmpty) {
-        _appVersionLabel = info.currentLabel;
+    try {
+      final info = await _appUpdateService.checkForUpdate();
+      if (mounted) {
+        setState(() {
+          _updateInfo = info;
+          if (_appVersionLabel == '...' && info != null) {
+            _appVersionLabel = info.currentLabel;
+          }
+        });
       }
-      _isCheckingForUpdates = false;
-    });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingForUpdates = false;
+        });
+      }
+    }
   }
 
   Future<void> _handleUpdateTap() async {

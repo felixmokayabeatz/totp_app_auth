@@ -256,7 +256,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         self.assertEqual(start_response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(start_response.data['success'])
-        self.assertEqual(len(start_response.data['verification_code']), 3)
+        self.assertEqual(len(start_response.data['verification_code']), 4)
         self.assertTrue(start_response.data['unlock_transfer_key'])
         self.assertEqual(start_response.data['primary_device_label'], 'Primary Phone')
 

@@ -608,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Choose the exact 3-digit code shown on $label, then tap Accept.',
+                  'Choose the exact 4-digit code shown on $label, then tap Accept.',
                   style: TextStyle(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     height: 1.35,

@@ -102,7 +102,7 @@ def create_passwordless_request_notification(
         ),
         details=(
             f"Open BeatzLock on your primary phone and approve the passwordless "
-            f"sign-in request for {requester_device_label} only if the 3-digit "
+            f"sign-in request for {requester_device_label} only if the 4-digit "
             "code matches what you see on that device."
         ),
         metadata={

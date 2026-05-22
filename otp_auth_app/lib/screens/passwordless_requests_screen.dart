@@ -671,7 +671,7 @@ class _PasswordlessRequestsScreenState
                     Expanded(
                       child: Text(
                         isPending
-                            ? 'Choose the exact 3-digit code shown on $label.'
+                            ? 'Choose the exact 4-digit code shown on $label.'
                             : 'Encrypted sign-in log',
                         style: TextStyle(
                           color: _textPrimary,

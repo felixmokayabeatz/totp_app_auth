@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_config.dart';
+import '../config/app_build_info.dart';
 import '../models/app_update_info.dart';
 
 class AppUpdateService {
@@ -39,6 +40,29 @@ class AppUpdateService {
   bool get canDownloadUpdateInApp =>
       Platform.isWindows || Platform.isLinux || Platform.isAndroid;
 
+  Future<_CurrentAppVersion> _resolveCurrentAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final version = packageInfo.version.trim();
+      final buildNumber = packageInfo.buildNumber.trim();
+      if (version.isNotEmpty) {
+        return _CurrentAppVersion(
+          version: version,
+          buildNumber: buildNumber.isEmpty
+              ? AppBuildInfo.buildNumber
+              : buildNumber,
+        );
+      }
+    } catch (_) {
+      // Fall through to the bundled fallback below.
+    }
+
+    return const _CurrentAppVersion(
+      version: AppBuildInfo.version,
+      buildNumber: AppBuildInfo.buildNumber,
+    );
+  }
+
   String get currentPlatform {
     if (Platform.isAndroid) return 'android';
     if (Platform.isWindows) return 'windows';
@@ -62,17 +86,14 @@ class AppUpdateService {
       return null;
     }
 
-    final packageInfo = await PackageInfo.fromPlatform();
-    final version = packageInfo.version.trim();
-    final buildNumber = int.tryParse(packageInfo.buildNumber.trim()) ?? 0;
-
     try {
+      final currentAppVersion = await _resolveCurrentAppVersion();
       final response = await _dio.get(
         '',
         queryParameters: {
           'platform': platform,
-          'version': version,
-          'build_number': buildNumber,
+          'version': currentAppVersion.version,
+          'build_number': currentAppVersion.parsedBuildNumber,
         },
       );
 
@@ -94,32 +115,8 @@ class AppUpdateService {
   }
 
   Future<String> getCurrentVersionLabel() async {
-    try {
-      final packageInfo = await PackageInfo.fromPlatform();
-      final version = packageInfo.version.trim();
-      final buildNumber = packageInfo.buildNumber.trim();
-      if (version.isNotEmpty) {
-        return buildNumber.isEmpty ? version : '$version (Build $buildNumber)';
-      }
-    } catch (_) {
-      // Fall through to the update-service fallback below.
-    }
-
-    final cachedInfo = _cachedUpdateInfo;
-    if (cachedInfo != null && cachedInfo.currentVersion.trim().isNotEmpty) {
-      return cachedInfo.currentLabel;
-    }
-
-    try {
-      final liveInfo = await checkForUpdate();
-      if (liveInfo != null && liveInfo.currentVersion.trim().isNotEmpty) {
-        return liveInfo.currentLabel;
-      }
-    } catch (_) {
-      // Ignore network fallback failures and return a friendly label instead.
-    }
-
-    return 'Version unavailable';
+    final currentAppVersion = await _resolveCurrentAppVersion();
+    return currentAppVersion.label;
   }
 
   Future<bool> openUpdate(AppUpdateInfo info) async {
@@ -138,11 +135,10 @@ class AppUpdateService {
 
   Future<InstalledReleaseNotesResult> getInstalledReleaseNotes() async {
     final platform = currentPlatform;
-    final packageInfo = await PackageInfo.fromPlatform();
-    final version = packageInfo.version.trim();
-    final buildNumber = packageInfo.buildNumber.trim();
-    final versionLabel =
-        buildNumber.isEmpty ? version : '$version (Build $buildNumber)';
+    final currentAppVersion = await _resolveCurrentAppVersion();
+    final version = currentAppVersion.version;
+    final buildNumber = currentAppVersion.buildNumber;
+    final versionLabel = currentAppVersion.label;
 
     if (platform.isEmpty) {
       return InstalledReleaseNotesResult(
@@ -153,7 +149,7 @@ class AppUpdateService {
 
     try {
       final updateInfo = await checkForUpdate();
-      final currentBuild = int.tryParse(buildNumber) ?? 0;
+      final currentBuild = currentAppVersion.parsedBuildNumber;
       if (updateInfo != null &&
           updateInfo.latestVersion == version &&
           updateInfo.latestBuildNumber == currentBuild &&
@@ -620,6 +616,22 @@ class InstalledReleaseNotesResult {
 
   final String versionLabel;
   final String notes;
+}
+
+class _CurrentAppVersion {
+  const _CurrentAppVersion({
+    required this.version,
+    required this.buildNumber,
+  });
+
+  final String version;
+  final String buildNumber;
+
+  int get parsedBuildNumber => int.tryParse(buildNumber.trim()) ?? 0;
+
+  String get label => buildNumber.trim().isEmpty
+      ? version
+      : '$version (Build $buildNumber)';
 }
 
 class AppSelfUpdateResult {

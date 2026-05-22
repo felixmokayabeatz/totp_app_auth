@@ -159,6 +159,8 @@ class DeviceSession(models.Model):
 
 
 class PasswordlessLoginRequest(models.Model):
+    CODE_LENGTH = 4
+    CODE_WINDOW_SECONDS = 60
     STATUS_PENDING = 'pending'
     STATUS_APPROVED = 'approved'
     STATUS_DENIED = 'denied'
@@ -213,13 +215,11 @@ class PasswordlessLoginRequest(models.Model):
     def __str__(self):
         return f"{self.user.username} - passwordless {self.status} - {self.requester_device_label}"
 
-    def _looks_like_legacy_raw_code(self) -> bool:
-        return self.verification_code.isdigit() and len(self.verification_code) == 3
+    def _looks_like_plain_numeric_code(self, value: str) -> bool:
+        return value.isdigit() and len(value) in {3, self.CODE_LENGTH}
 
     def _looks_like_seed(self, value: str) -> bool:
-        return 1 <= len(value) <= 7 and not (
-            value.isdigit() and len(value) == 3
-        )
+        return 1 <= len(value) <= 7 and not self._looks_like_plain_numeric_code(value)
 
     def _timeslot_for(self, at_time=None) -> int:
         current_time = at_time or timezone.now()
@@ -227,11 +227,13 @@ class PasswordlessLoginRequest(models.Model):
             0,
             int((current_time - self.created_at).total_seconds()),
         )
-        return elapsed // 30
+        return elapsed // self.CODE_WINDOW_SECONDS
 
     def code_expires_at(self, at_time=None):
         slot = self._timeslot_for(at_time)
-        return self.created_at + timedelta(seconds=(slot + 1) * 30)
+        return self.created_at + timedelta(
+            seconds=(slot + 1) * self.CODE_WINDOW_SECONDS
+        )
 
     def _derive_seeded_code(self, slot: int, *, seed: str) -> str:
         digest = hashlib.sha256(
@@ -239,7 +241,9 @@ class PasswordlessLoginRequest(models.Model):
                 "utf-8"
             )
         ).hexdigest()
-        return str(int(digest[:8], 16) % 1000).zfill(3)
+        return str(int(digest[:8], 16) % (10 ** self.CODE_LENGTH)).zfill(
+            self.CODE_LENGTH
+        )
 
     def set_verification_code(self, raw_code: str) -> None:
         self.verification_code = encrypt_passwordless_code(raw_code)
@@ -258,7 +262,9 @@ class PasswordlessLoginRequest(models.Model):
     def _raw_verification_value(self) -> str:
         if not self.verification_code:
             return ''
-        if self._looks_like_legacy_raw_code() or self._looks_like_seed(self.verification_code):
+        if self._looks_like_plain_numeric_code(
+            self.verification_code
+        ) or self._looks_like_seed(self.verification_code):
             return self.verification_code
         try:
             return decrypt_passwordless_code(self.verification_code)
@@ -269,7 +275,7 @@ class PasswordlessLoginRequest(models.Model):
         raw_value = self._raw_verification_value()
         if not raw_value:
             return ''
-        if raw_value.isdigit() and len(raw_value) == 3:
+        if self._looks_like_plain_numeric_code(raw_value):
             return raw_value
         if self._looks_like_seed(raw_value):
             return self._derive_seeded_code(self._timeslot_for(), seed=raw_value)
@@ -281,7 +287,7 @@ class PasswordlessLoginRequest(models.Model):
         stored_value = self._raw_verification_value()
         if not stored_value:
             return False
-        if stored_value.isdigit() and len(stored_value) == 3:
+        if self._looks_like_plain_numeric_code(stored_value):
             return stored_value == raw_code
         if self._looks_like_seed(stored_value):
             current_slot = self._timeslot_for()

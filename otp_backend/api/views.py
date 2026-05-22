@@ -203,13 +203,15 @@ def get_current_active_device_session(request):
 
 def _format_passwordless_code(raw_code: str) -> str:
     cleaned = ''.join(ch for ch in raw_code if ch.isdigit())
-    if len(cleaned) >= 3:
-        return cleaned[:3]
+    if len(cleaned) >= PasswordlessLoginRequest.CODE_LENGTH:
+        return cleaned[: PasswordlessLoginRequest.CODE_LENGTH]
     return raw_code
 
 
 def _generate_passwordless_code() -> str:
-    return _format_passwordless_code(''.join(random.choices(string.digits, k=3)))
+    return _format_passwordless_code(
+        ''.join(random.choices(string.digits, k=PasswordlessLoginRequest.CODE_LENGTH))
+    )
 
 
 def _generate_passwordless_seed() -> str:
@@ -219,6 +221,11 @@ def _generate_passwordless_seed() -> str:
 
 def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[str]:
     correct = request_obj.get_verification_code()
+    code_length = (
+        len(correct)
+        if correct.isdigit() and len(correct) > 0
+        else PasswordlessLoginRequest.CODE_LENGTH
+    )
     seen = {correct}
     decoys = []
     counter = 0
@@ -227,7 +234,9 @@ def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[s
         digest = hashlib.sha256(
             f'{request_obj.id}|{correct}|{counter}'.encode('utf-8')
         ).hexdigest()
-        candidate = str(int(digest[:8], 16) % 1000).zfill(3)
+        candidate = str(int(digest[:8], 16) % (10 ** code_length)).zfill(
+            code_length
+        )
         counter += 1
         if candidate in seen:
             continue
@@ -1473,7 +1482,7 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
         selected_code = (request.data.get('selected_code') or '').strip()
         if not selected_code:
             return Response(
-                {'error': 'Select the 3-digit code shown on the requesting device.'},
+                {'error': 'Select the 4-digit code shown on the requesting device.'},
                 status=400,
             )
 
