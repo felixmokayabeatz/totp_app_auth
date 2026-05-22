@@ -30,7 +30,7 @@ import 'services/push_messaging_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/sync_service.dart';
 
-void main() async {
+void main(List<String> launchArgs) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (!AppConfig.isDevelopment) {
     debugPrint = (String? message, {int? wrapWidth}) {};
@@ -74,13 +74,18 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => themeProvider),
       ],
-      child: const MyApp(),
+      child: MyApp(launchArgs: launchArgs),
     ),
   );
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({
+    super.key,
+    this.launchArgs = const [],
+  });
+
+  final List<String> launchArgs;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -97,6 +102,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppUpdateService _appUpdateService = AppUpdateService();
   final SyncService _syncService = SyncService();
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   bool _initialized = false;
   bool _isLocked = true;
@@ -114,10 +121,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Timer? _sessionHeartbeatTimer;
   AppUpdateInfo? _requiredUpdateInfo;
   AppDownloadProgress? _requiredUpdateProgress;
+  bool _updateInstalledNoticeShown = false;
+  String? _pendingInstalledUpdateLabel;
 
   @override
   void initState() {
     super.initState();
+    _pendingInstalledUpdateLabel =
+        _extractInstalledUpdateLabel(widget.launchArgs);
     WidgetsBinding.instance.addObserver(this);
     _updateTimer = Timer.periodic(
       const Duration(minutes: 5),
@@ -131,6 +142,57 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeApp();
     });
+  }
+
+  String? _extractInstalledUpdateLabel(List<String> launchArgs) {
+    for (final argument in launchArgs) {
+      if (!argument.startsWith(AppUpdateService.updateInstalledArgumentPrefix)) {
+        continue;
+      }
+
+      final rawValue = argument
+          .substring(AppUpdateService.updateInstalledArgumentPrefix.length)
+          .trim();
+      if (rawValue.isEmpty) {
+        return 'the latest version';
+      }
+
+      final parts = rawValue.split('+');
+      if (parts.length == 2 &&
+          parts.first.trim().isNotEmpty &&
+          parts.last.trim().isNotEmpty) {
+        return '${parts.first.trim()} (Build ${parts.last.trim()})';
+      }
+
+      return rawValue;
+    }
+    return null;
+  }
+
+  void _maybeShowInstalledUpdateNotice() {
+    if (_updateInstalledNoticeShown ||
+        !_initialized ||
+        !_sessionReady ||
+        !_startupLogoDone) {
+      return;
+    }
+
+    final label = _pendingInstalledUpdateLabel?.trim();
+    final messenger = _scaffoldMessengerKey.currentState;
+    if (label == null || label.isEmpty || messenger == null) {
+      return;
+    }
+
+    _updateInstalledNoticeShown = true;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Update installed: $label. BeatzLock reopened automatically.',
+        ),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -597,10 +659,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Consumer2<ThemeProvider, AuthProvider>(
       builder: (context, themeProvider, authProvider, _) {
+        if (_pendingInstalledUpdateLabel != null &&
+            !_updateInstalledNoticeShown &&
+            _initialized &&
+            _sessionReady &&
+            _startupLogoDone) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _maybeShowInstalledUpdateNotice();
+          });
+        }
+
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'BeatzLock Authenticator',
           navigatorKey: _navigatorKey,
+          scaffoldMessengerKey: _scaffoldMessengerKey,
           scrollBehavior: const MaterialScrollBehavior().copyWith(
             dragDevices: PointerDeviceKind.values.toSet(),
           ),
@@ -806,6 +879,19 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                   ),
                                 ),
                               ),
+                              if (canSelfUpdate) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  'On Windows and Linux, BeatzLock will install the update and reopen automatically when it finishes.',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                        height: 1.4,
+                                      ),
+                                ),
+                              ],
                               const SizedBox(height: 10),
                               SizedBox(
                                 width: double.infinity,

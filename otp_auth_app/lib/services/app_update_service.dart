@@ -13,6 +13,7 @@ class AppUpdateService {
   static final AppUpdateService _instance = AppUpdateService._internal();
   static const MethodChannel _storageChannel =
       MethodChannel('com.beatzlock.otp/storage');
+  static const String updateInstalledArgumentPrefix = '--update-installed=';
   factory AppUpdateService() => _instance;
 
   AppUpdateService._internal()
@@ -93,10 +94,32 @@ class AppUpdateService {
   }
 
   Future<String> getCurrentVersionLabel() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    final version = packageInfo.version.trim();
-    final buildNumber = packageInfo.buildNumber.trim();
-    return buildNumber.isEmpty ? version : '$version (Build $buildNumber)';
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final version = packageInfo.version.trim();
+      final buildNumber = packageInfo.buildNumber.trim();
+      if (version.isNotEmpty) {
+        return buildNumber.isEmpty ? version : '$version (Build $buildNumber)';
+      }
+    } catch (_) {
+      // Fall through to the update-service fallback below.
+    }
+
+    final cachedInfo = _cachedUpdateInfo;
+    if (cachedInfo != null && cachedInfo.currentVersion.trim().isNotEmpty) {
+      return cachedInfo.currentLabel;
+    }
+
+    try {
+      final liveInfo = await checkForUpdate();
+      if (liveInfo != null && liveInfo.currentVersion.trim().isNotEmpty) {
+        return liveInfo.currentLabel;
+      }
+    } catch (_) {
+      // Ignore network fallback failures and return a friendly label instead.
+    }
+
+    return 'Version unavailable';
   }
 
   Future<bool> openUpdate(AppUpdateInfo info) async {
@@ -214,7 +237,7 @@ class AppUpdateService {
         );
       }
 
-      await _prepareDesktopUpdate(installerPath);
+      await _prepareDesktopUpdate(installerPath, info);
       return const AppSelfUpdateResult(
         started: true,
         message: 'Update downloaded. Opening the installer now.',
@@ -403,10 +426,30 @@ class AppUpdateService {
     return null;
   }
 
-  Future<void> _prepareDesktopUpdate(String installerPath) async {
+  Future<void> _prepareDesktopUpdate(
+    String installerPath,
+    AppUpdateInfo info,
+  ) async {
+    final appPath = Platform.resolvedExecutable;
+    final relaunchArgument =
+        '$updateInstalledArgumentPrefix${info.latestVersion}+${info.latestBuildNumber}';
+
     if (Platform.isWindows) {
-      _pendingLauncherExecutable = installerPath;
-      _pendingLauncherArguments = const [];
+      final scriptPath = await _writeWindowsUpdaterScript(
+        installerPath,
+        appPid: pid,
+        appPath: appPath,
+        relaunchArgument: relaunchArgument,
+      );
+      _pendingLauncherExecutable = 'powershell.exe';
+      _pendingLauncherArguments = [
+        '-ExecutionPolicy',
+        'Bypass',
+        '-WindowStyle',
+        'Hidden',
+        '-File',
+        scriptPath,
+      ];
       return;
     }
 
@@ -414,6 +457,8 @@ class AppUpdateService {
       final scriptPath = await _writeLinuxUpdaterScript(
         installerPath,
         appPid: pid,
+        appPath: appPath,
+        relaunchArgument: relaunchArgument,
       );
       _pendingLauncherExecutable = scriptPath;
       _pendingLauncherArguments = const [];
@@ -421,6 +466,39 @@ class AppUpdateService {
     }
 
     throw UnsupportedError('Desktop update is not supported on this platform.');
+  }
+
+  Future<String> _writeWindowsUpdaterScript(
+    String installerPath, {
+    required int appPid,
+    required String appPath,
+    required String relaunchArgument,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final script = File(
+      '${tempDir.path}${Platform.pathSeparator}beatzlock_update.ps1',
+    );
+    final escapedInstallerPath = installerPath.replaceAll("'", "''");
+    final escapedAppPath = appPath.replaceAll("'", "''");
+    final escapedRelaunchArgument = relaunchArgument.replaceAll("'", "''");
+    await script.writeAsString('''
+\$ErrorActionPreference = 'SilentlyContinue'
+\$AppPid = $appPid
+\$InstallerPath = '$escapedInstallerPath'
+\$AppPath = '$escapedAppPath'
+\$RelaunchArgument = '$escapedRelaunchArgument'
+
+while (Get-Process -Id \$AppPid -ErrorAction SilentlyContinue) {
+  Start-Sleep -Seconds 1
+}
+
+\$process = Start-Process -FilePath \$InstallerPath -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS' -Verb RunAs -PassThru -Wait
+if (\$process.ExitCode -eq 0 -and (Test-Path \$AppPath)) {
+  Start-Sleep -Seconds 1
+  Start-Process -FilePath \$AppPath -ArgumentList \$RelaunchArgument
+}
+''');
+    return script.path;
   }
 
   String _installerExtension(Uri uri) {
@@ -444,34 +522,64 @@ class AppUpdateService {
   Future<String> _writeLinuxUpdaterScript(
     String installerPath, {
     required int appPid,
+    required String appPath,
+    required String relaunchArgument,
   }) async {
     final tempDir = await getTemporaryDirectory();
     final script = File(
       '${tempDir.path}${Platform.pathSeparator}beatzlock_update.sh',
     );
     final escapedInstallerPath = installerPath.replaceAll("'", r"'\''");
+    final escapedAppPath = appPath.replaceAll("'", r"'\''");
+    final escapedRelaunchArgument = relaunchArgument.replaceAll("'", r"'\''");
     await script.writeAsString('''
 #!/bin/sh
 set -eu
-DEB_PATH='$escapedInstallerPath'
-APP_PATH="/usr/local/BeatzLock/otp_auth_app"
+PACKAGE_PATH='$escapedInstallerPath'
+APP_PATH='$escapedAppPath'
 APP_PID="$appPid"
+APP_ARG='$escapedRelaunchArgument'
 
 while kill -0 "\$APP_PID" 2>/dev/null; do
   sleep 1
 done
 
-if command -v pkexec >/dev/null 2>&1; then
-  pkexec sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$DEB_PATH"
-elif command -v xdg-open >/dev/null 2>&1; then
-  xdg-open "\$DEB_PATH"
-  exit 0
-else
-  exit 1
-fi
+case "\$PACKAGE_PATH" in
+  *.deb)
+    if command -v pkexec >/dev/null 2>&1; then
+      pkexec sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"
+    elif command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "\$PACKAGE_PATH"
+      exit 0
+    else
+      exit 1
+    fi
+    ;;
+  *.rpm)
+    if command -v pkexec >/dev/null 2>&1; then
+      pkexec sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"
+    elif command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "\$PACKAGE_PATH"
+      exit 0
+    else
+      exit 1
+    fi
+    ;;
+  *)
+    if command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "\$PACKAGE_PATH"
+      exit 0
+    fi
+    exit 1
+    ;;
+esac
 
 if [ -x "\$APP_PATH" ]; then
-  nohup "\$APP_PATH" >/dev/null 2>&1 &
+  nohup "\$APP_PATH" "\$APP_ARG" >/dev/null 2>&1 &
 fi
 ''');
 

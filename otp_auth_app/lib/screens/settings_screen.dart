@@ -169,6 +169,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _updateInfo = info;
+      if ((_appVersionLabel == '...' ||
+              _appVersionLabel == 'Version unavailable') &&
+          info != null &&
+          info.currentVersion.trim().isNotEmpty) {
+        _appVersionLabel = info.currentLabel;
+      }
       _isCheckingForUpdates = false;
     });
   }
@@ -350,7 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String get _updateDialogMessage {
     if (_appUpdateService.canSelfUpdate) {
-      return 'BeatzLock can download this update now. When the download finishes, the app will close and the installer will open.';
+      return 'BeatzLock can download and install this desktop update now. When the download finishes, the app will close, install the update, and reopen automatically when the installer finishes.';
     }
     if (_appUpdateService.canDownloadUpdateInApp && _isAndroidUpdateDownload) {
       return 'BeatzLock can download the APK to your Downloads folder from settings. Open the saved APK from Downloads to install it.';
@@ -376,7 +382,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isAndroidUpdateDownload) {
       return 'Downloading the APK to your Downloads folder. The rate shown is the average transfer speed. Open it from Downloads after the transfer finishes to install the update.';
     }
-    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will close and open the installer.';
+    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will close, install the update, and reopen automatically.';
   }
 
   String _backupCodeStatusSubtitle() {
@@ -3812,19 +3818,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _versionBadge(String version) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF10B981).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border:
-            Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-      ),
-      child: Text(version,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 164),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF10B981).withValues(alpha: 0.3),
+          ),
+        ),
+        child: Text(
+          version,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-              color: Color(0xFF10B981),
-              fontSize: 12,
-              fontWeight: FontWeight.w600)),
+            color: Color(0xFF10B981),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
     );
   }
 
@@ -4200,7 +4215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 14),
             Expanded(
               child: Text(
-                'BeatzLock is closing so the installer can open.',
+                'BeatzLock is closing so the update can install. The app should reopen automatically when installation finishes.',
                 style: TextStyle(
                   color: _textSecondary,
                   fontSize: 13,
