@@ -122,9 +122,8 @@ class EncryptionService {
 
     final nonce = List<int>.generate(16, (_) => Random.secure().nextInt(256));
     final input = utf8.encode(plainText);
-    final encryptionKey = sha256
-        .convert(utf8.encode('$key|enc|$context'))
-        .bytes;
+    final encryptionKey =
+        sha256.convert(utf8.encode('$key|enc|$context')).bytes;
     final authKey = sha256.convert(utf8.encode('$key|auth|$context')).bytes;
     final encrypted = _xorWithKeystream(input, encryptionKey, nonce);
     final mac = Hmac(
@@ -153,9 +152,8 @@ class EncryptionService {
     final nonce = payload.sublist(0, 16);
     final mac = payload.sublist(16, 48);
     final encrypted = payload.sublist(48);
-    final encryptionKey = sha256
-        .convert(utf8.encode('$key|enc|$context'))
-        .bytes;
+    final encryptionKey =
+        sha256.convert(utf8.encode('$key|enc|$context')).bytes;
     final authKey = sha256.convert(utf8.encode('$key|auth|$context')).bytes;
     final expectedMac = Hmac(
       sha256,

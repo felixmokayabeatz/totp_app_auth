@@ -271,10 +271,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _isFinishing
                           ? 'Starting...'
                           : _isLastPage
-                          ? (widget.isFirstLaunch
-                                ? 'Start Using BeatzLock'
-                                : 'Continue to Login')
-                          : 'Next',
+                              ? (widget.isFirstLaunch
+                                  ? 'Start Using BeatzLock'
+                                  : 'Continue to Login')
+                              : 'Next',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,

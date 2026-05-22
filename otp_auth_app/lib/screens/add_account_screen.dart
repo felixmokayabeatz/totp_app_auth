@@ -382,9 +382,8 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     final content = entries.length == 1
         ? _formatEntrySummary(entries.first)
         : entries.take(5).map(_formatEntrySummary).join('\n');
-    final overflow = entries.length > 5
-        ? '\n...and ${entries.length - 5} more'
-        : '';
+    final overflow =
+        entries.length > 5 ? '\n...and ${entries.length - 5} more' : '';
 
     return showDialog<bool>(
       context: context,
@@ -415,8 +414,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
     List<OTPImportEntry> entries, {
     String? sourceLabel,
   }) async {
-    final userId =
-        await SecureStorageService().read(
+    final userId = await SecureStorageService().read(
           SecureStorageService.currentUserKey,
         ) ??
         await SecureStorageService().read(
@@ -692,8 +690,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
   void _saveAccount() async {
     if (_formKey.currentState!.validate()) {
-      final userId =
-          await SecureStorageService().read(
+      final userId = await SecureStorageService().read(
             SecureStorageService.currentUserKey,
           ) ??
           await SecureStorageService().read(

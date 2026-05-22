@@ -95,9 +95,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     final otpUrl = 'otpauth://totp/${Uri.encodeComponent(label)}?$query';
 
     return Scaffold(
-      backgroundColor: isDark
-          ? const Color(0xFF0F0F1A)
-          : const Color(0xFFF0F2FF),
+      backgroundColor:
+          isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
       appBar: AppBar(
         title: const Text(
           'QR Code',
@@ -124,8 +123,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
             final outerPadding = constraints.maxWidth >= 1200
                 ? 32.0
                 : constraints.maxWidth >= 700
-                ? 24.0
-                : 16.0;
+                    ? 24.0
+                    : 16.0;
 
             final serviceCard = _buildPanel(
               context,
@@ -363,9 +362,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                             : () {
                                 _revealSensitiveInfo();
                               },
-                        tooltip: _isSecretRevealed
-                            ? 'Hide secret'
-                            : 'Reveal secret',
+                        tooltip:
+                            _isSecretRevealed ? 'Hide secret' : 'Reveal secret',
                       ),
                     ],
                   ),
@@ -746,8 +744,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   color: isExpiring
                       ? Colors.red
                       : (isDark
-                            ? Colors.white60
-                            : colorScheme.onSurfaceVariant),
+                          ? Colors.white60
+                          : colorScheme.onSurfaceVariant),
                 ),
               ),
             ],

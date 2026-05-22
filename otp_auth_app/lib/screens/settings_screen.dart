@@ -468,9 +468,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
 
       final signedIn = await _syncService.isLoggedIn();
-      final currentSession = signedIn
-          ? await _syncService.getCurrentDeviceSession()
-          : null;
+      final currentSession =
+          signedIn ? await _syncService.getCurrentDeviceSession() : null;
       if (!mounted) return;
       final isPrimaryDevice = !signedIn || currentSession?.isPrimary == true;
 
@@ -525,8 +524,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       signedIn
                           ? (isPrimaryDevice
-                                ? 'This is your primary device, so you can restore or delete any restore point here.'
-                                : 'You can view restore points on this device, but only your primary device can restore or delete them.')
+                              ? 'This is your primary device, so you can restore or delete any restore point here.'
+                              : 'You can view restore points on this device, but only your primary device can restore or delete them.')
                           : 'Offline vault restore points can be restored on this device.',
                       style: TextStyle(
                         color: _textSecondary,
@@ -604,8 +603,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         ? () async {
                                             final deleted =
                                                 await _deleteOtpSnapshot(
-                                                  snapshot,
-                                                );
+                                              snapshot,
+                                            );
                                             if (!deleted ||
                                                 !dialogContext.mounted) {
                                               return;
@@ -854,8 +853,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text(
           syncEnabled
               ? (result.syncedToCloud
-                    ? 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
-                    : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
+                  ? 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
+                  : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
               : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
         ),
         backgroundColor: (!syncEnabled || result.syncedToCloud)
@@ -1025,8 +1024,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: authProvider.isAuthenticated
                   ? _loadBackupCodeStatus
                   : () => _requireSignedIn(
-                      'Recovery codes are available after you sign in.',
-                    ),
+                        'Recovery codes are available after you sign in.',
+                      ),
             ),
             _dividerLine(),
             _tappableTile(
@@ -1044,9 +1043,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     )
                   : null,
-              onTap: _isLoadingVaultRestorePoints
-                  ? null
-                  : _showOtpRestorePoints,
+              onTap:
+                  _isLoadingVaultRestorePoints ? null : _showOtpRestorePoints,
             ),
             _dividerLine(),
             _tappableTile(
@@ -1069,8 +1067,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated = await _appLockService
-                    .authenticateToUnlock(context);
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
@@ -1095,8 +1093,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated = await _appLockService
-                    .authenticateToUnlock(context);
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
@@ -1118,8 +1116,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated = await _appLockService
-                    .authenticateToUnlock(context);
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 await Navigator.push(
                   context,
@@ -1170,10 +1168,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: !authProvider.isAuthenticated
                   ? 'Sign in to sync across devices'
                   : _syncLockedOnThisDevice
-                  ? 'Unlock sync on this device first'
-                  : _syncEnabled
-                  ? 'Manually sync with cloud'
-                  : 'Cloud sync is disabled',
+                      ? 'Unlock sync on this device first'
+                      : _syncEnabled
+                          ? 'Manually sync with cloud'
+                          : 'Cloud sync is disabled',
               trailing: _isSyncing
                   ? SizedBox(
                       width: 18,
@@ -1184,17 +1182,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     )
                   : (_syncEnabled && !_syncLockedOnThisDevice
-                        ? null
-                        : const Icon(
-                            Icons.lock_outline,
-                            size: 16,
-                            color: Colors.grey,
-                          )),
+                      ? null
+                      : const Icon(
+                          Icons.lock_outline,
+                          size: 16,
+                          color: Colors.grey,
+                        )),
               onTap: !authProvider.isAuthenticated
                   ? _openLoginForSync
                   : (_syncLockedOnThisDevice
-                        ? _unlockSyncOnThisDevice
-                        : _syncNow),
+                      ? _unlockSyncOnThisDevice
+                      : _syncNow),
             ),
             if (authProvider.isAuthenticated && _syncLockedOnThisDevice) ...[
               _dividerLine(),
@@ -1215,10 +1213,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: _syncLockedOnThisDevice
                   ? 'Unlock this device first to resume cloud sync'
                   : _syncEnabled
-                  ? 'Accounts sync automatically'
-                  : 'Sync disabled - local only',
-              value:
-                  authProvider.isAuthenticated &&
+                      ? 'Accounts sync automatically'
+                      : 'Sync disabled - local only',
+              value: authProvider.isAuthenticated &&
                   _syncEnabled &&
                   !_syncLockedOnThisDevice,
               onChanged: (val) async {
@@ -1244,9 +1241,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? 'Cloud sync enabled on all devices'
                           : 'Cloud sync disabled on all devices',
                     ),
-                    backgroundColor: val
-                        ? const Color(0xFF10B981)
-                        : Colors.orange,
+                    backgroundColor:
+                        val ? const Color(0xFF10B981) : Colors.orange,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1322,8 +1318,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   return;
                 }
                 if (!context.mounted) return;
-                final authenticated = await _appLockService
-                    .authenticateToUnlock(context);
+                final authenticated =
+                    await _appLockService.authenticateToUnlock(context);
                 if (!context.mounted || !authenticated) return;
                 final changed = await Navigator.push<bool>(
                   context,
@@ -1497,9 +1493,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SizedBox(
             height: 52,
             child: ElevatedButton.icon(
-              onPressed: authProvider.isAuthenticated
-                  ? _logout
-                  : _openLoginForSync,
+              onPressed:
+                  authProvider.isAuthenticated ? _logout : _openLoginForSync,
               icon: Icon(
                 authProvider.isAuthenticated
                     ? Icons.logout_rounded
@@ -1629,9 +1624,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () => Navigator.pop(dialogContext),
+              onPressed:
+                  isSubmitting ? null : () => Navigator.pop(dialogContext),
               child: const Text('Not now'),
             ),
             ElevatedButton(
@@ -1663,8 +1657,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       setDialogState(() {
                         isSubmitting = false;
-                        errorText =
-                            _syncService.lastErrorMessage ??
+                        errorText = _syncService.lastErrorMessage ??
                             'Could not unlock sync on this device.';
                       });
                     },
@@ -1785,8 +1778,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final displayNameController = TextEditingController();
     displayNameController.text =
         (existingRating?.displayName == 'Anonymous user'
-        ? ''
-        : (existingRating?.displayName ?? savedDisplayName));
+            ? ''
+            : (existingRating?.displayName ?? savedDisplayName));
     commentController.text = existingRating?.comment ?? '';
     suggestionController.text = existingRating?.suggestion ?? '';
 
@@ -1836,8 +1829,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         if (platformSummary != null) ...[
                           const SizedBox(height: 14),
                           _buildPlatformSummaryCard(
-                            platformLabel:
-                                existingRating?.platformDisplay ??
+                            platformLabel: existingRating?.platformDisplay ??
                                 _platformLabelFromSlug(currentPlatform),
                             summary: platformSummary,
                           ),
@@ -1867,9 +1859,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               onPressed: isSubmitting
                                   ? null
                                   : () => setDialogState(() {
-                                      selectedStars = star;
-                                      errorText = null;
-                                    }),
+                                        selectedStars = star;
+                                        errorText = null;
+                                      }),
                               icon: Icon(
                                 selected
                                     ? Icons.star_rounded
@@ -2009,9 +2001,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ? 'Your review for this platform was deleted.'
                                     : 'No review was found for this platform.',
                               ),
-                              backgroundColor: deleted
-                                  ? Colors.orange
-                                  : _accent,
+                              backgroundColor:
+                                  deleted ? Colors.orange : _accent,
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -2043,9 +2034,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onPressed: (isSubmitting || isDeleting)
                     ? null
                     : () => setDialogState(() {
-                        isEditing = true;
-                        errorText = null;
-                      }),
+                          isEditing = true;
+                          errorText = null;
+                        }),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accent,
                   foregroundColor: Colors.white,
@@ -2075,8 +2066,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                         try {
                           final packageInfo = await PackageInfo.fromPlatform();
-                          final deviceLabel = await _syncService
-                              .getCurrentDeviceLabel();
+                          final deviceLabel =
+                              await _syncService.getCurrentDeviceLabel();
                           final storage = SecureStorageService();
                           await _appRatingService.submitRating(
                             reviewerKey: reviewerKey,
@@ -2088,18 +2079,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             appVersion: packageInfo.version,
                             buildNumber: packageInfo.buildNumber,
                             deviceLabel: deviceLabel,
-                            accountUserId:
-                                await storage.read(
+                            accountUserId: await storage.read(
                                   SecureStorageService.userIdKey,
                                 ) ??
                                 '',
-                            accountEmail:
-                                await storage.read(
+                            accountEmail: await storage.read(
                                   SecureStorageService.userEmailKey,
                                 ) ??
                                 '',
-                            accountUsername:
-                                await storage.read(
+                            accountUsername: await storage.read(
                                   SecureStorageService.currentUserKey,
                                 ) ??
                                 '',
@@ -2265,8 +2253,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<String> _ratingReviewerKey() async {
     final storage = SecureStorageService();
-    final rawUser =
-        (await storage.read(SecureStorageService.userIdKey)) ??
+    final rawUser = (await storage.read(SecureStorageService.userIdKey)) ??
         (await storage.read(SecureStorageService.userEmailKey)) ??
         (await storage.read(SecureStorageService.currentUserKey));
     if (rawUser == null || rawUser.trim().isEmpty) {
@@ -2575,8 +2562,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 });
 
                                 try {
-                                  final file = await filePicker
-                                      .pickOtpImportFile();
+                                  final file =
+                                      await filePicker.pickOtpImportFile();
                                   if (!dialogContext.mounted) return;
 
                                   if (file == null) {
@@ -2678,9 +2665,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: isImporting
-                  ? null
-                  : () => Navigator.pop(dialogContext),
+              onPressed:
+                  isImporting ? null : () => Navigator.pop(dialogContext),
               child: Text('Cancel', style: TextStyle(color: _textSecondary)),
             ),
             ElevatedButton(
@@ -2739,8 +2725,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String? sourceLabel,
   }) async {
     final storage = SecureStorageService();
-    final userId =
-        await storage.read(SecureStorageService.currentUserKey) ??
+    final userId = await storage.read(SecureStorageService.currentUserKey) ??
         await storage.read(SecureStorageService.localVaultUserKey) ??
         'default_user';
     final userBox = await _syncService.getUserBox();
@@ -3046,8 +3031,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    final username =
-        await SecureStorageService().read(
+    final username = await SecureStorageService().read(
           SecureStorageService.currentUserKey,
         ) ??
         '';
@@ -3307,8 +3291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const nu = '23456789';
       const sy = r'!@#$%^&*()_+-=[]{}|;:,.<>?';
       final random = DateTime.now().millisecondsSinceEpoch;
-      String pw =
-          up[random % up.length] +
+      String pw = up[random % up.length] +
           lo[(random + 1) % lo.length] +
           nu[(random + 2) % nu.length] +
           sy[(random + 3) % sy.length];
@@ -3510,8 +3493,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                         return;
                       }
-                      final username =
-                          await SecureStorageService().read(
+                      final username = await SecureStorageService().read(
                             SecureStorageService.currentUserKey,
                           ) ??
                           '';
@@ -3593,8 +3575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         );
                         return;
                       }
-                      final username =
-                          await SecureStorageService().read(
+                      final username = await SecureStorageService().read(
                             SecureStorageService.currentUserKey,
                           ) ??
                           '';
@@ -3841,8 +3822,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mode == ThemeMode.system
                 ? Icons.brightness_auto_rounded
                 : mode == ThemeMode.dark
-                ? Icons.dark_mode_rounded
-                : Icons.light_mode_rounded,
+                    ? Icons.dark_mode_rounded
+                    : Icons.light_mode_rounded,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -4574,7 +4555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           success
               ? 'Sync complete'
               : (_syncService.lastErrorMessage ??
-                    'Sync failed. Check your internet connection.'),
+                  'Sync failed. Check your internet connection.'),
         ),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,

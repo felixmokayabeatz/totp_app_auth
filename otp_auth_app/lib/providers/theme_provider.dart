@@ -60,33 +60,32 @@ class ThemeProvider extends ChangeNotifier {
     final exactPrimary = accentColor;
     final secondary = _shiftHue(exactPrimary, 34);
     final isDark = brightness == Brightness.dark;
-    final colorScheme =
-        ColorScheme.fromSeed(
-          seedColor: accentColor,
-          brightness: brightness,
-        ).copyWith(
-          primary: exactPrimary,
-          onPrimary: _idealTextColor(exactPrimary),
-          primaryContainer: Color.lerp(
-            exactPrimary,
-            isDark ? Colors.black : Colors.white,
-            0.82,
-          )!,
-          onPrimaryContainer: isDark ? Colors.white : exactPrimary,
-          secondary: secondary,
-          onSecondary: _idealTextColor(secondary),
-          secondaryContainer: Color.lerp(
-            secondary,
-            isDark ? Colors.black : Colors.white,
-            0.84,
-          )!,
-          outlineVariant: Color.lerp(
-            exactPrimary,
-            isDark ? Colors.white : Colors.black,
-            0.84,
-          )!,
-          surfaceTint: Colors.transparent,
-        );
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: accentColor,
+      brightness: brightness,
+    ).copyWith(
+      primary: exactPrimary,
+      onPrimary: _idealTextColor(exactPrimary),
+      primaryContainer: Color.lerp(
+        exactPrimary,
+        isDark ? Colors.black : Colors.white,
+        0.82,
+      )!,
+      onPrimaryContainer: isDark ? Colors.white : exactPrimary,
+      secondary: secondary,
+      onSecondary: _idealTextColor(secondary),
+      secondaryContainer: Color.lerp(
+        secondary,
+        isDark ? Colors.black : Colors.white,
+        0.84,
+      )!,
+      outlineVariant: Color.lerp(
+        exactPrimary,
+        isDark ? Colors.white : Colors.black,
+        0.84,
+      )!,
+      surfaceTint: Colors.transparent,
+    );
 
     final scaffoldColor = isDark
         ? Color.lerp(const Color(0xFF0B1120), exactPrimary, 0.08)!

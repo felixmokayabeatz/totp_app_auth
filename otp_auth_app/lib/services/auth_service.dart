@@ -18,8 +18,7 @@ class OTPService {
       final hash = hmac.convert(counterBytes);
 
       final offset = hash.bytes[19] & 0xf;
-      final code =
-          ((hash.bytes[offset] & 0x7f) << 24 |
+      final code = ((hash.bytes[offset] & 0x7f) << 24 |
               (hash.bytes[offset + 1] & 0xff) << 16 |
               (hash.bytes[offset + 2] & 0xff) << 8 |
               (hash.bytes[offset + 3] & 0xff)) %

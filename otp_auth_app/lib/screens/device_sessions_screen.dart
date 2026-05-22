@@ -120,7 +120,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           success
               ? '${session.deviceLabel} was signed out.'
               : (_syncService.lastErrorMessage ??
-                    'Could not sign out this device.'),
+                  'Could not sign out this device.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -190,7 +190,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           success
               ? 'Signed out $revokedCount other device${revokedCount == 1 ? '' : 's'}.'
               : (_syncService.lastErrorMessage ??
-                    'Could not sign out the other devices.'),
+                  'Could not sign out the other devices.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -310,7 +310,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
           success
               ? '${session.deviceLabel} is now your primary device.'
               : (_syncService.lastErrorMessage ??
-                    'Could not set the primary device.'),
+                  'Could not set the primary device.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -371,9 +371,9 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
         .where((session) => !session.isCurrent && !session.isPrimary)
         .length;
     final primarySession = _sessions.cast<DeviceSessionInfo?>().firstWhere(
-      (session) => session?.isPrimary == true,
-      orElse: () => null,
-    );
+          (session) => session?.isPrimary == true,
+          orElse: () => null,
+        );
     final canChangePrimaryDevice = _canChangePrimaryDevice;
 
     return Container(

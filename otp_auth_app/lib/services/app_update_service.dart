@@ -19,14 +19,14 @@ class AppUpdateService {
   factory AppUpdateService() => _instance;
 
   AppUpdateService._internal()
-    : _dio = Dio(
-        BaseOptions(
-          baseUrl: AppConfig.updateApiUrl,
-          connectTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
-          headers: {'Content-Type': 'application/json'},
-        ),
-      );
+      : _dio = Dio(
+          BaseOptions(
+            baseUrl: AppConfig.updateApiUrl,
+            connectTimeout: const Duration(seconds: 20),
+            receiveTimeout: const Duration(seconds: 20),
+            headers: {'Content-Type': 'application/json'},
+          ),
+        );
 
   final Dio _dio;
   AppUpdateInfo? _cachedUpdateInfo;
@@ -49,9 +49,8 @@ class AppUpdateService {
       if (version.isNotEmpty) {
         return _CurrentAppVersion(
           version: version,
-          buildNumber: buildNumber.isEmpty
-              ? AppBuildInfo.buildNumber
-              : buildNumber,
+          buildNumber:
+              buildNumber.isEmpty ? AppBuildInfo.buildNumber : buildNumber,
         );
       }
     } catch (_) {
@@ -176,9 +175,8 @@ class AppUpdateService {
       final response = await _dio.getUri(
         Uri.parse('${AppConfig.beatzLockAppsBaseUrl}release-notes/$appId/'),
       );
-      final notes = response.data is Map
-          ? response.data['notes']?.toString().trim()
-          : '';
+      final notes =
+          response.data is Map ? response.data['notes']?.toString().trim() : '';
       return InstalledReleaseNotesResult(
         versionLabel: versionLabel,
         notes: (notes == null || notes.isEmpty)
@@ -293,11 +291,9 @@ class AppUpdateService {
         onReceiveProgress: (received, total) {
           final elapsedSeconds =
               DateTime.now().difference(startedAt).inMilliseconds / 1000;
-          final averageBytesPerSecond = elapsedSeconds > 0
-              ? received / elapsedSeconds
-              : null;
-          final secondsRemaining =
-              (averageBytesPerSecond != null &&
+          final averageBytesPerSecond =
+              elapsedSeconds > 0 ? received / elapsedSeconds : null;
+          final secondsRemaining = (averageBytesPerSecond != null &&
                   averageBytesPerSecond > 0 &&
                   total > 0 &&
                   received <= total)
@@ -498,9 +494,8 @@ if (\$process.ExitCode -eq 0 -and (Test-Path \$AppPath)) {
   }
 
   String _installerExtension(Uri uri) {
-    final lastSegment = uri.pathSegments.isEmpty
-        ? ''
-        : uri.pathSegments.last.toLowerCase();
+    final lastSegment =
+        uri.pathSegments.isEmpty ? '' : uri.pathSegments.last.toLowerCase();
     if (lastSegment.endsWith('.exe')) return '.exe';
     if (lastSegment.endsWith('.apk')) return '.apk';
     if (lastSegment.endsWith('.deb')) return '.deb';

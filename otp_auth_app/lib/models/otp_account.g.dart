@@ -20,14 +20,13 @@ class OTPAccountAdapter extends TypeAdapter<OTPAccount> {
     final createdAt = rawCreatedAt is DateTime
         ? rawCreatedAt
         : rawCreatedAt is int
-        ? DateTime.fromMillisecondsSinceEpoch(rawCreatedAt)
-        : rawCreatedAt is String
-        ? DateTime.tryParse(rawCreatedAt) ?? DateTime.now()
-        : DateTime.now();
+            ? DateTime.fromMillisecondsSinceEpoch(rawCreatedAt)
+            : rawCreatedAt is String
+                ? DateTime.tryParse(rawCreatedAt) ?? DateTime.now()
+                : DateTime.now();
     final rawIssuer = fields[3];
-    final issuer = rawIssuer is String && rawIssuer.isEmpty
-        ? null
-        : rawIssuer as String?;
+    final issuer =
+        rawIssuer is String && rawIssuer.isEmpty ? null : rawIssuer as String?;
     final rawAccountLabel = fields[5];
     final accountLabel = rawAccountLabel is String && rawAccountLabel.isEmpty
         ? null

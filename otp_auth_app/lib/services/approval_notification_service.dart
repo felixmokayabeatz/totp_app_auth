@@ -61,10 +61,9 @@ class ApprovalNotificationService {
       onDidReceiveNotificationResponse: _handleNotificationResponse,
     );
 
-    final androidImplementation = _notifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
+    final androidImplementation =
+        _notifications.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
     await androidImplementation?.createNotificationChannel(
       const AndroidNotificationChannel(
         _passwordlessChannelId,
@@ -91,8 +90,8 @@ class ApprovalNotificationService {
       return;
     }
 
-    final launchDetails = await _notifications
-        .getNotificationAppLaunchDetails();
+    final launchDetails =
+        await _notifications.getNotificationAppLaunchDetails();
     _launchDetailsChecked = true;
 
     if (launchDetails?.didNotificationLaunchApp != true) {
@@ -139,14 +138,13 @@ class ApprovalNotificationService {
       return _notificationPermissionGranted;
     }
 
-    final androidImplementation = _notifications
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
+    final androidImplementation =
+        _notifications.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
 
     try {
-      final granted = await androidImplementation
-          ?.requestNotificationsPermission();
+      final granted =
+          await androidImplementation?.requestNotificationsPermission();
       _notificationPermissionGranted = granted ?? true;
     } catch (_) {
       _notificationPermissionGranted = false;

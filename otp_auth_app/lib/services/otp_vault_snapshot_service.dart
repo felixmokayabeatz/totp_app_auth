@@ -193,7 +193,7 @@ class OtpVaultSnapshotService {
     for (final account in record.accounts) {
       final createdAt =
           DateTime.tryParse(account['created_at']?.toString() ?? '') ??
-          record.createdAt;
+              record.createdAt;
       final restored = OTPAccount(
         id: account['id']?.toString() ?? '',
         service: account['service']?.toString() ?? 'Imported Account',
@@ -208,7 +208,7 @@ class OtpVaultSnapshotService {
     for (final entry in record.passwordEntries) {
       final createdAt =
           DateTime.tryParse(entry['created_at']?.toString() ?? '') ??
-          record.createdAt;
+              record.createdAt;
       final restored = PasswordEntry(
         id: entry['id']?.toString() ?? '',
         title: entry['title']?.toString() ?? 'Password',
@@ -216,15 +216,14 @@ class OtpVaultSnapshotService {
         password: entry['encrypted_password']?.toString() ?? '',
         serverIP: entry['server_ip']?.toString(),
         createdAt: createdAt,
-        updatedAt:
-            DateTime.tryParse(entry['updated_at']?.toString() ?? '') ??
+        updatedAt: DateTime.tryParse(entry['updated_at']?.toString() ?? '') ??
             createdAt,
       );
       final encryptedNote = entry['encrypted_note']?.toString();
       restored.encryptedNote =
           encryptedNote == null || encryptedNote.trim().isEmpty
-          ? null
-          : encryptedNote;
+              ? null
+              : encryptedNote;
       await passwordBox.put(restored.id, restored);
     }
 
@@ -245,10 +244,10 @@ class OtpVaultSnapshotService {
         restoredPasswordIds,
       );
       if (prepared) {
-        final syncedAccounts = await _syncService
-            .uploadCurrentAccountsAsAuthoritative();
-        final syncedPasswords = await _syncService
-            .uploadCurrentPasswordsAsAuthoritative();
+        final syncedAccounts =
+            await _syncService.uploadCurrentAccountsAsAuthoritative();
+        final syncedPasswords =
+            await _syncService.uploadCurrentPasswordsAsAuthoritative();
         syncedToCloud = syncedAccounts && syncedPasswords;
       }
     }
@@ -285,13 +284,11 @@ class OtpVaultSnapshotService {
   ) async {
     final boxName = await _syncService.getCurrentUserBoxName();
     final snapshotBox = await _openSnapshotBox();
-    final keysToDelete = snapshotBox.keys
-        .where((key) {
-          final raw = snapshotBox.get(key);
-          if (raw is! Map) return false;
-          return raw['box_name']?.toString() == boxName;
-        })
-        .toList(growable: false);
+    final keysToDelete = snapshotBox.keys.where((key) {
+      final raw = snapshotBox.get(key);
+      if (raw is! Map) return false;
+      return raw['box_name']?.toString() == boxName;
+    }).toList(growable: false);
 
     for (final key in keysToDelete) {
       await snapshotBox.delete(key);
@@ -357,9 +354,8 @@ class OtpVaultSnapshotService {
     }
 
     final records = await _recordsForCurrentVault();
-    final payload = records
-        .map((record) => record.toMap())
-        .toList(growable: false);
+    final payload =
+        records.map((record) => record.toMap()).toList(growable: false);
     final encrypted = EncryptionService.simpleEncrypt(
       jsonEncode(payload),
       encryptionKey,
@@ -482,38 +478,36 @@ class _SnapshotRecord {
   }
 
   factory _SnapshotRecord.fromMap(Map<dynamic, dynamic> raw) {
-    final createdAt =
-        DateTime.tryParse(raw['created_at']?.toString() ?? '') ??
+    final createdAt = DateTime.tryParse(raw['created_at']?.toString() ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
     final rawAccounts = raw['accounts'];
     final accounts = rawAccounts is List
         ? rawAccounts
-              .whereType<Map>()
-              .map(
-                (item) => jsonDecode(jsonEncode(item)) as Map<String, dynamic>,
-              )
-              .toList(growable: false)
+            .whereType<Map>()
+            .map(
+              (item) => jsonDecode(jsonEncode(item)) as Map<String, dynamic>,
+            )
+            .toList(growable: false)
         : const <Map<String, dynamic>>[];
     final rawPasswordEntries = raw['password_entries'];
     final passwordEntries = rawPasswordEntries is List
         ? rawPasswordEntries
-              .whereType<Map>()
-              .map(
-                (item) => jsonDecode(jsonEncode(item)) as Map<String, dynamic>,
-              )
-              .toList(growable: false)
+            .whereType<Map>()
+            .map(
+              (item) => jsonDecode(jsonEncode(item)) as Map<String, dynamic>,
+            )
+            .toList(growable: false)
         : const <Map<String, dynamic>>[];
 
     return _SnapshotRecord(
       id: raw['id']?.toString() ?? '',
       boxName: raw['box_name']?.toString() ?? '',
       createdAt: createdAt.toUtc(),
-      otpAccountCount:
-          int.tryParse(raw['account_count']?.toString() ?? '') ??
+      otpAccountCount: int.tryParse(raw['account_count']?.toString() ?? '') ??
           accounts.length,
       passwordEntryCount:
           int.tryParse(raw['password_count']?.toString() ?? '') ??
-          passwordEntries.length,
+              passwordEntries.length,
       reason: raw['reason']?.toString() ?? 'snapshot',
       accounts: accounts,
       passwordEntries: passwordEntries,

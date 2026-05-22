@@ -80,8 +80,7 @@ class _PasswordlessRequestsScreenState
     }
 
     setState(() {
-      _canManageLogs =
-          currentSession?.isPrimary == true &&
+      _canManageLogs = currentSession?.isPrimary == true &&
           currentSession?.deviceKind == 'mobile';
     });
   }
@@ -184,9 +183,8 @@ class _PasswordlessRequestsScreenState
 
     final requesterLabel =
         item['requester_device_label']?.toString().trim() ?? '';
-    final targetDeviceLabel = requesterLabel.isNotEmpty
-        ? requesterLabel
-        : 'the other device';
+    final targetDeviceLabel =
+        requesterLabel.isNotEmpty ? requesterLabel : 'the other device';
     final syncEnabled = await _syncService.isSyncEnabled();
     if (!mounted) return _PasswordlessApprovalMode.cancel;
 
@@ -218,14 +216,14 @@ class _PasswordlessRequestsScreenState
                   Text(
                     syncEnabled
                         ? 'Cloud sync is locked on this primary phone right '
-                              'now. Enter your account password here to unlock '
-                              'sync on this phone and let $targetDeviceLabel '
-                              'start syncing immediately after approval.'
+                            'now. Enter your account password here to unlock '
+                            'sync on this phone and let $targetDeviceLabel '
+                            'start syncing immediately after approval.'
                         : 'Cloud sync is not unlocked on this primary phone '
-                              'right now. Enter your account password here if '
-                              'you want to unlock sync on this phone too and '
-                              'let $targetDeviceLabel start syncing '
-                              'immediately after approval.',
+                            'right now. Enter your account password here if '
+                            'you want to unlock sync on this phone too and '
+                            'let $targetDeviceLabel start syncing '
+                            'immediately after approval.',
                     style: TextStyle(color: _textSecondary, height: 1.45),
                   ),
                   const SizedBox(height: 12),
@@ -302,8 +300,7 @@ class _PasswordlessRequestsScreenState
 
                         setDialogState(() {
                           isSubmitting = false;
-                          errorText =
-                              _syncService.lastErrorMessage ??
+                          errorText = _syncService.lastErrorMessage ??
                               'Could not unlock sync on this phone.';
                         });
                       },
@@ -357,8 +354,8 @@ class _PasswordlessRequestsScreenState
 
     final successMessage = approve
         ? approvalMode == _PasswordlessApprovalMode.unlockAndTransfer
-              ? 'Sign-in request approved and sync will unlock on that device too.'
-              : 'Sign-in request approved.'
+            ? 'Sign-in request approved and sync will unlock on that device too.'
+            : 'Sign-in request approved.'
         : 'Sign-in request denied.';
 
     if (success && approve && widget.closeOnSuccessfulApproval && mounted) {
@@ -371,16 +368,15 @@ class _PasswordlessRequestsScreenState
         content: Text(
           success
               ? (approve
-                    ? approvalMode ==
-                              _PasswordlessApprovalMode.unlockAndTransfer
-                          ? 'Sign-in request approved and sync will unlock on '
-                                'that device too.'
-                          : 'Sign-in request approved. That device may still '
-                                'need the account password to unlock encrypted '
-                                'sync.'
-                    : successMessage)
+                  ? approvalMode == _PasswordlessApprovalMode.unlockAndTransfer
+                      ? 'Sign-in request approved and sync will unlock on '
+                          'that device too.'
+                      : 'Sign-in request approved. That device may still '
+                          'need the account password to unlock encrypted '
+                          'sync.'
+                  : successMessage)
               : (_syncService.lastErrorMessage ??
-                    'Could not update this sign-in request.'),
+                  'Could not update this sign-in request.'),
         ),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -446,7 +442,7 @@ class _PasswordlessRequestsScreenState
           success
               ? 'Encrypted sign-in log deleted.'
               : (_syncService.lastErrorMessage ??
-                    'Could not delete this sign-in log.'),
+                  'Could not delete this sign-in log.'),
         ),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -507,7 +503,7 @@ class _PasswordlessRequestsScreenState
           success
               ? 'Cleared $clearedCount encrypted sign-in log${clearedCount == 1 ? '' : 's'}.'
               : (_syncService.lastErrorMessage ??
-                    'Could not clear the sign-in logs.'),
+                  'Could not clear the sign-in logs.'),
         ),
         backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -567,8 +563,8 @@ class _PasswordlessRequestsScreenState
               onPressed: _isActing
                   ? null
                   : () => setState(() {
-                      _selectedCodes[requestId] = choices[index];
-                    }),
+                        _selectedCodes[requestId] = choices[index];
+                      }),
             ),
           ),
           if (index != choices.length - 1) const SizedBox(width: 10),
@@ -729,10 +725,10 @@ class _PasswordlessRequestsScreenState
                     onPressed: _isActing || selectedCode == null
                         ? null
                         : () => _handleRequest(
-                            item,
-                            approve: true,
-                            selectedCode: selectedCode,
-                          ),
+                              item,
+                              approve: true,
+                              selectedCode: selectedCode,
+                            ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,
                       foregroundColor: Colors.white,

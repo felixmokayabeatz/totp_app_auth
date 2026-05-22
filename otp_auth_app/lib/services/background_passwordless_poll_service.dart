@@ -107,11 +107,10 @@ class BackgroundPasswordlessPollService {
 
     final sessions = await syncService.getActiveDeviceSessions();
     final currentSession = sessions.cast<DeviceSessionInfo?>().firstWhere(
-      (session) => session?.isCurrent == true,
-      orElse: () => null,
-    );
-    final canShowPasswordlessNotification =
-        currentSession != null &&
+          (session) => session?.isCurrent == true,
+          orElse: () => null,
+        );
+    final canShowPasswordlessNotification = currentSession != null &&
         currentSession.isPrimary &&
         currentSession.deviceKind == 'mobile';
 
@@ -142,7 +141,7 @@ class BackgroundPasswordlessPollService {
 
     final requesterDeviceLabel =
         pendingRequest['requester_device_label']?.toString() ??
-        'another device';
+            'another device';
     await approvalNotifications.showPasswordlessApprovalNotification(
       requestId: requestId,
       requesterDeviceLabel: requesterDeviceLabel,

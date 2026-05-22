@@ -146,8 +146,7 @@ class SecureStorageService {
   String _deriveStorageKey() {
     final username =
         Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
-    final homeDir =
-        Platform.environment['USERPROFILE'] ??
+    final homeDir = Platform.environment['USERPROFILE'] ??
         Platform.environment['HOME'] ??
         '';
     final seed =

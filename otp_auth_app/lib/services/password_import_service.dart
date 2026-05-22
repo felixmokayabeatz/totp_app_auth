@@ -153,9 +153,8 @@ class PasswordImportService {
       normalized['folder'],
     ]);
 
-    final resolvedTitle = (title?.trim().isNotEmpty == true)
-        ? title!.trim()
-        : _titleFromUrl(url);
+    final resolvedTitle =
+        (title?.trim().isNotEmpty == true) ? title!.trim() : _titleFromUrl(url);
     if (resolvedTitle == null || resolvedTitle.isEmpty) {
       return null;
     }
@@ -189,14 +188,12 @@ class PasswordImportService {
     if (lines.isEmpty) return const [];
 
     final delimiter = _detectDelimiter(input);
-    final rows = lines
-        .map((line) => _splitDelimitedLine(line, delimiter))
-        .toList();
+    final rows =
+        lines.map((line) => _splitDelimitedLine(line, delimiter)).toList();
     if (rows.isEmpty) return const [];
 
-    final headers = rows.first
-        .map((cell) => cell.trim().toLowerCase())
-        .toList();
+    final headers =
+        rows.first.map((cell) => cell.trim().toLowerCase()).toList();
     final hasHeader = headers.any((cell) => _knownHeaderNames.contains(cell));
     final dataRows = hasHeader ? rows.skip(1) : rows;
 

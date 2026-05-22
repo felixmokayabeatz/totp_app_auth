@@ -53,9 +53,8 @@ class ImportFilePickerService {
     final mimeType = payload['mimeType']?.toString().trim() ?? '';
     final bytes = _asBytes(payload['bytes']);
     return PickedImportFile(
-      fileName: (fileName == null || fileName.isEmpty)
-          ? 'import.txt'
-          : fileName,
+      fileName:
+          (fileName == null || fileName.isEmpty) ? 'import.txt' : fileName,
       mimeType: mimeType,
       content: _decodeText(bytes),
     );

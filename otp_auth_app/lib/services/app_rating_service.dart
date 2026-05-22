@@ -43,8 +43,7 @@ class AppRating {
       platform: json['platform']?.toString() ?? 'unknown',
       platformDisplay:
           json['platform_display']?.toString() ?? 'Unknown platform',
-      displayName:
-          json['display_name']?.toString() ??
+      displayName: json['display_name']?.toString() ??
           json['display_name_or_anonymous']?.toString() ??
           'Anonymous user',
       stars: int.tryParse(json['stars']?.toString() ?? '') ?? 5,
@@ -87,13 +86,13 @@ class AppRatingLookup {
 
 class AppRatingService {
   AppRatingService()
-    : _dio = Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 20),
-          receiveTimeout: const Duration(seconds: 20),
-          headers: {'Content-Type': 'application/json'},
-        ),
-      );
+      : _dio = Dio(
+          BaseOptions(
+            connectTimeout: const Duration(seconds: 20),
+            receiveTimeout: const Duration(seconds: 20),
+            headers: {'Content-Type': 'application/json'},
+          ),
+        );
 
   final Dio _dio;
 

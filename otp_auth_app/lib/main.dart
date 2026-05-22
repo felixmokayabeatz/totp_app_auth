@@ -334,8 +334,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       setState(() {
         _requiredUpdateInfo =
             info != null && info.updateAvailable && info.forceUpdate
-            ? info
-            : null;
+                ? info
+                : null;
       });
     } catch (e) {
       debugPrint('Update check error: $e');
@@ -688,32 +688,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           home: !_startupLogoDone || !_initialized || !_sessionReady
               ? const _LaunchLoadingScreen()
               : _requiredUpdateInfo != null
-              ? _RequiredUpdateScreen(
-                  info: _requiredUpdateInfo!,
-                  isOpeningUpdate: _openingRequiredUpdate,
-                  isOpeningDownloadPage: _openingRequiredDownloadPage,
-                  canSelfUpdate: _appUpdateService.canSelfUpdate,
-                  updateProgress: _requiredUpdateProgress,
-                  onUpdateNow: _openRequiredUpdate,
-                  onOpenManualDownloadPage: _openRequiredManualDownloadPage,
-                  onRefreshStatus: _refreshUpdateStatus,
-                )
-              : !_legalConsentAccepted
-              ? LegalConsentScreen(onAccepted: _acceptLegalConsent)
-              : !_onboardingCompleted
-              ? OnboardingScreen(
-                  isFirstLaunch: true,
-                  onFinished: _completeOnboarding,
-                )
-              : authProvider.canUseApp
-              ? (_isLocked
-                    ? _AppLockScreen(
-                        isBusy: _unlockInProgress,
-                        onUnlock: _unlockApp,
-                        onUsePin: _unlockWithPin,
-                      )
-                    : HomeScreen(key: ValueKey(authProvider.sessionScopeKey)))
-              : LoginScreen(),
+                  ? _RequiredUpdateScreen(
+                      info: _requiredUpdateInfo!,
+                      isOpeningUpdate: _openingRequiredUpdate,
+                      isOpeningDownloadPage: _openingRequiredDownloadPage,
+                      canSelfUpdate: _appUpdateService.canSelfUpdate,
+                      updateProgress: _requiredUpdateProgress,
+                      onUpdateNow: _openRequiredUpdate,
+                      onOpenManualDownloadPage: _openRequiredManualDownloadPage,
+                      onRefreshStatus: _refreshUpdateStatus,
+                    )
+                  : !_legalConsentAccepted
+                      ? LegalConsentScreen(onAccepted: _acceptLegalConsent)
+                      : !_onboardingCompleted
+                          ? OnboardingScreen(
+                              isFirstLaunch: true,
+                              onFinished: _completeOnboarding,
+                            )
+                          : authProvider.canUseApp
+                              ? (_isLocked
+                                  ? _AppLockScreen(
+                                      isBusy: _unlockInProgress,
+                                      onUnlock: _unlockApp,
+                                      onUsePin: _unlockWithPin,
+                                    )
+                                  : HomeScreen(
+                                      key: ValueKey(
+                                          authProvider.sessionScopeKey)))
+                              : LoginScreen(),
         );
       },
     );
@@ -745,9 +747,8 @@ class _RequiredUpdateScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final releaseNotes = info.releaseNotes.trim();
-    final notesMaxHeight = MediaQuery.sizeOf(context).height < 700
-        ? 220.0
-        : 280.0;
+    final notesMaxHeight =
+        MediaQuery.sizeOf(context).height < 700 ? 220.0 : 280.0;
 
     return Scaffold(
       body: SafeArea(
@@ -862,9 +863,8 @@ class _RequiredUpdateScreen extends StatelessWidget {
                               SizedBox(
                                 width: double.infinity,
                                 child: FilledButton.icon(
-                                  onPressed: isOpeningUpdate
-                                      ? null
-                                      : onUpdateNow,
+                                  onPressed:
+                                      isOpeningUpdate ? null : onUpdateNow,
                                   icon: isOpeningUpdate
                                       ? const SizedBox(
                                           width: 18,
@@ -879,8 +879,8 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                   label: Text(
                                     isOpeningUpdate
                                         ? (canSelfUpdate
-                                              ? 'Downloading update...'
-                                              : 'Opening download...')
+                                            ? 'Downloading update...'
+                                            : 'Opening download...')
                                         : 'Update now',
                                   ),
                                 ),
@@ -889,7 +889,9 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                 const SizedBox(height: 10),
                                 Text(
                                   'On Windows and Linux, BeatzLock will install the update and reopen automatically when it finishes.',
-                                  style: Theme.of(context).textTheme.bodySmall
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
                                       ?.copyWith(
                                         color: colorScheme.onSurfaceVariant,
                                         height: 1.4,
@@ -902,8 +904,8 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                 child: OutlinedButton.icon(
                                   onPressed:
                                       (isOpeningUpdate || isOpeningDownloadPage)
-                                      ? null
-                                      : onOpenManualDownloadPage,
+                                          ? null
+                                          : onOpenManualDownloadPage,
                                   icon: const Icon(Icons.open_in_new_rounded),
                                   label: Text(
                                     isOpeningDownloadPage
@@ -958,7 +960,9 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                 Text(
                                   updateProgress?.sizeLabel ??
                                       'Downloaded: 0 MiB',
-                                  style: Theme.of(context).textTheme.bodySmall
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
                                       ?.copyWith(
                                         color: colorScheme.onSurfaceVariant,
                                       ),
@@ -1010,9 +1014,9 @@ class _RequiredUpdateVersionRow extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
           ),
           const SizedBox(width: 12),
@@ -1221,8 +1225,7 @@ class _AppLockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile =
-        Theme.of(context).platform == TargetPlatform.android ||
+    final isMobile = Theme.of(context).platform == TargetPlatform.android ||
         Theme.of(context).platform == TargetPlatform.iOS;
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;

@@ -124,12 +124,10 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                       accent: _accent,
                       textPrimary: _textPrimary,
                       textSecondary: _textSecondary,
-                      surfaceColor: _isDark
-                          ? Colors.white10
-                          : Colors.grey.shade50,
-                      borderColor: _isDark
-                          ? Colors.white12
-                          : Colors.grey.shade200,
+                      surfaceColor:
+                          _isDark ? Colors.white10 : Colors.grey.shade50,
+                      borderColor:
+                          _isDark ? Colors.white12 : Colors.grey.shade200,
                     ),
                     const SizedBox(height: 20),
                     SizedBox(
@@ -291,9 +289,8 @@ class _LegalHtmlContent extends StatelessWidget {
 
     if (block.isListItem) {
       final style = TextStyle(color: textPrimary, fontSize: 14, height: 1.55);
-      final marker = block.orderedIndex == null
-          ? '-'
-          : '${block.orderedIndex}.';
+      final marker =
+          block.orderedIndex == null ? '-' : '${block.orderedIndex}.';
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -505,15 +502,15 @@ class _HtmlParser {
 
   static String plainText(String html) {
     return _decode(
-          _clean(html)
-              .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-              .replaceAll(
-                RegExp(r'</p>|</div>|</li>|</tr>', caseSensitive: false),
-                '\n',
-              )
-              .replaceAll(RegExp(r'</td>|</th>', caseSensitive: false), '  ')
-              .replaceAll(_tagPattern, ' '),
-        )
+      _clean(html)
+          .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+          .replaceAll(
+            RegExp(r'</p>|</div>|</li>|</tr>', caseSensitive: false),
+            '\n',
+          )
+          .replaceAll(RegExp(r'</td>|</th>', caseSensitive: false), '  ')
+          .replaceAll(_tagPattern, ' '),
+    )
         .split('\n')
         .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
         .where((line) => line.isNotEmpty)
@@ -707,14 +704,13 @@ class _HtmlParser {
         .replaceAll('&lt;', '<')
         .replaceAll('&gt;', '>')
         .replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
-          final code = int.tryParse(match.group(1) ?? '');
-          if (code == null) return match.group(0) ?? '';
-          return String.fromCharCode(code);
-        })
-        .replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
-          final code = int.tryParse(match.group(1) ?? '', radix: 16);
-          if (code == null) return match.group(0) ?? '';
-          return String.fromCharCode(code);
-        });
+      final code = int.tryParse(match.group(1) ?? '');
+      if (code == null) return match.group(0) ?? '';
+      return String.fromCharCode(code);
+    }).replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
+      final code = int.tryParse(match.group(1) ?? '', radix: 16);
+      if (code == null) return match.group(0) ?? '';
+      return String.fromCharCode(code);
+    });
   }
 }

@@ -71,9 +71,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     setState(() {
       _notifications = notifications;
-      _errorMessage = notifications.isEmpty
-          ? _syncService.lastErrorMessage
-          : null;
+      _errorMessage =
+          notifications.isEmpty ? _syncService.lastErrorMessage : null;
       _isLoading = false;
     });
   }
@@ -156,7 +155,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           success
               ? 'Marked $markedCount notification${markedCount == 1 ? '' : 's'} as read.'
               : (_syncService.lastErrorMessage ??
-                    'Could not mark notifications as read.'),
+                  'Could not mark notifications as read.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -291,7 +290,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           success
               ? 'Cleared $deletedCount notification${deletedCount == 1 ? '' : 's'}.'
               : (_syncService.lastErrorMessage ??
-                    'Could not clear notifications.'),
+                  'Could not clear notifications.'),
         ),
         backgroundColor: success ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,

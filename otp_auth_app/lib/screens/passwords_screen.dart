@@ -672,8 +672,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     final visibleIds = entries.map((entry) => entry.id).toSet();
     setState(() {
       _isSelectionMode = true;
-      final allVisibleSelected =
-          visibleIds.isNotEmpty &&
+      final allVisibleSelected = visibleIds.isNotEmpty &&
           visibleIds.every((entryId) => _selectedEntryIds.contains(entryId));
       if (allVisibleSelected) {
         _selectedEntryIds.removeAll(visibleIds);
@@ -801,9 +800,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: canDelete
-                    ? () => Navigator.pop(dialogContext, true)
-                    : null,
+                onPressed:
+                    canDelete ? () => Navigator.pop(dialogContext, true) : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
@@ -989,9 +987,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                         border: OutlineInputBorder(),
                       ),
                       validator: (value) {
-                        final hasPassword = passwordController.text
-                            .trim()
-                            .isNotEmpty;
+                        final hasPassword =
+                            passwordController.text.trim().isNotEmpty;
                         final hasNote = (value ?? '').trim().isNotEmpty;
                         if (!hasPassword && !hasNote) {
                           return 'Enter a password, a note, or both';
@@ -1030,8 +1027,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                       final box =
                           _passwordBox ?? await _syncService.getPasswordBox();
                       final entry = PasswordEntry(
-                        id:
-                            existing?.id ??
+                        id: existing?.id ??
                             DateTime.now().millisecondsSinceEpoch.toString(),
                         title: titleController.text.trim(),
                         username: usernameController.text.trim(),
@@ -1442,8 +1438,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
           color: isSelected
               ? _accent.withValues(alpha: 0.85)
               : _isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : _accent.withValues(alpha: 0.08),
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : _accent.withValues(alpha: 0.08),
           width: isSelected ? 1.6 : 1,
         ),
         boxShadow: [
@@ -1671,9 +1667,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                     if (entry.username.trim().isNotEmpty)
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: selectionMode
-                              ? null
-                              : () => _copyUsername(entry),
+                          onPressed:
+                              selectionMode ? null : () => _copyUsername(entry),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: BorderSide(
@@ -1715,9 +1710,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                   children: [
                     Expanded(
                       child: TextButton.icon(
-                        onPressed: selectionMode
-                            ? null
-                            : () => _copyPassword(entry),
+                        onPressed:
+                            selectionMode ? null : () => _copyPassword(entry),
                         style: TextButton.styleFrom(
                           foregroundColor: _textPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1731,9 +1725,8 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                     ),
                     Expanded(
                       child: TextButton.icon(
-                        onPressed: selectionMode
-                            ? null
-                            : () => _copyNote(entry),
+                        onPressed:
+                            selectionMode ? null : () => _copyNote(entry),
                         style: TextButton.styleFrom(
                           foregroundColor: _textPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1758,12 +1751,10 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   @override
   Widget build(BuildContext context) {
     final box = _passwordBox;
-    final sortedEntries = box == null
-        ? <PasswordEntry>[]
-        : _sortedEntries(box.values);
+    final sortedEntries =
+        box == null ? <PasswordEntry>[] : _sortedEntries(box.values);
     final filteredEntries = _filteredEntriesFrom(sortedEntries);
-    final allVisibleSelected =
-        filteredEntries.isNotEmpty &&
+    final allVisibleSelected = filteredEntries.isNotEmpty &&
         filteredEntries.every((entry) => _selectedEntryIds.contains(entry.id));
 
     return Scaffold(
@@ -1800,13 +1791,13 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
               onPressed: _selectedEntryIds.isEmpty
                   ? null
                   : () => _deleteEntries(
-                      sortedEntries
-                          .where(
-                            (entry) => _selectedEntryIds.contains(entry.id),
-                          )
-                          .toList(),
-                      deleteAll: false,
-                    ),
+                        sortedEntries
+                            .where(
+                              (entry) => _selectedEntryIds.contains(entry.id),
+                            )
+                            .toList(),
+                        deleteAll: false,
+                      ),
               icon: const Icon(Icons.delete_sweep_rounded),
             ),
             IconButton(
@@ -1893,168 +1884,174 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : box == null
-          ? Center(
-              child: Text(
-                'Password vault unavailable.',
-                style: TextStyle(color: _textSecondary),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _refreshFromCloud,
-              child: ValueListenableBuilder(
-                valueListenable: box.listenable(),
-                builder: (context, Box<PasswordEntry> passwordBox, _) {
-                  final entries = _sortedEntries(passwordBox.values);
+              ? Center(
+                  child: Text(
+                    'Password vault unavailable.',
+                    style: TextStyle(color: _textSecondary),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _refreshFromCloud,
+                  child: ValueListenableBuilder(
+                    valueListenable: box.listenable(),
+                    builder: (context, Box<PasswordEntry> passwordBox, _) {
+                      final entries = _sortedEntries(passwordBox.values);
 
-                  if (entries.isEmpty) {
-                    return ListView(children: [_buildEmptyState()]);
-                  }
+                      if (entries.isEmpty) {
+                        return ListView(children: [_buildEmptyState()]);
+                      }
 
-                  final filteredEntries = _filteredEntriesFrom(entries);
+                      final filteredEntries = _filteredEntriesFrom(entries);
 
-                  return ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 14),
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: _isDark
-                                ? const [Color(0xFF23233A), Color(0xFF171726)]
-                                : [
-                                    Colors.white,
-                                    _accent.withValues(alpha: 0.05),
-                                  ],
-                          ),
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(
-                            color: _accent.withValues(alpha: 0.10),
-                          ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: _accent.withValues(
-                                  alpha: _isDark ? 0.20 : 0.12,
-                                ),
-                                borderRadius: BorderRadius.circular(14),
+                      return ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: _isDark
+                                    ? const [
+                                        Color(0xFF23233A),
+                                        Color(0xFF171726)
+                                      ]
+                                    : [
+                                        Colors.white,
+                                        _accent.withValues(alpha: 0.05),
+                                      ],
                               ),
-                              child: Icon(
-                                Icons.password_rounded,
-                                color: _accent,
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: _accent.withValues(alpha: 0.10),
                               ),
                             ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Private vault',
-                                    style: TextStyle(
-                                      color: _textPrimary,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(
+                                      alpha: _isDark ? 0.20 : 0.12,
                                     ),
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
+                                  child: Icon(
+                                    Icons.password_rounded,
+                                    color: _accent,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      _buildInfoChip(
-                                        icon: Icons.inventory_2_rounded,
-                                        label:
-                                            '${entries.length} total entr${entries.length == 1 ? 'y' : 'ies'}',
-                                      ),
-                                      if (_searchQuery.isNotEmpty)
-                                        _buildInfoChip(
-                                          icon: Icons.filter_alt_rounded,
-                                          label:
-                                              '${filteredEntries.length} shown',
-                                          color: const Color(0xFF2563EB),
+                                      Text(
+                                        'Private vault',
+                                        style: TextStyle(
+                                          color: _textPrimary,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
                                         ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          _buildInfoChip(
+                                            icon: Icons.inventory_2_rounded,
+                                            label:
+                                                '${entries.length} total entr${entries.length == 1 ? 'y' : 'ies'}',
+                                          ),
+                                          if (_searchQuery.isNotEmpty)
+                                            _buildInfoChip(
+                                              icon: Icons.filter_alt_rounded,
+                                              label:
+                                                  '${filteredEntries.length} shown',
+                                              color: const Color(0xFF2563EB),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Reveal and copy actions still ask for unlock again. CSV and JSON password exports import into this encrypted vault on Android and Windows.',
+                                        style: TextStyle(
+                                          color: _textSecondary,
+                                          height: 1.45,
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Reveal and copy actions still ask for unlock again. CSV and JSON password exports import into this encrypted vault on Android and Windows.',
-                                    style: TextStyle(
-                                      color: _textSecondary,
-                                      height: 1.45,
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              hintText: 'Search passwords, usernames, or sites',
+                              prefixIcon: const Icon(Icons.search_rounded),
+                              suffixIcon: _searchQuery.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      onPressed: () =>
+                                          _searchController.clear(),
+                                      icon: const Icon(Icons.close_rounded),
                                     ),
-                                  ),
-                                ],
+                              filled: true,
+                              fillColor: _cardColor,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: BorderSide(
+                                  color: _accent.withValues(alpha: 0.10),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: BorderSide(
+                                  color: _accent.withValues(alpha: 0.10),
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide:
+                                    BorderSide(color: _accent, width: 1.4),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search passwords, usernames, or sites',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _searchQuery.isEmpty
-                              ? null
-                              : IconButton(
-                                  onPressed: () => _searchController.clear(),
-                                  icon: const Icon(Icons.close_rounded),
+                          ),
+                          const SizedBox(height: 14),
+                          if (filteredEntries.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: _cardColor,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Text(
+                                'No password entries match "$_searchQuery".',
+                                style: TextStyle(
+                                  color: _textSecondary,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                          filled: true,
-                          fillColor: _cardColor,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide(
-                              color: _accent.withValues(alpha: 0.10),
+                              ),
                             ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide(
-                              color: _accent.withValues(alpha: 0.10),
+                          for (final entry in filteredEntries)
+                            _buildEntryCard(
+                              entry,
+                              selectionMode: _isSelectionMode,
+                              isSelected: _selectedEntryIds.contains(entry.id),
                             ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide(color: _accent, width: 1.4),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      if (filteredEntries.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: _cardColor,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                          child: Text(
-                            'No password entries match "$_searchQuery".',
-                            style: TextStyle(
-                              color: _textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      for (final entry in filteredEntries)
-                        _buildEntryCard(
-                          entry,
-                          selectionMode: _isSelectionMode,
-                          isSelected: _selectedEntryIds.contains(entry.id),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
     );
   }
 }

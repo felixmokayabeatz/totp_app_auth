@@ -152,11 +152,11 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                           ),
                                           child: Text(
                                             'I have read and agree to the Terms of Service and Privacy Policy.',
-                                            style: textTheme.bodyMedium
-                                                ?.copyWith(
-                                                  color: colorScheme.onSurface,
-                                                  height: 1.35,
-                                                ),
+                                            style:
+                                                textTheme.bodyMedium?.copyWith(
+                                              color: colorScheme.onSurface,
+                                              height: 1.35,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -168,9 +168,8 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                               SizedBox(
                                 width: double.infinity,
                                 child: FilledButton.icon(
-                                  onPressed: _accepted && !_isSaving
-                                      ? _accept
-                                      : null,
+                                  onPressed:
+                                      _accepted && !_isSaving ? _accept : null,
                                   icon: _isSaving
                                       ? const SizedBox(
                                           width: 18,

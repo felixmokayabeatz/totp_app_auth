@@ -221,8 +221,8 @@ class _HomeScreenState extends State<HomeScreen>
           )
           .closed
           .whenComplete(() {
-            _offlineBackupReminderVisible = false;
-          });
+        _offlineBackupReminderVisible = false;
+      });
     });
   }
 
@@ -238,9 +238,8 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
 
     setState(() {
-      _unreadNotificationCount = notifications
-          .where((item) => !item.isRead)
-          .length;
+      _unreadNotificationCount =
+          notifications.where((item) => !item.isRead).length;
     });
   }
 
@@ -277,13 +276,12 @@ class _HomeScreenState extends State<HomeScreen>
     final sessions = await _syncService.getActiveDeviceSessions();
     if (!mounted) return;
     final currentSession = sessions.cast<DeviceSessionInfo?>().firstWhere(
-      (session) => session?.isCurrent == true,
-      orElse: () => null,
-    );
+          (session) => session?.isCurrent == true,
+          orElse: () => null,
+        );
     final canShowBulkDelete =
         currentSession != null && currentSession.isPrimary;
-    final canShowPasswordless =
-        canShowBulkDelete &&
+    final canShowPasswordless = canShowBulkDelete &&
         (Platform.isAndroid || Platform.isIOS) &&
         currentSession.deviceKind == 'mobile';
 
@@ -496,8 +494,8 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
 
-      final status = (refreshedItem['status']?.toString() ?? 'pending')
-          .toLowerCase();
+      final status =
+          (refreshedItem['status']?.toString() ?? 'pending').toLowerCase();
       if (status != 'pending') {
         dialogRefreshTimer?.cancel();
         dialogClosed = true;
@@ -542,9 +540,8 @@ class _HomeScreenState extends State<HomeScreen>
           final isDark = theme.brightness == Brightness.dark;
           final surfaceColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
           final softAccent = _accent.withValues(alpha: isDark ? 0.18 : 0.08);
-          final textPrimary = isDark
-              ? Colors.white
-              : theme.colorScheme.onSurface;
+          final textPrimary =
+              isDark ? Colors.white : theme.colorScheme.onSurface;
 
           Widget buildChoiceButton(String choice) {
             final isSelected = selectedCode == choice;
@@ -638,7 +635,7 @@ class _HomeScreenState extends State<HomeScreen>
                     success
                         ? 'Denied $label.'
                         : (_syncService.lastErrorMessage ??
-                              'Could not deny that sign-in request.'),
+                            'Could not deny that sign-in request.'),
                     success ? Colors.orange : Colors.red,
                   );
                 },
@@ -651,11 +648,11 @@ class _HomeScreenState extends State<HomeScreen>
                         final unlocked = await _appLockService
                             .authenticateToUnlock(dialogContext);
                         if (!dialogContext.mounted || !unlocked) return;
-                        final success = await _syncService
-                            .approvePasswordlessRequest(
-                              requestId,
-                              selectedCode: selectedCode!,
-                            );
+                        final success =
+                            await _syncService.approvePasswordlessRequest(
+                          requestId,
+                          selectedCode: selectedCode!,
+                        );
                         if (!dialogContext.mounted) return;
                         dialogClosed = true;
                         Navigator.pop(dialogContext);
@@ -663,7 +660,7 @@ class _HomeScreenState extends State<HomeScreen>
                           success
                               ? 'Approved $label.'
                               : (_syncService.lastErrorMessage ??
-                                    'Could not approve that sign-in request.'),
+                                  'Could not approve that sign-in request.'),
                           success ? const Color(0xFF10B981) : Colors.red,
                         );
                       },
@@ -767,7 +764,7 @@ class _HomeScreenState extends State<HomeScreen>
         denied
             ? 'Denied delete request from $label.'
             : (_syncService.lastErrorMessage ??
-                  'Could not deny that delete request.'),
+                'Could not deny that delete request.'),
         denied ? Colors.orange : Colors.red,
       );
       return;
@@ -866,7 +863,7 @@ class _HomeScreenState extends State<HomeScreen>
         denied
             ? 'Denied the Recovery Codes PDF request from $label.'
             : (_syncService.lastErrorMessage ??
-                  'Could not deny that Recovery Codes PDF request.'),
+                'Could not deny that Recovery Codes PDF request.'),
         denied ? Colors.orange : Colors.red,
       );
       return;
@@ -900,9 +897,8 @@ class _HomeScreenState extends State<HomeScreen>
     final isDark = theme.brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
-    final textSecondary = isDark
-        ? Colors.white70
-        : theme.colorScheme.onSurfaceVariant;
+    final textSecondary =
+        isDark ? Colors.white70 : theme.colorScheme.onSurfaceVariant;
 
     await showDialog<void>(
       context: context,
@@ -980,8 +976,8 @@ class _HomeScreenState extends State<HomeScreen>
     }
     final primaryLabel =
         (status['primary_device_label']?.toString().trim() ?? '').isEmpty
-        ? 'your primary device'
-        : status['primary_device_label'].toString().trim();
+            ? 'your primary device'
+            : status['primary_device_label'].toString().trim();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted ||
@@ -998,9 +994,8 @@ class _HomeScreenState extends State<HomeScreen>
           builder: (dialogContext) {
             final theme = Theme.of(dialogContext);
             final isDark = theme.brightness == Brightness.dark;
-            final surfaceColor = isDark
-                ? const Color(0xFF1E1E32)
-                : Colors.white;
+            final surfaceColor =
+                isDark ? const Color(0xFF1E1E32) : Colors.white;
             final textColor = theme.colorScheme.onSurface;
             final mutedColor = theme.colorScheme.onSurfaceVariant;
 
@@ -1029,8 +1024,8 @@ class _HomeScreenState extends State<HomeScreen>
                       isPrimary
                           ? 'This is your primary device, so you need to save the Recovery Codes PDF here before continuing.'
                           : hasPendingRequest
-                          ? 'A Recovery Codes PDF request is already waiting on $primaryLabel.'
-                          : '$primaryLabel is your primary device. Send a request there so it can generate and save the Recovery Codes PDF.',
+                              ? 'A Recovery Codes PDF request is already waiting on $primaryLabel.'
+                              : '$primaryLabel is your primary device. Send a request there so it can generate and save the Recovery Codes PDF.',
                       style: TextStyle(color: mutedColor, height: 1.35),
                     ),
                   ],
@@ -1083,8 +1078,8 @@ class _HomeScreenState extends State<HomeScreen>
         }
 
         if (action == 'request') {
-          final requestedPrimaryLabel = await _syncService
-              .createBackupCodeGenerationRequest();
+          final requestedPrimaryLabel =
+              await _syncService.createBackupCodeGenerationRequest();
           if (!mounted) return;
           if (requestedPrimaryLabel == null) {
             _showSnackBar(
@@ -1338,8 +1333,7 @@ class _HomeScreenState extends State<HomeScreen>
                         ),
                       ),
                       child: ClipOval(
-                        child:
-                            _profilePhotoUrl != null &&
+                        child: _profilePhotoUrl != null &&
                                 _profilePhotoUrl!.isNotEmpty
                             ? Image.network(
                                 '${AppConfig.mediaUrl}${_profilePhotoUrl!.replaceFirst('/media/', '')}',
@@ -1934,8 +1928,8 @@ class _HomeScreenState extends State<HomeScreen>
                                       color: isExpiring
                                           ? Colors.red
                                           : (isDark
-                                                ? Colors.white
-                                                : const Color(0xFF1A1A2E)),
+                                              ? Colors.white
+                                              : const Color(0xFF1A1A2E)),
                                       letterSpacing: 3,
                                       fontFamily: 'monospace',
                                     ),
@@ -1951,8 +1945,8 @@ class _HomeScreenState extends State<HomeScreen>
                                   color: isExpiring
                                       ? Colors.red
                                       : (isDark
-                                            ? Colors.white38
-                                            : Colors.grey[500]),
+                                          ? Colors.white38
+                                          : Colors.grey[500]),
                                 ),
                               ),
                             ],
@@ -2148,8 +2142,7 @@ class _HomeScreenState extends State<HomeScreen>
     required DateTime startDate,
     required DateTime endDate,
   }) async {
-    final username =
-        await SecureStorageService().read(
+    final username = await SecureStorageService().read(
           SecureStorageService.currentUserKey,
         ) ??
         '';
@@ -2302,9 +2295,8 @@ class _HomeScreenState extends State<HomeScreen>
           final start = _dateOnly(startDate);
           final end = _dateOnly(endDate);
           final validRange = !end.isBefore(start);
-          final matchCount = validRange
-              ? _accountsInDateRange(start, end).length
-              : 0;
+          final matchCount =
+              validRange ? _accountsInDateRange(start, end).length : 0;
 
           return AlertDialog(
             shape: RoundedRectangleBorder(
@@ -2415,8 +2407,8 @@ class _HomeScreenState extends State<HomeScreen>
                       color: !validRange
                           ? Colors.red
                           : Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white70
-                          : Colors.grey.shade700,
+                              ? Colors.white70
+                              : Colors.grey.shade700,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -2431,18 +2423,17 @@ class _HomeScreenState extends State<HomeScreen>
               ElevatedButton(
                 onPressed: validRange && matchCount > 0
                     ? () => Navigator.pop(
-                        dialogContext,
-                        _BulkDeleteDateResult(
-                          startDate: start,
-                          endDate: end,
-                          deleteEverywhere: deleteEverywhere,
-                        ),
-                      )
+                          dialogContext,
+                          _BulkDeleteDateResult(
+                            startDate: start,
+                            endDate: end,
+                            deleteEverywhere: deleteEverywhere,
+                          ),
+                        )
                     : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: deleteEverywhere
-                      ? Colors.red
-                      : Colors.orange,
+                  backgroundColor:
+                      deleteEverywhere ? Colors.red : Colors.orange,
                   foregroundColor: Colors.white,
                 ),
                 child: Text(
@@ -2622,9 +2613,8 @@ class _HomeScreenState extends State<HomeScreen>
                         ? () => Navigator.pop(dialogContext, true)
                         : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: deleteEverywhere
-                          ? Colors.red
-                          : Colors.orange,
+                      backgroundColor:
+                          deleteEverywhere ? Colors.red : Colors.orange,
                       foregroundColor: Colors.white,
                     ),
                     child: Text(
@@ -3058,8 +3048,8 @@ class _HomeScreenState extends State<HomeScreen>
           color: destructive
               ? Colors.red.withValues(alpha: 0.08)
               : (isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.grey[50]),
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.grey[50]),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: destructive
@@ -3277,8 +3267,8 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               backgroundColor:
                   Theme.of(dialogContext).brightness == Brightness.dark
-                  ? const Color(0xFF1E1E32)
-                  : Colors.white,
+                      ? const Color(0xFF1E1E32)
+                      : Colors.white,
               content: Row(
                 children: [
                   const SizedBox(

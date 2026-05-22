@@ -71,8 +71,8 @@ class AppLockService {
     await _showMandatoryLockIntroIfNeeded(context);
     if (!context.mounted) return;
 
-    final canUseSystemAuth = await _biometricService
-        .canUseSystemAuthentication();
+    final canUseSystemAuth =
+        await _biometricService.canUseSystemAuthentication();
     if (!canUseSystemAuth) {
       final hasPin = await _biometricService.hasAppPin();
       if (!hasPin && context.mounted) {
@@ -82,13 +82,13 @@ class AppLockService {
   }
 
   Future<bool> authenticateToUnlock(BuildContext context) async {
-    final canUseSystemAuth = await _biometricService
-        .canUseSystemAuthentication();
+    final canUseSystemAuth =
+        await _biometricService.canUseSystemAuthentication();
     if (!context.mounted) return false;
 
     if (canUseSystemAuth) {
-      final authenticated = await _biometricService
-          .authenticateWithDeviceSystem(context);
+      final authenticated =
+          await _biometricService.authenticateWithDeviceSystem(context);
       if (!context.mounted) return false;
       if (authenticated) {
         return true;
@@ -194,12 +194,10 @@ class AppLockService {
                 final confirm = confirmController.text.trim();
 
                 setDialogState(() {
-                  pinErrorText = pin.length < 4
-                      ? 'PIN must be at least 4 digits.'
-                      : null;
-                  confirmErrorText = pin != confirm
-                      ? 'PINs do not match.'
-                      : null;
+                  pinErrorText =
+                      pin.length < 4 ? 'PIN must be at least 4 digits.' : null;
+                  confirmErrorText =
+                      pin != confirm ? 'PINs do not match.' : null;
                 });
 
                 if (pin.length < 4 || pin != confirm) {
@@ -299,20 +297,16 @@ class AppLockService {
                 final currentPin = currentController.text.trim();
                 final pin = pinController.text.trim();
                 final confirm = confirmController.text.trim();
-                final currentPinValid =
-                    !hasExistingPin ||
+                final currentPinValid = !hasExistingPin ||
                     await _biometricService.verifyAppPin(currentPin);
 
                 setDialogState(() {
-                  currentErrorText = currentPinValid
-                      ? null
-                      : 'Current PIN is incorrect.';
-                  pinErrorText = pin.length < 4
-                      ? 'PIN must be at least 4 digits.'
-                      : null;
-                  confirmErrorText = pin != confirm
-                      ? 'PINs do not match.'
-                      : null;
+                  currentErrorText =
+                      currentPinValid ? null : 'Current PIN is incorrect.';
+                  pinErrorText =
+                      pin.length < 4 ? 'PIN must be at least 4 digits.' : null;
+                  confirmErrorText =
+                      pin != confirm ? 'PINs do not match.' : null;
                 });
 
                 if (!currentPinValid || pin.length < 4 || pin != confirm) {

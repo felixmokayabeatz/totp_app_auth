@@ -351,9 +351,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final accent = colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final inputCardColor = isDark
-        ? const Color(0xFF1E1E32)
-        : Colors.grey.shade50;
+    final inputCardColor =
+        isDark ? const Color(0xFF1E1E32) : Colors.grey.shade50;
     final inputBorderColor = isDark
         ? Colors.white.withValues(alpha: 0.12)
         : accent.withValues(alpha: 0.3);
@@ -388,12 +387,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       _show2FA
                           ? 'Enter 2FA Code'
                           : (_showResetPassword
-                                ? 'Reset Password'
-                                : (_showForgotPassword
-                                      ? 'Forgot Password'
-                                      : (_isLogin
-                                            ? 'Welcome to BeatzLock'
-                                            : 'Create BeatzLock Account'))),
+                              ? 'Reset Password'
+                              : (_showForgotPassword
+                                  ? 'Forgot Password'
+                                  : (_isLogin
+                                      ? 'Welcome to BeatzLock'
+                                      : 'Create BeatzLock Account'))),
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -455,10 +454,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           setState(() {
                             _isLoading = true;
                           });
-                          final exists = await _syncService
-                              .checkRecoveryEmailExists(
-                                _resetEmailController.text.trim(),
-                              );
+                          final exists =
+                              await _syncService.checkRecoveryEmailExists(
+                            _resetEmailController.text.trim(),
+                          );
                           if (!mounted) return;
                           setState(() {
                             _isLoading = false;
@@ -1032,9 +1031,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
-                          onPressed: _isLoading
-                              ? null
-                              : _startPasswordlessLogin,
+                          onPressed:
+                              _isLoading ? null : _startPasswordlessLogin,
                           icon: const Icon(Icons.phonelink_lock_rounded),
                           label: const Text(
                             'Use passwordless from primary phone',
@@ -1189,9 +1187,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             TextButton(
-                              onPressed: _resendCooldown == 0
-                                  ? _resend2FACode
-                                  : null,
+                              onPressed:
+                                  _resendCooldown == 0 ? _resend2FACode : null,
                               child: Text(
                                 _resendCooldown > 0
                                     ? 'Resend code (${_resendCooldown}s)'
@@ -1389,8 +1386,7 @@ class _LoginScreenState extends State<LoginScreen> {
     Map<String, dynamic> result, {
     String? effectivePassword,
   }) async {
-    final needsSyncUnlock =
-        result['requires_password_for_sync'] == true &&
+    final needsSyncUnlock = result['requires_password_for_sync'] == true &&
         (effectivePassword == null || effectivePassword.isEmpty);
     var syncUnlockedNow = false;
     if (needsSyncUnlock) {
@@ -1422,8 +1418,7 @@ class _LoginScreenState extends State<LoginScreen> {
     bool showFallbackMessage = true,
   }) async {
     final username = _usernameController.text.trim();
-    final effectivePassword =
-        passwordForSync ??
+    final effectivePassword = passwordForSync ??
         (_passwordController.text.isEmpty ? null : _passwordController.text);
     if (username.isEmpty) {
       _showError('Enter your username first');
@@ -1557,9 +1552,8 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () => Navigator.pop(dialogContext),
+                onPressed:
+                    isSubmitting ? null : () => Navigator.pop(dialogContext),
                 child: const Text('Continue without sync'),
               ),
               FilledButton(
@@ -1594,8 +1588,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         setDialogState(() {
                           isSubmitting = false;
-                          errorText =
-                              _syncService.lastErrorMessage ??
+                          errorText = _syncService.lastErrorMessage ??
                               'Could not unlock sync on this device.';
                         });
                       },

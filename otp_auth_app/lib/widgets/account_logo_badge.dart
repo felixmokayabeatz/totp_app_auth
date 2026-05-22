@@ -78,10 +78,9 @@ class AccountLogoBadge extends StatelessWidget {
       final mapped = _knownDomains[cleaned];
       if (mapped != null) return mapped;
 
-      for (final token
-          in cleaned
-              .split(RegExp(r'[^a-z0-9.]+'))
-              .where((token) => token.isNotEmpty)) {
+      for (final token in cleaned
+          .split(RegExp(r'[^a-z0-9.]+'))
+          .where((token) => token.isNotEmpty)) {
         final tokenMatch = _knownDomains[token];
         if (tokenMatch != null) {
           return tokenMatch;

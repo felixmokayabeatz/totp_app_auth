@@ -47,11 +47,9 @@ class DeviceSessionInfo {
       pushTokenUpdatedAt: DateTime.tryParse(
         json['push_token_updated_at']?.toString() ?? '',
       ),
-      createdAt:
-          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
-      lastSeenAt:
-          DateTime.tryParse(json['last_seen_at']?.toString() ?? '') ??
+      lastSeenAt: DateTime.tryParse(json['last_seen_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }

@@ -288,7 +288,7 @@ class SyncService {
   Future<String> _getUserBoxName() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-        await _secureStorage.read(SecureStorageService.localVaultUserKey);
+            await _secureStorage.read(SecureStorageService.localVaultUserKey);
     if (username == null || username.isEmpty) return 'otp_accounts_default';
     return 'otp_accounts_$username';
   }
@@ -307,7 +307,7 @@ class SyncService {
   Future<String> _getPasswordBoxName() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-        await _secureStorage.read(SecureStorageService.localVaultUserKey);
+            await _secureStorage.read(SecureStorageService.localVaultUserKey);
     if (username == null || username.isEmpty) return 'passwords_default';
     return 'passwords_$username';
   }
@@ -327,7 +327,7 @@ class SyncService {
   Future<String> _getSecureMessageBoxName() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-        await _secureStorage.read(SecureStorageService.localVaultUserKey);
+            await _secureStorage.read(SecureStorageService.localVaultUserKey);
     if (username == null || username.isEmpty) return 'secure_messages_default';
     return 'secure_messages_$username';
   }
@@ -361,9 +361,8 @@ class SyncService {
           storedSecret,
           userId,
         );
-        final cleanPlainSecret = plainSecret
-            .replaceAll(RegExp(r'\s+'), '')
-            .toUpperCase();
+        final cleanPlainSecret =
+            plainSecret.replaceAll(RegExp(r'\s+'), '').toUpperCase();
         if (RegExp(r'^[A-Z2-7]+$').hasMatch(cleanPlainSecret)) {
           return plainSecret;
         }
@@ -580,8 +579,8 @@ class SyncService {
   Future<String> _getPasswordDeletedIdsKey() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-        await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
-        'default_user';
+            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
+            'default_user';
     return '$_passwordDeletedIdsPrefix$username';
   }
 
@@ -635,8 +634,8 @@ class SyncService {
   Future<String> _getSecureMessageDeletedIdsKey() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
-        await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
-        'default_user';
+            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
+            'default_user';
     return '$_secureMessageDeletedIdsPrefix$username';
   }
 
@@ -779,8 +778,7 @@ class SyncService {
         ? 'Device'
         : '${operatingSystem[0].toUpperCase()}${operatingSystem.substring(1)}';
     final normalizedHostname = hostname?.toLowerCase();
-    final hasUsefulHostname =
-        hostname != null &&
+    final hasUsefulHostname = hostname != null &&
         hostname.isNotEmpty &&
         normalizedHostname != 'localhost' &&
         normalizedHostname != 'localhost.localdomain' &&
@@ -1355,7 +1353,7 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??
-                'This device session is no longer active.')
+              'This device session is no longer active.')
           : _friendlyRequestError(e, 'Sync failed. Please try again.');
       debugPrint('syncAccounts error: $e');
       return false;
@@ -1438,8 +1436,8 @@ class SyncService {
 
         final cloudUpdatedAt =
             DateTime.tryParse(rawEntry['updated_at']?.toString() ?? '') ??
-            DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
-            DateTime.now();
+                DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
+                DateTime.now();
 
         final existing = localBox.get(id);
         if (existing != null) {
@@ -1457,7 +1455,7 @@ class SyncService {
           serverIP: rawEntry['server_ip']?.toString(),
           createdAt:
               DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
-              DateTime.now(),
+                  DateTime.now(),
           updatedAt: cloudUpdatedAt,
           userId: userId,
         );
@@ -1794,8 +1792,7 @@ class SyncService {
       _lastErrorMessage = 'Could not unlock sync on this device.';
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not unlock sync on this device.';
       return false;
     } catch (_) {
@@ -1840,8 +1837,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not prepare synced restore on the server.';
       return false;
     } catch (_) {
@@ -1949,20 +1945,18 @@ class SyncService {
         }
       } catch (_) {}
 
-      final payload = passwordBox.values
-          .map((entry) {
-            return {
-              'id': entry.id,
-              'title': entry.title,
-              'username': entry.username,
-              'password': entry.getPassword(userId),
-              'note': entry.getNote(userId),
-              'server_ip': entry.serverIP,
-              'created_at': entry.createdAt.toIso8601String(),
-              'updated_at': entry.updatedAt.toIso8601String(),
-            };
-          })
-          .toList(growable: false);
+      final payload = passwordBox.values.map((entry) {
+        return {
+          'id': entry.id,
+          'title': entry.title,
+          'username': entry.username,
+          'password': entry.getPassword(userId),
+          'note': entry.getNote(userId),
+          'server_ip': entry.serverIP,
+          'created_at': entry.createdAt.toIso8601String(),
+          'updated_at': entry.updatedAt.toIso8601String(),
+        };
+      }).toList(growable: false);
 
       final encrypted = EncryptionService.encryptSensitiveSyncPayload(
         jsonEncode(payload),
@@ -2034,8 +2028,8 @@ class SyncService {
 
         if (downloadResponse.statusCode == 200 &&
             downloadResponse.data['encrypted_content'] != null) {
-          final encryptedContent = downloadResponse.data['encrypted_content']
-              .toString();
+          final encryptedContent =
+              downloadResponse.data['encrypted_content'].toString();
           if (encryptedContent.isNotEmpty) {
             final decrypted = EncryptionService.decryptSensitiveSyncPayload(
               encryptedContent,
@@ -2054,8 +2048,8 @@ class SyncService {
 
           cloudVersion =
               int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
-          final cloudDeletedIdsRaw = downloadResponse.data['deleted_accounts']
-              ?.toString();
+          final cloudDeletedIdsRaw =
+              downloadResponse.data['deleted_accounts']?.toString();
           if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
             final cloudDeletedState = _parseDeletedState(cloudDeletedIdsRaw);
             cloudDeletedIds = cloudDeletedState.deletedIds;
@@ -2082,8 +2076,8 @@ class SyncService {
         final value = cloudEntry.value;
         final cloudUpdatedAt =
             DateTime.tryParse(value['updated_at']?.toString() ?? '') ??
-            DateTime.tryParse(value['created_at']?.toString() ?? '') ??
-            DateTime.now();
+                DateTime.tryParse(value['created_at']?.toString() ?? '') ??
+                DateTime.now();
         final existing = passwordBox.get(cloudEntry.key);
         if (existing != null && !cloudUpdatedAt.isAfter(existing.updatedAt)) {
           continue;
@@ -2095,8 +2089,7 @@ class SyncService {
           password: value['password']?.toString() ?? '',
           note: value['note']?.toString(),
           serverIP: value['server_ip']?.toString(),
-          createdAt:
-              DateTime.tryParse(value['created_at']?.toString() ?? '') ??
+          createdAt: DateTime.tryParse(value['created_at']?.toString() ?? '') ??
               DateTime.now(),
           updatedAt: cloudUpdatedAt,
           userId: userId,
@@ -2155,7 +2148,7 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??
-                'This device session is no longer active.')
+              'This device session is no longer active.')
           : _friendlyRequestError(e, 'Password sync failed. Please try again.');
       debugPrint('syncPasswordEntries error: $e');
       return false;
@@ -2207,8 +2200,8 @@ class SyncService {
       final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
       final cloudDeletedIds =
           cloudDeletedIdsRaw == null || cloudDeletedIdsRaw.trim().isEmpty
-          ? <String>{}
-          : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
+              ? <String>{}
+              : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
       final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
 
       final cloudMessages = List<Map<String, dynamic>>.from(
@@ -2221,7 +2214,7 @@ class SyncService {
         final id = rawMessage['id']?.toString() ?? '';
         final createdAt =
             DateTime.tryParse(rawMessage['created_at']?.toString() ?? '') ??
-            DateTime.now();
+                DateTime.now();
         if (id.isEmpty || deletedIds.contains(id) || localBox.containsKey(id)) {
           continue;
         }
@@ -2304,8 +2297,8 @@ class SyncService {
 
         if (downloadResponse.statusCode == 200 &&
             downloadResponse.data['encrypted_content'] != null) {
-          final encryptedContent = downloadResponse.data['encrypted_content']
-              .toString();
+          final encryptedContent =
+              downloadResponse.data['encrypted_content'].toString();
           if (encryptedContent.isNotEmpty) {
             final decrypted = EncryptionService.decryptSensitiveSyncPayload(
               encryptedContent,
@@ -2323,8 +2316,8 @@ class SyncService {
           }
           cloudVersion =
               int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
-          final cloudDeletedIdsRaw = downloadResponse.data['deleted_accounts']
-              ?.toString();
+          final cloudDeletedIdsRaw =
+              downloadResponse.data['deleted_accounts']?.toString();
           if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
             cloudDeletedIds = List<String>.from(
               jsonDecode(cloudDeletedIdsRaw),
@@ -2341,10 +2334,9 @@ class SyncService {
 
       for (final cloudMessage
           in List<MapEntry<String, Map<String, dynamic>>>.from(
-            mergedMessages.entries,
-          )) {
-        final createdAt =
-            DateTime.tryParse(
+        mergedMessages.entries,
+      )) {
+        final createdAt = DateTime.tryParse(
               cloudMessage.value['created_at']?.toString() ?? '',
             ) ??
             DateTime.now();
@@ -2406,7 +2398,7 @@ class SyncService {
     } on DioException catch (e) {
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??
-                'This device session is no longer active.')
+              'This device session is no longer active.')
           : _friendlyRequestError(
               e,
               'Secure text sync failed. Please try again.',
@@ -2465,8 +2457,7 @@ class SyncService {
       _lastErrorMessage = 'Passwordless sign-in could not be started.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Passwordless sign-in could not be started.';
       return e.response?.data is Map
           ? Map<String, dynamic>.from(e.response!.data as Map)
@@ -2509,10 +2500,10 @@ class SyncService {
           await _getStoredPasswordlessUnlockTransferKey(requestId);
       final unlockTransferKeyCandidates =
           _passwordlessUnlockTransferKeyCandidates(
-            responseUnlockTransferKey: responseUnlockTransferKey,
-            providedUnlockTransferKey: unlockTransferKey,
-            storedUnlockTransferKey: storedUnlockTransferKey,
-          );
+        responseUnlockTransferKey: responseUnlockTransferKey,
+        providedUnlockTransferKey: unlockTransferKey,
+        storedUnlockTransferKey: storedUnlockTransferKey,
+      );
       if (data['success'] == true && data['status'] == 'approved') {
         String? transferredEncryptionKey;
         final syncUnlockPayload = data['sync_unlock_payload']?.toString();
@@ -2547,8 +2538,7 @@ class SyncService {
           data,
           password: password,
           transferredEncryptionKey: transferredEncryptionKey,
-          enableSyncByDefault:
-              (password != null && password.isNotEmpty) ||
+          enableSyncByDefault: (password != null && password.isNotEmpty) ||
               (transferredEncryptionKey != null &&
                   transferredEncryptionKey.isNotEmpty),
         );
@@ -2562,8 +2552,7 @@ class SyncService {
       }
       return data;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Passwordless sign-in could not be completed.';
       return e.response?.data is Map
           ? Map<String, dynamic>.from(e.response!.data as Map)
@@ -2762,8 +2751,7 @@ class SyncService {
       );
       return r.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          e.response?.data?['error']?.toString() ??
+      _lastErrorMessage = e.response?.data?['error']?.toString() ??
           'Unable to send reset code.';
       return false;
     } catch (e) {
@@ -2821,8 +2809,7 @@ class SyncService {
       );
       return response.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Recovery code verification failed.';
       return false;
     } catch (e) {
@@ -2840,8 +2827,7 @@ class SyncService {
       );
       return response.data['success'] == true;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'No account found with this email.';
       return false;
     } catch (e) {
@@ -2907,8 +2893,7 @@ class SyncService {
       }
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Password reset with recovery code failed.';
       return false;
     } catch (e) {
@@ -2984,8 +2969,7 @@ class SyncService {
       }
       return const [];
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not load backup-code requests.';
       return const [];
     } catch (_) {
@@ -3022,8 +3006,7 @@ class SyncService {
       _lastErrorMessage = 'Could not send the backup-code request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not send the backup-code request.';
       return null;
     } catch (_) {
@@ -3043,11 +3026,8 @@ class SyncService {
 
   String _backupCodesFileName(String username) {
     final safeUsername = username.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
-    final timestamp = DateTime.now()
-        .toIso8601String()
-        .replaceAll(':', '-')
-        .split('.')
-        .first;
+    final timestamp =
+        DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
     return 'beatzlock_backup_codes_${safeUsername}_$timestamp.pdf';
   }
 
@@ -3108,7 +3088,7 @@ class SyncService {
 
       final username =
           await _secureStorage.read(SecureStorageService.currentUserKey) ??
-          'user';
+              'user';
       final fileName = _backupCodesFileName(username);
       return await _saveBackupCodesPdf(fileName: fileName, bytes: bytes);
     } on DioException catch (e) {
@@ -3169,8 +3149,7 @@ class SyncService {
       _lastErrorMessage = 'Could not approve this backup-code request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not approve this backup-code request.';
       return null;
     } catch (_) {
@@ -3201,8 +3180,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not deny this backup-code request.';
       return false;
     } catch (_) {
@@ -3602,8 +3580,7 @@ class SyncService {
       return response.statusCode == 200;
     } on DioException catch (e) {
       if (reportError) {
-        _lastErrorMessage =
-            _extractServerError(e.response?.data) ??
+        _lastErrorMessage = _extractServerError(e.response?.data) ??
             'Could not enable push notifications.';
       }
       return false;
@@ -3636,8 +3613,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not sign out this device.';
       return false;
     } catch (e) {
@@ -3671,8 +3647,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not set the primary device.';
       return false;
     } catch (e) {
@@ -3709,8 +3684,7 @@ class SyncService {
       }
       return const [];
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not load passwordless sign-in requests.';
       return const [];
     } catch (_) {
@@ -3784,8 +3758,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not approve this sign-in request.';
       return false;
     } catch (_) {
@@ -3814,8 +3787,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not deny this sign-in request.';
       return false;
     } catch (_) {
@@ -3844,8 +3816,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not delete this sign-in log.';
       return false;
     } catch (_) {
@@ -3881,8 +3852,7 @@ class SyncService {
       _lastErrorMessage = 'Could not clear the sign-in logs.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not clear the sign-in logs.';
       return null;
     } catch (_) {
@@ -3918,8 +3888,7 @@ class SyncService {
       }
       return const [];
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not load OTP delete requests.';
       return const [];
     } catch (_) {
@@ -3972,8 +3941,7 @@ class SyncService {
       _lastErrorMessage = 'Could not send the delete request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not send the delete request.';
       return null;
     } catch (_) {
@@ -4011,8 +3979,7 @@ class SyncService {
       _lastErrorMessage = 'Could not approve this delete request.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not approve this delete request.';
       return null;
     } catch (_) {
@@ -4042,8 +4009,7 @@ class SyncService {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not deny this delete request.';
       return false;
     } catch (_) {
@@ -4086,8 +4052,7 @@ class SyncService {
       }
       return false;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Primary-device recovery failed.';
       return false;
     } catch (_) {
@@ -4123,8 +4088,7 @@ class SyncService {
       _lastErrorMessage = 'Could not sign out the other devices.';
       return null;
     } on DioException catch (e) {
-      _lastErrorMessage =
-          _extractServerError(e.response?.data) ??
+      _lastErrorMessage = _extractServerError(e.response?.data) ??
           'Could not sign out the other devices.';
       return null;
     } catch (e) {

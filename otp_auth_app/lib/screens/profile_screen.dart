@@ -47,8 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       _userEmail = 'No email';
       _username = 'User';
     });
-    final email =
-        await secureStorage.read(SecureStorageService.userEmailKey) ??
+    final email = await secureStorage.read(SecureStorageService.userEmailKey) ??
         'No email';
     final username =
         await secureStorage.read(SecureStorageService.currentUserKey) ?? 'User';
@@ -276,26 +275,26 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         height: 120,
                                       )
                                     : (_profileImageUrl != null &&
-                                              _profileImageUrl!.isNotEmpty
-                                          ? Image.network(
-                                              '${AppConfig.mediaUrl}${_profileImageUrl!.replaceFirst('/media/', '')}',
-                                              fit: BoxFit.cover,
-                                              width: 120,
-                                              height: 120,
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                    return Icon(
-                                                      Icons.person,
-                                                      size: 50,
-                                                      color: Colors.white,
-                                                    );
-                                                  },
-                                            )
-                                          : Icon(
-                                              Icons.person,
-                                              size: 50,
-                                              color: Colors.white,
-                                            )),
+                                            _profileImageUrl!.isNotEmpty
+                                        ? Image.network(
+                                            '${AppConfig.mediaUrl}${_profileImageUrl!.replaceFirst('/media/', '')}',
+                                            fit: BoxFit.cover,
+                                            width: 120,
+                                            height: 120,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                              return Icon(
+                                                Icons.person,
+                                                size: 50,
+                                                color: Colors.white,
+                                              );
+                                            },
+                                          )
+                                        : Icon(
+                                            Icons.person,
+                                            size: 50,
+                                            color: Colors.white,
+                                          )),
                               ),
                             ),
                             // Edit Button
@@ -380,9 +379,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: isDark
-                                    ? Colors.white
-                                    : Color(0xFF1A1A2E),
+                                color:
+                                    isDark ? Colors.white : Color(0xFF1A1A2E),
                               ),
                             ),
                             IconButton(

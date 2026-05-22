@@ -109,8 +109,7 @@ class OTPImportService {
         continue;
       }
 
-      final resolvedSecretIndex =
-          secretIndex ??
+      final resolvedSecretIndex = secretIndex ??
           row.indexWhere((cell) => _isBase32Secret(_cleanSecret(cell)));
       if (resolvedSecretIndex < 0 || resolvedSecretIndex >= row.length) {
         continue;
@@ -119,14 +118,12 @@ class OTPImportService {
       final secret = _cleanSecret(row[resolvedSecretIndex]);
       if (!_isBase32Secret(secret)) continue;
 
-      final service =
-          _readCell(row, serviceIndex) ??
+      final service = _readCell(row, serviceIndex) ??
           _readCell(row, issuerIndex) ??
           (resolvedSecretIndex == 0 ? null : row.first.trim());
       if (service == null || service.trim().isEmpty) continue;
 
-      final accountLabel =
-          _readCell(row, accountIndex) ??
+      final accountLabel = _readCell(row, accountIndex) ??
           _guessAccountLabel(row, resolvedSecretIndex, service);
 
       entries.add(
@@ -384,8 +381,8 @@ class OTPImportService {
       final rawItems = decoded is List
           ? decoded
           : decoded is Map && decoded['accounts'] is List
-          ? decoded['accounts'] as List
-          : const [];
+              ? decoded['accounts'] as List
+              : const [];
 
       return rawItems
           .whereType<Map>()
