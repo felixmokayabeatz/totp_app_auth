@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:qr/qr.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_service.dart';
 import '../widgets/account_logo_badge.dart';
@@ -215,19 +215,11 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                       .withValues(alpha: 0.35),
                                 ),
                               ),
-                              child: QrImageView(
+                              child: _QrCodeView(
                                 data: otpUrl,
-                                version: QrVersions.auto,
                                 size: isWide ? 220 : 200,
                                 backgroundColor: Colors.white,
-                                eyeStyle: const QrEyeStyle(
-                                  color: Colors.black,
-                                  eyeShape: QrEyeShape.square,
-                                ),
-                                dataModuleStyle: const QrDataModuleStyle(
-                                  color: Colors.black,
-                                  dataModuleShape: QrDataModuleShape.square,
-                                ),
+                                foregroundColor: Colors.black,
                               ),
                             ),
                           ),
@@ -888,5 +880,108 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
         ],
       ),
     );
+  }
+}
+
+class _QrCodeView extends StatelessWidget {
+  const _QrCodeView({
+    required this.data,
+    required this.size,
+    required this.backgroundColor,
+    required this.foregroundColor,
+  });
+
+  final String data;
+  final double size;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    try {
+      final qrCode = QrCode(
+        payload: QrPayload.fromString(data),
+        errorCorrectLevel: QrErrorCorrectLevel.low,
+      );
+      final qrImage = QrImage(qrCode);
+
+      return SizedBox.square(
+        dimension: size,
+        child: CustomPaint(
+          painter: _QrCodePainter(
+            image: qrImage,
+            backgroundColor: backgroundColor,
+            foregroundColor: foregroundColor,
+          ),
+        ),
+      );
+    } catch (_) {
+      return SizedBox.square(
+        dimension: size,
+        child: ColoredBox(
+          color: backgroundColor,
+          child: Center(
+            child: Icon(
+              Icons.qr_code_2_rounded,
+              color: foregroundColor.withValues(alpha: 0.55),
+              size: size * 0.28,
+            ),
+          ),
+        ),
+      );
+    }
+  }
+}
+
+class _QrCodePainter extends CustomPainter {
+  const _QrCodePainter({
+    required this.image,
+    required this.backgroundColor,
+    required this.foregroundColor,
+  });
+
+  static const int _quietZoneModules = 4;
+
+  final QrImage image;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final backgroundPaint = Paint()..color = backgroundColor;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
+
+    final moduleCount = image.moduleCount;
+    final totalModules = moduleCount + (_quietZoneModules * 2);
+    final moduleSize = size.shortestSide / totalModules;
+    final qrSize = moduleSize * moduleCount;
+    final offset = Offset(
+      (size.width - qrSize) / 2,
+      (size.height - qrSize) / 2,
+    );
+    final modulePaint = Paint()..color = foregroundColor;
+
+    for (var row = 0; row < moduleCount; row++) {
+      for (var col = 0; col < moduleCount; col++) {
+        if (!image.isDark(row, col)) continue;
+
+        canvas.drawRect(
+          Rect.fromLTWH(
+            offset.dx + (col * moduleSize),
+            offset.dy + (row * moduleSize),
+            moduleSize,
+            moduleSize,
+          ),
+          modulePaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _QrCodePainter oldDelegate) {
+    return oldDelegate.image != image ||
+        oldDelegate.backgroundColor != backgroundColor ||
+        oldDelegate.foregroundColor != foregroundColor;
   }
 }
