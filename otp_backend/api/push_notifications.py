@@ -99,11 +99,18 @@ def send_passwordless_request_push(
     request_id: str,
 ) -> bool:
     push_token = (primary_session.push_token or '').strip()
-    if (
-        not push_token
-        or not primary_session.is_active
-        or primary_session.revoked_at is not None
-    ):
+    if not push_token:
+        logger.info(
+            'Skipping passwordless push for session %s because no push token is registered.',
+            primary_session.id,
+        )
+        return False
+
+    if not primary_session.is_active or primary_session.revoked_at is not None:
+        logger.info(
+            'Skipping passwordless push for inactive or revoked session %s.',
+            primary_session.id,
+        )
         return False
 
     app = _get_firebase_app()
@@ -111,22 +118,32 @@ def send_passwordless_request_push(
         return False
 
     device_label = requester_device_label.strip() or 'another device'
+    title = 'Approve sign-in in BeatzLock'
+    body = f'{device_label} is asking to sign in. Tap to open BeatzLock.'
 
     try:
         messaging.send(
             messaging.Message(
                 token=push_token,
+                notification=messaging.Notification(
+                    title=title,
+                    body=body,
+                ),
                 data={
                     'event': 'passwordless_request',
                     'action': 'open_passwordless_approvals',
                     'request_id': request_id,
                     'requester_device_label': device_label,
-                    'title': 'Approve sign-in in BeatzLock',
-                    'body': f'{device_label} is asking to sign in. Tap to open BeatzLock.',
+                    'title': title,
+                    'body': body,
                 },
                 android=messaging.AndroidConfig(
                     priority='high',
                     ttl=timedelta(minutes=3),
+                    notification=messaging.AndroidNotification(
+                        channel_id='passwordless_approvals',
+                        sound='default',
+                    ),
                 ),
             ),
             app=app,

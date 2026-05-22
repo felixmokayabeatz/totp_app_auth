@@ -40,6 +40,10 @@ Future<void> firebasePasswordlessBackgroundMessageHandler(
     return;
   }
 
+  if (message.notification != null) {
+    return;
+  }
+
   final approvalNotifications = ApprovalNotificationService();
   await approvalNotifications.initialize();
   await approvalNotifications.showPasswordlessApprovalNotification(
@@ -182,6 +186,9 @@ class PushMessagingService {
       return;
     }
 
+    unawaited(
+      ApprovalNotificationService().clearPasswordlessApprovalNotification(),
+    );
     ApprovalNotificationService().markPendingPasswordlessOpenIntent();
   }
 }

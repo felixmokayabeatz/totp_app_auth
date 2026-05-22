@@ -266,9 +266,11 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    'Open BeatzLock on that primary phone to approve. '
-                                    'If it is already open there, the approval prompt '
-                                    'should appear right inside the app.',
+                                    'Check the primary phone to approve. '
+                                    'If BeatzLock is closed there, the request should '
+                                    'appear in the notification bar. If it is already '
+                                    'open, the approval prompt should appear right '
+                                    'inside the app.',
                                     style: TextStyle(
                                       color: _textSecondary,
                                       fontSize: 12.5,
