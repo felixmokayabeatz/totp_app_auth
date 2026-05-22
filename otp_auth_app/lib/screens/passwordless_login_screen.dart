@@ -24,6 +24,7 @@ class PasswordlessLoginScreen extends StatefulWidget {
 class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   final SyncService _syncService = SyncService();
   Timer? _pollTimer;
+  Timer? _countdownTimer;
 
   bool _isStarting = true;
   bool _isPolling = false;
@@ -46,6 +47,10 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   @override
   void initState() {
     super.initState();
+    _countdownTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _handleCountdownTick(),
+    );
     final initialResult = widget.initialResult;
     if (initialResult != null) {
       _consumeStartResult(initialResult);
@@ -57,6 +62,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -181,6 +187,23 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
           _syncService.lastErrorMessage ??
           'Passwordless sign-in could not be completed.';
     });
+  }
+
+  void _handleCountdownTick() {
+    if (!mounted ||
+        _isStarting ||
+        _errorMessage != null ||
+        _requestId == null ||
+        _codeExpiresAt == null) {
+      return;
+    }
+
+    final secondsRemaining = _secondsUntilRefresh();
+    if (secondsRemaining <= 0 && !_isPolling) {
+      unawaited(_pollApproval());
+    }
+
+    setState(() {});
   }
 
   @override
@@ -396,8 +419,8 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
   int _secondsUntilRefresh() {
     final expiresAt = _codeExpiresAt;
     if (expiresAt == null) return 30;
-    final seconds = expiresAt.difference(DateTime.now()).inSeconds;
-    if (seconds <= 0) return 0;
-    return seconds;
+    final milliseconds = expiresAt.difference(DateTime.now()).inMilliseconds;
+    if (milliseconds <= 0) return 0;
+    return ((milliseconds + 999) / 1000).floor();
   }
 }

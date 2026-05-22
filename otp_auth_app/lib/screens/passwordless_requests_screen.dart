@@ -13,7 +13,12 @@ enum _PasswordlessApprovalMode {
 }
 
 class PasswordlessRequestsScreen extends StatefulWidget {
-  const PasswordlessRequestsScreen({super.key});
+  const PasswordlessRequestsScreen({
+    super.key,
+    this.closeOnSuccessfulApproval = false,
+  });
+
+  final bool closeOnSuccessfulApproval;
 
   @override
   State<PasswordlessRequestsScreen> createState() =>
@@ -352,6 +357,20 @@ class _PasswordlessRequestsScreenState
     if (!mounted) return;
     setState(() => _isActing = false);
 
+    final successMessage = approve
+        ? approvalMode == _PasswordlessApprovalMode.unlockAndTransfer
+            ? 'Sign-in request approved and sync will unlock on that device too.'
+            : 'Sign-in request approved.'
+        : 'Sign-in request denied.';
+
+    if (success &&
+        approve &&
+        widget.closeOnSuccessfulApproval &&
+        mounted) {
+      Navigator.pop(context, successMessage);
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -363,7 +382,7 @@ class _PasswordlessRequestsScreenState
                       : 'Sign-in request approved. That device may still '
                           'need the account password to unlock encrypted '
                           'sync.'
-                  : 'Sign-in request denied.')
+                  : successMessage)
               : (_syncService.lastErrorMessage ??
                   'Could not update this sign-in request.'),
         ),

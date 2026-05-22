@@ -377,13 +377,18 @@ class _HomeScreenState extends State<HomeScreen>
 
     _openingPasswordlessRequestsFromNotification = true;
     try {
-      await Navigator.push(
+      final result = await Navigator.push<String?>(
         context,
         MaterialPageRoute(
-          builder: (_) => const PasswordlessRequestsScreen(),
+          builder: (_) => const PasswordlessRequestsScreen(
+            closeOnSuccessfulApproval: true,
+          ),
         ),
       );
       if (!mounted) return;
+      if (result != null && result.trim().isNotEmpty) {
+        _showSnackBar(result, const Color(0xFF10B981));
+      }
       await _refreshPasswordlessApprovalCapability();
       await _loadUnreadNotificationCount();
     } finally {
