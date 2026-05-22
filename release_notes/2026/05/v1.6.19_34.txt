@@ -1,4 +1,4 @@
-v1.6.18 (Build 33)
+v1.6.19 (Build 34)
 
 What's New
 - Update the passwordless sign to fetch encrpted password from the primary device during sign in.
