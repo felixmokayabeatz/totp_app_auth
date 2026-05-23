@@ -122,7 +122,7 @@ flutter build linux --release
 Install the Fedora build tools and Flutter desktop dependencies:
 
 ```bash
-sudo dnf install -y git curl unzip xz zip clang cmake gcc-c++ libstdc++-devel ninja-build pkgconf-pkg-config gtk3-devel libwebp-devel mesa-libGLU rpm-build rpmdevtools desktop-file-utils xdg-utils
+sudo dnf install -y git curl unzip xz zip clang cmake gcc-c++ libstdc++-devel ninja-build pkgconf-pkg-config gtk3-devel libwebp-devel mesa-libGLU patchelf rpm-build rpmdevtools desktop-file-utils xdg-utils
 ```
 
 If Flutter is not already installed, download the Linux SDK from the Flutter SDK archive, extract it, and add Flutter to your shell path:

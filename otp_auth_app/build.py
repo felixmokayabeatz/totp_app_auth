@@ -169,6 +169,7 @@ def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
         if include_rpm:
             packages.extend([
                 "desktop-file-utils",
+                "patchelf",
                 "rpm-build",
                 "rpmdevtools",
                 "xdg-utils",
@@ -187,7 +188,7 @@ def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
             "pkg-config",
         ]
         if include_rpm:
-            packages.extend(["desktop-file-utils", "rpm", "xdg-utils"])
+            packages.extend(["desktop-file-utils", "patchelf", "rpm", "xdg-utils"])
         return [
             "sudo apt update",
             f"sudo apt install -y {' '.join(packages)}",
@@ -198,7 +199,7 @@ def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
         "mesa-libGLU ninja-build pkg-config"
     )
     if include_rpm:
-        packages += " desktop-file-utils rpm-build rpmdevtools xdg-utils"
+        packages += " desktop-file-utils patchelf rpm-build rpmdevtools xdg-utils"
     return [f"Install these packages with your distro package manager: {packages}"]
 
 
@@ -817,10 +818,18 @@ def check_deb_packaging_requirements():
 
 def check_rpm_packaging_requirements():
     """Verify RPM package tooling is installed."""
-    if shutil.which("rpmbuild"):
+    missing_tools = [
+        tool_name
+        for tool_name in ("rpmbuild", "patchelf")
+        if shutil.which(tool_name) is None
+    ]
+    if not missing_tools:
         return True
 
-    print_color("\nRPM package tooling is missing: rpmbuild", Colors.RED)
+    print_color(
+        f"\nRPM package tooling is missing: {', '.join(missing_tools)}",
+        Colors.RED,
+    )
     print_color("Install it with:", Colors.BLUE)
     for command in get_linux_desktop_install_commands(include_rpm=True):
         print(f"  {command}")
@@ -1206,10 +1215,64 @@ def create_rpm_source_archive(bundle_path: Path, linux_binary_name: str) -> tupl
     if linux_icon_source.exists():
         shutil.copy2(linux_icon_source, source_root / "app_icon.png")
 
+    patch_staged_rpm_bundle_rpaths(source_root / "bundle")
+
     with tarfile.open(source_archive, "w:gz") as archive:
         archive.add(source_root, arcname=source_root.name)
 
     return source_root_name, source_archive
+
+
+def is_elf_file(path: Path) -> bool:
+    """Return True when a file looks like an ELF binary/shared library."""
+    if not path.is_file():
+        return False
+    try:
+        with path.open("rb") as file:
+            return file.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def get_bundle_relative_rpath(binary_path: Path, bundle_path: Path) -> str:
+    """Return a relocatable RPATH from an ELF file to the bundle lib folder."""
+    lib_dir = bundle_path / "lib"
+    relative_lib_dir = os.path.relpath(lib_dir, binary_path.parent)
+    if relative_lib_dir == ".":
+        return "$ORIGIN"
+    return f"$ORIGIN/{relative_lib_dir.replace(os.sep, '/')}"
+
+
+def patch_staged_rpm_bundle_rpaths(bundle_path: Path) -> None:
+    """Replace build-machine RUNPATHs with relocatable paths for RPM checks."""
+    patchelf_path = shutil.which("patchelf")
+    if not patchelf_path:
+        raise RuntimeError("patchelf is required to prepare the Fedora RPM bundle")
+
+    patched_files = []
+    for path in sorted(bundle_path.rglob("*")):
+        if not is_elf_file(path):
+            continue
+
+        rpath = get_bundle_relative_rpath(path, bundle_path)
+        try:
+            subprocess.run(
+                [patchelf_path, "--set-rpath", rpath, str(path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            message = error.stderr.strip() or error.stdout.strip() or str(error)
+            raise RuntimeError(f"Could not patch RPATH for {path}: {message}") from error
+
+        patched_files.append(path.relative_to(bundle_path))
+
+    if patched_files:
+        print_color(
+            f"✓ Normalized RPM bundle RPATHs for {len(patched_files)} ELF files",
+            Colors.GREEN,
+        )
 
 
 def write_rpm_spec_file(
@@ -1311,10 +1374,15 @@ def build_linux_rpm():
         for rpm_subdir in ["BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"]:
             (RPM_BUILD_DIR / rpm_subdir).mkdir(parents=True, exist_ok=True)
 
-        source_root_name, source_archive = create_rpm_source_archive(
-            bundle_path,
-            linux_binary_name,
-        )
+        try:
+            source_root_name, source_archive = create_rpm_source_archive(
+                bundle_path,
+                linux_binary_name,
+            )
+        except (FileNotFoundError, RuntimeError) as error:
+            print_color(f"RPM staging failed: {error}", Colors.RED)
+            return False
+
         spec_file = write_rpm_spec_file(
             source_root_name,
             source_archive,
