@@ -61,6 +61,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _syncEnabled = false;
   bool _syncLockedOnThisDevice = false;
   bool _serverLockdownEnabled = false;
+  bool _updateProgressDialogVisible = false;
+  bool _installerLaunchDialogVisible = false;
   String _appVersionLabel = '...';
   String? _profilePhotoUrl;
   Timer? _syncPrefTimer;
@@ -245,6 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _isInstallingUpdate = true);
       _updateProgressNotifier.value = null;
       unawaited(_showUpdateProgressDialog(info));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
 
       final result = await _appUpdateService.installUpdate(
         info,
@@ -254,9 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (!mounted) return;
 
-      if (Navigator.of(context, rootNavigator: true).canPop()) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
+      _dismissUpdateProgressDialog();
       setState(() => _isInstallingUpdate = false);
 
       if (result.started) {
@@ -267,9 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             await _appUpdateService.launchPreparedUpdateAndExit();
           } catch (e) {
             if (!mounted) return;
-            if (Navigator.of(context, rootNavigator: true).canPop()) {
-              Navigator.of(context, rootNavigator: true).pop();
-            }
+            _dismissInstallingUpdateDialog();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Could not start the update after closing: $e'),
@@ -489,7 +488,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String get _updateDialogMessage {
     if (_appUpdateService.canSelfUpdate) {
-      return 'BeatzLock can download and install this desktop update now. When the download finishes, the app will close, install the update, and reopen automatically when the installer finishes.';
+      return 'BeatzLock can download this desktop update now. When the download finishes, the installer will open, and after it completes you can click once to reopen BeatzLock automatically.';
     }
     if (_appUpdateService.canDownloadUpdateInApp && _isAndroidUpdateDownload) {
       return 'BeatzLock can download the APK to your Downloads folder from settings. Open the saved APK from Downloads to install it.';
@@ -515,7 +514,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isAndroidUpdateDownload) {
       return 'Downloading the APK to your Downloads folder. The rate shown is the average transfer speed. Open it from Downloads after the transfer finishes to install the update.';
     }
-    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will close, install the update, and reopen automatically.';
+    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will close and open the installer. After the installer completes, click once to reopen the app automatically.';
+  }
+
+  void _dismissUpdateProgressDialog() {
+    if (!_updateProgressDialogVisible) {
+      return;
+    }
+
+    _updateProgressDialogVisible = false;
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  void _dismissInstallingUpdateDialog() {
+    if (!_installerLaunchDialogVisible) {
+      return;
+    }
+
+    _installerLaunchDialogVisible = false;
+    Navigator.of(context, rootNavigator: true).pop();
   }
 
   String _backupCodeStatusSubtitle() {
@@ -4476,6 +4493,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showUpdateProgressDialog(AppUpdateInfo info) {
+    _updateProgressDialogVisible = true;
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -4570,10 +4588,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      _updateProgressDialogVisible = false;
+    });
   }
 
   Future<void> _showInstallingUpdateDialog() {
+    _installerLaunchDialogVisible = true;
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -4605,7 +4626,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 14),
             Expanded(
               child: Text(
-                'BeatzLock is closing so the update can install. The app should reopen automatically when installation finishes.',
+                'BeatzLock is closing so the installer can open. Finish the installer, then click the final button to reopen the app automatically.',
                 style: TextStyle(
                   color: _textSecondary,
                   fontSize: 13,
@@ -4616,7 +4637,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      _installerLaunchDialogVisible = false;
+    });
   }
 
   void _showColorPicker(ThemeProvider themeProvider) {

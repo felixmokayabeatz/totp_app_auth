@@ -273,7 +273,8 @@ class AppUpdateService {
       await _prepareDesktopUpdate(installerPath, info);
       return const AppSelfUpdateResult(
         started: true,
-        message: 'Update downloaded. Opening the installer now.',
+        message:
+            'Update downloaded. BeatzLock will close and open the installer now.',
         requiresAppExit: true,
       );
     } on DioException catch (e) {
@@ -511,7 +512,8 @@ class AppUpdateService {
     final escapedAppPath = appPath.replaceAll("'", "''");
     final escapedRelaunchArgument = relaunchArgument.replaceAll("'", "''");
     await script.writeAsString('''
-\$ErrorActionPreference = 'SilentlyContinue'
+\$ErrorActionPreference = 'Stop'
+\$null = [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')
 \$AppPid = $appPid
 \$InstallerPath = '$escapedInstallerPath'
 \$AppPath = '$escapedAppPath'
@@ -521,10 +523,36 @@ while (Get-Process -Id \$AppPid -ErrorAction SilentlyContinue) {
   Start-Sleep -Seconds 1
 }
 
-\$process = Start-Process -FilePath \$InstallerPath -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS' -Verb RunAs -PassThru -Wait
-if (\$process.ExitCode -eq 0 -and (Test-Path \$AppPath)) {
-  Start-Sleep -Seconds 1
-  Start-Process -FilePath \$AppPath -ArgumentList \$RelaunchArgument
+function Show-BeatzLockMessage([string]\$message, [string]\$iconName = 'Information') {
+  \$icon = [System.Windows.Forms.MessageBoxIcon]::\$iconName
+  [System.Windows.Forms.MessageBox]::Show(
+    \$message,
+    'BeatzLock Update',
+    [System.Windows.Forms.MessageBoxButtons]::OK,
+    \$icon
+  ) | Out-Null
+}
+
+\$exitCode = -1
+try {
+  \$process = Start-Process -FilePath \$InstallerPath -ArgumentList '/SP- /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS' -Verb RunAs -PassThru -Wait
+  \$exitCode = \$process.ExitCode
+} catch {
+  \$exitCode = -1
+}
+
+if (\$exitCode -eq 0) {
+  Show-BeatzLockMessage 'The update finished installing. Click OK to reopen BeatzLock.'
+  if (Test-Path \$AppPath) {
+    Start-Sleep -Milliseconds 700
+    Start-Process -FilePath \$AppPath -ArgumentList \$RelaunchArgument
+  }
+} else {
+  Show-BeatzLockMessage 'The installer did not complete. BeatzLock will reopen so you can try again.' 'Warning'
+  if (Test-Path \$AppPath) {
+    Start-Sleep -Milliseconds 700
+    Start-Process -FilePath \$AppPath
+  }
 }
 ''');
     return script.path;
@@ -569,46 +597,103 @@ APP_PATH='$escapedAppPath'
 APP_PID="$appPid"
 APP_ARG='$escapedRelaunchArgument'
 
+show_message() {
+  message="\$1"
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --info --title="BeatzLock Update" --text="\$message" --width=380 || true
+    return
+  fi
+  if command -v kdialog >/dev/null 2>&1; then
+    kdialog --title "BeatzLock Update" --msgbox "\$message" || true
+    return
+  fi
+  if command -v xmessage >/dev/null 2>&1; then
+    xmessage -center "\$message" || true
+    return
+  fi
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "BeatzLock Update" "\$message" || true
+  fi
+}
+
+reopen_app() {
+  launch_arg="\$1"
+  if [ ! -x "\$APP_PATH" ]; then
+    return
+  fi
+
+  if [ -n "\$launch_arg" ]; then
+    nohup "\$APP_PATH" "\$launch_arg" >/dev/null 2>&1 &
+  else
+    nohup "\$APP_PATH" >/dev/null 2>&1 &
+  fi
+}
+
 while kill -0 "\$APP_PID" 2>/dev/null; do
   sleep 1
 done
 
+INSTALL_STATUS=1
+
 case "\$PACKAGE_PATH" in
   *.deb)
     if command -v pkexec >/dev/null 2>&1; then
-      pkexec sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"
+      if pkexec sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"; then
+        INSTALL_STATUS=0
+      fi
     elif command -v sudo >/dev/null 2>&1; then
-      sudo sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"
+      if sudo sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"; then
+        INSTALL_STATUS=0
+      elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "\$PACKAGE_PATH"
+        show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
+        exit 0
+      fi
     elif command -v xdg-open >/dev/null 2>&1; then
       xdg-open "\$PACKAGE_PATH"
+      show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
       exit 0
     else
-      exit 1
+      INSTALL_STATUS=1
     fi
     ;;
   *.rpm)
     if command -v pkexec >/dev/null 2>&1; then
-      pkexec sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"
+      if pkexec sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"; then
+        INSTALL_STATUS=0
+      fi
     elif command -v sudo >/dev/null 2>&1; then
-      sudo sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"
+      if sudo sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"; then
+        INSTALL_STATUS=0
+      elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "\$PACKAGE_PATH"
+        show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
+        exit 0
+      fi
     elif command -v xdg-open >/dev/null 2>&1; then
       xdg-open "\$PACKAGE_PATH"
+      show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
       exit 0
     else
-      exit 1
+      INSTALL_STATUS=1
     fi
     ;;
   *)
     if command -v xdg-open >/dev/null 2>&1; then
       xdg-open "\$PACKAGE_PATH"
+      show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
       exit 0
     fi
-    exit 1
+    INSTALL_STATUS=1
     ;;
 esac
 
-if [ -x "\$APP_PATH" ]; then
-  nohup "\$APP_PATH" "\$APP_ARG" >/dev/null 2>&1 &
+if [ "\$INSTALL_STATUS" -eq 0 ]; then
+  show_message "The update finished installing. Click OK to reopen BeatzLock."
+  reopen_app "\$APP_ARG"
+else
+  show_message "The installer did not complete. BeatzLock will reopen so you can try again."
+  reopen_app ""
 fi
 ''');
 

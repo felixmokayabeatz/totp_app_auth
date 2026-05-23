@@ -1,0 +1,7 @@
+v1.7.1 (Build 38)
+
+What's New
+- Fixed desktop self-update on Windows and Linux so BeatzLock downloads the update, opens the installer, and relaunches the app more cleanly after installation.
+- Windows desktop updates now open the normal installer flow again instead of silently trying to finish in the background.
+- Linux desktop updates now handle installer fallback more safely when privilege prompts or detached package installs do not complete cleanly.
+- Improved update messaging in Settings and the forced-update screen so users know the installer will open and the app will reopen after the final confirmation click.

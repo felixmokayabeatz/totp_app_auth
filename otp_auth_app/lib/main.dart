@@ -125,6 +125,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   AppDownloadProgress? _requiredUpdateProgress;
   bool _updateInstalledNoticeShown = false;
   bool _serverLockdownNoticeShown = false;
+  bool _requiredInstallerDialogVisible = false;
   String? _pendingInstalledUpdateLabel;
 
   @override
@@ -410,6 +411,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         );
         if (result.started) {
           if (result.requiresAppExit) {
+            unawaited(_showRequiredInstallerOpeningDialog());
+            await Future<void>.delayed(const Duration(milliseconds: 300));
             await _appUpdateService.launchPreparedUpdateAndExit();
           }
           return;
@@ -423,6 +426,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
     } catch (e) {
       debugPrint('Required update install failed: $e');
+      _dismissRequiredInstallerOpeningDialog();
       final opened = await _appUpdateService.openUpdate(info);
       if (!opened) {
         debugPrint('Failed to open manual update download page.');
@@ -435,6 +439,51 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
       }
     }
+  }
+
+  void _dismissRequiredInstallerOpeningDialog() {
+    if (!_requiredInstallerDialogVisible) {
+      return;
+    }
+
+    _requiredInstallerDialogVisible = false;
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext != null && dialogContext.mounted) {
+      Navigator.of(dialogContext, rootNavigator: true).pop();
+    }
+  }
+
+  Future<void> _showRequiredInstallerOpeningDialog() async {
+    final dialogContext = _navigatorKey.currentContext;
+    if (dialogContext == null || !dialogContext.mounted) {
+      return;
+    }
+
+    _requiredInstallerDialogVisible = true;
+    await showDialog<void>(
+      context: dialogContext,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Opening Installer'),
+        content: const Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'BeatzLock is closing so the installer can open. Finish the installer, then click the final button to reopen the app automatically.',
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      _requiredInstallerDialogVisible = false;
+    });
   }
 
   Future<void> _openRequiredManualDownloadPage() async {
@@ -947,7 +996,7 @@ class _RequiredUpdateScreen extends StatelessWidget {
                               if (canSelfUpdate) ...[
                                 const SizedBox(height: 10),
                                 Text(
-                                  'On Windows and Linux, BeatzLock will install the update and reopen automatically when it finishes.',
+                                  'On Windows and Linux, BeatzLock will open the installer, and after it finishes you can click once to reopen the app automatically.',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
