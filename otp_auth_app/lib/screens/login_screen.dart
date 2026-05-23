@@ -6,6 +6,7 @@ import 'home_screen.dart';
 import 'passwordless_login_screen.dart';
 import 'recover_primary_device_screen.dart';
 import '../services/push_messaging_service.dart';
+import '../services/server_lockdown_service.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
@@ -58,6 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Timer? _resendTimer;
   int _resetResendCooldown = 0;
   Timer? _resetResendTimer;
+  bool _serverLockdownEnabled = false;
 
   static const String _syncValueMessage =
       'You can use BeatzLock offline. Sign in only when you want automatic cross-platform sync.';
@@ -78,6 +80,15 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _passwordController.addListener(_checkPasswordStrength);
     _resetNewPasswordController.addListener(_checkResetPasswordStrength);
+    unawaited(_loadServerLockdownState());
+  }
+
+  Future<void> _loadServerLockdownState() async {
+    final enabled = await ServerLockdownService().isEnabled();
+    if (!mounted) return;
+    setState(() {
+      _serverLockdownEnabled = enabled;
+    });
   }
 
   void _checkPasswordStrength() {
@@ -270,6 +281,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _resend2FACode() async {
+    if (_serverLockdownEnabled) {
+      _showError(
+        ServerLockdownService().blockedMessageFor(
+          'request email verification codes',
+        ),
+      );
+      return;
+    }
     if (_resendCooldown > 0) {
       _showError('Please wait $_resendCooldown seconds before resending');
       return;
@@ -320,6 +339,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _resendResetCode() async {
+    if (_serverLockdownEnabled) {
+      _showError(
+        ServerLockdownService().blockedMessageFor(
+          'request password reset codes',
+        ),
+      );
+      return;
+    }
     if (_resetResendCooldown > 0) {
       _showError('Please wait $_resetResendCooldown seconds before resending');
       return;
@@ -1008,6 +1035,30 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: 16),
 
                       if (_isLogin) ...[
+                        if (_serverLockdownEnabled) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.orange.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Text(
+                              'Server Lockdown is on. Sign-in, passwordless, sync, updates, and every server feature are blocked until you turn it off in Settings. Continue offline to keep using your local vault.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: inputLabelColor,
+                                height: 1.4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         Text(
                           _syncValueMessage,
                           textAlign: TextAlign.center,
@@ -1224,6 +1275,17 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _submitLogin() async {
+    if (_serverLockdownEnabled) {
+      _showError(
+        ServerLockdownService().blockedMessageFor(
+          _isLogin
+              ? 'sign in or request email verification codes'
+              : 'register or create an online account',
+        ),
+      );
+      return;
+    }
+
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
@@ -1322,6 +1384,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _sendResetCode() async {
+    if (_serverLockdownEnabled) {
+      _showError(
+        ServerLockdownService().blockedMessageFor(
+          'request password reset codes',
+        ),
+      );
+      return;
+    }
     if (_resetEmailController.text.isEmpty) {
       _showError('Please enter your email address');
       return;
@@ -1417,6 +1487,15 @@ class _LoginScreenState extends State<LoginScreen> {
     String? passwordForSync,
     bool showFallbackMessage = true,
   }) async {
+    if (_serverLockdownEnabled) {
+      _showError(
+        ServerLockdownService().blockedMessageFor(
+          'use passwordless sign-in',
+        ),
+      );
+      return _PasswordlessLoginOutcome.failed;
+    }
+
     final username = _usernameController.text.trim();
     final effectivePassword = passwordForSync ??
         (_passwordController.text.isEmpty ? null : _passwordController.text);
@@ -1612,6 +1691,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _recoverPrimaryDevice() async {
+    if (_serverLockdownEnabled) {
+      _showError(
+        ServerLockdownService().blockedMessageFor(
+          'recover or move the primary device',
+        ),
+      );
+      return;
+    }
+
     final success = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => const RecoverPrimaryDeviceScreen()),

@@ -19,7 +19,10 @@ import '../services/sync_service.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
 import '../services/otp_vault_snapshot_service.dart';
+import '../services/background_passwordless_poll_service.dart';
+import '../services/push_messaging_service.dart';
 import '../services/profile_service.dart';
+import '../services/server_lockdown_service.dart';
 import '../services/secure_storage_service.dart';
 import 'add_account_screen.dart';
 import 'device_sessions_screen.dart';
@@ -45,6 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final AppUpdateService _appUpdateService = AppUpdateService();
   final AppRatingService _appRatingService = AppRatingService();
   final ProfileService _profileService = ProfileService();
+  final ServerLockdownService _serverLockdownService = ServerLockdownService();
   final OtpVaultSnapshotService _otpVaultSnapshotService =
       OtpVaultSnapshotService();
 
@@ -56,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoadingVaultRestorePoints = false;
   bool _syncEnabled = false;
   bool _syncLockedOnThisDevice = false;
+  bool _serverLockdownEnabled = false;
   String _appVersionLabel = '...';
   String? _profilePhotoUrl;
   Timer? _syncPrefTimer;
@@ -68,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadSyncPreference();
+    _loadServerLockdownPreference();
     _loadAppVersion();
     _refreshUpdateInfo();
     _loadBackupCodeStatus();
@@ -112,6 +118,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       setState(() {
         _appVersionLabel = label;
+      });
+    }
+  }
+
+  Future<void> _loadServerLockdownPreference() async {
+    final enabled = await _serverLockdownService.isEnabled();
+    if (mounted) {
+      setState(() {
+        _serverLockdownEnabled = enabled;
       });
     }
   }
@@ -184,6 +199,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _handleUpdateTap() async {
+    if (!await _requireServerConnection('check for app updates')) {
+      return;
+    }
+
     await _refreshUpdateInfo();
     if (!mounted) return;
 
@@ -334,6 +353,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return 'Updates are not available for this platform';
     }
 
+    if (_serverLockdownEnabled) {
+      return 'Server Lockdown is on. Update checks are blocked.';
+    }
+
     if (_isInstallingUpdate) {
       return _isAndroidUpdateDownload
           ? 'Downloading the APK to Downloads...'
@@ -358,6 +381,107 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return 'You are using the latest version';
+  }
+
+  Future<bool> _requireServerConnection(String featureSummary) async {
+    if (!_serverLockdownEnabled) {
+      return true;
+    }
+
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _serverLockdownService.blockedMessageFor(featureSummary),
+        ),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+    return false;
+  }
+
+  Future<void> _setServerLockdownEnabled(bool enabled) async {
+    if (enabled == _serverLockdownEnabled) {
+      return;
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _cardColor,
+        title: Text(
+          enabled ? 'Turn on Server Lockdown?' : 'Turn off Server Lockdown?',
+          style: TextStyle(color: _textPrimary),
+        ),
+        content: Text(
+          enabled
+              ? 'This will 100% cut BeatzLock from talking to the internet or server. No sign-in, sync, passwordless, notifications, app updates, profile, ratings, or legal pages will work until you turn it off. Your local vault stays available offline.'
+              : 'This will let BeatzLock talk to the internet and server again for sign-in, sync, passwordless, notifications, updates, and other online features.',
+          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: enabled ? Colors.red : _accent,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(enabled ? 'Turn On' : 'Turn Off'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final unlocked = await _appLockService.authenticateWithPinOnly(context);
+    if (!mounted || !unlocked) {
+      return;
+    }
+
+    if (enabled) {
+      await PushMessagingService().prepareForServerLockdown();
+    }
+
+    await _serverLockdownService.setEnabled(enabled);
+    await BackgroundPasswordlessPollService().syncRegistration(
+      enabled: !enabled,
+    );
+    await PushMessagingService().applyServerLockdownState(enabled: enabled);
+
+    if (!mounted) return;
+    setState(() {
+      _serverLockdownEnabled = enabled;
+      if (enabled) {
+        _updateInfo = null;
+      }
+    });
+
+    if (!enabled) {
+      unawaited(_refreshUpdateInfo());
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          enabled
+              ? 'Server Lockdown is on. BeatzLock is now fully offline from the server.'
+              : 'Server Lockdown is off. Online features can connect again.',
+        ),
+        backgroundColor: enabled ? Colors.orange : const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   bool get _isAndroidUpdateDownload =>
@@ -1165,7 +1289,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.sync_rounded,
               label: 'Sync Now',
-              sub: !authProvider.isAuthenticated
+              sub: _serverLockdownEnabled
+                  ? 'Server Lockdown is on. All cloud communication is blocked.'
+                  : !authProvider.isAuthenticated
                   ? 'Sign in to sync across devices'
                   : _syncLockedOnThisDevice
                       ? 'Unlock sync on this device first'
@@ -1189,7 +1315,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           color: Colors.grey,
                         )),
               onTap: !authProvider.isAuthenticated
-                  ? _openLoginForSync
+                  ? () async {
+                      if (!await _requireServerConnection(
+                        'sign in or sync with the cloud',
+                      )) {
+                        return;
+                      }
+                      await _openLoginForSync();
+                    }
+                  : _serverLockdownEnabled
+                      ? () => unawaited(
+                            _requireServerConnection(
+                              'sync with the cloud',
+                            ),
+                          )
                   : (_syncLockedOnThisDevice
                       ? _unlockSyncOnThisDevice
                       : _syncNow),
@@ -1219,6 +1358,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _syncEnabled &&
                   !_syncLockedOnThisDevice,
               onChanged: (val) async {
+                if (_serverLockdownEnabled) {
+                  await _requireServerConnection(
+                    'change cloud sync while Server Lockdown is on',
+                  );
+                  return;
+                }
                 if (!authProvider.isAuthenticated) {
                   if (val) {
                     await _openLoginForSync();
@@ -1251,6 +1396,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               },
             ),
+            _dividerLine(),
+            _switchTile(
+              icon: Icons.cloud_off_rounded,
+              label: 'Server Lockdown',
+              sub: _serverLockdownEnabled
+                  ? '100% blocking BeatzLock from talking to the internet or server'
+                  : 'Off by default. Cut every server and internet connection from BeatzLock when you need full offline isolation.',
+              value: _serverLockdownEnabled,
+              onChanged: (val) async {
+                await _setServerLockdownEnabled(val);
+              },
+            ),
           ]),
           const SizedBox(height: 20),
           _sectionLabel('Account'),
@@ -1263,6 +1420,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : 'Enable automatic sync and account tools',
               onTap: authProvider.isAuthenticated
                   ? () async {
+                      if (!await _requireServerConnection(
+                        'open your online profile',
+                      )) {
+                        return;
+                      }
                       await Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => ProfileScreen()),
@@ -1549,8 +1711,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _openLegalDocument(String type, String title) {
-    Navigator.push(
+  Future<void> _openLegalDocument(String type, String title) async {
+    if (!await _requireServerConnection('load legal documents')) {
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => LegalDocumentScreen(type: type, fallbackTitle: title),
@@ -1559,6 +1725,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openLoginForSync() async {
+    if (!await _requireServerConnection('sign in and reconnect to online tools')) {
+      return;
+    }
+
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -1701,6 +1871,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<bool> _requireSignedIn(String message) async {
+    if (!await _requireServerConnection('reach signed-in server features')) {
+      return false;
+    }
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.isAuthenticated && await _syncService.isLoggedIn()) {
       return true;
@@ -1741,6 +1915,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openRateApp() async {
+    if (!await _requireServerConnection('view or send app ratings')) {
+      return;
+    }
+
     if (!await _requireSignedIn('Only signed-in users can send app reviews.')) {
       return;
     }
@@ -2142,6 +2320,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openManualDownloadPage() async {
+    if (!await _requireServerConnection('open manual downloads')) {
+      return;
+    }
+
     final confirmed = await _confirmExternalBrowserLaunch(
       title: 'Open Browser?',
       message:
@@ -2195,6 +2377,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String failureMessage,
     required String url,
   }) async {
+    if (!await _requireServerConnection('open websites and internet pages')) {
+      return;
+    }
+
     final confirmed = await _confirmExternalBrowserLaunch(
       title: title,
       message: message,

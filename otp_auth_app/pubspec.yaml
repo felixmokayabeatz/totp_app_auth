@@ -1,6 +1,6 @@
 name: beatzlock_auth
 description: BeatzLock Authenticator - Secure Two-Factor Authentication
-version: 1.6.21+36
+version: 1.7.0+37
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

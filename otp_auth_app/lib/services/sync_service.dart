@@ -13,6 +13,7 @@ import '../models/password_entry.dart';
 import '../models/secure_message.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
+import 'server_lockdown_service.dart';
 import 'secure_storage_service.dart';
 import '../config/app_config.dart';
 import 'dart:convert';
@@ -35,6 +36,11 @@ class SyncService {
         receiveTimeout: const Duration(seconds: 30),
         headers: {'Content-Type': 'application/json'},
       ),
+    );
+    ServerLockdownService().attachDioInterceptor(
+      _dio,
+      featureSummary:
+          'sign-in, sync, passwordless, notifications, device sessions, and other server features',
     );
   }
 
@@ -495,6 +501,10 @@ class SyncService {
               'X-Device-Fingerprint': deviceFingerprint,
           },
         ),
+      );
+      ServerLockdownService().attachDioInterceptor(
+        refreshDio,
+        featureSummary: 'refresh your signed-in session',
       );
       final response = await refreshDio.post(
         'token/refresh/',
@@ -3577,6 +3587,7 @@ class SyncService {
     required String token,
     String platform = 'android',
     bool reportError = false,
+    bool allowEmptyToken = false,
   }) async {
     await _updateAuthHeader();
     if (reportError) {
@@ -3594,7 +3605,7 @@ class SyncService {
     }
 
     final trimmedToken = token.trim();
-    if (trimmedToken.isEmpty) {
+    if (trimmedToken.isEmpty && !allowEmptyToken) {
       if (reportError) {
         _lastErrorMessage = 'Notification token is missing.';
       }

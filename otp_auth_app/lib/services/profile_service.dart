@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 import '../config/app_config.dart';
 import 'secure_storage_service.dart';
+import 'server_lockdown_service.dart';
 
 class ProfileService {
   late Dio _dio;
@@ -19,6 +20,10 @@ class ProfileService {
         connectTimeout: Duration(seconds: 30),
         receiveTimeout: Duration(seconds: 30),
       ),
+    );
+    ServerLockdownService().attachDioInterceptor(
+      _dio,
+      featureSummary: 'load and edit your profile',
     );
   }
 

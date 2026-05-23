@@ -30,6 +30,7 @@ import '../widgets/account_logo_badge.dart';
 import '../services/approval_notification_service.dart';
 import '../services/background_passwordless_poll_service.dart';
 import '../services/push_messaging_service.dart';
+import '../services/server_lockdown_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -146,6 +147,12 @@ class _HomeScreenState extends State<HomeScreen>
     required bool syncEnabled,
   }) async {
     try {
+      if (await ServerLockdownService().isEnabled()) {
+        await _vaultSnapshotService.captureDailySnapshotIfNeeded();
+        await _showOfflineBackupReminderIfNeeded();
+        return;
+      }
+
       if (isSignedIn && syncEnabled) {
         await _syncService.downloadAndMergeAccounts();
         await _initUserBox();
@@ -260,6 +267,19 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _refreshPasswordlessApprovalCapability() async {
+    if (await ServerLockdownService().isEnabled()) {
+      await BackgroundPasswordlessPollService().syncRegistration(
+        enabled: false,
+      );
+      if (mounted) {
+        setState(() {
+          _canShowPasswordlessPrompt = false;
+          _canShowBulkDeletePrompt = false;
+        });
+      }
+      return;
+    }
+
     if (!mounted || !await _syncService.isLoggedIn()) {
       await BackgroundPasswordlessPollService().syncRegistration(
         enabled: false,
@@ -296,6 +316,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _pollPrimaryApprovalRequests() async {
+    if (await ServerLockdownService().isEnabled()) {
+      return;
+    }
+
     if (_approvalPollInProgress) {
       return;
     }
@@ -3187,6 +3211,16 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _openLoginForSync() async {
+    if (await ServerLockdownService().isEnabled()) {
+      _showSnackBar(
+        ServerLockdownService().blockedMessageFor(
+          'sign in or reconnect to cloud features',
+        ),
+        Colors.orange,
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     await Navigator.push(
       context,

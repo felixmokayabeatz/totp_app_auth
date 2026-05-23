@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
+import 'server_lockdown_service.dart';
 
 class LegalDocument {
   const LegalDocument({
@@ -35,7 +36,12 @@ class LegalDocumentService {
             connectTimeout: const Duration(seconds: 20),
             receiveTimeout: const Duration(seconds: 20),
           ),
-        );
+        ) {
+    ServerLockdownService().attachDioInterceptor(
+      _dio,
+      featureSummary: 'load legal documents from the internet',
+    );
+  }
 
   final Dio _dio;
 

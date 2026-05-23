@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
+import 'server_lockdown_service.dart';
 
 class AppRating {
   const AppRating({
@@ -92,7 +93,12 @@ class AppRatingService {
             receiveTimeout: const Duration(seconds: 20),
             headers: {'Content-Type': 'application/json'},
           ),
-        );
+        ) {
+    ServerLockdownService().attachDioInterceptor(
+      _dio,
+      featureSummary: 'view and send app ratings',
+    );
+  }
 
   final Dio _dio;
 

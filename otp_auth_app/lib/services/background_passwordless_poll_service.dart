@@ -5,6 +5,7 @@ import 'package:workmanager/workmanager.dart';
 
 import '../models/device_session_info.dart';
 import 'approval_notification_service.dart';
+import 'server_lockdown_service.dart';
 import 'secure_storage_service.dart';
 import 'sync_service.dart';
 
@@ -69,8 +70,13 @@ class BackgroundPasswordlessPollService {
     }
 
     await initialize();
+    var shouldEnable = enabled;
 
-    if (!enabled) {
+    if (await ServerLockdownService().isEnabled()) {
+      shouldEnable = false;
+    }
+
+    if (!shouldEnable) {
       await Workmanager().cancelByUniqueName(uniqueWorkName);
       await ApprovalNotificationService()
           .clearPasswordlessApprovalNotification();
@@ -98,6 +104,11 @@ class BackgroundPasswordlessPollService {
     await SecureStorageService().init();
     final approvalNotifications = ApprovalNotificationService();
     await approvalNotifications.initialize();
+
+    if (await ServerLockdownService().isEnabled()) {
+      await approvalNotifications.clearPasswordlessApprovalNotification();
+      return;
+    }
 
     final syncService = SyncService();
     if (!await syncService.isLoggedIn()) {

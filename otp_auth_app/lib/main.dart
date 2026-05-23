@@ -27,6 +27,7 @@ import 'services/otp_service.dart';
 import 'services/approval_notification_service.dart';
 import 'services/background_passwordless_poll_service.dart';
 import 'services/push_messaging_service.dart';
+import 'services/server_lockdown_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/sync_service.dart';
 
@@ -58,13 +59,17 @@ void main(List<String> launchArgs) async {
   await Hive.openBox<SecureMessage>('secure_messages');
   await Hive.openBox('settings');
 
+  final serverLockdownService = ServerLockdownService();
+  await serverLockdownService.initialize();
   await SecureStorageService().init();
   await BiometricService().init();
   await BackgroundPasswordlessPollService().initialize();
   await ApprovalNotificationService().initialize();
   await ApprovalNotificationService().refreshPendingActionFromPlatform();
   await PushMessagingService().initialize();
-  await PushMessagingService().syncCurrentPushTokenIfPossible();
+  await PushMessagingService().applyServerLockdownState(
+    enabled: await serverLockdownService.isEnabled(),
+  );
   final themeProvider = ThemeProvider();
   await themeProvider.loadPreferences();
 
@@ -119,6 +124,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   AppUpdateInfo? _requiredUpdateInfo;
   AppDownloadProgress? _requiredUpdateProgress;
   bool _updateInstalledNoticeShown = false;
+  bool _serverLockdownNoticeShown = false;
   String? _pendingInstalledUpdateLabel;
 
   @override
@@ -190,6 +196,35 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           'Update installed: $label. BeatzLock reopened automatically.',
         ),
         backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _maybeShowServerLockdownNotice() async {
+    if (_serverLockdownNoticeShown ||
+        !_initialized ||
+        !_sessionReady ||
+        !_startupLogoDone) {
+      return;
+    }
+
+    if (!await ServerLockdownService().isEnabled()) {
+      return;
+    }
+
+    final messenger = _scaffoldMessengerKey.currentState;
+    if (messenger == null) {
+      return;
+    }
+
+    _serverLockdownNoticeShown = true;
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Server Lockdown is on. BeatzLock will not talk to the internet or server until you turn it off in Settings.',
+        ),
+        backgroundColor: Colors.orange,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -323,6 +358,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _refreshUpdateStatus() async {
     if (_updateCheckInProgress || _appUpdateService.currentPlatform.isEmpty) {
+      return;
+    }
+
+    if (await ServerLockdownService().isEnabled()) {
+      if (mounted && _requiredUpdateInfo != null) {
+        setState(() {
+          _requiredUpdateInfo = null;
+        });
+      }
       return;
     }
 
@@ -522,6 +566,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _restoreCloudDataInBackground() async {
     try {
+      if (await ServerLockdownService().isEnabled()) {
+        return;
+      }
       if (await _syncService.isSyncEnabled()) {
         await _syncService.downloadAndMergeAccounts();
         await _syncService.downloadAndMergePasswordEntries();
@@ -537,6 +584,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         !_initialized ||
         !_sessionReady ||
         _sessionHeartbeatInProgress) {
+      return;
+    }
+
+    if (await ServerLockdownService().isEnabled()) {
       return;
     }
 
@@ -671,6 +722,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             _startupLogoDone) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             _maybeShowInstalledUpdateNotice();
+          });
+        }
+        if (!_serverLockdownNoticeShown &&
+            _initialized &&
+            _sessionReady &&
+            _startupLogoDone) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            unawaited(_maybeShowServerLockdownNotice());
           });
         }
 

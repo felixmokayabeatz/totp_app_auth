@@ -26,7 +26,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Offline-First Security',
       subtitle: 'Use BeatzLock without an account',
       description:
-          'BeatzLock works offline first, so your 2FA codes stay on this device from the start. Sign in only when you want backup and sync across devices.',
+          'BeatzLock works offline first, so your 2FA codes stay on this device from the start. Sign in only when you want backup and sync across devices. Need a hard stop? Server Lockdown in Settings can cut all app/server communication until you turn it off.',
       icon: Icons.security,
       gradientColors: [Color(0xFF667eea), Color(0xFF764ba2)],
       isNewUser: true,
@@ -65,7 +65,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Welcome Back to',
       subtitle: 'BeatzLock Authenticator',
       description:
-          'Login to access your secure 2FA codes and continue protecting your accounts.',
+          'Login to access your secure 2FA codes and continue protecting your accounts. If Server Lockdown is on, keep using offline mode until you turn it off in Settings.',
       icon: Icons.fingerprint,
       gradientColors: [Color(0xFF667eea), Color(0xFF764ba2)],
       isNewUser: false,

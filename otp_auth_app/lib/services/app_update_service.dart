@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/app_config.dart';
 import '../config/app_build_info.dart';
 import '../models/app_update_info.dart';
+import 'server_lockdown_service.dart';
 
 class AppUpdateService {
   static final AppUpdateService _instance = AppUpdateService._internal();
@@ -26,7 +27,12 @@ class AppUpdateService {
             receiveTimeout: const Duration(seconds: 20),
             headers: {'Content-Type': 'application/json'},
           ),
-        );
+        ) {
+    ServerLockdownService().attachDioInterceptor(
+      _dio,
+      featureSummary: 'check for app updates and release notes',
+    );
+  }
 
   final Dio _dio;
   AppUpdateInfo? _cachedUpdateInfo;
@@ -120,6 +126,12 @@ class AppUpdateService {
   }
 
   Future<bool> openUpdate(AppUpdateInfo info) async {
+    if (await ServerLockdownService().isEnabled()) {
+      _lastErrorMessage = ServerLockdownService().blockedMessageFor(
+        'open update downloads',
+      );
+      return false;
+    }
     final uri = Uri.tryParse(_manualDownloadPageUrl(info));
     if (uri == null) return false;
 
@@ -127,6 +139,12 @@ class AppUpdateService {
   }
 
   Future<bool> openManualDownloadPage([AppUpdateInfo? info]) async {
+    if (await ServerLockdownService().isEnabled()) {
+      _lastErrorMessage = ServerLockdownService().blockedMessageFor(
+        'open manual downloads',
+      );
+      return false;
+    }
     final uri = Uri.tryParse(_manualDownloadPageUrl(info));
     if (uri == null) return false;
 
@@ -139,6 +157,15 @@ class AppUpdateService {
     final version = currentAppVersion.version;
     final buildNumber = currentAppVersion.buildNumber;
     final versionLabel = currentAppVersion.label;
+
+    if (await ServerLockdownService().isEnabled()) {
+      return InstalledReleaseNotesResult(
+        versionLabel: versionLabel,
+        notes: ServerLockdownService().blockedMessageFor(
+          'load server-hosted release notes',
+        ),
+      );
+    }
 
     if (platform.isEmpty) {
       return InstalledReleaseNotesResult(
@@ -196,6 +223,16 @@ class AppUpdateService {
     AppUpdateInfo info, {
     void Function(AppDownloadProgress progress)? onReceiveProgress,
   }) async {
+    if (await ServerLockdownService().isEnabled()) {
+      _lastErrorMessage = ServerLockdownService().blockedMessageFor(
+        'download and install updates',
+      );
+      return AppSelfUpdateResult(
+        started: false,
+        message: _lastErrorMessage!,
+      );
+    }
+
     if (!canDownloadUpdateInApp) {
       return const AppSelfUpdateResult(
         started: false,
@@ -580,6 +617,14 @@ fi
   }
 
   String _friendlyUpdateError(DioException error) {
+    final responseData = error.response?.data;
+    if (responseData is Map && responseData['error'] is String) {
+      final message = responseData['error'].toString().trim();
+      if (message.isNotEmpty) {
+        return message;
+      }
+    }
+
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:

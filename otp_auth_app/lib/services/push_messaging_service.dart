@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'approval_notification_service.dart';
+import 'server_lockdown_service.dart';
 import 'sync_service.dart';
 
 const String _passwordlessOpenApprovalsAction = 'open_passwordless_approvals';
@@ -34,6 +35,11 @@ Future<void> firebasePasswordlessBackgroundMessageHandler(
     }
   } catch (error) {
     debugPrint('Firebase background init failed: $error');
+  }
+
+  if (await ServerLockdownService().isEnabled()) {
+    await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+    return;
   }
 
   if (!_isPasswordlessApprovalMessage(message)) {
@@ -89,6 +95,8 @@ class PushMessagingService {
   }
 
   Future<void> _initializeInternal() async {
+    final lockdownEnabled = await ServerLockdownService().isEnabled();
+
     try {
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp();
@@ -102,12 +110,14 @@ class PushMessagingService {
       firebasePasswordlessBackgroundMessageHandler,
     );
     await ApprovalNotificationService().initialize();
-    await _messagingInstance.setAutoInitEnabled(true);
-    await _messagingInstance.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    await _messagingInstance.setAutoInitEnabled(!lockdownEnabled);
+    if (!lockdownEnabled) {
+      await _messagingInstance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
 
     _messageSubscription ??= FirebaseMessaging.onMessage.listen(
       _handleForegroundMessage,
@@ -127,6 +137,11 @@ class PushMessagingService {
 
   Future<void> syncCurrentPushTokenIfPossible({bool force = false}) async {
     if (!Platform.isAndroid) {
+      return;
+    }
+
+    if (await ServerLockdownService().isEnabled()) {
+      await _clearLocalRegistrationCache();
       return;
     }
 
@@ -165,6 +180,48 @@ class PushMessagingService {
     await prefs.setString(_registeredUserKey, currentUser);
   }
 
+  Future<void> prepareForServerLockdown() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    await initialize();
+
+    final syncService = SyncService();
+    if (await syncService.isLoggedIn()) {
+      await syncService.registerPushToken(
+        token: '',
+        platform: 'android',
+        reportError: false,
+        allowEmptyToken: true,
+      );
+    }
+
+    try {
+      await _messagingInstance.deleteToken();
+    } catch (error) {
+      debugPrint('Push token deletion before lockdown failed: $error');
+    }
+
+    await applyServerLockdownState(enabled: true);
+  }
+
+  Future<void> applyServerLockdownState({required bool enabled}) async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    await initialize();
+    await _messagingInstance.setAutoInitEnabled(!enabled);
+    if (enabled) {
+      await _clearLocalRegistrationCache();
+      await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+      return;
+    }
+
+    await syncCurrentPushTokenIfPossible(force: true);
+  }
+
   Future<void> _clearLocalRegistrationCache() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_registeredTokenKey);
@@ -172,6 +229,11 @@ class PushMessagingService {
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    if (await ServerLockdownService().isEnabled()) {
+      await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+      return;
+    }
+
     if (!_isPasswordlessApprovalMessage(message)) {
       return;
     }
@@ -182,13 +244,20 @@ class PushMessagingService {
   }
 
   void _handleOpenedMessage(RemoteMessage message) {
+    unawaited(_handleOpenedMessageAsync(message));
+  }
+
+  Future<void> _handleOpenedMessageAsync(RemoteMessage message) async {
     if (!_isPasswordlessApprovalMessage(message)) {
       return;
     }
 
-    unawaited(
-      ApprovalNotificationService().clearPasswordlessApprovalNotification(),
-    );
+    if (await ServerLockdownService().isEnabled()) {
+      await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+      return;
+    }
+
+    await ApprovalNotificationService().clearPasswordlessApprovalNotification();
     ApprovalNotificationService().markPendingPasswordlessOpenIntent();
   }
 }

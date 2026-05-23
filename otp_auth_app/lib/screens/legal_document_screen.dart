@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_config.dart';
 import '../services/legal_document_service.dart';
+import '../services/server_lockdown_service.dart';
 
 class LegalDocumentScreen extends StatefulWidget {
   const LegalDocumentScreen({
@@ -37,6 +38,22 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
   Color get _textSecondary => _isDark ? Colors.white60 : Colors.grey.shade600;
 
   Future<void> _openWebVersion(String url) async {
+    if (await ServerLockdownService().isEnabled()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ServerLockdownService().blockedMessageFor(
+              'open legal pages in a browser',
+            ),
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final uri = Uri.tryParse(
       url.isNotEmpty ? url : AppConfig.legalDocumentWebUrl(widget.type),
     );
