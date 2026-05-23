@@ -181,7 +181,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Enter your BeatzLock PIN to show the QR code, then scan it with another authenticator if you want the same account in more than one app or device.',
+                    'Use your device security or your BeatzLock PIN to show the QR code, then scan it with another authenticator if you want the same account in more than one app or device.',
                     style: TextStyle(fontSize: 13, color: mutedText),
                   ),
                   const SizedBox(height: 18),
@@ -249,8 +249,8 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                     onPressed: () {
                                       _revealSensitiveInfo();
                                     },
-                                    icon: const Icon(Icons.pin_rounded),
-                                    label: const Text('Enter PIN'),
+                                    icon: const Icon(Icons.lock_open_rounded),
+                                    label: const Text('Unlock'),
                                   ),
                                 ],
                               ),
@@ -411,7 +411,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
-                                  'Enter PIN to reveal',
+                                  'Unlock to reveal',
                                   style: TextStyle(
                                     color: colorScheme.onSurface,
                                     fontSize: 14,
@@ -786,7 +786,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
   }
 
   Future<bool> _revealSensitiveInfo() async {
-    final unlocked = await _appLockService.authenticateWithPinOnly(context);
+    final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted) return false;
 
     if (unlocked) {
@@ -796,7 +796,9 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('PIN required to show QR code and secret key.'),
+        content: Text(
+          'Unlock with device security or your BeatzLock PIN to show the QR code and secret key.',
+        ),
         duration: Duration(seconds: 2),
       ),
     );

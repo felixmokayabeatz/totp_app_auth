@@ -411,8 +411,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         );
         if (result.started) {
           if (result.requiresAppExit) {
-            unawaited(_showRequiredInstallerOpeningDialog());
-            await Future<void>.delayed(const Duration(milliseconds: 300));
+            final shouldOpenInstaller = await _showRequiredInstallerOpeningDialog();
+            if (shouldOpenInstaller != true) {
+              _appUpdateService.clearPreparedUpdate();
+              return;
+            }
             await _appUpdateService.launchPreparedUpdateAndExit();
           }
           return;
@@ -453,33 +456,31 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _showRequiredInstallerOpeningDialog() async {
+  Future<bool?> _showRequiredInstallerOpeningDialog() async {
     final dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null || !dialogContext.mounted) {
-      return;
+      return false;
     }
 
     _requiredInstallerDialogVisible = true;
-    await showDialog<void>(
+    return showDialog<bool>(
       context: dialogContext,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Opening Installer'),
-        content: const Row(
-          children: [
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.4),
-            ),
-            SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                'BeatzLock is closing so the installer can open. Finish the installer, then click the final button to reopen the app automatically.',
-              ),
-            ),
-          ],
+        title: const Text('Open Installer Now?'),
+        content: const Text(
+          'The update has finished downloading. BeatzLock will close and open the normal Windows installer or Linux package installer. Do you want to continue now?',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Open Installer'),
+          ),
+        ],
       ),
     ).whenComplete(() {
       _requiredInstallerDialogVisible = false;
@@ -996,7 +997,7 @@ class _RequiredUpdateScreen extends StatelessWidget {
                               if (canSelfUpdate) ...[
                                 const SizedBox(height: 10),
                                 Text(
-                                  'On Windows and Linux, BeatzLock will open the installer, and after it finishes you can click once to reopen the app automatically.',
+                                  'On Windows, BeatzLock opens the normal installer. On Linux, it opens the package installer. After the update finishes, click once to reopen BeatzLock.',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall

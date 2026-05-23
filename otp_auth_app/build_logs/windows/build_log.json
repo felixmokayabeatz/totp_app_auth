@@ -423,14 +423,14 @@
     "sequence": 31,
     "platform": "windows",
     "artifact_type": "installer",
-    "file": "beatzlock_1.7.0_37_x64.exe",
-    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.7.0_37\\beatzlock_1.7.0_37_x64.exe",
-    "relative_path": "final_builds/windows/1.7.0_37/beatzlock_1.7.0_37_x64.exe",
+    "file": "beatzlock_1.7.2_39_x64.exe",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.7.2_39\\beatzlock_1.7.2_39_x64.exe",
+    "relative_path": "final_builds/windows/1.7.2_39/beatzlock_1.7.2_39_x64.exe",
     "is_directory": false,
-    "timestamp": "2026-05-23T15:16:44",
-    "version": "1.7.0+37",
-    "build_number": "37",
-    "artifact_version": "1.7.0_37",
+    "timestamp": "2026-05-23T18:18:28",
+    "version": "1.7.2+39",
+    "build_number": "39",
+    "artifact_version": "1.7.2_39",
     "host_platform": "Windows"
   },
   {
@@ -441,10 +441,24 @@
     "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.7.1_38\\beatzlock_1.7.1_38_x64.exe",
     "relative_path": "final_builds/windows/1.7.1_38/beatzlock_1.7.1_38_x64.exe",
     "is_directory": false,
-    "timestamp": "2026-05-23T17:52:22",
+    "timestamp": "2026-05-23T18:54:26",
     "version": "1.7.1+38",
     "build_number": "38",
     "artifact_version": "1.7.1_38",
+    "host_platform": "Windows"
+  },
+  {
+    "sequence": 33,
+    "platform": "windows",
+    "artifact_type": "installer",
+    "file": "beatzlock_1.7.0_37_x64.exe",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.7.0_37\\beatzlock_1.7.0_37_x64.exe",
+    "relative_path": "final_builds/windows/1.7.0_37/beatzlock_1.7.0_37_x64.exe",
+    "is_directory": false,
+    "timestamp": "2026-05-23T19:55:14",
+    "version": "1.7.0+37",
+    "build_number": "37",
+    "artifact_version": "1.7.0_37",
     "host_platform": "Windows"
   }
 ]

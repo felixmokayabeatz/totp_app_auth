@@ -222,10 +222,15 @@ class AppLockService {
     final hasExistingPin = await _biometricService.hasAppPin();
     if (!context.mounted) return false;
 
-    final currentController = TextEditingController();
+    if (hasExistingPin) {
+      final authenticated = await authenticateToUnlock(context);
+      if (!context.mounted || !authenticated) {
+        return false;
+      }
+    }
+
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
-    String? currentErrorText;
     String? pinErrorText;
     String? confirmErrorText;
 
@@ -245,24 +250,10 @@ class AppLockService {
             children: [
               Text(
                 hasExistingPin
-                    ? 'Confirm your current PIN, then create a new 4-6 digit PIN.'
+                    ? 'Create a new 4-6 digit PIN for app access.'
                     : 'Create a 4-6 digit PIN for app access.',
               ),
               const SizedBox(height: 16),
-              if (hasExistingPin) ...[
-                TextField(
-                  controller: currentController,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Current PIN',
-                    errorText: currentErrorText,
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
               TextField(
                 controller: pinController,
                 obscureText: true,
@@ -294,22 +285,17 @@ class AppLockService {
             ),
             FilledButton(
               onPressed: () async {
-                final currentPin = currentController.text.trim();
                 final pin = pinController.text.trim();
                 final confirm = confirmController.text.trim();
-                final currentPinValid = !hasExistingPin ||
-                    await _biometricService.verifyAppPin(currentPin);
 
                 setDialogState(() {
-                  currentErrorText =
-                      currentPinValid ? null : 'Current PIN is incorrect.';
                   pinErrorText =
                       pin.length < 4 ? 'PIN must be at least 4 digits.' : null;
                   confirmErrorText =
                       pin != confirm ? 'PINs do not match.' : null;
                 });
 
-                if (!currentPinValid || pin.length < 4 || pin != confirm) {
+                if (pin.length < 4 || pin != confirm) {
                   return;
                 }
 

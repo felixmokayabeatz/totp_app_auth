@@ -19,6 +19,7 @@ FINAL_BUILDS_DIR = WORKSPACE_DIR / "final_builds"
 BUILD_LOGS_DIR = SCRIPT_DIR / "build_logs"
 CONFIG_FILE = str(WORKSPACE_DIR / "build_config.json")
 PUBSPEC_FILE = SCRIPT_DIR / "pubspec.yaml"
+APP_BUILD_INFO_FILE = SCRIPT_DIR / "lib" / "config" / "app_build_info.dart"
 INNO_SCRIPT_DIR = WORKSPACE_DIR / "inno_script"
 VC_REDIST_DIR = WORKSPACE_DIR / "vc_redist"
 INNO_SCRIPT_SEEDS = [
@@ -160,9 +161,49 @@ def refresh_version_context(announce=False):
     APP_VERSION = app_version
     APP_BUILD_NUMBER = app_build_number
     APP_ARTIFACT_VERSION = app_artifact_version
+    sync_app_build_info()
 
     if announce:
         print_color(f"Using app version: {APP_FULL_VERSION}", Colors.GREEN)
+
+def sync_app_build_info():
+    """Keep the bundled fallback version in sync with pubspec.yaml."""
+    if not APP_BUILD_INFO_FILE.exists():
+        return False
+
+    original_text = APP_BUILD_INFO_FILE.read_text(encoding="utf-8")
+    updated_lines = []
+    saw_version = False
+    saw_build_number = False
+
+    for line in original_text.splitlines():
+        stripped = line.strip()
+        indent = line[: len(line) - len(line.lstrip())]
+
+        if stripped.startswith("static const String version = '"):
+            updated_lines.append(
+                f"{indent}static const String version = '{APP_VERSION}';"
+            )
+            saw_version = True
+            continue
+
+        if stripped.startswith("static const String buildNumber = '"):
+            updated_lines.append(
+                f"{indent}static const String buildNumber = '{APP_BUILD_NUMBER}';"
+            )
+            saw_build_number = True
+            continue
+
+        updated_lines.append(line)
+
+    if not saw_version or not saw_build_number:
+        return False
+
+    updated_text = "\n".join(updated_lines) + "\n"
+    if updated_text != original_text:
+        APP_BUILD_INFO_FILE.write_text(updated_text, encoding="utf-8")
+
+    return True
 
 
 refresh_version_context()
@@ -303,9 +344,12 @@ def build_windows_installer() -> bool:
         target_script_path.parent.mkdir(parents=True, exist_ok=True)
         if target_script_path.exists():
             target_script_path.unlink()
-        shutil.move(str(script_path), target_script_path)
+        shutil.copy2(str(script_path), target_script_path)
         script_path = target_script_path
-        print_color(f"Inno Setup script renamed to: {script_path}", Colors.GREEN)
+        print_color(
+            f"Inno Setup script copied to current version: {script_path}",
+            Colors.GREEN,
+        )
 
     sync_inno_setup_script(script_path)
 

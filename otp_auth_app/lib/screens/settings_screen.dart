@@ -262,13 +262,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (result.started) {
         if (result.requiresAppExit) {
+          final shouldOpenInstaller = await _showInstallingUpdateDialog();
+          if (!mounted) return;
+          if (shouldOpenInstaller != true) {
+            _appUpdateService.clearPreparedUpdate();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Installer launch cancelled. Tap update again when you are ready.',
+                ),
+                backgroundColor: Colors.orange,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            );
+            return;
+          }
           try {
-            unawaited(_showInstallingUpdateDialog());
-            await Future<void>.delayed(const Duration(milliseconds: 300));
             await _appUpdateService.launchPreparedUpdateAndExit();
           } catch (e) {
             if (!mounted) return;
-            _dismissInstallingUpdateDialog();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Could not start the update after closing: $e'),
@@ -442,7 +457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    final unlocked = await _appLockService.authenticateWithPinOnly(context);
+    final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) {
       return;
     }
@@ -488,7 +503,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   String get _updateDialogMessage {
     if (_appUpdateService.canSelfUpdate) {
-      return 'BeatzLock can download this desktop update now. When the download finishes, the installer will open, and after it completes you can click once to reopen BeatzLock automatically.';
+      return 'BeatzLock can download this desktop update now. When the download finishes, BeatzLock will close and open the normal Windows installer or Linux package installer. After the update finishes, click once to reopen BeatzLock.';
     }
     if (_appUpdateService.canDownloadUpdateInApp && _isAndroidUpdateDownload) {
       return 'BeatzLock can download the APK to your Downloads folder from settings. Open the saved APK from Downloads to install it.';
@@ -514,7 +529,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isAndroidUpdateDownload) {
       return 'Downloading the APK to your Downloads folder. The rate shown is the average transfer speed. Open it from Downloads after the transfer finishes to install the update.';
     }
-    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will close and open the installer. After the installer completes, click once to reopen the app automatically.';
+    return 'Downloading the update. The rate shown is the average transfer speed. When it finishes, BeatzLock will close and open the normal Windows installer or Linux package installer. After the update finishes, click once to reopen BeatzLock.';
   }
 
   void _dismissUpdateProgressDialog() {
@@ -4593,9 +4608,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  Future<void> _showInstallingUpdateDialog() {
+  Future<bool?> _showInstallingUpdateDialog() {
     _installerLaunchDialogVisible = true;
-    return showDialog<void>(
+    return showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
@@ -4603,39 +4618,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: _cardColor,
         title: Row(
           children: [
-            Icon(Icons.sync_rounded, color: _accent),
+            Icon(Icons.system_update_alt_rounded, color: _accent),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Opening Installer',
+                'Open Installer Now?',
                 style: TextStyle(color: _textPrimary, fontSize: 18),
               ),
             ),
           ],
         ),
-        content: Row(
-          children: [
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.4,
-                color: _accent,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                'BeatzLock is closing so the installer can open. Finish the installer, then click the final button to reopen the app automatically.',
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ],
+        content: Text(
+          'The update has finished downloading. BeatzLock will close and open the normal Windows installer or Linux package installer. Do you want to continue now?',
+          style: TextStyle(
+            color: _textSecondary,
+            fontSize: 13,
+            height: 1.4,
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Open Installer'),
+          ),
+        ],
       ),
     ).whenComplete(() {
       _installerLaunchDialogVisible = false;

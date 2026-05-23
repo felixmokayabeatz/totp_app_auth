@@ -2807,7 +2807,7 @@ class _HomeScreenState extends State<HomeScreen>
         if (confirmed != true) return;
       }
 
-      final unlocked = await _appLockService.authenticateWithPinOnly(context);
+      final unlocked = await _appLockService.authenticateToUnlock(context);
       if (!mounted || !unlocked) return;
 
       await _syncService.deleteAccountLocalOnly(accountId);
@@ -2853,7 +2853,7 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (!confirmed) return;
 
-      final unlocked = await _appLockService.authenticateWithPinOnly(context);
+      final unlocked = await _appLockService.authenticateToUnlock(context);
       if (!mounted || !unlocked) return;
 
       _showSnackBar('Deleting everywhere', Colors.grey);

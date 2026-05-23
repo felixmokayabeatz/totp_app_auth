@@ -84,6 +84,11 @@ class AppUpdateService {
     _activeDownloadCancelToken?.cancel('User cancelled update download.');
   }
 
+  void clearPreparedUpdate() {
+    _pendingLauncherExecutable = null;
+    _pendingLauncherArguments = null;
+  }
+
   Future<AppUpdateInfo?> checkForUpdate() async {
     final platform = currentPlatform;
     _lastErrorMessage = null;
@@ -377,7 +382,15 @@ class AppUpdateService {
     _pendingLauncherExecutable = null;
     _pendingLauncherArguments = null;
 
-    await Process.start(executable, arguments, mode: ProcessStartMode.detached);
+    await Process.start(
+      executable,
+      arguments,
+      mode: ProcessStartMode.detached,
+    );
+    if (Platform.isWindows &&
+        executable.toLowerCase().endsWith('.exe')) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
     exit(0);
   }
 
@@ -465,21 +478,8 @@ class AppUpdateService {
         '$updateInstalledArgumentPrefix${info.latestVersion}+${info.latestBuildNumber}';
 
     if (Platform.isWindows) {
-      final scriptPath = await _writeWindowsUpdaterScript(
-        installerPath,
-        appPid: pid,
-        appPath: appPath,
-        relaunchArgument: relaunchArgument,
-      );
-      _pendingLauncherExecutable = 'powershell.exe';
-      _pendingLauncherArguments = [
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        scriptPath,
-      ];
+      _pendingLauncherExecutable = installerPath;
+      _pendingLauncherArguments = const [];
       return;
     }
 
@@ -496,66 +496,6 @@ class AppUpdateService {
     }
 
     throw UnsupportedError('Desktop update is not supported on this platform.');
-  }
-
-  Future<String> _writeWindowsUpdaterScript(
-    String installerPath, {
-    required int appPid,
-    required String appPath,
-    required String relaunchArgument,
-  }) async {
-    final tempDir = await getTemporaryDirectory();
-    final script = File(
-      '${tempDir.path}${Platform.pathSeparator}beatzlock_update.ps1',
-    );
-    final escapedInstallerPath = installerPath.replaceAll("'", "''");
-    final escapedAppPath = appPath.replaceAll("'", "''");
-    final escapedRelaunchArgument = relaunchArgument.replaceAll("'", "''");
-    await script.writeAsString('''
-\$ErrorActionPreference = 'Stop'
-\$null = [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')
-\$AppPid = $appPid
-\$InstallerPath = '$escapedInstallerPath'
-\$AppPath = '$escapedAppPath'
-\$RelaunchArgument = '$escapedRelaunchArgument'
-
-while (Get-Process -Id \$AppPid -ErrorAction SilentlyContinue) {
-  Start-Sleep -Seconds 1
-}
-
-function Show-BeatzLockMessage([string]\$message, [string]\$iconName = 'Information') {
-  \$icon = [System.Windows.Forms.MessageBoxIcon]::\$iconName
-  [System.Windows.Forms.MessageBox]::Show(
-    \$message,
-    'BeatzLock Update',
-    [System.Windows.Forms.MessageBoxButtons]::OK,
-    \$icon
-  ) | Out-Null
-}
-
-\$exitCode = -1
-try {
-  \$process = Start-Process -FilePath \$InstallerPath -ArgumentList '/SP- /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS' -Verb RunAs -PassThru -Wait
-  \$exitCode = \$process.ExitCode
-} catch {
-  \$exitCode = -1
-}
-
-if (\$exitCode -eq 0) {
-  Show-BeatzLockMessage 'The update finished installing. Click OK to reopen BeatzLock.'
-  if (Test-Path \$AppPath) {
-    Start-Sleep -Milliseconds 700
-    Start-Process -FilePath \$AppPath -ArgumentList \$RelaunchArgument
-  }
-} else {
-  Show-BeatzLockMessage 'The installer did not complete. BeatzLock will reopen so you can try again.' 'Warning'
-  if (Test-Path \$AppPath) {
-    Start-Sleep -Milliseconds 700
-    Start-Process -FilePath \$AppPath
-  }
-}
-''');
-    return script.path;
   }
 
   String _installerExtension(Uri uri) {
@@ -596,6 +536,7 @@ PACKAGE_PATH='$escapedInstallerPath'
 APP_PATH='$escapedAppPath'
 APP_PID="$appPid"
 APP_ARG='$escapedRelaunchArgument'
+APP_DIR="\$(dirname "\$APP_PATH")"
 
 show_message() {
   message="\$1"
@@ -616,17 +557,32 @@ show_message() {
   fi
 }
 
+open_package_installer() {
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "\$PACKAGE_PATH"
+    return 0
+  fi
+  if command -v gio >/dev/null 2>&1; then
+    gio open "\$PACKAGE_PATH"
+    return 0
+  fi
+  return 1
+}
+
 reopen_app() {
   launch_arg="\$1"
   if [ ! -x "\$APP_PATH" ]; then
     return
   fi
 
-  if [ -n "\$launch_arg" ]; then
-    nohup "\$APP_PATH" "\$launch_arg" >/dev/null 2>&1 &
-  else
-    nohup "\$APP_PATH" >/dev/null 2>&1 &
-  fi
+  (
+    cd "\$APP_DIR" 2>/dev/null || true
+    if [ -n "\$launch_arg" ]; then
+      nohup "\$APP_PATH" "\$launch_arg" >/dev/null 2>&1 &
+    else
+      nohup "\$APP_PATH" >/dev/null 2>&1 &
+    fi
+  )
 }
 
 while kill -0 "\$APP_PID" 2>/dev/null; do
@@ -635,53 +591,38 @@ done
 
 INSTALL_STATUS=1
 
+if [ ! -f "\$PACKAGE_PATH" ]; then
+  show_message "The downloaded update package could not be found. BeatzLock will reopen so you can try again."
+  reopen_app ""
+  exit 0
+fi
+
 case "\$PACKAGE_PATH" in
   *.deb)
     if command -v pkexec >/dev/null 2>&1; then
-      if pkexec sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"; then
+      if pkexec env DISPLAY="\${DISPLAY:-}" WAYLAND_DISPLAY="\${WAYLAND_DISPLAY:-}" XAUTHORITY="\${XAUTHORITY:-}" DEBIAN_FRONTEND=noninteractive sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"; then
         INSTALL_STATUS=0
       fi
-    elif command -v sudo >/dev/null 2>&1; then
-      if sudo sh -c 'dpkg -i "\$1" || apt-get install -f -y' sh "\$PACKAGE_PATH"; then
-        INSTALL_STATUS=0
-      elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "\$PACKAGE_PATH"
-        show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
-        exit 0
-      fi
-    elif command -v xdg-open >/dev/null 2>&1; then
-      xdg-open "\$PACKAGE_PATH"
-      show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
+    fi
+    if [ "\$INSTALL_STATUS" -ne 0 ] && open_package_installer; then
+      show_message "The Ubuntu package installer has opened. Finish the update there, then reopen BeatzLock if it does not come back automatically."
       exit 0
-    else
-      INSTALL_STATUS=1
     fi
     ;;
   *.rpm)
     if command -v pkexec >/dev/null 2>&1; then
-      if pkexec sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"; then
+      if pkexec env DISPLAY="\${DISPLAY:-}" WAYLAND_DISPLAY="\${WAYLAND_DISPLAY:-}" XAUTHORITY="\${XAUTHORITY:-}" sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"; then
         INSTALL_STATUS=0
       fi
-    elif command -v sudo >/dev/null 2>&1; then
-      if sudo sh -c 'if command -v dnf >/dev/null 2>&1; then dnf install -y "\$1"; elif command -v zypper >/dev/null 2>&1; then zypper --non-interactive install "\$1"; else rpm -Uvh "\$1"; fi' sh "\$PACKAGE_PATH"; then
-        INSTALL_STATUS=0
-      elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "\$PACKAGE_PATH"
-        show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
-        exit 0
-      fi
-    elif command -v xdg-open >/dev/null 2>&1; then
-      xdg-open "\$PACKAGE_PATH"
-      show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
+    fi
+    if [ "\$INSTALL_STATUS" -ne 0 ] && open_package_installer; then
+      show_message "The package installer has opened. Finish the update there, then reopen BeatzLock if it does not come back automatically."
       exit 0
-    else
-      INSTALL_STATUS=1
     fi
     ;;
   *)
-    if command -v xdg-open >/dev/null 2>&1; then
-      xdg-open "\$PACKAGE_PATH"
-      show_message "The installer has opened. Finish the installation, then reopen BeatzLock if it does not come back automatically."
+    if open_package_installer; then
+      show_message "The installer has opened. Finish the update there, then reopen BeatzLock if it does not come back automatically."
       exit 0
     fi
     INSTALL_STATUS=1
