@@ -1,8 +1,8 @@
 v1.7.0 (Build 37)
 
 What's New
-- Added Server Lockdown in Settings. After PIN confirmation, it fully blocks BeatzLock from talking to the internet or server until you turn it off.
-- Server Lockdown now shuts down sign-in, passwordless, sync, update checks, ratings, legal pages, and other online features while keeping the local vault available offline.
-- Individual local OTP-account deletion now requires your BeatzLock PIN.
-- Individual Delete Account Everywhere now requires the exact phrase "Delete Account Everywhere", your BeatzLock PIN, and the current primary device.
-- Passwordless sign-in codes now use 4 digits and rotate every 60 seconds for a smoother approval window.
+- Added Server Lockdown in Settings so you can keep BeatzLock fully offline while still using your local vault.
+- Sensitive actions now try your device security first on every platform, then fall back to your BeatzLock PIN when needed.
+- QR and secret reveal, account deletion, Delete Everywhere, and App PIN changes now follow the same unlock flow for more consistent protection.
+- Windows in-app updates now ask before closing the app and open the normal installer after you confirm.
+- Linux desktop updates now prepare the package installer flow more safely and guide you to reopen the app after the update.
