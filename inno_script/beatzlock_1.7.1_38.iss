@@ -3,8 +3,8 @@
 ; Non-commercial use only
 
 #define MyAppName "beatzLock"
-#define MyAppVersion "1.7.0+38"
-#define MyAppArtifactVersion "1.7.0_38"
+#define MyAppVersion "1.7.1+38"
+#define MyAppArtifactVersion "1.7.1_38"
 #define MyAppPublisher "felixmokayabeatz Inc."
 #define MyAppURL "https://www.felixmokayabeatz.online/"
 #define MyAppExeName "otp_auth_app.exe"
@@ -30,7 +30,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
 DisableProgramGroupPage=yes
-OutputDir=C:\Programming\totp_app\final_builds\windows\1.7.0_38
+OutputDir=C:\Programming\totp_app\final_builds\windows\1.7.1_38
 OutputBaseFilename=beatzlock_{#MyAppArtifactVersion}_x64
 SetupIconFile=C:\Programming\totp_app\otp_backend\static\favicon.ico
 SolidCompression=yes
@@ -45,12 +45,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\Programming\totp_app\final_builds\windows\1.7.0_38\app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.7.0_38\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
-Source: "C:\Programming\totp_app\final_builds\windows\1.7.0_38\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.7.0_38\app\local_auth_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.7.0_38\app\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\totp_app\final_builds\windows\1.7.0_38\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.7.1_38\app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.7.1_38\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
+Source: "C:\Programming\totp_app\final_builds\windows\1.7.1_38\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.7.1_38\app\local_auth_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.7.1_38\app\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\totp_app\final_builds\windows\1.7.1_38\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\totp_app\vc_redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Registry]
