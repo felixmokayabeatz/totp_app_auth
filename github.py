@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Git Configuration Helper Script
+Git Configuration Helper Script - Felix Mokaya 2026
 Sets up git user.name and user.email either globally or for current repo
 """
 

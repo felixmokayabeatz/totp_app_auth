@@ -676,11 +676,80 @@ def get_linux_build_env() -> dict[str, str]:
     )
     return {"PATH": f"{BUILD_TOOLS_DIR}{os.pathsep}{os.environ.get('PATH', '')}"}
 
+
+def get_common_flutter_bins() -> list[Path]:
+    """Return common Flutter executable locations for manual SDK installs."""
+    return [
+        Path.home() / "develop/flutter/bin/flutter",
+        Path.home() / "development/flutter/bin/flutter",
+        Path.home() / "flutter/bin/flutter",
+        Path("/opt/flutter/bin/flutter"),
+        Path("/snap/bin/flutter"),
+    ]
+
+
+def find_local_flutter() -> Path | None:
+    """Find Flutter in common install paths when PATH does not include it."""
+    for flutter_bin in get_common_flutter_bins():
+        if flutter_bin.exists() and os.access(flutter_bin, os.X_OK):
+            return flutter_bin
+    return None
+
+
+def add_flutter_to_current_path(flutter_bin: Path) -> None:
+    """Make a discovered Flutter SDK available to this build script process."""
+    flutter_dir = str(flutter_bin.parent)
+    os.environ["PATH"] = f"{flutter_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+
+
+def print_flutter_install_help():
+    """Print Flutter install/PATH guidance for the current host."""
+    common_flutter_bins = get_common_flutter_bins()
+    existing_bins = [path for path in common_flutter_bins if path.exists()]
+
+    if existing_bins:
+        print_color("\nFlutter exists, but it is not on PATH in this terminal.", Colors.YELLOW)
+        print_color("Add it to PATH, for example:", Colors.BLUE)
+        print(f"  echo 'export PATH=\"{existing_bins[0].parent}:$PATH\"' >> ~/.bashrc")
+        print("  source ~/.bashrc")
+        print("  flutter doctor -v")
+        return
+
+    print_color("\nInstall Flutter and add it to PATH.", Colors.YELLOW)
+
+    if platform.system() == "Linux" and is_rpm_based_linux():
+        print_color("\nFedora prerequisites:", Colors.BLUE)
+        for command in get_linux_desktop_install_commands(include_rpm=True):
+            print(f"  {command}")
+        print_color("\nThen install the Flutter SDK:", Colors.BLUE)
+        print("  mkdir -p \"$HOME/develop\"")
+        print("  # Download the Linux Flutter SDK from https://docs.flutter.dev/get-started/install/linux")
+        print("  tar -xf ~/Downloads/flutter_linux_*.tar.xz -C \"$HOME/develop\"")
+        print("  echo 'export PATH=\"$HOME/develop/flutter/bin:$PATH\"' >> ~/.bashrc")
+        print("  source ~/.bashrc")
+        print("  flutter doctor -v")
+        return
+
+    print_color("\nOfficial Flutter install guide:", Colors.BLUE)
+    print("  https://docs.flutter.dev/get-started/install")
+
+
 def check_flutter():
     """Verify Flutter is installed and configured"""
+    if shutil.which("flutter") is None:
+        local_flutter = find_local_flutter()
+        if local_flutter:
+            add_flutter_to_current_path(local_flutter)
+            print_color(f"Using Flutter from: {local_flutter}", Colors.GREEN)
+        else:
+            print_color("Flutter command not found.", Colors.RED)
+            print_flutter_install_help()
+            return False
+
     result = run("flutter --version", cwd=PROJECT_DIR, capture_output=True)
     if not result:
-        print_color("❌ Flutter not found! Please install Flutter first.", Colors.RED)
+        print_color("Flutter is on PATH, but it did not run correctly.", Colors.RED)
+        print("  Try: flutter doctor -v")
         return False
     
     # Quick check - don't run full doctor unless needed
@@ -987,15 +1056,6 @@ def run_android():
     
     print_color("Starting Android app (press Ctrl+C to stop)...", Colors.GREEN)
     run("flutter run", cwd=PROJECT_DIR)
-    return True
-
-def run_web():
-    """Run the app in web browser"""
-    print_color("\n🌐 Running Web app...", Colors.CYAN)
-    
-    print_color("Starting web server (press Ctrl+C to stop)...", Colors.GREEN)
-    print_color("   Open Chrome to see the app", Colors.BLUE)
-    run("flutter run -d chrome", cwd=PROJECT_DIR)
     return True
 
 def list_devices():
@@ -1527,57 +1587,56 @@ def main_menu():
   8. Run Linux (debug mode)
   9. Run Windows (debug mode)
   10. Run Android (debug mode)
-  11. Run Web (Chrome)
-  12. Run with Hot Reload (development)
+  11. Run with Hot Reload (development)
 
 {'UTILITIES:':^50}
-  13. Clean all build files
-  14. Fix Windows build (clear CMake cache)
-  15. List previous builds
-  16. Open final builds directory
-  17. List available devices
-  18. Run tests
-  19. Analyze code
-  20. Exit
+  12. Clean all build files
+  13. Fix Windows build (clear CMake cache)
+  14. List previous builds
+  15. Open final builds directory
+  16. List available devices
+  17. Run tests
+  18. Analyze code
+  19. Exit
 
 Current platform: {system}
 Current app version: {APP_FULL_VERSION}
 """)
         
-        choice = input("Enter your choice (1-20): ").strip()
+        choice = input("Enter your choice (1-19): ").strip()
 
-        if choice == "20":
+        if choice == "19":
             print_color("\nGoodbye!", Colors.GREEN)
             break
         
-        if choice == "13":
+        if choice == "12":
             clean_all()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "14":
+        elif choice == "13":
             if system == "Windows":
                 fix_windows_build()
             else:
                 print_color("This option is only for Windows!", Colors.YELLOW)
             input("\nPress Enter to continue...")
             continue
-        elif choice == "15":
+        elif choice == "14":
             list_builds()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "16":
+        elif choice == "15":
             open_final_builds_dir()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "17":
+        elif choice == "16":
             list_devices()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "18":
+        elif choice == "17":
             run_tests()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "19":
+        elif choice == "18":
             analyze_code()
             input("\nPress Enter to continue...")
             continue
@@ -1639,8 +1698,6 @@ Current app version: {APP_FULL_VERSION}
         elif choice == "10":
             run_android()
         elif choice == "11":
-            run_web()
-        elif choice == "12":
             hot_reload()
         else:
             print_color("Invalid choice", Colors.RED)
