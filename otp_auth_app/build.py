@@ -8,6 +8,8 @@ import platform
 import sys
 import json
 import glob
+import re
+import tarfile
 from datetime import datetime
 from pathlib import Path
 
@@ -31,13 +33,18 @@ INNO_SCRIPT_SEEDS = [
 
 # Platform-specific build dirs
 LINUX_DIR = str(FINAL_BUILDS_DIR / "linux")
+FEDORA_DIR = str(FINAL_BUILDS_DIR / "fedora")
 WINDOWS_DIR = str(FINAL_BUILDS_DIR / "windows")
 ANDROID_DIR = str(FINAL_BUILDS_DIR / "android")
 BUILD_TOOLS_DIR = WORKSPACE_DIR / ".build_tools" / "bin"
+RPM_BUILD_DIR = WORKSPACE_DIR / "rpm_pkg"
 
 # App metadata (customize these)
 APP_NAME = "BeatzLock"
 DEB_PACKAGE_NAME = "beatzlock"
+RPM_PACKAGE_NAME = "beatzlock"
+RPM_ARCH = "x86_64"
+RPM_LICENSE = "LicenseRef-Proprietary"
 LINUX_APPLICATION_ID = "com.beatzlock.auth"
 APP_MAINTAINER = "Felix Mokaya <felixmokayabeatz@proton.me>"
 APP_DESCRIPTION = "BeatzLock OTP Authentication App"
@@ -89,7 +96,20 @@ APP_FULL_VERSION = ""
 APP_VERSION = ""
 APP_BUILD_NUMBER = ""
 APP_ARTIFACT_VERSION = ""
-SUPPORTED_BUILD_LOG_PLATFORMS = ("windows", "linux", "android")
+SUPPORTED_BUILD_LOG_PLATFORMS = ("windows", "linux", "fedora", "android")
+RPM_BASED_LINUX_IDS = {
+    "fedora",
+    "rhel",
+    "centos",
+    "rocky",
+    "almalinux",
+    "ol",
+    "opensuse",
+    "opensuse-leap",
+    "opensuse-tumbleweed",
+    "sles",
+}
+DEB_BASED_LINUX_IDS = {"debian", "ubuntu", "kali", "linuxmint", "pop"}
 
 
 def get_platform_version_dir(platform_name: str) -> Path:
@@ -100,6 +120,92 @@ def get_platform_version_dir(platform_name: str) -> Path:
 def get_build_log_dir(platform_name: str) -> Path:
     """Return otp_auth_app/build_logs/<platform>/ for incremental JSON logs."""
     return BUILD_LOGS_DIR / platform_name
+
+
+def read_os_release() -> dict[str, str]:
+    """Read Linux distribution metadata from /etc/os-release."""
+    os_release_path = Path("/etc/os-release")
+    if platform.system() != "Linux" or not os_release_path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for line in os_release_path.read_text(encoding="utf-8").splitlines():
+        if "=" not in line or line.startswith("#"):
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value.strip().strip('"')
+    return values
+
+
+def get_linux_distribution_id() -> str:
+    """Return the lower-case Linux distribution ID when available."""
+    return read_os_release().get("ID", "").lower()
+
+
+def is_rpm_based_linux() -> bool:
+    """Detect Fedora/RHEL/openSUSE style distributions."""
+    distro_id = get_linux_distribution_id()
+    if distro_id in RPM_BASED_LINUX_IDS:
+        return True
+    return shutil.which("dnf") is not None or shutil.which("zypper") is not None
+
+
+def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
+    """Return install commands for the current Linux packaging family."""
+    distro_id = get_linux_distribution_id()
+
+    if distro_id in RPM_BASED_LINUX_IDS or shutil.which("dnf"):
+        packages = [
+            "clang",
+            "cmake",
+            "gcc-c++",
+            "gtk3-devel",
+            "libstdc++-devel",
+            "libwebp-devel",
+            "mesa-libGLU",
+            "ninja-build",
+            "pkgconf-pkg-config",
+        ]
+        if include_rpm:
+            packages.extend([
+                "desktop-file-utils",
+                "rpm-build",
+                "rpmdevtools",
+                "xdg-utils",
+            ])
+        return [f"sudo dnf install -y {' '.join(packages)}"]
+
+    if distro_id in DEB_BASED_LINUX_IDS or shutil.which("apt"):
+        packages = [
+            "clang",
+            "cmake",
+            "libgtk-3-dev",
+            "libstdc++-12-dev",
+            "libwebp-dev",
+            "libglu1-mesa",
+            "ninja-build",
+            "pkg-config",
+        ]
+        if include_rpm:
+            packages.extend(["desktop-file-utils", "rpm", "xdg-utils"])
+        return [
+            "sudo apt update",
+            f"sudo apt install -y {' '.join(packages)}",
+        ]
+
+    packages = (
+        "clang cmake gcc-c++ gtk3-devel libstdc++-devel libwebp-devel "
+        "mesa-libGLU ninja-build pkg-config"
+    )
+    if include_rpm:
+        packages += " desktop-file-utils rpm-build rpmdevtools xdg-utils"
+    return [f"Install these packages with your distro package manager: {packages}"]
+
+
+def sanitize_rpm_value(value: str, fallback: str) -> str:
+    """Keep RPM Version/Release values inside rpm's accepted character set."""
+    sanitized = re.sub(r"[^A-Za-z0-9._+~]", "_", value.strip())
+    return sanitized or fallback
 
 
 def get_versioned_inno_script_path() -> Path:
@@ -214,6 +320,39 @@ def get_linux_bundle_binary_name(bundle_path: Path) -> str:
         if entry.is_file() and os.access(entry, os.X_OK):
             return entry.name
     raise FileNotFoundError(f"No executable found in Linux bundle: {bundle_path}")
+
+
+def get_linux_bundle_path() -> Path:
+    """Return Flutter's release bundle path for Linux x64 desktop builds."""
+    return SCRIPT_DIR / "build/linux/x64/release/bundle"
+
+
+def write_linux_desktop_file(destination: Path, linux_binary_name: str) -> None:
+    """Copy the desktop entry and keep launcher paths aligned with the package."""
+    desktop_file_source = SCRIPT_DIR / "linux/runner/resources" / f"{LINUX_APPLICATION_ID}.desktop"
+    if not desktop_file_source.exists():
+        raise FileNotFoundError(f"Linux desktop file not found: {desktop_file_source}")
+
+    replacements = {
+        "Exec=": f"Exec=/usr/local/{APP_NAME}/{linux_binary_name}",
+        "Icon=": f"Icon={LINUX_APPLICATION_ID}",
+        "Comment=": f"Comment={APP_DESCRIPTION}",
+        "StartupWMClass=": f"StartupWMClass={LINUX_APPLICATION_ID}",
+    }
+    updated_lines = []
+    for line in desktop_file_source.read_text(encoding="utf-8").splitlines():
+        replacement = next(
+            (
+                replacement
+                for prefix, replacement in replacements.items()
+                if line.startswith(prefix)
+            ),
+            None,
+        )
+        updated_lines.append(replacement if replacement is not None else line)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
 
 
 def sync_inno_setup_script(script_path: Path):
@@ -407,7 +546,7 @@ def run(cmd, cwd=None, shell=True, capture_output=False, env=None):
 
 def ensure_dirs():
     """Create necessary directories"""
-    for dir_path in [LINUX_DIR, WINDOWS_DIR, ANDROID_DIR]:
+    for dir_path in [LINUX_DIR, FEDORA_DIR, WINDOWS_DIR, ANDROID_DIR]:
         os.makedirs(dir_path, exist_ok=True)
         print_color(f"✓ Directory ready: {dir_path}", Colors.GREEN)
 
@@ -553,7 +692,7 @@ def check_linux_desktop_requirements():
         return True
 
     missing_tools = []
-    for tool in ["cmake", "ninja", "pkg-config"]:
+    for tool in ["clang", "cmake", "ninja", "pkg-config"]:
         if shutil.which(tool) is None:
             missing_tools.append(tool)
 
@@ -583,9 +722,39 @@ def check_linux_desktop_requirements():
         print_color("Missing WebP development headers (/usr/include/webp).", Colors.YELLOW)
 
     print_color("\nInstall them with:", Colors.BLUE)
-    print("  sudo apt update")
-    print("  sudo apt install cmake ninja-build pkg-config libgtk-3-dev libwebp-dev")
+    for command in get_linux_desktop_install_commands():
+        print(f"  {command}")
     print_color("\nThen try the Linux run/build again.", Colors.BLUE)
+    return False
+
+
+def check_deb_packaging_requirements():
+    """Verify Debian package tooling is installed."""
+    if shutil.which("dpkg-deb"):
+        return True
+
+    print_color("\nDebian package tooling is missing: dpkg-deb", Colors.RED)
+    if shutil.which("apt"):
+        print_color("Install it with:", Colors.BLUE)
+        print("  sudo apt update")
+        print("  sudo apt install -y dpkg")
+    else:
+        print_color(
+            "This host does not look Debian-based. Use the Fedora .rpm option here.",
+            Colors.YELLOW,
+        )
+    return False
+
+
+def check_rpm_packaging_requirements():
+    """Verify RPM package tooling is installed."""
+    if shutil.which("rpmbuild"):
+        return True
+
+    print_color("\nRPM package tooling is missing: rpmbuild", Colors.RED)
+    print_color("Install it with:", Colors.BLUE)
+    for command in get_linux_desktop_install_commands(include_rpm=True):
+        print(f"  {command}")
     return False
 
 def check_device_connected():
@@ -854,13 +1023,16 @@ def build_linux_deb(skip_deb_package=False):
 
     if not check_linux_desktop_requirements():
         return False
+
+    if not skip_deb_package and not check_deb_packaging_requirements():
+        return False
     
     # Build Flutter Linux app
     linux_build_env = get_linux_build_env()
     if not run("flutter build linux --release", cwd=PROJECT_DIR, env=linux_build_env):
         return False
     
-    bundle_path = SCRIPT_DIR / "build/linux/x64/release/bundle"
+    bundle_path = get_linux_bundle_path()
     if not bundle_path.exists():
         print_color("❌ Linux build failed - bundle not found", Colors.RED)
         return False
@@ -889,14 +1061,14 @@ def build_linux_deb(skip_deb_package=False):
                 deb_dir / "usr/share/icons/hicolor/256x256/apps" / f"{LINUX_APPLICATION_ID}.png",
             )
 
-        desktop_file_source = SCRIPT_DIR / "linux/runner/resources" / f"{LINUX_APPLICATION_ID}.desktop"
-        if not desktop_file_source.exists():
-            print_color(f"❌ Linux desktop file not found: {desktop_file_source}", Colors.RED)
+        try:
+            write_linux_desktop_file(
+                deb_dir / "usr/share/applications" / f"{LINUX_APPLICATION_ID}.desktop",
+                linux_binary_name,
+            )
+        except FileNotFoundError as error:
+            print_color(f"❌ {error}", Colors.RED)
             return False
-        shutil.copy2(
-            desktop_file_source,
-            deb_dir / "usr/share/applications" / f"{LINUX_APPLICATION_ID}.desktop",
-        )
 
         # Create control file
         control_content = f"""Package: {DEB_PACKAGE_NAME}
@@ -945,8 +1117,185 @@ exit 0
             shutil.rmtree(deb_dir)
             print_color(f"✓ Removed temporary Debian package folder: {deb_dir}", Colors.GREEN)
 
+
+def create_rpm_source_archive(bundle_path: Path, linux_binary_name: str) -> tuple[str, Path]:
+    """Stage Flutter bundle assets and archive them for rpmbuild."""
+    source_root_name = f"{RPM_PACKAGE_NAME}-{APP_ARTIFACT_VERSION}"
+    sources_dir = RPM_BUILD_DIR / "SOURCES"
+    source_root = sources_dir / source_root_name
+    source_archive = sources_dir / f"{source_root_name}.tar.gz"
+
+    if source_root.exists():
+        shutil.rmtree(source_root)
+    if source_archive.exists():
+        source_archive.unlink()
+
+    source_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(bundle_path, source_root / "bundle", dirs_exist_ok=True)
+
+    try:
+        write_linux_desktop_file(
+            source_root / f"{LINUX_APPLICATION_ID}.desktop",
+            linux_binary_name,
+        )
+    except FileNotFoundError:
+        shutil.rmtree(source_root)
+        raise
+
+    linux_icon_source = SCRIPT_DIR / "linux/runner/resources/app_icon.png"
+    if linux_icon_source.exists():
+        shutil.copy2(linux_icon_source, source_root / "app_icon.png")
+
+    with tarfile.open(source_archive, "w:gz") as archive:
+        archive.add(source_root, arcname=source_root.name)
+
+    return source_root_name, source_archive
+
+
+def write_rpm_spec_file(
+    source_root_name: str,
+    source_archive: Path,
+    linux_binary_name: str,
+) -> Path:
+    """Write the RPM spec file for the current Flutter release bundle."""
+    specs_dir = RPM_BUILD_DIR / "SPECS"
+    specs_dir.mkdir(parents=True, exist_ok=True)
+
+    rpm_version = sanitize_rpm_value(APP_VERSION, "0")
+    rpm_release = sanitize_rpm_value(APP_BUILD_NUMBER, "1")
+    changelog_date = datetime.now().strftime("%a %b %d %Y")
+    spec_file = specs_dir / f"{RPM_PACKAGE_NAME}.spec"
+    spec_content = f"""%global debug_package %{{nil}}
+%global _build_id_links none
+
+Name:           {RPM_PACKAGE_NAME}
+Version:        {rpm_version}
+Release:        {rpm_release}%{{?dist}}
+Summary:        {APP_DESCRIPTION}
+License:        {RPM_LICENSE}
+BuildArch:      {RPM_ARCH}
+Source0:        {source_archive.name}
+
+Requires:       gtk3
+Requires:       xdg-utils
+Requires(post): /usr/bin/update-desktop-database
+Requires(postun): /usr/bin/update-desktop-database
+
+%description
+This package provides an OTP authentication application.
+
+%prep
+%setup -q -n {source_root_name}
+
+%build
+# Flutter already produced the release bundle before rpmbuild runs.
+
+%install
+rm -rf %{{buildroot}}
+mkdir -p %{{buildroot}}/usr/local/{APP_NAME}
+cp -a bundle/. %{{buildroot}}/usr/local/{APP_NAME}/
+install -Dm0644 {LINUX_APPLICATION_ID}.desktop %{{buildroot}}%{{_datadir}}/applications/{LINUX_APPLICATION_ID}.desktop
+install -Dm0644 app_icon.png %{{buildroot}}%{{_datadir}}/icons/hicolor/256x256/apps/{LINUX_APPLICATION_ID}.png
+chmod 0755 %{{buildroot}}/usr/local/{APP_NAME}/{linux_binary_name}
+
+%post
+/usr/bin/update-desktop-database %{{_datadir}}/applications >/dev/null 2>&1 || :
+/bin/touch --no-create %{{_datadir}}/icons/hicolor >/dev/null 2>&1 || :
+
+%postun
+/usr/bin/update-desktop-database %{{_datadir}}/applications >/dev/null 2>&1 || :
+/bin/touch --no-create %{{_datadir}}/icons/hicolor >/dev/null 2>&1 || :
+
+%files
+/usr/local/{APP_NAME}
+%{{_datadir}}/applications/{LINUX_APPLICATION_ID}.desktop
+%{{_datadir}}/icons/hicolor/256x256/apps/{LINUX_APPLICATION_ID}.png
+
+%changelog
+* {changelog_date} {APP_MAINTAINER} - {rpm_version}-{rpm_release}
+- Build {APP_FULL_VERSION}
+"""
+    spec_file.write_text(spec_content, encoding="utf-8")
+    return spec_file
+
+
+def build_linux_rpm():
+    """Build Fedora/RHEL .rpm package."""
+    print_color("\nBuilding Fedora .rpm package...", Colors.CYAN)
+
+    if platform.system() != "Linux":
+        print_color("Fedora RPM builds require Linux.", Colors.YELLOW)
+        return False
+
+    if not check_linux_desktop_requirements():
+        return False
+
+    if not check_rpm_packaging_requirements():
+        return False
+
+    linux_build_env = get_linux_build_env()
+    if not run("flutter build linux --release", cwd=PROJECT_DIR, env=linux_build_env):
+        return False
+
+    bundle_path = get_linux_bundle_path()
+    if not bundle_path.exists():
+        print_color("Linux build failed - bundle not found", Colors.RED)
+        return False
+
+    linux_binary_name = get_linux_bundle_binary_name(bundle_path)
+
+    try:
+        if RPM_BUILD_DIR.exists():
+            shutil.rmtree(RPM_BUILD_DIR)
+
+        for rpm_subdir in ["BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"]:
+            (RPM_BUILD_DIR / rpm_subdir).mkdir(parents=True, exist_ok=True)
+
+        source_root_name, source_archive = create_rpm_source_archive(
+            bundle_path,
+            linux_binary_name,
+        )
+        spec_file = write_rpm_spec_file(
+            source_root_name,
+            source_archive,
+            linux_binary_name,
+        )
+
+        if not run(
+            f'rpmbuild -bb "{spec_file}" --define "_topdir {RPM_BUILD_DIR}"',
+            cwd=str(WORKSPACE_DIR),
+        ):
+            return False
+
+        rpm_outputs = sorted(
+            (RPM_BUILD_DIR / "RPMS" / RPM_ARCH).glob(f"{RPM_PACKAGE_NAME}-*.{RPM_ARCH}.rpm"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        if not rpm_outputs:
+            print_color("rpmbuild finished, but no RPM artifact was found.", Colors.RED)
+            return False
+
+        fedora_version_dir = get_platform_version_dir("fedora")
+        fedora_version_dir.mkdir(parents=True, exist_ok=True)
+        final_rpm_path = fedora_version_dir / f"{RPM_PACKAGE_NAME}_{APP_ARTIFACT_VERSION}_{RPM_ARCH}.rpm"
+        if final_rpm_path.exists():
+            final_rpm_path.unlink()
+        shutil.move(str(rpm_outputs[0]), final_rpm_path)
+        save_platform_build_metadata("fedora", "rpm", final_rpm_path)
+
+        print_color(f"✅ Fedora .rpm created: {final_rpm_path}", Colors.GREEN)
+        return True
+    finally:
+        if RPM_BUILD_DIR.exists():
+            shutil.rmtree(RPM_BUILD_DIR)
+            print_color(f"✓ Removed temporary RPM package folder: {RPM_BUILD_DIR}", Colors.GREEN)
+
+
 def build_linux():
-    """Build the Linux Debian package."""
+    """Build the native Linux package for the current distribution."""
+    if is_rpm_based_linux():
+        return build_linux_rpm()
     return build_linux_deb()
 
 def build_windows():
@@ -1051,8 +1400,8 @@ def build_windows_and_apk():
 
 
 def build_linux_and_apk():
-    """Build Linux .deb and Android APK in one run."""
-    print_color("\nBuilding Linux and Android APK artifacts...", Colors.CYAN)
+    """Build the current Linux distro package and Android APK in one run."""
+    print_color("\nBuilding Linux package and Android APK artifacts...", Colors.CYAN)
     linux_ok = build_linux()
     android_ok = build_android("1")
     return linux_ok and android_ok
@@ -1065,6 +1414,7 @@ def clean_all():
     dirs_to_clean = [
         SCRIPT_DIR / "build",
         WORKSPACE_DIR / "deb_pkg",
+        WORKSPACE_DIR / "rpm_pkg",
         SCRIPT_DIR / ".dart_tool",
         SCRIPT_DIR / "windows/CMakeCache.txt",
         SCRIPT_DIR / "windows/CMakeFiles",
@@ -1090,7 +1440,7 @@ def list_builds():
     print_color("\nPreviously built outputs:", Colors.CYAN)
     
     found = False
-    for platform_dir in [Path(LINUX_DIR), Path(WINDOWS_DIR), Path(ANDROID_DIR)]:
+    for platform_dir in [Path(LINUX_DIR), Path(FEDORA_DIR), Path(WINDOWS_DIR), Path(ANDROID_DIR)]:
         if platform_dir.exists() and any(platform_dir.iterdir()):
             found = True
             print_color(f"\n{platform_dir.name.upper()}:", Colors.BOLD)
@@ -1144,7 +1494,7 @@ def fix_windows_build():
         print_color("   Make sure Visual Studio 2022 is installed with 'Desktop development with C++' workload", Colors.YELLOW)
     
     print_color("\n✅ Windows build fix complete!", Colors.GREEN)
-    print_color("   Now try building again with option 2", Colors.BLUE)
+    print_color("   Now try building again with option 4", Colors.BLUE)
 
 def run_tests():
     """Run Flutter tests"""
@@ -1165,67 +1515,69 @@ def main_menu():
         refresh_version_context()
         print_color(f"""
 {'BUILD OPTIONS:':^50}
-  1. Linux (.deb final build)
-  2. Windows installer (.exe)
-  3. Android (.apk + .aab)
-  4. Build All (Windows + APK)
-  5. Build All (Linux + APK)
+  1. Linux package for this distro (.deb/.rpm)
+  2. Ubuntu/Debian .deb final build
+  3. Fedora .rpm final build
+  4. Windows installer (.exe)
+  5. Android (.apk + .aab)
+  6. Build All (Windows + APK)
+  7. Build All (Linux package + APK)
 
 {'RUN OPTIONS:':^50}
-  6. Run Linux (debug mode)
-  7. Run Windows (debug mode)
-  8. Run Android (debug mode)
-  9. Run Web (Chrome)
-  10. Run with Hot Reload (development)
+  8. Run Linux (debug mode)
+  9. Run Windows (debug mode)
+  10. Run Android (debug mode)
+  11. Run Web (Chrome)
+  12. Run with Hot Reload (development)
 
 {'UTILITIES:':^50}
-  11. Clean all build files
-  12. Fix Windows build (clear CMake cache)
-  13. List previous builds
-  14. Open final builds directory
-  15. List available devices
-  16. Run tests
-  17. Analyze code
-  18. Exit
+  13. Clean all build files
+  14. Fix Windows build (clear CMake cache)
+  15. List previous builds
+  16. Open final builds directory
+  17. List available devices
+  18. Run tests
+  19. Analyze code
+  20. Exit
 
 Current platform: {system}
 Current app version: {APP_FULL_VERSION}
 """)
         
-        choice = input("Enter your choice (1-18): ").strip()
+        choice = input("Enter your choice (1-20): ").strip()
 
-        if choice == "18":
+        if choice == "20":
             print_color("\nGoodbye!", Colors.GREEN)
             break
         
-        if choice == "11":
+        if choice == "13":
             clean_all()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "12":
+        elif choice == "14":
             if system == "Windows":
                 fix_windows_build()
             else:
                 print_color("This option is only for Windows!", Colors.YELLOW)
             input("\nPress Enter to continue...")
             continue
-        elif choice == "13":
+        elif choice == "15":
             list_builds()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "14":
+        elif choice == "16":
             open_final_builds_dir()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "15":
+        elif choice == "17":
             list_devices()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "16":
+        elif choice == "18":
             run_tests()
             input("\nPress Enter to continue...")
             continue
-        elif choice == "17":
+        elif choice == "19":
             analyze_code()
             input("\nPress Enter to continue...")
             continue
@@ -1241,44 +1593,54 @@ Current app version: {APP_FULL_VERSION}
         if choice == "1":
             if system != "Linux":
                 print_color("Linux builds require Linux OS!", Colors.YELLOW)
-                print_color("   This script must be run on Ubuntu/Debian", Colors.YELLOW)
+                print_color("   Run this script on Fedora, Ubuntu, Debian, or another Linux host", Colors.YELLOW)
             else:
                 build_linux()
         elif choice == "2":
+            if system != "Linux":
+                print_color("Ubuntu/Debian .deb builds require Linux OS!", Colors.YELLOW)
+            else:
+                build_linux_deb()
+        elif choice == "3":
+            if system != "Linux":
+                print_color("Fedora .rpm builds require Linux OS!", Colors.YELLOW)
+            else:
+                build_linux_rpm()
+        elif choice == "4":
             if system != "Windows":
                 print_color("Windows builds require Windows OS!", Colors.YELLOW)
                 print_color("   Run this script on Windows", Colors.YELLOW)
             else:
                 build_windows()
-        elif choice == "3":
+        elif choice == "5":
             build_android()
-        elif choice == "4":
+        elif choice == "6":
             if system != "Windows":
                 print_color("Build All currently requires Windows for the Windows app build!", Colors.YELLOW)
                 print_color("   Run this script on Windows to build Windows + APK together", Colors.YELLOW)
             else:
                 build_windows_and_apk()
-        elif choice == "5":
+        elif choice == "7":
             if system != "Linux":
                 print_color("Linux + APK builds require Linux OS!", Colors.YELLOW)
-                print_color("   Run this script on Linux to build the .deb + APK together", Colors.YELLOW)
+                print_color("   Run this script on Linux to build the native package + APK together", Colors.YELLOW)
             else:
                 build_linux_and_apk()
-        elif choice == "6":
+        elif choice == "8":
             if system != "Linux":
                 print_color("Linux run requires Linux OS!", Colors.YELLOW)
             else:
                 run_linux()
-        elif choice == "7":
+        elif choice == "9":
             if system != "Windows":
                 print_color("Windows run requires Windows OS!", Colors.YELLOW)
             else:
                 run_windows()
-        elif choice == "8":
-            run_android()
-        elif choice == "9":
-            run_web()
         elif choice == "10":
+            run_android()
+        elif choice == "11":
+            run_web()
+        elif choice == "12":
             hot_reload()
         else:
             print_color("Invalid choice", Colors.RED)

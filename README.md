@@ -117,6 +117,57 @@ Build the Linux release app:
 flutter build linux --release
 ```
 
+## Fedora Linux
+
+Install the Fedora build tools and Flutter desktop dependencies:
+
+```bash
+sudo dnf install -y git curl unzip xz zip clang cmake gcc-c++ libstdc++-devel ninja-build pkgconf-pkg-config gtk3-devel libwebp-devel mesa-libGLU rpm-build rpmdevtools desktop-file-utils xdg-utils
+```
+
+If Flutter is not already installed, download the Linux SDK from the Flutter SDK archive, extract it, and add Flutter to your shell path:
+
+```bash
+mkdir -p "$HOME/develop"
+tar -xf ~/Downloads/flutter_linux_*.tar.xz -C "$HOME/develop"
+echo 'export PATH="$HOME/develop/flutter/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+flutter doctor -v
+```
+
+Install the app packages:
+
+```bash
+cd otp_auth_app
+flutter pub get
+```
+
+Debug run on Fedora:
+
+```bash
+flutter run -d linux
+```
+
+Build the Fedora RPM from the project root:
+
+```bash
+python3 build.py
+```
+
+Choose option `3. Fedora .rpm final build`, or option `1. Linux package for this distro (.deb/.rpm)` while on Fedora.
+
+The RPM is written to:
+
+```text
+final_builds/fedora/<version_build>/beatzlock_<version_build>_x86_64.rpm
+```
+
+Install the generated RPM:
+
+```bash
+sudo dnf install ./final_builds/fedora/<version_build>/beatzlock_<version_build>_x86_64.rpm
+```
+
 ## Android
 
 Make sure an Android phone is connected with USB debugging enabled, or start an Android emulator first.
@@ -258,6 +309,14 @@ flutter run -d windows
 ```
 
 ### Kali Linux
+
+```bash
+cd otp_auth_app
+flutter pub get
+flutter run -d linux
+```
+
+### Fedora Linux
 
 ```bash
 cd otp_auth_app
