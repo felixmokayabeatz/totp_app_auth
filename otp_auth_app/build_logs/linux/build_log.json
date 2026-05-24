@@ -376,5 +376,19 @@
     "build_number": "40",
     "artifact_version": "1.7.3_40",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 28,
+    "platform": "linux",
+    "artifact_type": "deb",
+    "file": "beatzlock_1.7.7_44_amd64.deb",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/final_builds/linux/1.7.7_44/beatzlock_1.7.7_44_amd64.deb",
+    "relative_path": "final_builds/linux/1.7.7_44/beatzlock_1.7.7_44_amd64.deb",
+    "is_directory": false,
+    "timestamp": "2026-05-25T00:05:18",
+    "version": "1.7.7+44",
+    "build_number": "44",
+    "artifact_version": "1.7.7_44",
+    "host_platform": "Linux"
   }
 ]
