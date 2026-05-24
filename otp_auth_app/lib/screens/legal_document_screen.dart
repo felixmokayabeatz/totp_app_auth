@@ -277,11 +277,7 @@ class _LegalHtmlContentState extends State<_LegalHtmlContent> {
     if (blocks.isEmpty) {
       return Text(
         'This document is currently unavailable.',
-        style: TextStyle(
-          color: widget.textPrimary,
-          fontSize: 14,
-          height: 1.55,
-        ),
+        style: TextStyle(color: widget.textPrimary, fontSize: 14, height: 1.55),
       );
     }
 
@@ -331,9 +327,7 @@ class _LegalHtmlContentState extends State<_LegalHtmlContent> {
         decoration: BoxDecoration(
           color: widget.surfaceColor,
           borderRadius: BorderRadius.circular(10),
-          border: Border(
-            left: BorderSide(color: widget.accent, width: 3),
-          ),
+          border: Border(left: BorderSide(color: widget.accent, width: 3)),
         ),
         child: RichText(
           text: TextSpan(
@@ -610,9 +604,7 @@ class _HtmlParser {
         .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
         .replaceAll(RegExp(r'</p>|</div>', caseSensitive: false), '\n');
     final fragments = <_InlineTextFragment>[];
-    final stack = <_InlineStyleFrame>[
-      _InlineStyleFrame('root', baseStyle),
-    ];
+    final stack = <_InlineStyleFrame>[_InlineStyleFrame('root', baseStyle)];
     var cursor = 0;
 
     void addText(String text) {

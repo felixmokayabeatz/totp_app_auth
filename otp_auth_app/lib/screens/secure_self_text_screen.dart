@@ -498,7 +498,9 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
           borderRadius: BorderRadius.circular(18),
           border: isHighlighted
               ? Border.all(
-                  color: Colors.white.withValues(alpha: 0.85), width: 2)
+                  color: Colors.white.withValues(alpha: 0.85),
+                  width: 2,
+                )
               : null,
           boxShadow: isHighlighted
               ? [
@@ -618,8 +620,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                         builder: (context, Box<SecureMessage> messageBox, _) {
                           final messages = messageBox.values.toList()
                             ..sort(
-                              (a, b) => a.createdAt.compareTo(b.createdAt),
-                            );
+                                (a, b) => a.createdAt.compareTo(b.createdAt));
                           if (messages.isEmpty) {
                             return _buildEmptyState();
                           }
@@ -627,8 +628,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                           final userId = _vaultIdentity;
                           if (userId == null || userId.isEmpty) {
                             return const Center(
-                              child: CircularProgressIndicator(),
-                            );
+                                child: CircularProgressIndicator());
                           }
 
                           _scheduleMessageReveal(messages);
@@ -667,8 +667,9 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                 color: _cardColor,
                 boxShadow: [
                   BoxShadow(
-                    color:
-                        Colors.black.withValues(alpha: _isDark ? 0.22 : 0.06),
+                    color: Colors.black.withValues(
+                      alpha: _isDark ? 0.22 : 0.06,
+                    ),
                     blurRadius: 16,
                     offset: const Offset(0, -4),
                   ),
@@ -704,8 +705,9 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                             onSubmitted: (_) => _sendMessage(),
                             decoration: InputDecoration(
                               hintText: 'Type a secure message to yourself',
-                              helperText:
-                                  _retentionCaption(_selectedRetentionMinutes),
+                              helperText: _retentionCaption(
+                                _selectedRetentionMinutes,
+                              ),
                               border: const OutlineInputBorder(),
                             ),
                           ),

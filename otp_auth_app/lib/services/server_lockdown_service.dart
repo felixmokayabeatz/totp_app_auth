@@ -57,10 +57,7 @@ class ServerLockdownService {
     }
 
     dio.interceptors.add(
-      _ServerLockdownInterceptor(
-        service: this,
-        featureSummary: featureSummary,
-      ),
+      _ServerLockdownInterceptor(service: this, featureSummary: featureSummary),
     );
   }
 }
@@ -91,10 +88,7 @@ class _ServerLockdownInterceptor extends Interceptor {
         response: Response<dynamic>(
           requestOptions: options,
           statusCode: 423,
-          data: {
-            'error': message,
-            'code': 'server_lockdown_enabled',
-          },
+          data: {'error': message, 'code': 'server_lockdown_enabled'},
         ),
         error: message,
         type: DioExceptionType.badResponse,

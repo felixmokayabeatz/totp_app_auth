@@ -1468,9 +1468,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }) async {
     if (_serverLockdownEnabled) {
       _showError(
-        ServerLockdownService().blockedMessageFor(
-          'use passwordless sign-in',
-        ),
+        ServerLockdownService().blockedMessageFor('use passwordless sign-in'),
       );
       return _PasswordlessLoginOutcome.failed;
     }
@@ -1823,10 +1821,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final success = await _syncService.login(
-      email,
-      _passwordController.text,
-    );
+    final success = await _syncService.login(email, _passwordController.text);
     if (!mounted) return;
     setState(() {
       _isLoading = false;

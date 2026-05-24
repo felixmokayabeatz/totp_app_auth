@@ -141,9 +141,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await Navigator.push<void>(
         context,
         MaterialPageRoute(
-          builder: (_) => SecureSelfTextScreen(
-            initialMessageId: detail.secureMessageId,
-          ),
+          builder: (_) =>
+              SecureSelfTextScreen(initialMessageId: detail.secureMessageId),
         ),
       );
     } else {

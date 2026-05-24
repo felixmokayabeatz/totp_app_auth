@@ -1407,9 +1407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     }
                   : _serverLockdownEnabled
                       ? () => unawaited(
-                            _requireServerConnection(
-                              'sync with the cloud',
-                            ),
+                            _requireServerConnection('sync with the cloud'),
                           )
                       : (_syncLockedOnThisDevice
                           ? _unlockSyncOnThisDevice
@@ -1809,7 +1807,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openLoginForSync() async {
     if (!await _requireServerConnection(
-        'sign in and reconnect to online tools')) {
+      'sign in and reconnect to online tools',
+    )) {
       return;
     }
 
@@ -4685,11 +4684,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         content: Text(
           'The update has finished downloading. BeatzLock will close and open the normal Windows installer or Linux package installer. Do you want to continue now?',
-          style: TextStyle(
-            color: _textSecondary,
-            fontSize: 13,
-            height: 1.4,
-          ),
+          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(

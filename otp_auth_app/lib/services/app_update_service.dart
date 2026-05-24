@@ -144,10 +144,7 @@ class AppUpdateService {
         queryParameters['distribution'] = linuxDistribution;
       }
 
-      final response = await _dio.get(
-        '',
-        queryParameters: queryParameters,
-      );
+      final response = await _dio.get('', queryParameters: queryParameters);
 
       if (response.statusCode == 200 && response.data is Map) {
         _cachedUpdateInfo = AppUpdateInfo.fromJson(
@@ -212,8 +209,10 @@ class AppUpdateService {
   }
 
   String? _normalizeLinuxDistribution(String value) {
-    final key =
-        value.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final key = value.trim().toLowerCase().replaceAll(
+          RegExp(r'[^a-z0-9]+'),
+          '',
+        );
     if (key.isEmpty) return null;
     return _linuxDistributionAliases[key];
   }
@@ -345,10 +344,7 @@ class AppUpdateService {
       _lastErrorMessage = ServerLockdownService().blockedMessageFor(
         'download and install updates',
       );
-      return AppSelfUpdateResult(
-        started: false,
-        message: _lastErrorMessage!,
-      );
+      return AppSelfUpdateResult(started: false, message: _lastErrorMessage!);
     }
 
     if (!canDownloadUpdateInApp) {
@@ -492,11 +488,7 @@ class AppUpdateService {
       throw const FileSystemException('No prepared desktop update was found.');
     }
 
-    await Process.start(
-      executable,
-      arguments,
-      mode: ProcessStartMode.detached,
-    );
+    await Process.start(executable, arguments, mode: ProcessStartMode.detached);
     _clearPreparedUpdateState(cleanupArtifacts: false);
     if (Platform.isWindows && executable.toLowerCase().endsWith('.exe')) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
@@ -646,11 +638,11 @@ class AppUpdateService {
     final updateDirPath = File(installerPath).parent.path;
 
     if (Platform.isWindows) {
-      _pendingLauncherExecutable = 'powershell.exe';
+      _pendingLauncherExecutable = _resolveWindowsPowerShellExecutable();
       _pendingLauncherArguments = _buildWindowsUpdateLauncherArguments(
         installerPath: installerPath,
         appPath: appPath,
-        updateDirPath: updateDirPath,
+        appPid: pid,
       );
       _setPendingCleanupPaths(<String>[updateDirPath]);
       return;
@@ -707,35 +699,33 @@ class AppUpdateService {
   List<String> _buildWindowsUpdateLauncherArguments({
     required String installerPath,
     required String appPath,
-    required String updateDirPath,
+    required int appPid,
   }) {
     final escapedInstallerPath = _escapePowerShellSingleQuotedString(
       installerPath,
     );
     final escapedAppPath = _escapePowerShellSingleQuotedString(appPath);
-    final escapedUpdateDirPath = _escapePowerShellSingleQuotedString(
-      updateDirPath,
-    );
     final command = '''
 \$installer = '$escapedInstallerPath'
 \$app = '$escapedAppPath'
-\$updateDir = '$escapedUpdateDirPath'
-\$exitCode = 1
+\$appPid = $appPid
 try {
-  \$process = Start-Process -FilePath \$installer -Wait -PassThru -ErrorAction Stop
-  if (\$null -ne \$process) {
-    \$exitCode = \$process.ExitCode
-  } else {
-    \$exitCode = 0
+  for (\$i = 0; \$i -lt 120; \$i++) {
+    if (\$appPid -le 0) {
+      break
+    }
+    \$process = Get-Process -Id \$appPid -ErrorAction SilentlyContinue
+    if (\$null -eq \$process) {
+      break
+    }
+    Start-Sleep -Milliseconds 250
   }
+  Start-Sleep -Milliseconds 400
+  Start-Process -FilePath \$installer -ErrorAction Stop | Out-Null
 } catch {
-  \$exitCode = 1
-}
-if (Test-Path -LiteralPath \$updateDir) {
-  Remove-Item -LiteralPath \$updateDir -Recurse -Force -ErrorAction SilentlyContinue
-}
-if (\$exitCode -ne 0 -and (Test-Path -LiteralPath \$app)) {
-  Start-Process -FilePath \$app -ErrorAction SilentlyContinue | Out-Null
+  if (Test-Path -LiteralPath \$app) {
+    Start-Process -FilePath \$app -ErrorAction SilentlyContinue | Out-Null
+  }
 }
 ''';
 
@@ -752,6 +742,15 @@ if (\$exitCode -ne 0 -and (Test-Path -LiteralPath \$app)) {
 
   String _escapePowerShellSingleQuotedString(String value) {
     return value.replaceAll("'", "''");
+  }
+
+  String _resolveWindowsPowerShellExecutable() {
+    final systemRoot = Platform.environment['SystemRoot'] ??
+        Platform.environment['WINDIR'] ??
+        'C:\\Windows';
+    final candidate =
+        '$systemRoot${Platform.pathSeparator}System32${Platform.pathSeparator}WindowsPowerShell${Platform.pathSeparator}v1.0${Platform.pathSeparator}powershell.exe';
+    return File(candidate).existsSync() ? candidate : 'powershell.exe';
   }
 
   Future<String> _writeLinuxUpdaterScript(
