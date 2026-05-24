@@ -1060,6 +1060,25 @@ class AppNotificationTests(APITestCase):
             ).exists()
         )
 
+    def test_log_secure_self_text_notification_includes_message_target(self):
+        response = self.client.post(
+            reverse('notifications-log-event'),
+            {
+                'event_type': 'secure_self_text',
+                'message_id': 'msg-123',
+                'preview_text': 'See this secure note later.',
+                'device_label': 'Windows - Studio Laptop',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        notification = self.user.app_notifications.latest('created_at')
+        self.assertEqual(notification.notification_type, 'secure_self_text')
+        payload = decrypt_notification_payload(notification.encrypted_payload)
+        self.assertEqual(payload['metadata']['target_screen'], 'secure_self_text')
+        self.assertEqual(payload['metadata']['message_id'], 'msg-123')
+
 
 @override_settings(BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-review-secret')
 class ExternalReviewReplyNotificationTests(APITestCase):

@@ -66,6 +66,7 @@ from .notifications import (
     create_password_changed_notification,
     create_recovery_code_used_notification,
     create_recovery_codes_generated_notification,
+    create_secure_self_text_notification,
     create_sign_in_notification,
 )
 from .push_notifications import send_passwordless_request_push
@@ -1472,6 +1473,23 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 request.user,
                 imported_count=imported_count,
                 source_label=(request.data.get('source_label') or '').strip() or None,
+            )
+            return Response({'success': True}, status=201)
+
+        if event_type == 'secure_self_text':
+            message_id = (request.data.get('message_id') or '').strip()
+            if not message_id:
+                return Response({'error': 'message_id is required'}, status=400)
+
+            device_label = build_device_label(
+                request.data.get('device_label'),
+                request.META.get('HTTP_USER_AGENT'),
+            )
+            create_secure_self_text_notification(
+                request.user,
+                message_id=message_id,
+                author_device_label=device_label,
+                preview_text=(request.data.get('preview_text') or '').strip() or None,
             )
             return Response({'success': True}, status=201)
 

@@ -23,7 +23,6 @@ class SyncService {
   static const _passwordDeletedIdsPrefix = 'password_deleted_ids_';
   static const _secureMessageDeletedIdsPrefix = 'secure_message_deleted_ids_';
   static const _passwordlessUnlockKeyPrefix = 'passwordless_unlock_key_';
-  static const _secureMessageLifetime = Duration(minutes: 30);
   static const _passwordlessSyncUnlockContext = 'passwordless-sync-unlock';
   // ─── Singleton ────────────────────────────────────────────────────────────
   static final SyncService _instance = SyncService._internal();
@@ -670,16 +669,46 @@ class SyncService {
     await _storeDeletedSecureMessageIds(deletedIds);
   }
 
-  bool isSecureMessageExpired(DateTime createdAt, {DateTime? now}) {
+  int _parseSecureMessageRetentionMinutes(dynamic value) {
+    if (value is int) {
+      return SecureMessage.normalizeRetentionMinutes(value);
+    }
+    if (value is num) {
+      return SecureMessage.normalizeRetentionMinutes(value.toInt());
+    }
+    return SecureMessage.normalizeRetentionMinutes(
+      int.tryParse(value?.toString() ?? ''),
+    );
+  }
+
+  bool isSecureMessageExpired(
+    DateTime createdAt, {
+    int? retentionMinutes,
+    DateTime? now,
+  }) {
+    final normalizedRetention = SecureMessage.normalizeRetentionMinutes(
+      retentionMinutes,
+    );
+    if (normalizedRetention == SecureMessage.foreverRetentionMinutes) {
+      return false;
+    }
     final currentTime = now ?? DateTime.now();
-    return createdAt.add(_secureMessageLifetime).isBefore(currentTime);
+    return createdAt
+        .add(Duration(minutes: normalizedRetention))
+        .isBefore(currentTime);
   }
 
   Future<int> purgeExpiredSecureMessages() async {
     final box = await _getSecureMessageBox();
     final now = DateTime.now();
     final expiredIds = box.values
-        .where((message) => isSecureMessageExpired(message.createdAt, now: now))
+        .where(
+          (message) => isSecureMessageExpired(
+            message.createdAt,
+            retentionMinutes: message.retentionMinutes,
+            now: now,
+          ),
+        )
         .map((message) => message.id)
         .toList();
 
@@ -2227,8 +2256,7 @@ class SyncService {
     final localDeletedIds = await _getDeletedSecureMessageIds();
     final now = DateTime.now();
     final userId = await _getCurrentUserId();
-    final prefs = await SharedPreferences.getInstance();
-    final deviceId = prefs.getString('device_id') ?? '';
+    final deviceId = await getOrCreateDeviceId();
 
     try {
       final response = await _requestWithRetry(
@@ -2270,10 +2298,17 @@ class SyncService {
         final createdAt =
             DateTime.tryParse(rawMessage['created_at']?.toString() ?? '') ??
                 DateTime.now();
+        final retentionMinutes = _parseSecureMessageRetentionMinutes(
+          rawMessage['retention_minutes'],
+        );
         if (id.isEmpty || deletedIds.contains(id) || localBox.containsKey(id)) {
           continue;
         }
-        if (isSecureMessageExpired(createdAt, now: now)) {
+        if (isSecureMessageExpired(
+          createdAt,
+          retentionMinutes: retentionMinutes,
+          now: now,
+        )) {
           deletedIds.add(id);
           continue;
         }
@@ -2283,6 +2318,7 @@ class SyncService {
           text: rawMessage['text']?.toString() ?? '',
           createdAt: createdAt,
           authorDeviceLabel: rawMessage['author_device_label']?.toString(),
+          retentionMinutes: retentionMinutes,
           userId: userId,
         );
         await localBox.put(id, message);
@@ -2327,12 +2363,7 @@ class SyncService {
     final localDeletedIds = await _getDeletedSecureMessageIds();
     final now = DateTime.now();
     final userId = await _getCurrentUserId();
-    final prefs = await SharedPreferences.getInstance();
-    var deviceId = prefs.getString('device_id') ?? '';
-    if (deviceId.isEmpty) {
-      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
-      await prefs.setString('device_id', deviceId);
-    }
+    final deviceId = await getOrCreateDeviceId();
 
     try {
       final mergedMessages = <String, Map<String, dynamic>>{};
@@ -2391,12 +2422,19 @@ class SyncService {
           in List<MapEntry<String, Map<String, dynamic>>>.from(
         mergedMessages.entries,
       )) {
+        final retentionMinutes = _parseSecureMessageRetentionMinutes(
+          cloudMessage.value['retention_minutes'],
+        );
         final createdAt = DateTime.tryParse(
               cloudMessage.value['created_at']?.toString() ?? '',
             ) ??
             DateTime.now();
         if (deletedIds.contains(cloudMessage.key) ||
-            isSecureMessageExpired(createdAt, now: now)) {
+            isSecureMessageExpired(
+              createdAt,
+              retentionMinutes: retentionMinutes,
+              now: now,
+            )) {
           mergedMessages.remove(cloudMessage.key);
           deletedIds.add(cloudMessage.key);
         }
@@ -2404,7 +2442,11 @@ class SyncService {
 
       for (final message in messageBox.values) {
         if (deletedIds.contains(message.id) ||
-            isSecureMessageExpired(message.createdAt, now: now)) {
+            isSecureMessageExpired(
+              message.createdAt,
+              retentionMinutes: message.retentionMinutes,
+              now: now,
+            )) {
           if (messageBox.containsKey(message.id)) {
             await messageBox.delete(message.id);
           }
@@ -2416,6 +2458,7 @@ class SyncService {
           'text': message.getText(userId),
           'created_at': message.createdAt.toIso8601String(),
           'author_device_label': message.authorDeviceLabel,
+          'retention_minutes': message.retentionMinutes,
         };
       }
 
@@ -3548,6 +3591,40 @@ class SyncService {
             'event_type': 'passwords_imported',
             'imported_count': importedCount,
             'source_label': sourceLabel,
+          },
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+        ),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> logSecureSelfTextNotification({
+    required String messageId,
+    required String previewText,
+    required String authorDeviceLabel,
+  }) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'notifications/log-event/',
+          data: {
+            'event_type': 'secure_self_text',
+            'message_id': messageId,
+            'preview_text': previewText,
+            'device_label': authorDeviceLabel,
           },
           options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),

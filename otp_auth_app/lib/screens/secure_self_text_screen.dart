@@ -3,26 +3,77 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/secure_message.dart';
 import '../services/sync_service.dart';
 
 class SecureSelfTextScreen extends StatefulWidget {
-  const SecureSelfTextScreen({super.key});
+  const SecureSelfTextScreen({super.key, this.initialMessageId});
+
+  final String? initialMessageId;
 
   @override
   State<SecureSelfTextScreen> createState() => _SecureSelfTextScreenState();
 }
 
 class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
+  static const String _retentionPreferenceKey =
+      'secure_self_text_retention_minutes';
+  static const List<_SecureMessageRetentionOption> _retentionOptions = [
+    _SecureMessageRetentionOption(10, '10 minutes'),
+    _SecureMessageRetentionOption(30, '30 minutes'),
+    _SecureMessageRetentionOption(60, '1 hour'),
+    _SecureMessageRetentionOption(6 * 60, '6 hours'),
+    _SecureMessageRetentionOption(12 * 60, '12 hours'),
+    _SecureMessageRetentionOption(24 * 60, '24 hours'),
+    _SecureMessageRetentionOption(3 * 24 * 60, '3 days'),
+    _SecureMessageRetentionOption(7 * 24 * 60, '7 days'),
+    _SecureMessageRetentionOption(
+      SecureMessage.foreverRetentionMinutes,
+      'Keep forever',
+    ),
+  ];
+  static const List<String> _emojiOptions = [
+    '😀',
+    '😂',
+    '🙂',
+    '😉',
+    '😍',
+    '😎',
+    '🤔',
+    '🤝',
+    '🙏',
+    '🔥',
+    '✅',
+    '⭐',
+    '📌',
+    '📣',
+    '📱',
+    '💻',
+    '🧠',
+    '📝',
+    '🔒',
+    '🔐',
+    '⏰',
+    '⚡',
+    '🎉',
+    '🚀',
+  ];
+
   final SyncService _syncService = SyncService();
   final TextEditingController _composerController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, GlobalKey> _messageKeys = {};
 
   Box<SecureMessage>? _messageBox;
   Timer? _pollTimer;
   bool _isLoading = true;
   bool _isSending = false;
   String? _vaultIdentity;
+  int _selectedRetentionMinutes = SecureMessage.defaultRetentionMinutes;
+  String? _highlightedMessageId;
+  bool _initialMessageRevealScheduled = false;
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
@@ -40,11 +91,13 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
   void dispose() {
     _pollTimer?.cancel();
     _composerController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadMessages() async {
     try {
+      final selectedRetentionMinutes = await _loadRetentionPreference();
       await _syncService.purgeExpiredSecureMessages();
       if (await _syncService.isLoggedIn() &&
           await _syncService.isSyncEnabled()) {
@@ -56,6 +109,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
       setState(() {
         _messageBox = box;
         _vaultIdentity = vaultIdentity;
+        _selectedRetentionMinutes = selectedRetentionMinutes;
         _isLoading = false;
       });
       _startPolling();
@@ -72,6 +126,22 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
         ),
       );
     }
+  }
+
+  Future<int> _loadRetentionPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    return SecureMessage.normalizeRetentionMinutes(
+      prefs.getInt(_retentionPreferenceKey),
+    );
+  }
+
+  Future<void> _setRetentionPreference(int retentionMinutes) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_retentionPreferenceKey, retentionMinutes);
+    if (!mounted) return;
+    setState(() {
+      _selectedRetentionMinutes = retentionMinutes;
+    });
   }
 
   void _startPolling() {
@@ -94,6 +164,221 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
     });
   }
 
+  String _retentionLabel(int retentionMinutes) {
+    if (retentionMinutes == SecureMessage.foreverRetentionMinutes) {
+      return 'Forever';
+    }
+
+    for (final option in _retentionOptions) {
+      if (option.minutes == retentionMinutes) {
+        return option.label;
+      }
+    }
+
+    if (retentionMinutes % (24 * 60) == 0) {
+      final days = retentionMinutes ~/ (24 * 60);
+      return '$days day${days == 1 ? '' : 's'}';
+    }
+    if (retentionMinutes % 60 == 0) {
+      final hours = retentionMinutes ~/ 60;
+      return '$hours hour${hours == 1 ? '' : 's'}';
+    }
+    return '$retentionMinutes minutes';
+  }
+
+  String _retentionCaption(int retentionMinutes) {
+    if (retentionMinutes == SecureMessage.foreverRetentionMinutes) {
+      return 'Saved until you delete it';
+    }
+    return 'Auto-clears after ${_retentionLabel(retentionMinutes).toLowerCase()}';
+  }
+
+  Future<void> _showRetentionPicker() async {
+    final selectedValue = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: _cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Choose delete timer',
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'New secure self texts will use this timer until you change it again.',
+                  style: TextStyle(color: _textSecondary, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                for (final option in _retentionOptions)
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    tileColor: option.minutes == _selectedRetentionMinutes
+                        ? _accent.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    leading: Icon(
+                      option.minutes == SecureMessage.foreverRetentionMinutes
+                          ? Icons.all_inbox_rounded
+                          : Icons.timer_outlined,
+                      color: _accent,
+                    ),
+                    title: Text(
+                      option.label,
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      option.minutes == SecureMessage.foreverRetentionMinutes
+                          ? 'Only manual delete removes it.'
+                          : 'Deletes automatically after ${option.label.toLowerCase()}.',
+                      style: TextStyle(color: _textSecondary),
+                    ),
+                    trailing: option.minutes == _selectedRetentionMinutes
+                        ? Icon(Icons.check_circle, color: _accent)
+                        : null,
+                    onTap: () => Navigator.pop(sheetContext, option.minutes),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selectedValue == null) return;
+    await _setRetentionPreference(selectedValue);
+  }
+
+  void _insertEmoji(String emoji) {
+    final selection = _composerController.selection;
+    final text = _composerController.text;
+    final start = selection.start >= 0 ? selection.start : text.length;
+    final end = selection.end >= 0 ? selection.end : text.length;
+    final newText = text.replaceRange(start, end, emoji);
+    final newOffset = start + emoji.length;
+    _composerController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newOffset),
+    );
+  }
+
+  Future<void> _showEmojiPicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add emoji',
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GridView.builder(
+                  shrinkWrap: true,
+                  itemCount: _emojiOptions.length,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 6,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                  ),
+                  itemBuilder: (context, index) {
+                    final emoji = _emojiOptions[index];
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        _insertEmoji(emoji);
+                        Navigator.pop(sheetContext);
+                      },
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 24),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  GlobalKey _messageKeyFor(String messageId) {
+    return _messageKeys.putIfAbsent(messageId, () => GlobalKey());
+  }
+
+  void _scheduleMessageReveal(List<SecureMessage> messages) {
+    final targetMessageId = widget.initialMessageId;
+    if (_initialMessageRevealScheduled ||
+        targetMessageId == null ||
+        targetMessageId.isEmpty ||
+        !messages.any((message) => message.id == targetMessageId)) {
+      return;
+    }
+
+    _initialMessageRevealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final targetContext = _messageKeyFor(targetMessageId).currentContext;
+      if (targetContext == null) return;
+      Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+        alignment: 0.2,
+      ).then((_) {
+        if (!mounted) return;
+        setState(() {
+          _highlightedMessageId = targetMessageId;
+        });
+        Future<void>.delayed(const Duration(seconds: 3), () {
+          if (!mounted || _highlightedMessageId != targetMessageId) return;
+          setState(() {
+            _highlightedMessageId = null;
+          });
+        });
+      });
+    });
+  }
+
   Future<void> _sendMessage() async {
     final text = _composerController.text.trim();
     if (text.isEmpty) return;
@@ -108,6 +393,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
         text: text,
         createdAt: DateTime.now(),
         authorDeviceLabel: deviceLabel,
+        retentionMinutes: _selectedRetentionMinutes,
         userId: userId,
       );
       await box.put(message.id, message);
@@ -115,7 +401,25 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
 
       if (await _syncService.isLoggedIn() &&
           await _syncService.isSyncEnabled()) {
-        await _syncService.syncSecureMessages();
+        final synced = await _syncService.syncSecureMessages();
+        if (synced) {
+          await _syncService.logSecureSelfTextNotification(
+            messageId: message.id,
+            previewText: text,
+            authorDeviceLabel: deviceLabel,
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _syncService.lastErrorMessage ??
+                    'Secure text saved locally but did not sync yet.',
+              ),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) {
@@ -217,7 +521,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Send a secure message to yourself here. Your own devices under this account will pick it up through encrypted sync, and each message clears itself after 30 minutes.',
+              'Send a secure message to yourself here. Your own devices under this account will pick it up through encrypted sync, and each message uses the delete timer you choose.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _textSecondary, height: 1.45),
             ),
@@ -228,15 +532,31 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
   }
 
   Widget _buildMessageBubble(SecureMessage message, String userId) {
+    final isHighlighted = _highlightedMessageId == message.id;
+
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
+        key: _messageKeyFor(message.id),
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(14, 14, 12, 12),
         constraints: const BoxConstraints(maxWidth: 420),
         decoration: BoxDecoration(
           color: _accent,
           borderRadius: BorderRadius.circular(18),
+          border: isHighlighted
+              ? Border.all(
+                  color: Colors.white.withValues(alpha: 0.85), width: 2)
+              : null,
+          boxShadow: isHighlighted
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    blurRadius: 20,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,9 +596,9 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
               ],
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Auto-clears after 30 minutes',
-              style: TextStyle(
+            Text(
+              _retentionCaption(message.retentionMinutes),
+              style: const TextStyle(
                 color: Colors.white60,
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
@@ -346,7 +666,8 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                         builder: (context, Box<SecureMessage> messageBox, _) {
                           final messages = messageBox.values.toList()
                             ..sort(
-                                (a, b) => a.createdAt.compareTo(b.createdAt));
+                              (a, b) => a.createdAt.compareTo(b.createdAt),
+                            );
                           if (messages.isEmpty) {
                             return _buildEmptyState();
                           }
@@ -354,10 +675,14 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                           final userId = _vaultIdentity;
                           if (userId == null || userId.isEmpty) {
                             return const Center(
-                                child: CircularProgressIndicator());
+                              child: CircularProgressIndicator(),
+                            );
                           }
 
+                          _scheduleMessageReveal(messages);
+
                           return ListView(
+                            controller: _scrollController,
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                             children: [
                               Container(
@@ -368,7 +693,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                                   borderRadius: BorderRadius.circular(18),
                                 ),
                                 child: Text(
-                                  'This is your private self-text feed. Messages stay tied to your own BeatzLock account, sync only through encrypted account data, and clear themselves after 30 minutes.',
+                                  'This is your private self-text feed. Messages stay tied to your own BeatzLock account, sync only through encrypted account data, and you can set each new message to delete after 10 minutes, 24 hours, or stay until you remove it.',
                                   style: TextStyle(
                                     color: _textSecondary,
                                     height: 1.45,
@@ -390,45 +715,68 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                 color: _cardColor,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: _isDark ? 0.22 : 0.06,
-                    ),
+                    color:
+                        Colors.black.withValues(alpha: _isDark ? 0.22 : 0.06),
                     blurRadius: 16,
                     offset: const Offset(0, -4),
                   ),
                 ],
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _composerController,
-                      minLines: 1,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        hintText: 'Type a secure message to yourself',
-                        border: OutlineInputBorder(),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _showEmojiPicker,
+                        icon: const Icon(Icons.emoji_emotions_outlined),
+                        label: const Text('Emoji'),
                       ),
-                    ),
+                      OutlinedButton.icon(
+                        onPressed: _showRetentionPicker,
+                        icon: const Icon(Icons.timer_outlined),
+                        label: Text(_retentionLabel(_selectedRetentionMinutes)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                    onPressed: _isSending ? null : _sendMessage,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(58, 54),
-                    ),
-                    child: _isSending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.send_rounded),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _composerController,
+                          minLines: 1,
+                          maxLines: 5,
+                          decoration: InputDecoration(
+                            hintText: 'Type a secure message to yourself',
+                            helperText:
+                                _retentionCaption(_selectedRetentionMinutes),
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        onPressed: _isSending ? null : _sendMessage,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _accent,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(58, 54),
+                        ),
+                        child: _isSending
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.send_rounded),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -438,4 +786,11 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
       ),
     );
   }
+}
+
+class _SecureMessageRetentionOption {
+  const _SecureMessageRetentionOption(this.minutes, this.label);
+
+  final int minutes;
+  final String label;
 }

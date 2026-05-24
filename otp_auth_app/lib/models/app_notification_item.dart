@@ -5,6 +5,7 @@ class AppNotificationItem {
   final String message;
   final String details;
   final String preview;
+  final Map<String, dynamic> metadata;
   final bool isRead;
   final DateTime createdAt;
   final DateTime? readAt;
@@ -16,6 +17,7 @@ class AppNotificationItem {
     required this.message,
     required this.details,
     required this.preview,
+    required this.metadata,
     required this.isRead,
     required this.createdAt,
     this.readAt,
@@ -29,10 +31,22 @@ class AppNotificationItem {
       message: json['message']?.toString() ?? '',
       details: json['details']?.toString() ?? '',
       preview: json['preview']?.toString() ?? '',
+      metadata: json['metadata'] is Map
+          ? Map<String, dynamic>.from(json['metadata'] as Map)
+          : const <String, dynamic>{},
       isRead: json['is_read'] == true,
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
       readAt: DateTime.tryParse(json['read_at']?.toString() ?? ''),
     );
   }
+
+  String? get targetScreen => metadata['target_screen']?.toString();
+
+  String? get secureMessageId => metadata['message_id']?.toString();
+
+  bool get opensSecureSelfText =>
+      targetScreen == 'secure_self_text' &&
+      secureMessageId != null &&
+      secureMessageId!.isNotEmpty;
 }

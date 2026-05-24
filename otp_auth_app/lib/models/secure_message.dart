@@ -6,6 +6,10 @@ part 'secure_message.g.dart';
 
 @HiveType(typeId: 2)
 class SecureMessage {
+  static const int foreverRetentionMinutes = -1;
+  static const int defaultRetentionMinutes = 24 * 60;
+  static const int minimumRetentionMinutes = 10;
+
   @HiveField(0)
   String id;
 
@@ -18,6 +22,9 @@ class SecureMessage {
   @HiveField(3)
   String? authorDeviceLabel;
 
+  @HiveField(4)
+  int retentionMinutes;
+
   String? _plainText;
 
   SecureMessage({
@@ -25,8 +32,10 @@ class SecureMessage {
     required String text,
     required this.createdAt,
     this.authorDeviceLabel,
+    int? retentionMinutes,
     String? userId,
-  }) : encryptedText = '' {
+  })  : encryptedText = '',
+        retentionMinutes = normalizeRetentionMinutes(retentionMinutes) {
     if (userId != null && userId.isNotEmpty) {
       setText(text, userId);
     } else {
@@ -38,6 +47,35 @@ class SecureMessage {
   void setText(String text, String userId) {
     _plainText = text;
     encryptedText = EncryptionService.encryptSecureMessageText(text, userId);
+  }
+
+  static int normalizeRetentionMinutes(int? minutes) {
+    if (minutes == foreverRetentionMinutes) {
+      return foreverRetentionMinutes;
+    }
+    if (minutes == null) {
+      return defaultRetentionMinutes;
+    }
+    return minutes < minimumRetentionMinutes
+        ? minimumRetentionMinutes
+        : minutes;
+  }
+
+  bool get persistsForever => retentionMinutes == foreverRetentionMinutes;
+
+  DateTime? expiresAt() {
+    if (persistsForever) {
+      return null;
+    }
+    return createdAt.add(Duration(minutes: retentionMinutes));
+  }
+
+  bool isExpired({DateTime? now}) {
+    final expiresAtValue = expiresAt();
+    if (expiresAtValue == null) {
+      return false;
+    }
+    return expiresAtValue.isBefore(now ?? DateTime.now());
   }
 
   String getText(String userId) {

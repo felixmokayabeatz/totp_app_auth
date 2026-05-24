@@ -17,13 +17,16 @@ class SecureMessageAdapter extends TypeAdapter<SecureMessage> {
       text: fields[1] as String,
       createdAt: fields[2] as DateTime,
       authorDeviceLabel: fields[3] as String?,
+      retentionMinutes: SecureMessage.normalizeRetentionMinutes(
+        fields[4] as int?,
+      ),
     )..encryptedText = fields[1] as String;
   }
 
   @override
   void write(BinaryWriter writer, SecureMessage obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -31,7 +34,9 @@ class SecureMessageAdapter extends TypeAdapter<SecureMessage> {
       ..writeByte(2)
       ..write(obj.createdAt)
       ..writeByte(3)
-      ..write(obj.authorDeviceLabel);
+      ..write(obj.authorDeviceLabel)
+      ..writeByte(4)
+      ..write(obj.retentionMinutes);
   }
 
   @override

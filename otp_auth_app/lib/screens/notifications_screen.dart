@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_notification_item.dart';
 import '../services/sync_service.dart';
+import 'secure_self_text_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -43,6 +44,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'backup_code_request': 'Recovery Codes PDF requests',
     'app_review_reply': 'Review replies',
     'active_devices_daily': 'Active-device summaries',
+    'secure_self_text': 'Secure self texts',
   };
 
   static const Map<String, String> _ageFilterLabels = {
@@ -124,18 +126,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.download_for_offline_rounded;
       case 'app_review_reply':
         return Icons.rate_review_rounded;
+      case 'secure_self_text':
+        return Icons.chat_bubble_rounded;
       default:
         return Icons.notifications_none_rounded;
     }
   }
 
   Future<void> _openNotification(AppNotificationItem item) async {
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NotificationDetailScreen(notification: item),
-      ),
-    );
+    final detail = await _syncService.getNotificationDetail(item.id) ?? item;
+    if (!mounted) return;
+
+    if (detail.opensSecureSelfText) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SecureSelfTextScreen(
+            initialMessageId: detail.secureMessageId,
+          ),
+        ),
+      );
+    } else {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NotificationDetailScreen(notification: detail),
+        ),
+      );
+    }
     await _loadNotifications();
   }
 
@@ -712,6 +730,23 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                     height: 1.55,
                   ),
                 ),
+                if (notification.opensSecureSelfText) ...[
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await Navigator.push<void>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SecureSelfTextScreen(
+                            initialMessageId: notification.secureMessageId,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: const Text('Open message'),
+                  ),
+                ],
                 if (_isLoading) ...[
                   const SizedBox(height: 18),
                   Row(

@@ -9,7 +9,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer(read_only=True)
+    joined_on = serializers.DateTimeField(source='date_joined', read_only=True)
     
     class Meta:
         model = User
-        fields = ['id', 'email', 'profile']
+        fields = ['id', 'email', 'profile', 'joined_on']

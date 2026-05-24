@@ -57,6 +57,7 @@ class AppNotificationSerializer(serializers.ModelSerializer):
     message = serializers.SerializerMethodField()
     details = serializers.SerializerMethodField()
     preview = serializers.SerializerMethodField()
+    metadata = serializers.SerializerMethodField()
 
     class Meta:
         model = AppNotification
@@ -67,6 +68,7 @@ class AppNotificationSerializer(serializers.ModelSerializer):
             'message',
             'details',
             'preview',
+            'metadata',
             'is_read',
             'read_at',
             'created_at',
@@ -95,6 +97,10 @@ class AppNotificationSerializer(serializers.ModelSerializer):
     def get_preview(self, obj):
         message = self._payload(obj).get('message', '')
         return message[:120]
+
+    def get_metadata(self, obj):
+        metadata = self._payload(obj).get('metadata', {})
+        return metadata if isinstance(metadata, dict) else {}
 
 
 class DeviceSessionSerializer(serializers.ModelSerializer):

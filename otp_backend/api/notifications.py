@@ -335,6 +335,37 @@ def create_passwords_imported_notification(
     )
 
 
+def create_secure_self_text_notification(
+    user: User,
+    *,
+    message_id: str,
+    author_device_label: str | None = None,
+    preview_text: str | None = None,
+) -> AppNotification:
+    clean_label = author_device_label.strip() if author_device_label else 'your device'
+    preview = ' '.join((preview_text or '').split())
+    short_preview = preview[:140].rstrip()
+    if preview and len(preview) > 140:
+        short_preview = f'{short_preview}...'
+
+    details = f'{clean_label} sent a secure self text to your private feed.'
+    if short_preview:
+        details = f'{details}\n\nPreview: {short_preview}'
+
+    return create_notification(
+        user,
+        'secure_self_text',
+        title='New secure self text',
+        message=f'Open your private feed to view a secure self text from {clean_label}.',
+        details=details,
+        metadata={
+            'target_screen': 'secure_self_text',
+            'message_id': message_id,
+            'author_device_label': clean_label,
+        },
+    )
+
+
 def create_app_pin_changed_notification(
     user: User,
     *,

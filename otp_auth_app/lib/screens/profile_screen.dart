@@ -25,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isLoading = true;
   bool _isUploading = false;
   String _userEmail = '';
+  DateTime? _joinedOn;
   final TextEditingController _bioController = TextEditingController();
   Color get _accent => Theme.of(context).colorScheme.primary;
 
@@ -64,6 +65,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       setState(() {
         _profileImageUrl = profile['profile']?['profile_photo'];
         _bio = profile['profile']?['bio'] ?? '';
+        _joinedOn = DateTime.tryParse(profile['joined_on']?.toString() ?? '');
         _bioController.text = _bio;
         _isLoading = false;
       });
@@ -208,6 +210,25 @@ class _ProfileScreenState extends State<ProfileScreen>
         ],
       ),
     );
+  }
+
+  String _formatJoinedOn(DateTime dateTime) {
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final local = dateTime.toLocal();
+    return '${monthNames[local.month - 1]} ${local.day}, ${local.year}';
   }
 
   @override
@@ -425,6 +446,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         SizedBox(height: 12),
                         _infoRow(Icons.email, 'Email', _userEmail, isDark),
+                        if (_joinedOn != null)
+                          _infoRow(
+                            Icons.event_rounded,
+                            'Joined on',
+                            _formatJoinedOn(_joinedOn!),
+                            isDark,
+                          ),
                         _infoRow(
                           Icons.security,
                           '2FA Status',
