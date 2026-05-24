@@ -1,6 +1,7 @@
 v1.7.2 (Build 39)
 
 What's New
+- Add the Fedora distro builds support.
 - Login now uses email and password to send the normal email verification code first.
 - The verification-code screen now includes a passwordless approval option for secondary-device sign-in.
 - New accounts now use email as the account login, while existing username-based accounts can still sign in with their saved email.
