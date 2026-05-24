@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isSyncing = false;
   bool _allBlurred = false;
   String? _profilePhotoUrl;
-  String? _username;
+  String? _accountLabel;
   Box<OTPAccount>? _userBox;
   bool _isLoadingVault = true;
   String? _loadError;
@@ -1146,7 +1146,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (!isSignedIn) {
       if (mounted) {
         setState(() {
-          _username = 'Offline vault';
+          _accountLabel = 'Offline vault';
           _profilePhotoUrl = null;
         });
       }
@@ -1154,9 +1154,10 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     final storage = SecureStorageService();
+    final email = await storage.read(SecureStorageService.userEmailKey);
     final username = await storage.read(SecureStorageService.currentUserKey);
     if (mounted) {
-      setState(() => _username = username ?? 'Signed in');
+      setState(() => _accountLabel = email ?? 'Signed in');
     }
     if (username == null || username.isEmpty) {
       return;
@@ -1403,7 +1404,7 @@ class _HomeScreenState extends State<HomeScreen>
                           children: [
                             Flexible(
                               child: Text(
-                                _username ?? 'Two-Factor Security',
+                                _accountLabel ?? 'Two-Factor Security',
                                 style: const TextStyle(
                                   fontSize: 10,
                                   color: Colors.white60,
@@ -2870,7 +2871,8 @@ class _HomeScreenState extends State<HomeScreen>
         _showSnackBar('Account deleted from all devices', Colors.red);
       } else {
         _showSnackBar(
-          _syncService.lastErrorMessage ?? 'Failed to delete from cloud try again',
+          _syncService.lastErrorMessage ??
+              'Failed to delete from cloud try again',
           Colors.red,
         );
       }

@@ -1,7 +1,6 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -19,6 +18,10 @@ from api.notifications import (
 )
 from api.device_sessions import attach_session_to_refresh_token
 from api.models import BackupCodeSet
+from accounts.identity import (
+    authenticate_login_identifier,
+    find_user_by_login_identifier,
+)
 from .models import EmailVerification
 from .email_templates import (
     get_2fa_email_template,
@@ -86,45 +89,36 @@ def _consume_recovery_code(user: User, raw_code: str):
 @permission_classes([AllowAny])
 def send_2fa_code(request):
     start_time = __import__('time').time()
-    username = (request.data.get('username') or '').strip()
+    login_identifier = (
+        request.data.get('email') or request.data.get('username') or ''
+    ).strip()
     password = request.data.get('password')
     
     # Debug print
     debug_print(f"\n{'='*60}")
     debug_print(f"[2FA] send_2fa_code called")
-    debug_print(f"[2FA] Username: {username}")
+    debug_print(f"[2FA] Email/Login: {login_identifier}")
     debug_print(f"[2FA] Password provided: {'Yes' if password else 'No'}")
     debug_print(f"[2FA] Request IP: {request.META.get('REMOTE_ADDR')}")
     debug_print(f"[2FA] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
     debug_print(f"{'='*60}\n")
     
     # Log to file
-    logger.info(f"2FA code request - Username: {username}, IP: {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"2FA code request - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
     
-    if not username or not password:
-        debug_print(f"[2FA] ERROR: Missing username or password")
-        logger.warning(f"2FA request missing username or password - Username: {username}")
-        return Response({'success': False, 'error': 'Username and password required'}, status=400)
+    if not login_identifier or not password:
+        debug_print(f"[2FA] ERROR: Missing email/login or password")
+        logger.warning(f"2FA request missing email/login or password - Email/Login: {login_identifier}")
+        return Response({'success': False, 'error': 'Email and password required'}, status=400)
     
     try:
-        # Try to find user
-        debug_print(f"[2FA] Looking up user: {username}")
-        try:
-            user_obj = User.objects.get(username__iexact=username)
-            auth_username = user_obj.username
-            debug_print(f"[2FA] User found: {auth_username} (ID: {user_obj.id})")
-        except User.DoesNotExist:
-            debug_print(f"[2FA] User not found: {username}")
-            auth_username = username
-
-        # Authenticate
-        debug_print(f"[2FA] Authenticating user: {auth_username}")
-        user = authenticate(username=auth_username, password=password)
+        debug_print(f"[2FA] Looking up user by email/login: {login_identifier}")
+        user = authenticate_login_identifier(login_identifier, password)
         
         if not user:
-            debug_print(f"[2FA] Authentication FAILED for user: {auth_username}")
-            logger.warning(f"2FA authentication failed - Username: {auth_username}, IP: {request.META.get('REMOTE_ADDR')}")
-            return Response({'success': False, 'error': 'Invalid username or password'}, status=401)
+            debug_print(f"[2FA] Authentication FAILED for login: {login_identifier}")
+            logger.warning(f"2FA authentication failed - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
+            return Response({'success': False, 'error': 'Invalid email or password'}, status=401)
         
         debug_print(f"[2FA] Authentication SUCCESS for user: {user.username} (ID: {user.id})")
         
@@ -187,26 +181,30 @@ def send_2fa_code(request):
 @permission_classes([AllowAny])
 def verify_2fa_code(request):
     start_time = __import__('time').time()
-    username = (request.data.get('username') or '').strip()
+    login_identifier = (
+        request.data.get('email') or request.data.get('username') or ''
+    ).strip()
     code = (request.data.get('code') or '').strip()
     
     debug_print(f"\n{'='*60}")
     debug_print(f"[2FA] verify_2fa_code called")
-    debug_print(f"[2FA] Username: {username}")
+    debug_print(f"[2FA] Email/Login: {login_identifier}")
     debug_print(f"[2FA] Code: {code}")
     debug_print(f"[2FA] Request IP: {request.META.get('REMOTE_ADDR')}")
     debug_print(f"{'='*60}\n")
     
-    logger.info(f"2FA verification attempt - Username: {username}, IP: {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"2FA verification attempt - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
     
-    if not username or not code:
-        debug_print(f"[2FA] ERROR: Missing username or code")
+    if not login_identifier or not code:
+        debug_print(f"[2FA] ERROR: Missing email/login or code")
         logger.warning(f"2FA verification missing username or code")
-        return Response({'success': False, 'error': 'Username and code required'}, status=400)
+        return Response({'success': False, 'error': 'Email and code required'}, status=400)
     
     try:
-        debug_print(f"[2FA] Looking up user: {username}")
-        user = User.objects.get(username__iexact=username)
+        debug_print(f"[2FA] Looking up user by email/login: {login_identifier}")
+        user = find_user_by_login_identifier(login_identifier)
+        if user is None:
+            raise User.DoesNotExist
         debug_print(f"[2FA] User found: {user.username} (ID: {user.id})")
         
         # Get the LATEST unused code
@@ -246,8 +244,8 @@ def verify_2fa_code(request):
             return Response({'success': False, 'error': 'Code expired (10 minute limit)'}, status=400)
             
     except User.DoesNotExist:
-        debug_print(f"[2FA] User not found: {username}")
-        logger.warning(f"User not found for verification: {username}")
+        debug_print(f"[2FA] User not found: {login_identifier}")
+        logger.warning(f"User not found for verification: {login_identifier}")
         return Response({'success': False, 'error': 'User not found'}, status=400)
     except Exception as e:
         error_details = traceback.format_exc()
@@ -450,7 +448,9 @@ def reset_password(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_recovery_code_login(request):
-    username = (request.data.get('username') or '').strip()
+    login_identifier = (
+        request.data.get('email') or request.data.get('username') or ''
+    ).strip()
     password = request.data.get('password')
     recovery_code = (request.data.get('recovery_code') or '').strip()
     device_label = build_device_label(
@@ -458,17 +458,19 @@ def verify_recovery_code_login(request):
         request.META.get('HTTP_USER_AGENT'),
     )
 
-    if not username or not password or not recovery_code:
+    if not login_identifier or not password or not recovery_code:
         return Response(
-            {'success': False, 'error': 'Username, password, and recovery code required'},
+            {'success': False, 'error': 'Email, password, and recovery code required'},
             status=400,
         )
 
     try:
-        user_obj = User.objects.get(username__iexact=username)
-        user = authenticate(username=user_obj.username, password=password)
+        user_obj = find_user_by_login_identifier(login_identifier)
+        if user_obj is None:
+            raise User.DoesNotExist
+        user = authenticate_login_identifier(login_identifier, password)
         if not user:
-            return Response({'success': False, 'error': 'Invalid username or password'}, status=401)
+            return Response({'success': False, 'error': 'Invalid email or password'}, status=401)
 
         consumed, result = _consume_recovery_code(user, recovery_code)
         if not consumed:

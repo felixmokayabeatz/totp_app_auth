@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from accounts.identity import normalize_email
 from .models import (
     AppNotification,
     BackupCodeGenerationRequest,
@@ -23,15 +24,32 @@ class EncryptedDataSerializer(serializers.ModelSerializer):
         fields = ['data_type', 'encrypted_content', 'version', 'updated_at']
 
 class RegisterSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
     
     class Meta:
         model = User
-        fields = ['username', 'email', 'password']
+        fields = ['email', 'password']
+
+    def validate_email(self, value):
+        email = normalize_email(value)
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError(
+                'An account already exists with this email.'
+            )
+        if User.objects.filter(username__iexact=email).exists():
+            raise serializers.ValidationError(
+                'An account already exists with this email.'
+            )
+        return email
     
     def create(self, validated_data):
-        user = User.objects.create_user(**validated_data)
-        return user
+        email = validated_data['email']
+        return User.objects.create_user(
+            username=email,
+            email=email,
+            password=validated_data['password'],
+        )
 
 
 class AppNotificationSerializer(serializers.ModelSerializer):

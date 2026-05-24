@@ -25,7 +25,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isLoading = true;
   bool _isUploading = false;
   String _userEmail = '';
-  String _username = '';
   final TextEditingController _bioController = TextEditingController();
   Color get _accent => Theme.of(context).colorScheme.primary;
 
@@ -45,16 +44,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     final secureStorage = SecureStorageService();
     setState(() {
       _userEmail = 'No email';
-      _username = 'User';
     });
     final email = await secureStorage.read(SecureStorageService.userEmailKey) ??
         'No email';
-    final username =
-        await secureStorage.read(SecureStorageService.currentUserKey) ?? 'User';
     if (!mounted) return;
     setState(() {
       _userEmail = email;
-      _username = username;
     });
   }
 
@@ -335,18 +330,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         SizedBox(height: 16),
                         Text(
-                          _username,
+                          _userEmail,
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
                             color: isDark ? Colors.white : Color(0xFF1A1A2E),
-                          ),
-                        ),
-                        Text(
-                          _userEmail,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark ? Colors.white38 : Colors.grey[600],
                           ),
                         ),
                       ],
@@ -437,7 +425,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         SizedBox(height: 12),
                         _infoRow(Icons.email, 'Email', _userEmail, isDark),
-                        _infoRow(Icons.person, 'Username', _username, isDark),
                         _infoRow(
                           Icons.security,
                           '2FA Status',

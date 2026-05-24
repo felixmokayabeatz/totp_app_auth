@@ -28,7 +28,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -51,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscureConfirmPassword = true;
   bool _obscureResetPassword = true;
   bool _obscureResetConfirmPassword = true;
-  String? _tempUsername;
+  String? _pendingLoginEmail;
   String? _resetEmail;
   double _passwordLength = 16;
   double _resetPasswordLength = 16;
@@ -293,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Please wait $_resendCooldown seconds before resending');
       return;
     }
-    if (_tempUsername == null) {
+    if (_pendingLoginEmail == null) {
       _showError('Session expired. Please login again.');
       return;
     }
@@ -301,7 +300,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
     final sent = await _syncService.send2FACode(
-      _tempUsername!,
+      _pendingLoginEmail!,
       _passwordController.text,
     );
     setState(() {
@@ -790,34 +789,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Text('Back to Login'),
                       ),
                     ] else if (!_show2FA) ...[
-                      // Username field
+                      // Email field
                       TextFormField(
-                        controller: _usernameController,
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        autofillHints: const [AutofillHints.email],
                         decoration: InputDecoration(
-                          labelText: 'Username',
-                          prefixIcon: Icon(Icons.person),
+                          labelText: 'Email',
+                          prefixIcon: Icon(Icons.email),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                       ),
                       SizedBox(height: 16),
-
-                      // Email field (only for registration)
-                      if (!_isLogin) ...[
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            labelText: 'Email',
-                            prefixIcon: Icon(Icons.email),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                      ],
 
                       // Password field with visibility toggle
                       TextFormField(
@@ -1081,21 +1066,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed:
-                              _isLoading ? null : _startPasswordlessLogin,
-                          icon: const Icon(Icons.phonelink_lock_rounded),
-                          label: const Text(
-                            'Use passwordless from primary phone',
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 46),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
                         TextButton(
                           onPressed: _isLoading ? null : _recoverPrimaryDevice,
                           child: Text(
@@ -1128,6 +1098,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             _isLogin = !_isLogin;
                             _passwordController.clear();
                             _confirmPasswordController.clear();
+                            _pendingLoginEmail = null;
                             _passwordStrength = 0.0;
                             _passwordStrengthText = '';
                             _passwordSuggestions = [];
@@ -1253,11 +1224,32 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
+                      if (!_useRecoveryCodeFor2FA) ...[
+                        const SizedBox(height: 6),
+                        OutlinedButton.icon(
+                          onPressed: _isLoading
+                              ? null
+                              : () => _startPasswordlessLogin(
+                                    passwordForSync: _passwordController.text,
+                                  ),
+                          icon: const Icon(Icons.phonelink_lock_rounded),
+                          label: const Text(
+                            'Use passwordless approval instead',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ],
                       TextButton(
                         onPressed: () {
                           setState(() {
                             _show2FA = false;
                             _useRecoveryCodeFor2FA = false;
+                            _pendingLoginEmail = null;
                             _otpCodeController.clear();
                           });
                         },
@@ -1286,11 +1278,15 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (username.isEmpty) {
-      _showError('Please enter username');
+    if (email.isEmpty) {
+      _showError('Please enter email');
+      return;
+    }
+    if (!email.contains('@') || !email.contains('.')) {
+      _showError('Please enter a valid email address');
       return;
     }
     if (password.isEmpty) {
@@ -1298,15 +1294,6 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     if (!_isLogin) {
-      if (_emailController.text.isEmpty) {
-        _showError('Please enter email');
-        return;
-      }
-      if (!_emailController.text.contains('@') ||
-          !_emailController.text.contains('.')) {
-        _showError('Please enter a valid email address');
-        return;
-      }
       if (_passwordController.text != _confirmPasswordController.text) {
         _showError('Passwords do not match');
         return;
@@ -1320,52 +1307,26 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
     if (_isLogin) {
-      setState(() {
-        _isLoading = false;
-      });
-
-      final passwordlessOutcome = await _startPasswordlessLogin(
-        passwordForSync: password,
-        showFallbackMessage: false,
-      );
-      if (!mounted) return;
-      if (passwordlessOutcome == _PasswordlessLoginOutcome.approved) {
-        return;
-      }
-      if (passwordlessOutcome == _PasswordlessLoginOutcome.cancelled ||
-          passwordlessOutcome == _PasswordlessLoginOutcome.failed) {
-        return;
-      }
-
-      setState(() {
-        _isLoading = true;
-      });
-      final sent = await _syncService.send2FACode(username, password);
+      final sent = await _syncService.send2FACode(email, password);
       if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
       if (sent) {
-        _tempUsername = username;
+        _pendingLoginEmail = email;
         _startResendTimer();
         setState(() {
           _show2FA = true;
         });
-        _showSuccess(
-          'Primary-phone approval was not completed. A normal 2FA code was sent to your email.',
-        );
+        _showSuccess('Verification code sent to your email.');
       } else {
         _showError(
           _syncService.lastErrorMessage ??
-              'Unable to send the verification code. Check your username, password, or internet connection.',
+              'Unable to send the verification code. Check your email, password, or internet connection.',
         );
       }
     } else {
-      bool success = await _syncService.register(
-        username,
-        _emailController.text.trim(),
-        password,
-      );
+      bool success = await _syncService.register(email, password);
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -1378,7 +1339,10 @@ class _LoginScreenState extends State<LoginScreen> {
           _confirmPasswordController.clear();
         });
       } else {
-        _showError('Registration failed - Username may already exist');
+        _showError(
+          _syncService.lastErrorMessage ??
+              'Registration failed - email may already exist',
+        );
       }
     }
   }
@@ -1496,16 +1460,16 @@ class _LoginScreenState extends State<LoginScreen> {
       return _PasswordlessLoginOutcome.failed;
     }
 
-    final username = _usernameController.text.trim();
+    final email = (_pendingLoginEmail ?? _emailController.text).trim();
     final effectivePassword = passwordForSync ??
         (_passwordController.text.isEmpty ? null : _passwordController.text);
-    if (username.isEmpty) {
-      _showError('Enter your username first');
+    if (email.isEmpty) {
+      _showError('Enter your email first');
       return _PasswordlessLoginOutcome.failed;
     }
 
     final startResult = await _syncService.startPasswordlessLogin(
-      username,
+      email,
       password: effectivePassword,
     );
     if (!mounted) {
@@ -1555,7 +1519,7 @@ class _LoginScreenState extends State<LoginScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => PasswordlessLoginScreen(
-          username: username,
+          email: email,
           passwordForSync: effectivePassword,
           initialResult: startResult,
         ),
@@ -1806,7 +1770,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _verify2FA() async {
-    final username = (_tempUsername ?? _usernameController.text).trim();
+    final email = (_pendingLoginEmail ?? _emailController.text).trim();
     final code = _otpCodeController.text.trim();
 
     if (_otpCodeController.text.isEmpty) {
@@ -1830,11 +1794,11 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     final isValid = _useRecoveryCodeFor2FA
         ? await _syncService.verifyLoginWithRecoveryCode(
-            username,
+            email,
             _passwordController.text,
             code,
           )
-        : await _syncService.verify2FACode(username, code);
+        : await _syncService.verify2FACode(email, code);
     if (!mounted) return;
     if (!isValid) {
       setState(() {
@@ -1845,7 +1809,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final success = await _syncService.login(
-      username,
+      email,
       _passwordController.text,
     );
     if (!mounted) return;
@@ -1860,32 +1824,39 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red,
-        duration: Duration(seconds: 3),
+        duration: _snackDuration(message),
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
   void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.green,
-        duration: Duration(seconds: 3),
+        duration: _snackDuration(message),
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  Duration _snackDuration(String message) {
+    return Duration(seconds: message.length >= 80 ? 5 : 3);
   }
 
   @override
   void dispose() {
     _resendTimer?.cancel();
     _resetResendTimer?.cancel();
-    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();

@@ -11,7 +11,6 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.utils.crypto import constant_time_compare
 from django.utils import timezone
@@ -26,6 +25,11 @@ import string
 import logging
 import traceback
 from django.conf import settings as django_settings
+from accounts.identity import (
+    authenticate_login_identifier,
+    find_user_by_login_identifier,
+    normalize_email,
+)
 
 from .backup_codes import (
     build_backup_codes_pdf,
@@ -450,16 +454,16 @@ class AuthViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'])
     def register(self, request):
         start_time = __import__('time').time()
+        email = normalize_email(request.data.get('email') or '')
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[AUTH] Register called")
-        debug_print(f"[AUTH] Username: {request.data.get('username')}")
-        debug_print(f"[AUTH] Email: {request.data.get('email')}")
+        debug_print(f"[AUTH] Email: {email}")
         debug_print(f"[AUTH] Request IP: {request.META.get('REMOTE_ADDR')}")
         debug_print(f"[AUTH] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Registration attempt - IP: {request.META.get('REMOTE_ADDR')}, Username: {request.data.get('username')}")
+        logger.info(f"Registration attempt - IP: {request.META.get('REMOTE_ADDR')}, Email: {email}")
         
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
@@ -491,13 +495,15 @@ class AuthViewSet(viewsets.GenericViewSet):
                 return Response({'error': 'Failed to create user'}, status=500)
         
         debug_print(f"[AUTH] Registration validation FAILED: {serializer.errors}")
-        logger.warning(f"Registration failed - Username: {request.data.get('username')}, Errors: {serializer.errors}")
+        logger.warning(f"Registration failed - Email: {email}, Errors: {serializer.errors}")
         return Response(serializer.errors, status=400)
     
     @action(detail=False, methods=['post'])
     def login(self, request):
         start_time = __import__('time').time()
-        username = (request.data.get('username') or '').strip()
+        login_identifier = (
+            request.data.get('email') or request.data.get('username') or ''
+        ).strip()
         password = request.data.get('password')
         device_label = build_device_label(
             request.data.get('device_label'),
@@ -506,32 +512,22 @@ class AuthViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[AUTH] Login called")
-        debug_print(f"[AUTH] Username: {username}")
+        debug_print(f"[AUTH] Email/Login: {login_identifier}")
         debug_print(f"[AUTH] Password provided: {'Yes' if password else 'No'}")
         debug_print(f"[AUTH] Request IP: {request.META.get('REMOTE_ADDR')}")
         debug_print(f"[AUTH] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Login attempt - Username: {username}, IP: {request.META.get('REMOTE_ADDR')}")
+        logger.info(f"Login attempt - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
         
-        if not username or not password:
-            debug_print(f"[AUTH] ERROR: Missing username or password")
-            logger.warning(f"Login missing credentials - Username: {username}")
-            return Response({'error': 'Username and password required'}, status=400)
+        if not login_identifier or not password:
+            debug_print(f"[AUTH] ERROR: Missing email/login or password")
+            logger.warning(f"Login missing credentials - Email/Login: {login_identifier}")
+            return Response({'error': 'Email and password required'}, status=400)
         
         try:
-            # Try to find user for case-insensitive lookup
-            debug_print(f"[AUTH] Looking up user: {username}")
-            try:
-                user_obj = User.objects.get(username__iexact=username)
-                auth_username = user_obj.username
-                debug_print(f"[AUTH] User found - ID: {user_obj.id}, Username: {auth_username}")
-            except User.DoesNotExist:
-                debug_print(f"[AUTH] User not found by username, will try direct authentication")
-                auth_username = username
-            
-            debug_print(f"[AUTH] Authenticating with username: {auth_username}")
-            user = authenticate(username=auth_username, password=password)
+            debug_print(f"[AUTH] Looking up user by email/login: {login_identifier}")
+            user = authenticate_login_identifier(login_identifier, password)
             
             if user:
                 debug_print(f"[AUTH] Authentication SUCCESS - User ID: {user.id}, Username: {user.username}")
@@ -551,8 +547,8 @@ class AuthViewSet(viewsets.GenericViewSet):
                     'refresh': str(refresh),
                 })
             
-            debug_print(f"[AUTH] Authentication FAILED for user: {username}")
-            logger.warning(f"Failed login attempt - Username: {username}, IP: {request.META.get('REMOTE_ADDR')}")
+            debug_print(f"[AUTH] Authentication FAILED for login: {login_identifier}")
+            logger.warning(f"Failed login attempt - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
             return Response({'error': 'Invalid credentials'}, status=401)
             
         except Exception as e:
@@ -564,27 +560,31 @@ class AuthViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'], url_path='passwordless-start')
     def passwordless_start(self, request):
-        username = (request.data.get('username') or '').strip()
+        login_identifier = (
+            request.data.get('email') or request.data.get('username') or ''
+        ).strip()
         password = request.data.get('password') or ''
         device_id = get_request_device_id(request)
         device_fingerprint = get_request_device_fingerprint(request)
         device_label = get_request_device_label(request)
         device_kind = get_request_device_kind(request)
 
-        if not username:
-            return Response({'error': 'Username is required.'}, status=400)
+        if not login_identifier:
+            return Response({'error': 'Email is required.'}, status=400)
 
-        try:
-            user = User.objects.get(username__iexact=username)
-        except User.DoesNotExist:
+        user = find_user_by_login_identifier(login_identifier)
+        if user is None:
             return Response({'error': 'Account not available.'}, status=404)
 
         if password:
-            authenticated_user = authenticate(username=user.username, password=password)
+            authenticated_user = authenticate_login_identifier(
+                login_identifier,
+                password,
+            )
             if not authenticated_user:
                 return Response(
                     {
-                        'error': 'Invalid username or password.',
+                        'error': 'Invalid email or password.',
                         'fallback_to_password': True,
                     },
                     status=403,
@@ -772,23 +772,24 @@ class AuthViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'], url_path='recover-primary-device')
     def recover_primary_device(self, request):
-        username = (request.data.get('username') or '').strip()
+        login_identifier = (
+            request.data.get('email') or request.data.get('username') or ''
+        ).strip()
         password = request.data.get('password') or ''
         email_code = (request.data.get('email_code') or '').strip()
         recovery_code = (request.data.get('recovery_code') or '').strip()
 
-        if not username or not password or not email_code or not recovery_code:
+        if not login_identifier or not password or not email_code or not recovery_code:
             return Response(
-                {'error': 'Username, password, email code, and recovery code are required.'},
+                {'error': 'Email, password, email code, and recovery code are required.'},
                 status=400,
             )
 
-        try:
-            user_obj = User.objects.get(username__iexact=username)
-        except User.DoesNotExist:
-            return Response({'error': 'No account was found for that username.'}, status=404)
+        user_obj = find_user_by_login_identifier(login_identifier)
+        if user_obj is None:
+            return Response({'error': 'No account was found for that email.'}, status=404)
 
-        user = authenticate(username=user_obj.username, password=password)
+        user = authenticate_login_identifier(login_identifier, password)
         if not user:
             return Response({'error': 'Account password is incorrect.'}, status=403)
 

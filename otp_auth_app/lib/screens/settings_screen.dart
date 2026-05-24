@@ -397,21 +397,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return 'You are using the latest version';
   }
 
+  Duration _snackDuration(String message) {
+    return Duration(seconds: message.length >= 80 ? 5 : 3);
+  }
+
+  void _showSettingsSnackBar({
+    required String message,
+    required Color backgroundColor,
+  }) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor,
+        duration: _snackDuration(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   Future<bool> _requireServerConnection(String featureSummary) async {
     if (!_serverLockdownEnabled) {
       return true;
     }
 
     if (!mounted) return false;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _serverLockdownService.blockedMessageFor(featureSummary),
-        ),
-        backgroundColor: Colors.orange,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    _showSettingsSnackBar(
+      message: _serverLockdownService.blockedMessageFor(featureSummary),
+      backgroundColor: Colors.orange,
     );
     return false;
   }
@@ -484,17 +500,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       unawaited(_refreshUpdateInfo());
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          enabled
-              ? 'Server Lockdown is on. BeatzLock is now fully offline from the server.'
-              : 'Server Lockdown is off. Online features can connect again.',
-        ),
-        backgroundColor: enabled ? Colors.orange : const Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    _showSettingsSnackBar(
+      message: enabled
+          ? 'Server Lockdown is on. BeatzLock is now fully offline from the server.'
+          : 'Server Lockdown is off. Online features can connect again.',
+      backgroundColor: enabled ? Colors.orange : const Color(0xFF10B981),
     );
   }
 
@@ -1324,12 +1334,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               sub: _serverLockdownEnabled
                   ? 'Server Lockdown is on. All cloud communication is blocked.'
                   : !authProvider.isAuthenticated
-                  ? 'Sign in to sync across devices'
-                  : _syncLockedOnThisDevice
-                      ? 'Unlock sync on this device first'
-                      : _syncEnabled
-                          ? 'Manually sync with cloud'
-                          : 'Cloud sync is disabled',
+                      ? 'Sign in to sync across devices'
+                      : _syncLockedOnThisDevice
+                          ? 'Unlock sync on this device first'
+                          : _syncEnabled
+                              ? 'Manually sync with cloud'
+                              : 'Cloud sync is disabled',
               trailing: _isSyncing
                   ? SizedBox(
                       width: 18,
@@ -1361,9 +1371,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               'sync with the cloud',
                             ),
                           )
-                  : (_syncLockedOnThisDevice
-                      ? _unlockSyncOnThisDevice
-                      : _syncNow),
+                      : (_syncLockedOnThisDevice
+                          ? _unlockSyncOnThisDevice
+                          : _syncNow),
             ),
             if (authProvider.isAuthenticated && _syncLockedOnThisDevice) ...[
               _dividerLine(),
@@ -1757,7 +1767,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openLoginForSync() async {
-    if (!await _requireServerConnection('sign in and reconnect to online tools')) {
+    if (!await _requireServerConnection(
+        'sign in and reconnect to online tools')) {
       return;
     }
 

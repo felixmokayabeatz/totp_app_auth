@@ -14,7 +14,7 @@ class RecoverPrimaryDeviceScreen extends StatefulWidget {
 class _RecoverPrimaryDeviceScreenState
     extends State<RecoverPrimaryDeviceScreen> {
   final SyncService _syncService = SyncService();
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _emailCodeController = TextEditingController();
   final _recoveryCodeController = TextEditingController();
@@ -35,7 +35,7 @@ class _RecoverPrimaryDeviceScreenState
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _emailCodeController.dispose();
     _recoveryCodeController.dispose();
@@ -43,12 +43,12 @@ class _RecoverPrimaryDeviceScreenState
   }
 
   Future<void> _sendEmailCode() async {
-    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
-    if (username.isEmpty || password.isEmpty) {
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter your username and password first.'),
+          content: Text('Enter your email and password first.'),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
@@ -57,7 +57,7 @@ class _RecoverPrimaryDeviceScreenState
     }
 
     setState(() => _isSendingCode = true);
-    final sent = await _syncService.send2FACode(username, password);
+    final sent = await _syncService.send2FACode(email, password);
     if (!mounted) return;
     setState(() => _isSendingCode = false);
 
@@ -75,14 +75,14 @@ class _RecoverPrimaryDeviceScreenState
   }
 
   Future<void> _recover() async {
-    if (_usernameController.text.trim().isEmpty ||
+    if (_emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty ||
         _emailCodeController.text.trim().length != 6 ||
         _normalizedRecoveryCode.length != 10) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Enter your username, password, 6-digit email code, and 10-character recovery code.',
+            'Enter your email, password, 6-digit email code, and 10-character recovery code.',
           ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
@@ -93,7 +93,7 @@ class _RecoverPrimaryDeviceScreenState
 
     setState(() => _isRecovering = true);
     final success = await _syncService.recoverPrimaryDevice(
-      username: _usernameController.text.trim(),
+      email: _emailController.text.trim(),
       password: _passwordController.text,
       emailCode: _emailCodeController.text.trim(),
       recoveryCode: _normalizedRecoveryCode,
@@ -160,9 +160,10 @@ class _RecoverPrimaryDeviceScreenState
                     ),
                     const SizedBox(height: 20),
                     TextField(
-                      controller: _usernameController,
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(
-                        labelText: 'Username',
+                        labelText: 'Email',
                         border: OutlineInputBorder(),
                       ),
                     ),

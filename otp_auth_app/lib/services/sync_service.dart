@@ -137,6 +137,7 @@ class SyncService {
 
     if (statusCode == 404 &&
         (normalized.contains('no account was found for that username') ||
+            normalized.contains('no account was found for that email') ||
             normalized.contains('user not found') ||
             normalized.contains('account not available'))) {
       return 'Account not available.';
@@ -144,9 +145,10 @@ class SyncService {
 
     if (statusCode == 401 ||
         normalized.contains('invalid credential') ||
+        normalized.contains('invalid email or password') ||
         normalized.contains('invalid username or password') ||
         normalized.contains('no active account found')) {
-      return 'Invalid username or password.';
+      return 'Invalid email or password.';
     }
 
     return message;
@@ -180,7 +182,7 @@ class SyncService {
       case DioExceptionType.badResponse:
         final status = statusCode;
         if (status == 401) {
-          return 'Invalid username or password.';
+          return 'Invalid email or password.';
         }
         if (status == 403) {
           return 'You are not authorized to perform this action.';
@@ -843,17 +845,18 @@ class SyncService {
   }
 
   // ─── Register ─────────────────────────────────────────────────────────────
-  Future<bool> register(String username, String email, String password) async {
+  Future<bool> register(String email, String password) async {
     try {
       _lastErrorMessage = null;
+      final normalizedEmail = email.trim().toLowerCase();
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post(
         'auth/register/',
         data: {
-          'username': username,
-          'email': email,
+          'email': normalizedEmail,
+          'username': normalizedEmail,
           'password': password,
           'device_id': deviceId,
           'device_label': deviceLabel,
@@ -862,7 +865,7 @@ class SyncService {
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
         final canonicalUsername =
-            response.data['user']?['username']?.toString() ?? username.trim();
+            response.data['user']?['username']?.toString() ?? normalizedEmail;
         await _secureStorage.write(
           SecureStorageService.accessTokenKey,
           response.data['access'],
@@ -879,7 +882,10 @@ class SyncService {
           SecureStorageService.localVaultUserKey,
           canonicalUsername,
         );
-        await _secureStorage.write(SecureStorageService.userEmailKey, email);
+        await _secureStorage.write(
+          SecureStorageService.userEmailKey,
+          response.data['user']?['email']?.toString() ?? normalizedEmail,
+        );
         await _secureStorage.write(
           SecureStorageService.userIdKey,
           response.data['user']['id'].toString(),
@@ -907,16 +913,18 @@ class SyncService {
   }
 
   // ─── Login ────────────────────────────────────────────────────────────────
-  Future<bool> login(String username, String password) async {
+  Future<bool> login(String email, String password) async {
     try {
       _lastErrorMessage = null;
+      final loginIdentifier = email.trim();
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post(
         'auth/login/',
         data: {
-          'username': username.trim(),
+          'email': loginIdentifier,
+          'username': loginIdentifier,
           'password': password,
           'device_id': deviceId,
           'device_label': deviceLabel,
@@ -925,7 +933,7 @@ class SyncService {
       );
       if (response.statusCode == 200) {
         final canonicalUsername =
-            response.data['user']?['username']?.toString() ?? username.trim();
+            response.data['user']?['username']?.toString() ?? loginIdentifier;
         await _secureStorage.write(
           SecureStorageService.accessTokenKey,
           response.data['access'],
@@ -2460,18 +2468,20 @@ class SyncService {
   }
 
   Future<Map<String, dynamic>?> startPasswordlessLogin(
-    String username, {
+    String email, {
     String? password,
   }) async {
     try {
       _lastErrorMessage = null;
+      final loginIdentifier = email.trim();
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post(
         'auth/passwordless-start/',
         data: {
-          'username': username.trim(),
+          'email': loginIdentifier,
+          'username': loginIdentifier,
           if (password != null && password.isNotEmpty) 'password': password,
           'device_id': deviceId,
           'device_label': deviceLabel,
@@ -2610,12 +2620,17 @@ class SyncService {
     }
   }
 
-  Future<bool> send2FACode(String username, String password) async {
+  Future<bool> send2FACode(String email, String password) async {
     try {
       _lastErrorMessage = null;
+      final loginIdentifier = email.trim();
       final r = await _dio.post(
         'send-2fa/',
-        data: {'username': username.trim(), 'password': password},
+        data: {
+          'email': loginIdentifier,
+          'username': loginIdentifier,
+          'password': password,
+        },
       );
       return r.data['success'] == true;
     } on DioException catch (e) {
@@ -2632,12 +2647,17 @@ class SyncService {
     }
   }
 
-  Future<bool> verify2FACode(String username, String code) async {
+  Future<bool> verify2FACode(String email, String code) async {
     try {
       _lastErrorMessage = null;
+      final loginIdentifier = email.trim();
       final r = await _dio.post(
         'verify-2fa/',
-        data: {'username': username.trim(), 'code': code.trim()},
+        data: {
+          'email': loginIdentifier,
+          'username': loginIdentifier,
+          'code': code.trim(),
+        },
       );
       return r.data['success'] == true;
     } on DioException catch (e) {
@@ -2835,19 +2855,21 @@ class SyncService {
 
   // ─── Logout ───────────────────────────────────────────────────────────────
   Future<bool> verifyLoginWithRecoveryCode(
-    String username,
+    String email,
     String password,
     String recoveryCode,
   ) async {
     try {
       _lastErrorMessage = null;
+      final loginIdentifier = email.trim();
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post(
         'recovery-code/login/',
         data: {
-          'username': username.trim(),
+          'email': loginIdentifier,
+          'username': loginIdentifier,
           'password': password,
           'recovery_code': recoveryCode.trim(),
           'device_id': deviceId,
@@ -4067,20 +4089,22 @@ class SyncService {
   }
 
   Future<bool> recoverPrimaryDevice({
-    required String username,
+    required String email,
     required String password,
     required String emailCode,
     required String recoveryCode,
   }) async {
     try {
       _lastErrorMessage = null;
+      final loginIdentifier = email.trim();
       await _updateAuthHeader();
       final deviceId = await getOrCreateDeviceId();
       final deviceLabel = await _buildDeviceLabel();
       final response = await _dio.post(
         'auth/recover-primary-device/',
         data: {
-          'username': username.trim(),
+          'email': loginIdentifier,
+          'username': loginIdentifier,
           'password': password,
           'email_code': emailCode.trim(),
           'recovery_code': _normalizeRecoveryCode(recoveryCode),

@@ -220,12 +220,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
 
     _serverLockdownNoticeShown = true;
+    messenger.clearSnackBars();
     messenger.showSnackBar(
       const SnackBar(
         content: Text(
           'Server Lockdown is on. BeatzLock will not talk to the internet or server until you turn it off in Settings.',
         ),
         backgroundColor: Colors.orange,
+        duration: Duration(seconds: 5),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -411,7 +413,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         );
         if (result.started) {
           if (result.requiresAppExit) {
-            final shouldOpenInstaller = await _showRequiredInstallerOpeningDialog();
+            final shouldOpenInstaller =
+                await _showRequiredInstallerOpeningDialog();
             if (shouldOpenInstaller != true) {
               _appUpdateService.clearPreparedUpdate();
               return;

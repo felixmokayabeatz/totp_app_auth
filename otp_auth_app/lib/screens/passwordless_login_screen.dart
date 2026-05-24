@@ -7,12 +7,12 @@ import '../services/sync_service.dart';
 class PasswordlessLoginScreen extends StatefulWidget {
   const PasswordlessLoginScreen({
     super.key,
-    required this.username,
+    required this.email,
     this.passwordForSync,
     this.initialResult,
   });
 
-  final String username;
+  final String email;
   final String? passwordForSync;
   final Map<String, dynamic>? initialResult;
 
@@ -88,7 +88,7 @@ class _PasswordlessLoginScreenState extends State<PasswordlessLoginScreen> {
 
   Future<void> _startFlow() async {
     final result = await _syncService.startPasswordlessLogin(
-      widget.username,
+      widget.email,
       password: widget.passwordForSync,
     );
     _consumeStartResult(result);

@@ -410,7 +410,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data['fallback_to_password'], True)
-        self.assertEqual(response.data['error'], 'Invalid username or password.')
+        self.assertEqual(response.data['error'], 'Invalid email or password.')
         self.assertFalse(
             PasswordlessLoginRequest.objects.filter(user=self.user).exists()
         )
