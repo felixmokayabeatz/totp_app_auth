@@ -465,6 +465,20 @@
     "sequence": 34,
     "platform": "android",
     "artifact_type": "apk",
+    "file": "beatzlock_1.7.6_43.apk",
+    "path": "C:\\Programming\\totp_app\\final_builds\\android\\1.7.6_43\\beatzlock_1.7.6_43.apk",
+    "relative_path": "final_builds/android/1.7.6_43/beatzlock_1.7.6_43.apk",
+    "is_directory": false,
+    "timestamp": "2026-05-24T12:39:37",
+    "version": "1.7.6+43",
+    "build_number": "43",
+    "artifact_version": "1.7.6_43",
+    "host_platform": "Windows"
+  },
+  {
+    "sequence": 35,
+    "platform": "android",
+    "artifact_type": "apk",
     "file": "beatzlock_1.7.4_41.apk",
     "path": "C:\\Programming\\totp_app\\final_builds\\android\\1.7.4_41\\beatzlock_1.7.4_41.apk",
     "relative_path": "final_builds/android/1.7.4_41/beatzlock_1.7.4_41.apk",
@@ -476,7 +490,7 @@
     "host_platform": "Windows"
   },
   {
-    "sequence": 35,
+    "sequence": 36,
     "platform": "android",
     "artifact_type": "apk",
     "file": "beatzlock_1.7.5_42.apk",
