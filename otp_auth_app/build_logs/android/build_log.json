@@ -446,5 +446,19 @@
     "build_number": "38",
     "artifact_version": "1.7.1_38",
     "host_platform": "Windows"
+  },
+  {
+    "sequence": 33,
+    "platform": "android",
+    "artifact_type": "apk",
+    "file": "beatzlock_1.7.3_40.apk",
+    "path": "C:\\Programming\\totp_app\\final_builds\\android\\1.7.3_40\\beatzlock_1.7.3_40.apk",
+    "relative_path": "final_builds/android/1.7.3_40/beatzlock_1.7.3_40.apk",
+    "is_directory": false,
+    "timestamp": "2026-05-24T03:25:09",
+    "version": "1.7.3+40",
+    "build_number": "40",
+    "artifact_version": "1.7.3_40",
+    "host_platform": "Windows"
   }
 ]
