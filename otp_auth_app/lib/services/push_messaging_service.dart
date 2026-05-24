@@ -215,7 +215,8 @@ class PushMessagingService {
     await _messagingInstance.setAutoInitEnabled(!enabled);
     if (enabled) {
       await _clearLocalRegistrationCache();
-      await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+      await ApprovalNotificationService()
+          .clearPasswordlessApprovalNotification();
       return;
     }
 
@@ -230,7 +231,8 @@ class PushMessagingService {
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     if (await ServerLockdownService().isEnabled()) {
-      await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+      await ApprovalNotificationService()
+          .clearPasswordlessApprovalNotification();
       return;
     }
 
@@ -253,7 +255,8 @@ class PushMessagingService {
     }
 
     if (await ServerLockdownService().isEnabled()) {
-      await ApprovalNotificationService().clearPasswordlessApprovalNotification();
+      await ApprovalNotificationService()
+          .clearPasswordlessApprovalNotification();
       return;
     }
 
