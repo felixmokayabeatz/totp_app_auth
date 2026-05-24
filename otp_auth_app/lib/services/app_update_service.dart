@@ -638,12 +638,8 @@ class AppUpdateService {
     final updateDirPath = File(installerPath).parent.path;
 
     if (Platform.isWindows) {
-      _pendingLauncherExecutable = _resolveWindowsPowerShellExecutable();
-      _pendingLauncherArguments = _buildWindowsUpdateLauncherArguments(
-        installerPath: installerPath,
-        appPath: appPath,
-        appPid: pid,
-      );
+      _pendingLauncherExecutable = installerPath;
+      _pendingLauncherArguments = const [];
       _setPendingCleanupPaths(<String>[updateDirPath]);
       return;
     }
@@ -694,63 +690,6 @@ class AppUpdateService {
     final pageUrl = info?.manualDownloadPageUrl ?? '';
     if (pageUrl.isNotEmpty) return pageUrl;
     return AppConfig.manualDownloadUrl;
-  }
-
-  List<String> _buildWindowsUpdateLauncherArguments({
-    required String installerPath,
-    required String appPath,
-    required int appPid,
-  }) {
-    final escapedInstallerPath = _escapePowerShellSingleQuotedString(
-      installerPath,
-    );
-    final escapedAppPath = _escapePowerShellSingleQuotedString(appPath);
-    final command = '''
-\$installer = '$escapedInstallerPath'
-\$app = '$escapedAppPath'
-\$appPid = $appPid
-try {
-  for (\$i = 0; \$i -lt 120; \$i++) {
-    if (\$appPid -le 0) {
-      break
-    }
-    \$process = Get-Process -Id \$appPid -ErrorAction SilentlyContinue
-    if (\$null -eq \$process) {
-      break
-    }
-    Start-Sleep -Milliseconds 250
-  }
-  Start-Sleep -Milliseconds 400
-  Start-Process -FilePath \$installer -ErrorAction Stop | Out-Null
-} catch {
-  if (Test-Path -LiteralPath \$app) {
-    Start-Process -FilePath \$app -ErrorAction SilentlyContinue | Out-Null
-  }
-}
-''';
-
-    return <String>[
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-Command',
-      command,
-    ];
-  }
-
-  String _escapePowerShellSingleQuotedString(String value) {
-    return value.replaceAll("'", "''");
-  }
-
-  String _resolveWindowsPowerShellExecutable() {
-    final systemRoot = Platform.environment['SystemRoot'] ??
-        Platform.environment['WINDIR'] ??
-        'C:\\Windows';
-    final candidate =
-        '$systemRoot${Platform.pathSeparator}System32${Platform.pathSeparator}WindowsPowerShell${Platform.pathSeparator}v1.0${Platform.pathSeparator}powershell.exe';
-    return File(candidate).existsSync() ? candidate : 'powershell.exe';
   }
 
   Future<String> _writeLinuxUpdaterScript(
