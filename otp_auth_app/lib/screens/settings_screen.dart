@@ -4422,6 +4422,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _updateVersionLine('Current', info.currentLabel),
               const SizedBox(height: 8),
               _updateVersionLine('Latest', info.latestLabel),
+              const SizedBox(height: 8),
+              _updateVersionLine('Package', info.targetLabel),
               const SizedBox(height: 14),
               Text(
                 _updateDialogMessage,

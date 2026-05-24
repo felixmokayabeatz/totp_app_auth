@@ -936,6 +936,11 @@ class _RequiredUpdateScreen extends StatelessWidget {
                                 label: 'Latest version',
                                 value: info.latestLabel,
                               ),
+                              const SizedBox(height: 8),
+                              _RequiredUpdateVersionRow(
+                                label: 'Package',
+                                value: info.targetLabel,
+                              ),
                               if (info.reason.trim().isNotEmpty) ...[
                                 const SizedBox(height: 18),
                                 Text(

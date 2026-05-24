@@ -1,6 +1,8 @@
 class AppUpdateInfo {
   const AppUpdateInfo({
     required this.platform,
+    required this.platformDisplay,
+    required this.linuxDistribution,
     required this.currentVersion,
     required this.currentBuildNumber,
     required this.latestVersion,
@@ -14,6 +16,8 @@ class AppUpdateInfo {
   });
 
   final String platform;
+  final String platformDisplay;
+  final String linuxDistribution;
   final String currentVersion;
   final int currentBuildNumber;
   final String latestVersion;
@@ -34,9 +38,17 @@ class AppUpdateInfo {
 
   String get manualDownloadPageUrl => downloadsPageUrl.trim();
 
+  String get targetLabel {
+    final display = platformDisplay.trim();
+    if (display.isNotEmpty) return display;
+    return platform.trim().isEmpty ? 'Current platform' : platform;
+  }
+
   factory AppUpdateInfo.fromJson(Map<String, dynamic> json) {
     return AppUpdateInfo(
       platform: json['platform']?.toString() ?? '',
+      platformDisplay: json['platform_display']?.toString() ?? '',
+      linuxDistribution: json['linux_distribution']?.toString() ?? '',
       currentVersion: json['current_version']?.toString() ?? '',
       currentBuildNumber:
           int.tryParse(json['current_build_number']?.toString() ?? '0') ?? 0,

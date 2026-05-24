@@ -17,6 +17,27 @@ class AppUpdateService {
     'com.beatzlock.otp/storage',
   );
   static const String updateInstalledArgumentPrefix = '--update-installed=';
+  static const Map<String, String> _linuxDistributionAliases = {
+    'ubuntu': 'ubuntu',
+    'debian': 'debian',
+    'kali': 'kali',
+    'kalilinux': 'kali',
+    'fedora': 'fedora',
+    'rhel': 'fedora',
+    'redhat': 'fedora',
+    'redhatenterpriselinux': 'fedora',
+    'centos': 'fedora',
+    'rocky': 'fedora',
+    'rockylinux': 'fedora',
+    'almalinux': 'fedora',
+    'opensuse': 'opensuse',
+    'opensuseleap': 'opensuse',
+    'opensusetumbleweed': 'opensuse',
+    'suse': 'opensuse',
+    'arch': 'arch',
+    'archlinux': 'arch',
+    'manjaro': 'manjaro',
+  };
   factory AppUpdateService() => _instance;
 
   AppUpdateService._internal()
@@ -99,13 +120,19 @@ class AppUpdateService {
 
     try {
       final currentAppVersion = await _resolveCurrentAppVersion();
+      final queryParameters = <String, dynamic>{
+        'platform': platform,
+        'version': currentAppVersion.version,
+        'build_number': currentAppVersion.parsedBuildNumber,
+      };
+      final linuxDistribution = await _resolveLinuxDistribution();
+      if (linuxDistribution != null && linuxDistribution.isNotEmpty) {
+        queryParameters['distribution'] = linuxDistribution;
+      }
+
       final response = await _dio.get(
         '',
-        queryParameters: {
-          'platform': platform,
-          'version': currentAppVersion.version,
-          'build_number': currentAppVersion.parsedBuildNumber,
-        },
+        queryParameters: queryParameters,
       );
 
       if (response.statusCode == 200 && response.data is Map) {
@@ -123,6 +150,58 @@ class AppUpdateService {
     }
 
     return _cachedUpdateInfo;
+  }
+
+  Future<String?> _resolveLinuxDistribution() async {
+    if (!Platform.isLinux) return null;
+
+    try {
+      final file = File('/etc/os-release');
+      if (!await file.exists()) return null;
+      return _linuxDistributionFromOsRelease(await file.readAsString());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _linuxDistributionFromOsRelease(String contents) {
+    final values = <String, String>{};
+    for (final line in contents.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+
+      final separatorIndex = trimmed.indexOf('=');
+      if (separatorIndex <= 0) continue;
+
+      final key = trimmed.substring(0, separatorIndex).trim().toUpperCase();
+      var value = trimmed.substring(separatorIndex + 1).trim();
+      if (value.length >= 2 &&
+          ((value.startsWith('"') && value.endsWith('"')) ||
+              (value.startsWith("'") && value.endsWith("'")))) {
+        value = value.substring(1, value.length - 1);
+      }
+      values[key] = value;
+    }
+
+    final candidates = <String>[
+      if ((values['ID'] ?? '').trim().isNotEmpty) values['ID']!,
+      ...((values['ID_LIKE'] ?? '')
+          .split(RegExp(r'\s+'))
+          .where((value) => value.trim().isNotEmpty)),
+    ];
+
+    for (final candidate in candidates) {
+      final normalized = _normalizeLinuxDistribution(candidate);
+      if (normalized != null) return normalized;
+    }
+    return null;
+  }
+
+  String? _normalizeLinuxDistribution(String value) {
+    final key =
+        value.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    if (key.isEmpty) return null;
+    return _linuxDistributionAliases[key];
   }
 
   Future<String> getCurrentVersionLabel() async {
@@ -320,9 +399,9 @@ class AppUpdateService {
       await updateDir.create(recursive: true);
     }
 
-    final extension = _installerExtension(downloadUri);
+    final extension = _installerExtension(downloadUri, info);
     final fileName =
-        'beatzlock_${info.latestVersion}_${info.latestBuildNumber}$extension';
+        'beatzlock_${info.latestVersion}_${info.latestBuildNumber}${_downloadTargetSuffix(info)}$extension';
     final filePath = '${updateDir.path}${Platform.pathSeparator}$fileName';
     final startedAt = DateTime.now();
 
@@ -387,8 +466,7 @@ class AppUpdateService {
       arguments,
       mode: ProcessStartMode.detached,
     );
-    if (Platform.isWindows &&
-        executable.toLowerCase().endsWith('.exe')) {
+    if (Platform.isWindows && executable.toLowerCase().endsWith('.exe')) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
     exit(0);
@@ -404,7 +482,7 @@ class AppUpdateService {
       'saveFileToDownloads',
       {
         'fileName':
-            'beatzlock_${info.latestVersion}_${info.latestBuildNumber}${_installerExtension(downloadUri)}',
+            'beatzlock_${info.latestVersion}_${info.latestBuildNumber}${_downloadTargetSuffix(info)}${_installerExtension(downloadUri, info)}',
         'mimeType': 'application/vnd.android.package-archive',
         'bytes': await file.readAsBytes(),
       },
@@ -498,7 +576,7 @@ class AppUpdateService {
     throw UnsupportedError('Desktop update is not supported on this platform.');
   }
 
-  String _installerExtension(Uri uri) {
+  String _installerExtension(Uri uri, [AppUpdateInfo? info]) {
     final lastSegment =
         uri.pathSegments.isEmpty ? '' : uri.pathSegments.last.toLowerCase();
     if (lastSegment.endsWith('.exe')) return '.exe';
@@ -507,7 +585,20 @@ class AppUpdateService {
     if (lastSegment.endsWith('.rpm')) return '.rpm';
     if (Platform.isWindows) return '.exe';
     if (Platform.isAndroid) return '.apk';
+    if (Platform.isLinux || info?.platform == 'linux') {
+      final distribution = info?.linuxDistribution.trim().toLowerCase() ?? '';
+      if (distribution == 'fedora' || distribution == 'opensuse') {
+        return '.rpm';
+      }
+      return '.deb';
+    }
     return '.deb';
+  }
+
+  String _downloadTargetSuffix(AppUpdateInfo info) {
+    if (info.platform != 'linux') return '';
+    final distribution = info.linuxDistribution.trim().toLowerCase();
+    return distribution.isEmpty ? '' : '_$distribution';
   }
 
   String _manualDownloadPageUrl([AppUpdateInfo? info]) {
