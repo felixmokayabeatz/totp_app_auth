@@ -474,5 +474,19 @@
     "build_number": "40",
     "artifact_version": "1.7.3_40",
     "host_platform": "Windows"
+  },
+  {
+    "sequence": 35,
+    "platform": "windows",
+    "artifact_type": "installer",
+    "file": "beatzlock_1.7.4_41_x64.exe",
+    "path": "C:\\Programming\\totp_app\\final_builds\\windows\\1.7.4_41\\beatzlock_1.7.4_41_x64.exe",
+    "relative_path": "final_builds/windows/1.7.4_41/beatzlock_1.7.4_41_x64.exe",
+    "is_directory": false,
+    "timestamp": "2026-05-24T12:40:24",
+    "version": "1.7.4+41",
+    "build_number": "41",
+    "artifact_version": "1.7.4_41",
+    "host_platform": "Windows"
   }
 ]
