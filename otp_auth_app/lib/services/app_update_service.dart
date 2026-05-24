@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -61,6 +62,7 @@ class AppUpdateService {
   CancelToken? _activeDownloadCancelToken;
   String? _pendingLauncherExecutable;
   List<String>? _pendingLauncherArguments;
+  final List<String> _pendingCleanupPaths = <String>[];
 
   AppUpdateInfo? get cachedUpdateInfo => _cachedUpdateInfo;
   String? get lastErrorMessage => _lastErrorMessage;
@@ -106,8 +108,20 @@ class AppUpdateService {
   }
 
   void clearPreparedUpdate() {
-    _pendingLauncherExecutable = null;
-    _pendingLauncherArguments = null;
+    _clearPreparedUpdateState(cleanupArtifacts: true);
+  }
+
+  Future<void> cleanupStaleUpdateArtifacts() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final separator = Platform.pathSeparator;
+      await _deletePaths(<String>[
+        '${tempDir.path}${separator}beatzlock_updates',
+        '${tempDir.path}${separator}beatzlock_update.sh',
+      ]);
+    } catch (_) {
+      // Temporary update cleanup is best-effort only.
+    }
   }
 
   Future<AppUpdateInfo?> checkForUpdate() async {
@@ -458,18 +472,73 @@ class AppUpdateService {
       throw const FileSystemException('No prepared desktop update was found.');
     }
 
-    _pendingLauncherExecutable = null;
-    _pendingLauncherArguments = null;
-
     await Process.start(
       executable,
       arguments,
       mode: ProcessStartMode.detached,
     );
+    _clearPreparedUpdateState(cleanupArtifacts: false);
     if (Platform.isWindows && executable.toLowerCase().endsWith('.exe')) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
     exit(0);
+  }
+
+  void _clearPreparedUpdateState({required bool cleanupArtifacts}) {
+    _pendingLauncherExecutable = null;
+    _pendingLauncherArguments = null;
+
+    final cleanupPaths = List<String>.from(_pendingCleanupPaths);
+    _pendingCleanupPaths.clear();
+    if (cleanupArtifacts && cleanupPaths.isNotEmpty) {
+      unawaited(_deletePaths(cleanupPaths));
+    }
+  }
+
+  void _setPendingCleanupPaths(Iterable<String> paths) {
+    final stalePaths = List<String>.from(_pendingCleanupPaths);
+    _pendingCleanupPaths
+      ..clear()
+      ..addAll(
+        paths
+            .map((path) => path.trim())
+            .where((path) => path.isNotEmpty)
+            .toSet(),
+      );
+
+    if (stalePaths.isNotEmpty) {
+      unawaited(_deletePaths(stalePaths));
+    }
+  }
+
+  Future<void> _deletePaths(Iterable<String> paths) async {
+    final seenPaths = <String>{};
+    for (final rawPath in paths) {
+      final path = rawPath.trim();
+      if (path.isEmpty || !seenPaths.add(path)) {
+        continue;
+      }
+
+      try {
+        switch (await FileSystemEntity.type(path, followLinks: false)) {
+          case FileSystemEntityType.file:
+            await File(path).delete();
+            break;
+          case FileSystemEntityType.directory:
+            await Directory(path).delete(recursive: true);
+            break;
+          case FileSystemEntityType.link:
+            await Link(path).delete();
+            break;
+          case FileSystemEntityType.pipe:
+          case FileSystemEntityType.unixDomainSock:
+          case FileSystemEntityType.notFound:
+            break;
+        }
+      } catch (_) {
+        // Ignore best-effort update cleanup failures.
+      }
+    }
   }
 
   Future<String> _saveAndroidInstallerToDownloads(
@@ -554,22 +623,30 @@ class AppUpdateService {
     final appPath = Platform.resolvedExecutable;
     final relaunchArgument =
         '$updateInstalledArgumentPrefix${info.latestVersion}+${info.latestBuildNumber}';
+    final updateDirPath = File(installerPath).parent.path;
 
     if (Platform.isWindows) {
-      _pendingLauncherExecutable = installerPath;
-      _pendingLauncherArguments = const [];
+      _pendingLauncherExecutable = 'powershell.exe';
+      _pendingLauncherArguments = _buildWindowsUpdateLauncherArguments(
+        installerPath: installerPath,
+        appPath: appPath,
+        updateDirPath: updateDirPath,
+      );
+      _setPendingCleanupPaths(<String>[updateDirPath]);
       return;
     }
 
     if (Platform.isLinux) {
       final scriptPath = await _writeLinuxUpdaterScript(
         installerPath,
+        updateDirPath: updateDirPath,
         appPid: pid,
         appPath: appPath,
         relaunchArgument: relaunchArgument,
       );
       _pendingLauncherExecutable = scriptPath;
       _pendingLauncherArguments = const [];
+      _setPendingCleanupPaths(<String>[updateDirPath, scriptPath]);
       return;
     }
 
@@ -607,8 +684,59 @@ class AppUpdateService {
     return AppConfig.manualDownloadUrl;
   }
 
+  List<String> _buildWindowsUpdateLauncherArguments({
+    required String installerPath,
+    required String appPath,
+    required String updateDirPath,
+  }) {
+    final escapedInstallerPath = _escapePowerShellSingleQuotedString(
+      installerPath,
+    );
+    final escapedAppPath = _escapePowerShellSingleQuotedString(appPath);
+    final escapedUpdateDirPath = _escapePowerShellSingleQuotedString(
+      updateDirPath,
+    );
+    final command = '''
+\$installer = '$escapedInstallerPath'
+\$app = '$escapedAppPath'
+\$updateDir = '$escapedUpdateDirPath'
+\$exitCode = 1
+try {
+  \$process = Start-Process -FilePath \$installer -Wait -PassThru -ErrorAction Stop
+  if (\$null -ne \$process) {
+    \$exitCode = \$process.ExitCode
+  } else {
+    \$exitCode = 0
+  }
+} catch {
+  \$exitCode = 1
+}
+if (Test-Path -LiteralPath \$updateDir) {
+  Remove-Item -LiteralPath \$updateDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+if (\$exitCode -ne 0 -and (Test-Path -LiteralPath \$app)) {
+  Start-Process -FilePath \$app -ErrorAction SilentlyContinue | Out-Null
+}
+''';
+
+    return <String>[
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-Command',
+      command,
+    ];
+  }
+
+  String _escapePowerShellSingleQuotedString(String value) {
+    return value.replaceAll("'", "''");
+  }
+
   Future<String> _writeLinuxUpdaterScript(
     String installerPath, {
+    required String updateDirPath,
     required int appPid,
     required String appPath,
     required String relaunchArgument,
@@ -618,15 +746,19 @@ class AppUpdateService {
       '${tempDir.path}${Platform.pathSeparator}beatzlock_update.sh',
     );
     final escapedInstallerPath = installerPath.replaceAll("'", r"'\''");
+    final escapedUpdateDirPath = updateDirPath.replaceAll("'", r"'\''");
     final escapedAppPath = appPath.replaceAll("'", r"'\''");
     final escapedRelaunchArgument = relaunchArgument.replaceAll("'", r"'\''");
+    final escapedScriptPath = script.path.replaceAll("'", r"'\''");
     await script.writeAsString('''
 #!/bin/sh
 set -eu
 PACKAGE_PATH='$escapedInstallerPath'
+UPDATE_DIR='$escapedUpdateDirPath'
 APP_PATH='$escapedAppPath'
 APP_PID="$appPid"
 APP_ARG='$escapedRelaunchArgument'
+SCRIPT_PATH='$escapedScriptPath'
 APP_DIR="\$(dirname "\$APP_PATH")"
 
 show_message() {
@@ -660,6 +792,21 @@ open_package_installer() {
   return 1
 }
 
+cleanup_update_artifacts() {
+  if [ -f "\$PACKAGE_PATH" ]; then
+    rm -f "\$PACKAGE_PATH" || true
+  fi
+  if [ -d "\$UPDATE_DIR" ] && [ "\$(basename "\$UPDATE_DIR")" = "beatzlock_updates" ]; then
+    rm -rf "\$UPDATE_DIR" || true
+  fi
+}
+
+cleanup_script() {
+  if [ -f "\$SCRIPT_PATH" ]; then
+    rm -f "\$SCRIPT_PATH" || true
+  fi
+}
+
 reopen_app() {
   launch_arg="\$1"
   if [ ! -x "\$APP_PATH" ]; then
@@ -676,6 +823,8 @@ reopen_app() {
   )
 }
 
+trap cleanup_script EXIT
+
 while kill -0 "\$APP_PID" 2>/dev/null; do
   sleep 1
 done
@@ -684,6 +833,7 @@ INSTALL_STATUS=1
 
 if [ ! -f "\$PACKAGE_PATH" ]; then
   show_message "The downloaded update package could not be found. BeatzLock will reopen so you can try again."
+  cleanup_update_artifacts
   reopen_app ""
   exit 0
 fi
@@ -721,9 +871,11 @@ case "\$PACKAGE_PATH" in
 esac
 
 if [ "\$INSTALL_STATUS" -eq 0 ]; then
+  cleanup_update_artifacts
   show_message "The update finished installing. Click OK to reopen BeatzLock."
   reopen_app "\$APP_ARG"
 else
+  cleanup_update_artifacts
   show_message "The installer did not complete. BeatzLock will reopen so you can try again."
   reopen_app ""
 fi

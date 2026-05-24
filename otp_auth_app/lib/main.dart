@@ -37,6 +37,8 @@ void main(List<String> launchArgs) async {
     debugPrint = (String? message, {int? wrapWidth}) {};
   }
 
+  await AppUpdateService().cleanupStaleUpdateArtifacts();
+
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     final appSupportDir = await getApplicationSupportDirectory();
     await Hive.initFlutter(appSupportDir.path);
