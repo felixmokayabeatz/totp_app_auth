@@ -667,6 +667,7 @@ class SyncService {
     final deletedIds = await _getDeletedSecureMessageIds();
     deletedIds.add(messageId);
     await _storeDeletedSecureMessageIds(deletedIds);
+    await _clearSecureSelfTextNotificationsForMessageIds([messageId]);
   }
 
   int _parseSecureMessageRetentionMinutes(dynamic value) {
@@ -723,7 +724,49 @@ class SyncService {
     final deletedIds = await _getDeletedSecureMessageIds();
     deletedIds.addAll(expiredIds);
     await _storeDeletedSecureMessageIds(deletedIds);
+    await _clearSecureSelfTextNotificationsForMessageIds(expiredIds);
     return expiredIds.length;
+  }
+
+  Future<void> _clearSecureSelfTextNotificationsForMessageIds(
+    Iterable<String> messageIds,
+  ) async {
+    final normalizedIds = messageIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    if (normalizedIds.isEmpty) {
+      return;
+    }
+
+    final previousErrorMessage = _lastErrorMessage;
+
+    try {
+      await _updateAuthHeader();
+      final token = await _secureStorage.read(
+        SecureStorageService.accessTokenKey,
+      );
+      if (token == null || token.isEmpty) {
+        return;
+      }
+
+      await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'notifications/clear/',
+          data: {
+            'notification_type': 'secure_self_text',
+            'message_ids': normalizedIds,
+          },
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+        ),
+      );
+    } catch (_) {
+      // Secure-self-text notification cleanup is best-effort only.
+    } finally {
+      _lastErrorMessage = previousErrorMessage;
+    }
   }
 
   Future<String> getOrCreateDeviceId() async {
@@ -3314,6 +3357,11 @@ class SyncService {
     }
 
     try {
+      await purgeExpiredSecureMessages();
+      await _clearSecureSelfTextNotificationsForMessageIds(
+        await _getDeletedSecureMessageIds(),
+      );
+
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'notifications/',

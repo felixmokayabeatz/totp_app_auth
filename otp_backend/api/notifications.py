@@ -366,6 +366,49 @@ def create_secure_self_text_notification(
     )
 
 
+def delete_secure_self_text_notifications(
+    user: User,
+    *,
+    message_ids: list[str] | set[str] | tuple[str, ...],
+) -> int:
+    normalized_ids = {
+        str(message_id).strip()
+        for message_id in message_ids
+        if str(message_id).strip()
+    }
+    if not normalized_ids:
+        return 0
+
+    matching_notification_ids = []
+    notifications = AppNotification.objects.filter(
+        user=user,
+        notification_type='secure_self_text',
+    ).only('id', 'encrypted_payload')
+
+    for notification in notifications:
+        try:
+            payload = decrypt_notification_payload(notification.encrypted_payload)
+        except Exception:
+            continue
+
+        metadata = payload.get('metadata', {})
+        if not isinstance(metadata, dict):
+            continue
+
+        message_id = str(metadata.get('message_id') or '').strip()
+        if message_id in normalized_ids:
+            matching_notification_ids.append(notification.id)
+
+    if not matching_notification_ids:
+        return 0
+
+    deleted_count, _ = AppNotification.objects.filter(
+        user=user,
+        id__in=matching_notification_ids,
+    ).delete()
+    return deleted_count
+
+
 def create_app_pin_changed_notification(
     user: User,
     *,

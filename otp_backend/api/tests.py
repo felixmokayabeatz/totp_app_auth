@@ -13,7 +13,11 @@ from .models import (
     DeviceSession,
     PasswordlessLoginRequest,
 )
-from .notifications import create_notification, decrypt_notification_payload
+from .notifications import (
+    create_notification,
+    create_secure_self_text_notification,
+    decrypt_notification_payload,
+)
 
 
 class DeviceSessionPrimaryChangeTests(APITestCase):
@@ -1078,6 +1082,37 @@ class AppNotificationTests(APITestCase):
         payload = decrypt_notification_payload(notification.encrypted_payload)
         self.assertEqual(payload['metadata']['target_screen'], 'secure_self_text')
         self.assertEqual(payload['metadata']['message_id'], 'msg-123')
+
+    def test_clear_notifications_can_remove_secure_self_text_by_message_id(self):
+        target_notification = create_secure_self_text_notification(
+            self.user,
+            message_id='msg-delete',
+            author_device_label='Windows - Studio Laptop',
+        )
+        keep_notification = create_secure_self_text_notification(
+            self.user,
+            message_id='msg-keep',
+            author_device_label='Android - Primary Phone',
+        )
+
+        response = self.client.post(
+            reverse('notifications-clear'),
+            {
+                'notification_type': 'secure_self_text',
+                'message_ids': ['msg-delete'],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['success'], True)
+        self.assertEqual(response.data['deleted_count'], 1)
+        self.assertFalse(
+            self.user.app_notifications.filter(id=target_notification.id).exists()
+        )
+        self.assertTrue(
+            self.user.app_notifications.filter(id=keep_notification.id).exists()
+        )
 
 
 @override_settings(BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-review-secret')

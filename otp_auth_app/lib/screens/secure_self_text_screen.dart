@@ -177,14 +177,29 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) {
-        return SafeArea(
-          child: FractionallySizedBox(
-            heightFactor: 0.82,
+        final mediaQuery = MediaQuery.of(sheetContext);
+        final bottomSafeSpace = mediaQuery.viewPadding.bottom + 28;
+
+        return Padding(
+          padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
+          child: SizedBox(
+            height: mediaQuery.size.height * 0.72,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Center(
+                    child: Container(
+                      width: 46,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: _textSecondary.withValues(alpha: 0.42),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   Text(
                     'Choose delete timer',
                     style: TextStyle(
@@ -201,6 +216,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                   const SizedBox(height: 14),
                   Expanded(
                     child: ListView(
+                      padding: EdgeInsets.only(bottom: bottomSafeSpace),
                       children: [
                         for (final option in _retentionOptions)
                           ListTile(

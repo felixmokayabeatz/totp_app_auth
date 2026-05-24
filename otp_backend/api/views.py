@@ -68,6 +68,7 @@ from .notifications import (
     create_recovery_codes_generated_notification,
     create_secure_self_text_notification,
     create_sign_in_notification,
+    delete_secure_self_text_notifications,
 )
 from .push_notifications import send_passwordless_request_push
 from .device_sessions import (
@@ -1389,6 +1390,29 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
         notification_type = (request.data.get('notification_type') or '').strip()
         if notification_type and notification_type != 'all':
             queryset = queryset.filter(notification_type=notification_type)
+
+        message_ids = request.data.get('message_ids')
+        if message_ids not in (None, ''):
+            if not isinstance(message_ids, list):
+                return Response(
+                    {'error': 'message_ids must be a list.'},
+                    status=400,
+                )
+            if notification_type not in ('', 'all', 'secure_self_text'):
+                return Response(
+                    {
+                        'error': (
+                            'message_ids can only be used with secure_self_text '
+                            'notifications.'
+                        )
+                    },
+                    status=400,
+                )
+            deleted_count = delete_secure_self_text_notifications(
+                request.user,
+                message_ids=message_ids,
+            )
+            return Response({'success': True, 'deleted_count': deleted_count})
 
         keep_unread = request.data.get('keep_unread') is True
         if keep_unread:
