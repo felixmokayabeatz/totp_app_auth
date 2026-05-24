@@ -58,6 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDownloadingBackupCodes = false;
   bool _isLoadingBackupCodeStatus = false;
   bool _isLoadingVaultRestorePoints = false;
+  bool _cancelVaultRestorePointsLoadRequested = false;
   bool _syncEnabled = false;
   bool _syncLockedOnThisDevice = false;
   bool _serverLockdownEnabled = false;
@@ -639,20 +640,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _isLoadingVaultRestorePoints = true;
+      _cancelVaultRestorePointsLoadRequested = false;
     });
 
     unawaited(_showVaultRestorePointsLoadingDialog());
 
     try {
       await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (!mounted || _cancelVaultRestorePointsLoadRequested) return;
       await _otpVaultSnapshotService.captureDailySnapshotIfNeeded();
+      if (!mounted || _cancelVaultRestorePointsLoadRequested) return;
       final snapshots = await _otpVaultSnapshotService.getSnapshots();
-      if (!mounted) return;
+      if (!mounted || _cancelVaultRestorePointsLoadRequested) return;
 
       final signedIn = await _syncService.isLoggedIn();
+      if (!mounted || _cancelVaultRestorePointsLoadRequested) return;
       final currentSession =
           signedIn ? await _syncService.getCurrentDeviceSession() : null;
-      if (!mounted) return;
+      if (!mounted || _cancelVaultRestorePointsLoadRequested) return;
       final isPrimaryDevice = !signedIn || currentSession?.isPrimary == true;
 
       _dismissVaultRestorePointsLoadingDialog();
@@ -837,6 +842,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (_) {
       if (!mounted) return;
       _dismissVaultRestorePointsLoadingDialog();
+      if (_cancelVaultRestorePointsLoadRequested) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Could not load vault restore points right now.'),
@@ -851,9 +857,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           _isLoadingVaultRestorePoints = false;
+          _cancelVaultRestorePointsLoadRequested = false;
         });
       }
     }
+  }
+
+  void _cancelVaultRestorePointsLoading() {
+    if (!mounted || _cancelVaultRestorePointsLoadRequested) return;
+    _cancelVaultRestorePointsLoadRequested = true;
+    _dismissVaultRestorePointsLoadingDialog();
   }
 
   void _dismissVaultRestorePointsLoadingDialog() {
@@ -869,44 +882,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       barrierDismissible: false,
       routeSettings: const RouteSettings(name: 'vault-restore-loading'),
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: _cardColor,
-        content: Row(
-          children: [
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.4,
-                color: _accent,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          backgroundColor: _cardColor,
+          content: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: _accent,
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Loading vault restore points...',
-                    style: TextStyle(
-                      color: _textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Loading vault restore points...',
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Checking local snapshots and syncing recent restore points from the server.',
-                    style: TextStyle(
-                      color: _textSecondary,
-                      fontSize: 12,
-                      height: 1.35,
+                    const SizedBox(height: 4),
+                    Text(
+                      'Checking local snapshots and syncing recent restore points from the server.',
+                      style: TextStyle(
+                        color: _textSecondary,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: _cancelVaultRestorePointsLoading,
+              child: const Text('Cancel'),
             ),
           ],
         ),

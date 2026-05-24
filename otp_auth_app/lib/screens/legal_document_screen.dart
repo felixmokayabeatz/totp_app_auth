@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -61,12 +62,28 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  String _formatReadableDate(DateTime value) {
+    const monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final local = value.toLocal();
+    return '${monthNames[local.month - 1]} ${local.day}, ${local.year}';
+  }
+
   String _formatUpdatedAt(DateTime? value) {
     if (value == null) return 'Last updated unavailable';
-    final local = value.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    return 'Last updated ${local.year}-$month-$day';
+    return 'Last updated ${_formatReadableDate(value)}';
   }
 
   @override
@@ -138,6 +155,10 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                     const SizedBox(height: 16),
                     _LegalHtmlContent(
                       html: document.contentHtml,
+                      baseUrl: document.webUrl.isNotEmpty
+                          ? document.webUrl
+                          : AppConfig.legalDocumentWebUrl(widget.type),
+                      onOpenLink: _openWebVersion,
                       accent: _accent,
                       textPrimary: _textPrimary,
                       textSecondary: _textSecondary,
@@ -207,9 +228,11 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
   }
 }
 
-class _LegalHtmlContent extends StatelessWidget {
+class _LegalHtmlContent extends StatefulWidget {
   const _LegalHtmlContent({
     required this.html,
+    required this.baseUrl,
+    required this.onOpenLink,
     required this.accent,
     required this.textPrimary,
     required this.textSecondary,
@@ -218,6 +241,8 @@ class _LegalHtmlContent extends StatelessWidget {
   });
 
   final String html;
+  final String baseUrl;
+  final Future<void> Function(String url) onOpenLink;
   final Color accent;
   final Color textPrimary;
   final Color textSecondary;
@@ -225,18 +250,46 @@ class _LegalHtmlContent extends StatelessWidget {
   final Color borderColor;
 
   @override
+  State<_LegalHtmlContent> createState() => _LegalHtmlContentState();
+}
+
+class _LegalHtmlContentState extends State<_LegalHtmlContent> {
+  final List<TapGestureRecognizer> _linkRecognizers = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final recognizer in _linkRecognizers) {
+      recognizer.dispose();
+    }
+    _linkRecognizers.clear();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final blocks = _HtmlParser.parseBlocks(html);
+    _disposeRecognizers();
+
+    final blocks = _HtmlParser.parseBlocks(widget.html);
     if (blocks.isEmpty) {
       return Text(
         'This document is currently unavailable.',
-        style: TextStyle(color: textPrimary, fontSize: 14, height: 1.55),
+        style: TextStyle(
+          color: widget.textPrimary,
+          fontSize: 14,
+          height: 1.55,
+        ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [for (final block in blocks) _buildBlock(block)],
+    return SelectionArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [for (final block in blocks) _buildBlock(block)],
+      ),
     );
   }
 
@@ -244,7 +297,7 @@ class _LegalHtmlContent extends StatelessWidget {
     if (block.tag == 'hr') {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Divider(height: 1, color: borderColor),
+        child: Divider(height: 1, color: widget.borderColor),
       );
     }
 
@@ -254,14 +307,14 @@ class _LegalHtmlContent extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: surfaceColor,
+          color: widget.surfaceColor,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: borderColor),
+          border: Border.all(color: widget.borderColor),
         ),
-        child: SelectableText(
+        child: Text(
           _HtmlParser.plainText(block.html),
           style: TextStyle(
-            color: textPrimary,
+            color: widget.textPrimary,
             fontSize: 13,
             height: 1.5,
             fontFamily: 'monospace',
@@ -276,28 +329,28 @@ class _LegalHtmlContent extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         decoration: BoxDecoration(
-          color: surfaceColor,
+          color: widget.surfaceColor,
           borderRadius: BorderRadius.circular(10),
-          border: Border(left: BorderSide(color: accent, width: 3)),
+          border: Border(
+            left: BorderSide(color: widget.accent, width: 3),
+          ),
         ),
-        child: SelectableText.rich(
-          TextSpan(
+        child: RichText(
+          text: TextSpan(
             style: TextStyle(
-              color: textSecondary,
+              color: widget.textSecondary,
               fontSize: 14,
               height: 1.55,
               fontStyle: FontStyle.italic,
             ),
-            children: _HtmlParser.inlineSpans(
+            children: _buildInlineSpans(
               block.html,
               TextStyle(
-                color: textSecondary,
+                color: widget.textSecondary,
                 fontSize: 14,
                 height: 1.55,
                 fontStyle: FontStyle.italic,
               ),
-              accent,
-              textPrimary,
             ),
           ),
         ),
@@ -305,7 +358,11 @@ class _LegalHtmlContent extends StatelessWidget {
     }
 
     if (block.isListItem) {
-      final style = TextStyle(color: textPrimary, fontSize: 14, height: 1.55);
+      final style = TextStyle(
+        color: widget.textPrimary,
+        fontSize: 14,
+        height: 1.55,
+      );
       final marker =
           block.orderedIndex == null ? '-' : '${block.orderedIndex}.';
 
@@ -320,7 +377,7 @@ class _LegalHtmlContent extends StatelessWidget {
                 marker,
                 textAlign: TextAlign.right,
                 style: TextStyle(
-                  color: accent,
+                  color: widget.accent,
                   fontSize: 14,
                   height: 1.55,
                   fontWeight: FontWeight.w700,
@@ -329,15 +386,10 @@ class _LegalHtmlContent extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: SelectableText.rich(
-                TextSpan(
+              child: RichText(
+                text: TextSpan(
                   style: style,
-                  children: _HtmlParser.inlineSpans(
-                    block.html,
-                    style,
-                    accent,
-                    textPrimary,
-                  ),
+                  children: _buildInlineSpans(block.html, style),
                 ),
               ),
             ),
@@ -349,24 +401,74 @@ class _LegalHtmlContent extends StatelessWidget {
     final style = _styleForTag(block.tag);
     return Padding(
       padding: EdgeInsets.only(bottom: _bottomPaddingForTag(block.tag)),
-      child: SelectableText.rich(
-        TextSpan(
+      child: RichText(
+        text: TextSpan(
           style: style,
-          children: _HtmlParser.inlineSpans(
-            block.html,
-            style,
-            accent,
-            textPrimary,
-          ),
+          children: _buildInlineSpans(block.html, style),
         ),
       ),
     );
   }
 
+  List<InlineSpan> _buildInlineSpans(String html, TextStyle baseStyle) {
+    final fragments = _HtmlParser.inlineFragments(
+      html,
+      baseStyle,
+      widget.accent,
+      widget.textPrimary,
+    );
+    return fragments.map<InlineSpan>(_buildInlineSpan).toList();
+  }
+
+  InlineSpan _buildInlineSpan(_InlineTextFragment fragment) {
+    final href = fragment.href?.trim();
+    if (href == null || href.isEmpty) {
+      return TextSpan(text: fragment.text, style: fragment.style);
+    }
+
+    final recognizer = TapGestureRecognizer()
+      ..onTap = () => _openResolvedLink(href);
+    _linkRecognizers.add(recognizer);
+
+    return TextSpan(
+      text: fragment.text,
+      style: fragment.style,
+      recognizer: recognizer,
+      mouseCursor: SystemMouseCursors.click,
+    );
+  }
+
+  Future<void> _openResolvedLink(String href) async {
+    final uri = _resolveLinkUri(href);
+    if (uri == null) return;
+    await widget.onOpenLink(uri.toString());
+  }
+
+  Uri? _resolveLinkUri(String href) {
+    final trimmed = href.trim();
+    if (trimmed.isEmpty) return null;
+
+    final direct = Uri.tryParse(trimmed);
+    if (direct != null && direct.hasScheme) {
+      return direct;
+    }
+
+    if (trimmed.startsWith('//')) {
+      return Uri.tryParse('https:$trimmed');
+    }
+
+    final baseUri = Uri.tryParse(widget.baseUrl);
+    if (baseUri != null) {
+      return baseUri.resolve(trimmed);
+    }
+
+    return direct;
+  }
+
   TextStyle _styleForTag(String tag) {
     if (tag == 'h1') {
       return TextStyle(
-        color: textPrimary,
+        color: widget.textPrimary,
         fontSize: 21,
         height: 1.25,
         fontWeight: FontWeight.w800,
@@ -374,7 +476,7 @@ class _LegalHtmlContent extends StatelessWidget {
     }
     if (tag == 'h2') {
       return TextStyle(
-        color: textPrimary,
+        color: widget.textPrimary,
         fontSize: 18,
         height: 1.3,
         fontWeight: FontWeight.w800,
@@ -382,7 +484,7 @@ class _LegalHtmlContent extends StatelessWidget {
     }
     if (tag == 'h3') {
       return TextStyle(
-        color: textPrimary,
+        color: widget.textPrimary,
         fontSize: 16,
         height: 1.35,
         fontWeight: FontWeight.w700,
@@ -390,13 +492,13 @@ class _LegalHtmlContent extends StatelessWidget {
     }
     if (tag == 'h4' || tag == 'h5' || tag == 'h6') {
       return TextStyle(
-        color: textSecondary,
+        color: widget.textSecondary,
         fontSize: 14,
         height: 1.4,
         fontWeight: FontWeight.w800,
       );
     }
-    return TextStyle(color: textPrimary, fontSize: 14, height: 1.55);
+    return TextStyle(color: widget.textPrimary, fontSize: 14, height: 1.55);
   }
 
   double _bottomPaddingForTag(String tag) {
@@ -415,11 +517,24 @@ class _HtmlBlock {
   bool get isListItem => tag == 'li';
 }
 
+class _InlineTextFragment {
+  const _InlineTextFragment({
+    required this.text,
+    required this.style,
+    this.href,
+  });
+
+  final String text;
+  final TextStyle style;
+  final String? href;
+}
+
 class _InlineStyleFrame {
-  const _InlineStyleFrame(this.tag, this.style);
+  const _InlineStyleFrame(this.tag, this.style, {this.href});
 
   final String tag;
   final TextStyle style;
+  final String? href;
 }
 
 class _HtmlParser {
@@ -485,7 +600,7 @@ class _HtmlParser {
     return blocks;
   }
 
-  static List<TextSpan> inlineSpans(
+  static List<_InlineTextFragment> inlineFragments(
     String html,
     TextStyle baseStyle,
     Color accent,
@@ -494,8 +609,10 @@ class _HtmlParser {
     final normalized = html
         .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
         .replaceAll(RegExp(r'</p>|</div>', caseSensitive: false), '\n');
-    final spans = <TextSpan>[];
-    final stack = <_InlineStyleFrame>[_InlineStyleFrame('root', baseStyle)];
+    final fragments = <_InlineTextFragment>[];
+    final stack = <_InlineStyleFrame>[
+      _InlineStyleFrame('root', baseStyle),
+    ];
     var cursor = 0;
 
     void addText(String text) {
@@ -503,7 +620,13 @@ class _HtmlParser {
           .replaceAll(RegExp(r'[ \t\f\v]+'), ' ')
           .replaceAll(RegExp(r'\n{3,}'), '\n\n');
       if (decoded.isEmpty) return;
-      spans.add(TextSpan(text: decoded, style: stack.last.style));
+      fragments.add(
+        _InlineTextFragment(
+          text: decoded,
+          style: stack.last.style,
+          href: stack.last.href,
+        ),
+      );
     }
 
     for (final match in _tagPattern.allMatches(normalized)) {
@@ -514,7 +637,7 @@ class _HtmlParser {
     }
 
     addText(normalized.substring(cursor));
-    return spans;
+    return fragments;
   }
 
   static String plainText(String html) {
@@ -581,6 +704,8 @@ class _HtmlParser {
     final tag = _normalizeTag(openMatch.group(1) ?? '');
     var nextStyle = stack.last.style;
 
+    String? nextHref = stack.last.href;
+
     if (tag == 'strong') {
       nextStyle = nextStyle.merge(const TextStyle(fontWeight: FontWeight.w800));
     } else if (tag == 'em') {
@@ -590,6 +715,7 @@ class _HtmlParser {
         const TextStyle(decoration: TextDecoration.underline),
       );
     } else if (tag == 'a') {
+      nextHref = _extractHref(rawTag) ?? nextHref;
       nextStyle = nextStyle.merge(
         TextStyle(
           color: accent,
@@ -625,7 +751,7 @@ class _HtmlParser {
       return;
     }
 
-    stack.add(_InlineStyleFrame(tag, nextStyle));
+    stack.add(_InlineStyleFrame(tag, nextStyle, href: nextHref));
   }
 
   static String _normalizeTag(String tag) {
@@ -670,6 +796,15 @@ class _HtmlParser {
     }
 
     return merged;
+  }
+
+  static String? _extractHref(String rawTag) {
+    final hrefMatch = RegExp(
+      r'''href\s*=\s*["']([^"']+)["']''',
+      caseSensitive: false,
+    ).firstMatch(rawTag);
+    final href = _decode(hrefMatch?.group(1) ?? '').trim();
+    return href.isEmpty ? null : href;
   }
 
   static Color? _parseCssColor(String css, Color textPrimary) {
