@@ -62,7 +62,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _syncLockedOnThisDevice = false;
   bool _serverLockdownEnabled = false;
   bool _updateProgressDialogVisible = false;
-  bool _installerLaunchDialogVisible = false;
   String _appVersionLabel = '...';
   String? _profilePhotoUrl;
   Timer? _syncPrefTimer;
@@ -548,15 +547,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     _updateProgressDialogVisible = false;
-    Navigator.of(context, rootNavigator: true).pop();
-  }
-
-  void _dismissInstallingUpdateDialog() {
-    if (!_installerLaunchDialogVisible) {
-      return;
-    }
-
-    _installerLaunchDialogVisible = false;
     Navigator.of(context, rootNavigator: true).pop();
   }
 
@@ -1467,6 +1457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       )) {
                         return;
                       }
+                      if (!context.mounted) return;
                       await Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => ProfileScreen()),
@@ -1772,6 +1763,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
+    if (!mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -1918,6 +1910,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return false;
     }
 
+    if (!mounted) return false;
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.isAuthenticated && await _syncService.isLoggedIn()) {
       return true;
@@ -4622,7 +4615,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<bool?> _showInstallingUpdateDialog() {
-    _installerLaunchDialogVisible = true;
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -4660,9 +4652,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    ).whenComplete(() {
-      _installerLaunchDialogVisible = false;
-    });
+    );
   }
 
   void _showColorPicker(ThemeProvider themeProvider) {

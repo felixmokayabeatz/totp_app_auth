@@ -2808,6 +2808,7 @@ class _HomeScreenState extends State<HomeScreen>
         if (confirmed != true) return;
       }
 
+      if (!mounted) return;
       final unlocked = await _appLockService.authenticateToUnlock(context);
       if (!mounted || !unlocked) return;
 
@@ -2854,6 +2855,7 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (!confirmed) return;
 
+      if (!mounted) return;
       final unlocked = await _appLockService.authenticateToUnlock(context);
       if (!mounted || !unlocked) return;
 
@@ -3223,6 +3225,7 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     await Navigator.push(
       context,
