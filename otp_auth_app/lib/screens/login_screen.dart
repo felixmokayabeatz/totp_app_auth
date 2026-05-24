@@ -1066,6 +1066,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed:
+                              _isLoading ? null : _startPasswordlessLogin,
+                          icon: const Icon(Icons.phonelink_lock_rounded),
+                          label: const Text(
+                            'Use passwordless from primary phone',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         TextButton(
                           onPressed: _isLoading ? null : _recoverPrimaryDevice,
                           child: Text(
