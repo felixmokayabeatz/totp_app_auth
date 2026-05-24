@@ -2,6 +2,7 @@ package com.beatzlock.otp
 
 import android.Manifest
 import android.app.Activity
+import android.app.DownloadManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -138,6 +139,17 @@ class MainActivity : FlutterFragmentActivity() {
                         result.error(
                             "DOWNLOAD_SAVE_FAILED",
                             error.message ?: "Unable to save file to Downloads.",
+                            null
+                        )
+                    }
+                }
+                "openDownloadsFolder" -> {
+                    try {
+                        result.success(openDownloadsFolder())
+                    } catch (error: Exception) {
+                        result.error(
+                            "DOWNLOADS_OPEN_FAILED",
+                            error.message ?: "Unable to open Downloads.",
                             null
                         )
                     }
@@ -289,6 +301,19 @@ class MainActivity : FlutterFragmentActivity() {
             output.write(bytes)
         }
         return file.absolutePath
+    }
+
+    private fun openDownloadsFolder(): Boolean {
+        val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val canHandle = intent.resolveActivity(packageManager) != null
+        if (!canHandle) {
+            return false
+        }
+
+        startActivity(intent)
+        return true
     }
 
     private fun requestNotificationPermission(result: MethodChannel.Result) {

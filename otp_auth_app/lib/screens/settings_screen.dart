@@ -305,6 +305,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
+            action: _isAndroidUpdateDownload
+                ? SnackBarAction(
+                    label: 'Open Downloads',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      unawaited(_openAndroidDownloadsFolder());
+                    },
+                  )
+                : null,
           ),
         );
         return;
@@ -394,6 +403,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     return 'You are using the latest version';
+  }
+
+  Future<void> _openAndroidDownloadsFolder() async {
+    final opened = await _appUpdateService.openAndroidDownloadsFolder();
+    if (!mounted || opened) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _appUpdateService.lastErrorMessage ??
+              'Could not open the Downloads folder.',
+        ),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   Duration _snackDuration(String message) {

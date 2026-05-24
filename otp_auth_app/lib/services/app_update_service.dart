@@ -249,6 +249,26 @@ class AppUpdateService {
     return launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<bool> openAndroidDownloadsFolder() async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+    if (await ServerLockdownService().isEnabled()) {
+      _lastErrorMessage = ServerLockdownService().blockedMessageFor(
+        'open Android downloads',
+      );
+      return false;
+    }
+
+    try {
+      return await _storageChannel.invokeMethod<bool>('openDownloadsFolder') ??
+          false;
+    } catch (_) {
+      _lastErrorMessage = 'Could not open the Downloads folder.';
+      return false;
+    }
+  }
+
   Future<InstalledReleaseNotesResult> getInstalledReleaseNotes() async {
     final platform = currentPlatform;
     final currentAppVersion = await _resolveCurrentAppVersion();
@@ -364,7 +384,7 @@ class AppUpdateService {
         return AppSelfUpdateResult(
           started: true,
           message:
-              'Update APK downloaded to $savedPath. Open it from Downloads to install.',
+              'Update APK downloaded to $savedPath. Open Downloads to install it.',
         );
       }
 

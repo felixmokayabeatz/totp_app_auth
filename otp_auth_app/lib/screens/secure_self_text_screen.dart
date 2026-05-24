@@ -29,36 +29,11 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
     _SecureMessageRetentionOption(24 * 60, '24 hours'),
     _SecureMessageRetentionOption(3 * 24 * 60, '3 days'),
     _SecureMessageRetentionOption(7 * 24 * 60, '7 days'),
+    _SecureMessageRetentionOption(30 * 24 * 60, '1 month'),
     _SecureMessageRetentionOption(
       SecureMessage.foreverRetentionMinutes,
       'Keep forever',
     ),
-  ];
-  static const List<String> _emojiOptions = [
-    '😀',
-    '😂',
-    '🙂',
-    '😉',
-    '😍',
-    '😎',
-    '🤔',
-    '🤝',
-    '🙏',
-    '🔥',
-    '✅',
-    '⭐',
-    '📌',
-    '📣',
-    '📱',
-    '💻',
-    '🧠',
-    '📝',
-    '🔒',
-    '🔐',
-    '⏰',
-    '⚡',
-    '🎉',
-    '🚀',
   ];
 
   final SyncService _syncService = SyncService();
@@ -196,65 +171,79 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
   Future<void> _showRetentionPicker() async {
     final selectedValue = await showModalBottomSheet<int>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: _cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Choose delete timer',
-                  style: TextStyle(
-                    color: _textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
+          child: FractionallySizedBox(
+            heightFactor: 0.82,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Choose delete timer',
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'New secure self texts will use this timer until you change it again.',
-                  style: TextStyle(color: _textSecondary, height: 1.4),
-                ),
-                const SizedBox(height: 14),
-                for (final option in _retentionOptions)
-                  ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    tileColor: option.minutes == _selectedRetentionMinutes
-                        ? _accent.withValues(alpha: 0.12)
-                        : Colors.transparent,
-                    leading: Icon(
-                      option.minutes == SecureMessage.foreverRetentionMinutes
-                          ? Icons.all_inbox_rounded
-                          : Icons.timer_outlined,
-                      color: _accent,
-                    ),
-                    title: Text(
-                      option.label,
-                      style: TextStyle(
-                        color: _textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Text(
-                      option.minutes == SecureMessage.foreverRetentionMinutes
-                          ? 'Only manual delete removes it.'
-                          : 'Deletes automatically after ${option.label.toLowerCase()}.',
-                      style: TextStyle(color: _textSecondary),
-                    ),
-                    trailing: option.minutes == _selectedRetentionMinutes
-                        ? Icon(Icons.check_circle, color: _accent)
-                        : null,
-                    onTap: () => Navigator.pop(sheetContext, option.minutes),
+                  const SizedBox(height: 8),
+                  Text(
+                    'New secure self texts will use this timer until you change it again.',
+                    style: TextStyle(color: _textSecondary, height: 1.4),
                   ),
-              ],
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        for (final option in _retentionOptions)
+                          ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            tileColor:
+                                option.minutes == _selectedRetentionMinutes
+                                    ? _accent.withValues(alpha: 0.12)
+                                    : Colors.transparent,
+                            leading: Icon(
+                              option.minutes ==
+                                      SecureMessage.foreverRetentionMinutes
+                                  ? Icons.all_inbox_rounded
+                                  : Icons.timer_outlined,
+                              color: _accent,
+                            ),
+                            title: Text(
+                              option.label,
+                              style: TextStyle(
+                                color: _textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: Text(
+                              option.minutes ==
+                                      SecureMessage.foreverRetentionMinutes
+                                  ? 'Only manual delete removes it.'
+                                  : 'Deletes automatically after ${option.label.toLowerCase()}.',
+                              style: TextStyle(color: _textSecondary),
+                            ),
+                            trailing:
+                                option.minutes == _selectedRetentionMinutes
+                                    ? Icon(Icons.check_circle, color: _accent)
+                                    : null,
+                            onTap: () =>
+                                Navigator.pop(sheetContext, option.minutes),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -265,80 +254,27 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
     await _setRetentionPreference(selectedValue);
   }
 
-  void _insertEmoji(String emoji) {
-    final selection = _composerController.selection;
-    final text = _composerController.text;
-    final start = selection.start >= 0 ? selection.start : text.length;
-    final end = selection.end >= 0 ? selection.end : text.length;
-    final newText = text.replaceRange(start, end, emoji);
-    final newOffset = start + emoji.length;
-    _composerController.value = TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: newOffset),
-    );
-  }
+  KeyEventResult _handleComposerKeyEvent(FocusNode node, KeyEvent event) {
+    final isEnterKey = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (!isEnterKey || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
 
-  Future<void> _showEmojiPicker() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: _cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Add emoji',
-                  style: TextStyle(
-                    color: _textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  itemCount: _emojiOptions.length,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 6,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                  ),
-                  itemBuilder: (context, index) {
-                    final emoji = _emojiOptions[index];
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () {
-                        _insertEmoji(emoji);
-                        Navigator.pop(sheetContext);
-                      },
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: _accent.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 24),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed ||
+        keyboard.isControlPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed) {
+      return KeyEventResult.ignored;
+    }
+
+    if (_isSending) {
+      return KeyEventResult.handled;
+    }
+
+    unawaited(_sendMessage());
+    return KeyEventResult.handled;
   }
 
   GlobalKey _messageKeyFor(String messageId) {
@@ -730,14 +666,11 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                     runSpacing: 8,
                     children: [
                       OutlinedButton.icon(
-                        onPressed: _showEmojiPicker,
-                        icon: const Icon(Icons.emoji_emotions_outlined),
-                        label: const Text('Emoji'),
-                      ),
-                      OutlinedButton.icon(
                         onPressed: _showRetentionPicker,
                         icon: const Icon(Icons.timer_outlined),
-                        label: Text(_retentionLabel(_selectedRetentionMinutes)),
+                        label: Text(
+                          'Delete: ${_retentionLabel(_selectedRetentionMinutes)}',
+                        ),
                       ),
                     ],
                   ),
@@ -745,15 +678,20 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextField(
-                          controller: _composerController,
-                          minLines: 1,
-                          maxLines: 5,
-                          decoration: InputDecoration(
-                            hintText: 'Type a secure message to yourself',
-                            helperText:
-                                _retentionCaption(_selectedRetentionMinutes),
-                            border: const OutlineInputBorder(),
+                        child: Focus(
+                          onKeyEvent: _handleComposerKeyEvent,
+                          child: TextField(
+                            controller: _composerController,
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendMessage(),
+                            decoration: InputDecoration(
+                              hintText: 'Type a secure message to yourself',
+                              helperText:
+                                  _retentionCaption(_selectedRetentionMinutes),
+                              border: const OutlineInputBorder(),
+                            ),
                           ),
                         ),
                       ),
