@@ -1,4 +1,4 @@
-v1.7.4 (Build 42)
+v1.7.5 (Build 42)
 
 What's New
 - Fixed secure self texts sent from desktop/laptop devices so they sync through properly to your phone and tablet too.
