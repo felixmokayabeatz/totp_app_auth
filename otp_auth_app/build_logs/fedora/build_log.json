@@ -40,5 +40,19 @@
     "build_number": "40",
     "artifact_version": "1.7.3_40",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 4,
+    "platform": "fedora",
+    "artifact_type": "rpm",
+    "file": "beatzlock_1.7.7_44_x86_64.rpm",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/final_builds/fedora/1.7.7_44/beatzlock_1.7.7_44_x86_64.rpm",
+    "relative_path": "final_builds/fedora/1.7.7_44/beatzlock_1.7.7_44_x86_64.rpm",
+    "is_directory": false,
+    "timestamp": "2026-05-25T11:56:42",
+    "version": "1.7.7+44",
+    "build_number": "44",
+    "artifact_version": "1.7.7_44",
+    "host_platform": "Linux"
   }
 ]
