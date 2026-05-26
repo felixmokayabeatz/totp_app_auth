@@ -3243,22 +3243,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (confirm != true) return;
 
+      if (!mounted) return;
+      final unlocked = await _appLockService.authenticateToUnlock(context);
+      if (!mounted || !unlocked) return;
+
       await _otpVaultSnapshotService.captureSnapshot(reason: 'pre_delete_all');
       await _syncService.deleteAllLocalOnly();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'All accounts removed from this device. Sync to restore.',
-          ),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text(
+              'All accounts removed from this device. Sync to restore.',
+            ),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
       return;
     }
 
