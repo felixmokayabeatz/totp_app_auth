@@ -10,7 +10,7 @@ import os
 
 # Your details
 USERNAME = "felixmokayabeatz"
-EMAIL = "130485404+felixmokayabeatz@users.noreply.github.com"
+EMAIL = "felixmokayabeatz.git@proton.me"
 
 def run_git_command(args):
     """Run a git command and return output"""
