@@ -33,8 +33,15 @@ if DEBUG:
     ALLOWED_HOSTS = ['*']
 else:
     allowed_hosts = _split_csv_env('ALLOWED_HOSTS', 'DJANGO_ALLOWED_HOSTS')
+    # '153.75.247.17' accepts requests that reach the server by bare IP instead of
+    # the domain; without it those hit DisallowedHost before any view runs.
     ALLOWED_HOSTS = list(dict.fromkeys(
-        allowed_hosts + ['localhost', '127.0.0.1', 'api.felixmokayabeatz.online']
+        allowed_hosts + [
+            'localhost',
+            '127.0.0.1',
+            'api.felixmokayabeatz.online',
+            '153.75.247.17',
+        ]
     ))
     
 

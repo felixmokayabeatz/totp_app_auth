@@ -258,7 +258,7 @@ Group=felixmokayabeatz
 WorkingDirectory=/home/felixmokayabeatz/totp_app/otp_backend
 Environment="PATH=/home/felixmokayabeatz/totp_app/totp_app_venv/bin"
 Environment="DJANGO_SETTINGS_MODULE=otp_backend.settings"
-Environment="DJANGO_ALLOWED_HOSTS=api.felixmokayabeatz.online,localhost,127.0.0.1"
+Environment="DJANGO_ALLOWED_HOSTS=api.felixmokayabeatz.online,localhost,127.0.0.1,153.75.247.17"
 ExecStart=/home/felixmokayabeatz/totp_app/totp_app_venv/bin/gunicorn otp_backend.wsgi:application --bind 127.0.0.1:8002 --workers 3 --timeout 120 --access-logfile /home/felixmokayabeatz/totp_app/logs/gunicorn_access.log --error-logfile /home/felixmokayabeatz/totp_app/logs/gunicorn_error.log
 Restart=always
 RestartSec=10
