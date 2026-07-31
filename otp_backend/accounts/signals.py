@@ -10,18 +10,18 @@ def debug_print(*args, **kwargs):
         print(*args, **kwargs)
 
 @receiver(post_save, sender=User)
-def create_user_profile(sender, instance, created, **kwargs):
-    """Create a UserProfile for every new user"""
+def ensure_user_profile(sender, instance, created, **kwargs):
+    """Give every user exactly one UserProfile.
+
+    Deliberately does not re-save an existing profile: the old handler wrote the
+    profile row on every single user.save(), which cost an extra UPDATE per save
+    and made UserProfile.updated_at track user saves instead of profile edits.
+    """
     if created:
         UserProfile.objects.create(user=instance)
         debug_print(f"Profile created for user: {instance.username}")
+        return
 
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
-    """Save UserProfile when user is saved"""
-    if hasattr(instance, 'profile'):
-        instance.profile.save()
-    else:
-        # If profile doesn't exist, create it
-        UserProfile.objects.create(user=instance)
+    _, profile_created = UserProfile.objects.get_or_create(user=instance)
+    if profile_created:
         debug_print(f"Profile created for existing user: {instance.username}")

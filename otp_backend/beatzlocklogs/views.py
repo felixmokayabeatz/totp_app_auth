@@ -8,7 +8,7 @@ from django.http import Http404
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
-from otp_backend.logging_config import get_log_files_for_admin
+from otp_backend.logging_config import LOGS_DIR, get_log_files_for_admin
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +36,16 @@ def _group_logs(log_files: list[dict]) -> list[dict]:
 
 
 def _safe_log_path(log_file: str) -> Path:
-    base_dir = Path(settings.BASE_DIR).resolve()
-    log_path = (base_dir / log_file).resolve()
+    # Paths arrive relative to BASE_DIR (e.g. "logs/2026/07/errors_2026-07-23.log"),
+    # but only files the viewer actually lists may be served. Anchoring on BASE_DIR
+    # alone would expose settings.py, the database and .env to any staff account.
+    logs_dir = Path(LOGS_DIR).resolve()
+    log_path = (Path(settings.BASE_DIR).resolve() / log_file).resolve()
 
-    if base_dir not in log_path.parents and log_path != base_dir:
+    if logs_dir not in log_path.parents:
         raise Http404("Invalid log path")
 
-    if not log_path.exists() or not log_path.is_file():
+    if not log_path.is_file() or not log_path.match("errors_*.log"):
         raise Http404(f"Log file not found: {log_file}")
 
     return log_path

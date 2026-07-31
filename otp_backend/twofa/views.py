@@ -20,6 +20,7 @@ from api.device_sessions import attach_session_to_refresh_token
 from api.models import BackupCodeSet
 from accounts.identity import (
     authenticate_login_identifier,
+    find_user_by_email,
     find_user_by_login_identifier,
 )
 from .models import EmailVerification
@@ -156,7 +157,7 @@ def send_2fa_code(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[2FA] Email sent successfully in {elapsed_time:.2f} seconds")
         
-        logger.info(f'2FA code sent successfully - User: {user.username}, Email: {user.email}, Code: {verification.code}')
+        logger.info(f'2FA code sent successfully - User: {user.username}, Email: {user.email}')
         
         return Response({
             'success': True,
@@ -223,7 +224,7 @@ def verify_2fa_code(request):
         
         if verification.code != code:
             debug_print(f"[2FA] Code mismatch - Expected: {verification.code}, Got: {code}")
-            logger.warning(f"Invalid code attempt for user: {user.username} - Expected: {verification.code}, Got: {code}")
+            logger.warning(f"Invalid code attempt for user: {user.username}")
             return Response({'success': False, 'error': 'Invalid code'}, status=400)
         
         debug_print(f"[2FA] Code matches, checking validity...")
@@ -280,9 +281,11 @@ def send_password_reset_code(request):
     
     try:
         debug_print(f"[PASSWORD RESET] Looking up user by email: {email}")
-        user = User.objects.get(email__iexact=email)
+        user = find_user_by_email(email)
+        if user is None:
+            raise User.DoesNotExist
         debug_print(f"[PASSWORD RESET] User found: {user.username} (ID: {user.id})")
-        
+
         # Delete old codes
         debug_print(f"[PASSWORD RESET] Deleting old unused reset codes")
         deleted_count = EmailVerification.objects.filter(user=user, is_used=False).delete()[0]
@@ -309,7 +312,7 @@ def send_password_reset_code(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[PASSWORD RESET] Email sent successfully in {elapsed_time:.2f} seconds")
         
-        logger.info(f'Password reset code sent - User: {user.username}, Email: {user.email}, Code: {verification.code}')
+        logger.info(f'Password reset code sent - User: {user.username}, Email: {user.email}')
         
         return Response({
             'success': True,
@@ -362,9 +365,11 @@ def reset_password(request):
     
     try:
         debug_print(f"[PASSWORD RESET] Looking up user by email: {email}")
-        user = User.objects.get(email__iexact=email)
+        user = find_user_by_email(email)
+        if user is None:
+            raise User.DoesNotExist
         debug_print(f"[PASSWORD RESET] User found: {user.username} (ID: {user.id})")
-        
+
         # Get the LATEST unused reset code
         debug_print(f"[PASSWORD RESET] Fetching latest unused reset code")
         verification = EmailVerification.objects.filter(
@@ -534,7 +539,9 @@ def reset_password_with_recovery_code(request):
         )
 
     try:
-        user = User.objects.get(email__iexact=email)
+        user = find_user_by_email(email)
+        if user is None:
+            raise User.DoesNotExist
         consumed, result = _consume_recovery_code(user, recovery_code)
         if not consumed:
             return Response({'success': False, 'error': result}, status=400)

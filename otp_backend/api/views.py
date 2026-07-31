@@ -12,6 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
+from django.db import connection
 from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from django.conf import settings
@@ -204,9 +205,15 @@ def get_request_pdf_theme(request) -> str:
     return 'light'
 
 
-def get_current_active_device_session(request):
+def get_request_session_id(request) -> str:
+    """Session id carried by the JWT, or '' when the request has no token payload."""
     auth = getattr(request, 'auth', None)
     session_id = auth.get('session_id') if hasattr(auth, 'get') else None
+    return str(session_id) if session_id else ''
+
+
+def get_current_active_device_session(request):
+    session_id = get_request_session_id(request)
     device_id = get_request_device_id(request)
     device_fingerprint = get_request_device_fingerprint(request)
 
@@ -2047,6 +2054,24 @@ class BackupCodeGenerationRequestViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'success': True})
 
 
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def health(request):
+    """Unauthenticated liveness probe for deploy scripts and uptime checks.
+
+    The DRF router root at /api/ answers 401, so it cannot tell a healthy
+    deployment apart from a broken one.
+    """
+    try:
+        connection.ensure_connection()
+    except Exception:
+        logger.exception('Health check could not reach the database.')
+        return Response({'status': 'degraded', 'database': False}, status=503)
+
+    return Response({'status': 'ok', 'database': True})
+
+
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([AllowAny])
@@ -2075,7 +2100,7 @@ def receive_external_review_reply(request):
         return Response({'error': 'admin_reply is required'}, status=status.HTTP_400_BAD_REQUEST)
 
     user = None
-    if user_id:
+    if user_id.isdigit():
         user = User.objects.filter(id=user_id).first()
     if user is None and email:
         user = User.objects.filter(email__iexact=email).first()
@@ -2175,17 +2200,20 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
     def list(self, request, *args, **kwargs):
         current_session = self._ensure_current_session()
         ensure_primary_session(request.user)
-        queryset = self.get_queryset()[:25]
+        base_queryset = self.get_queryset()
+        # Count every active device; the slice below only caps what is serialized.
+        active_count = base_queryset.count()
+        queryset = base_queryset[:25]
         create_daily_active_devices_notification(
             request.user,
-            active_count=queryset.count(),
+            active_count=active_count,
         )
         serializer = self.get_serializer(
             queryset,
             many=True,
             context={
                 **self.get_serializer_context(),
-                'current_session_id': str(current_session.id) if current_session else request.auth.get('session_id'),
+                'current_session_id': str(current_session.id) if current_session else get_request_session_id(request),
                 'current_device_id': get_request_device_id(request),
                 'current_device_fingerprint': get_request_device_fingerprint(request),
             },
@@ -2245,7 +2273,7 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
     def revoke(self, request, pk=None):
         current_session = self._ensure_current_session()
         session = self.get_object()
-        current_session_id = str(current_session.id) if current_session else str(request.auth.get('session_id', ''))
+        current_session_id = str(current_session.id) if current_session else get_request_session_id(request)
 
         if current_session_id and str(session.id) == current_session_id:
             return Response(
@@ -2287,7 +2315,7 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         if current_session is not None:
             queryset = queryset.exclude(id=current_session.id)
         else:
-            current_session_id = request.auth.get('session_id')
+            current_session_id = get_request_session_id(request)
             current_device_id = get_request_device_id(request)
             if current_session_id:
                 queryset = queryset.exclude(id=current_session_id)
@@ -2381,20 +2409,23 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({
             'success': True,
             'active_count': active_count,
-            'current_session_id': str(current_session.id) if current_session else request.auth.get('session_id'),
+            # Keep this null rather than '' when there is no session to report.
+            'current_session_id': str(current_session.id) if current_session else (get_request_session_id(request) or None),
         })
 
     @action(detail=False, methods=['post'], url_path='logout-current')
     def logout_current(self, request):
         current_session = self._ensure_current_session()
         if current_session is None:
-            session_id = request.auth.get('session_id')
+            session_id = get_request_session_id(request)
+            # Filtering a UUID primary key on '' would raise, so only look it up
+            # when the token actually carried a session id.
             current_session = DeviceSession.objects.filter(
                 id=session_id,
                 user=request.user,
                 is_active=True,
                 revoked_at__isnull=True,
-            ).first()
+            ).first() if session_id else None
 
         if current_session is not None:
             current_session.is_active = False
@@ -2468,7 +2499,7 @@ def send_delete_otp(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[DELETE OTP] Email sent successfully in {elapsed_time:.2f} seconds")
         
-        logger.info(f"Delete OTP sent successfully - User: {user.username}, Code: {code}")
+        logger.info(f"Delete OTP sent successfully - User: {user.username}")
         
         return Response({'success': True, 'message': f'Verification code sent to {user.email}'})
         
@@ -2513,7 +2544,7 @@ def verify_delete_otp(request):
         
         if not otp_obj:
             debug_print(f"[DELETE OTP] No valid OTP found for code: {code}")
-            logger.warning(f"Invalid delete OTP attempt - User: {user.username}, Code: {code}")
+            logger.warning(f"Invalid delete OTP attempt - User: {user.username}")
             return Response({'success': False, 'error': 'Invalid or expired code'}, status=400)
         
         debug_print(f"[DELETE OTP] Found OTP - ID: {otp_obj.id}, Created: {otp_obj.created_at}")

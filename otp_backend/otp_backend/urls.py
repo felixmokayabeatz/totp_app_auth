@@ -21,6 +21,7 @@ from api.views import (
     get_sync_preference,
     download_backup_codes,
     get_backup_code_status,
+    health,
     receive_external_review_reply,
 )
 from api.token_views import DeviceSessionTokenRefreshView
@@ -68,6 +69,7 @@ urlpatterns = [
     path('', go_to_main_site, name='go_to_main_site'),
     path('favicon.ico', RedirectView.as_view(url='/static/favicon.ico')),
     # API URLs
+    path('api/health/', health, name='health'),
     path('api/', include(router.urls)),
     path('api/token/refresh/', DeviceSessionTokenRefreshView.as_view(), name='token_refresh'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),

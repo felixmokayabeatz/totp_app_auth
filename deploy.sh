@@ -19,6 +19,9 @@ EMAIL="felixmokaya675@gmail.com"
 NGINX_SOURCE="$BACKEND_PATH/nginx/beatzlock.conf"
 NGINX_TARGET="/etc/nginx/sites-available/beatzlock"
 NGINX_ENABLED="/etc/nginx/sites-enabled/beatzlock"
+# requirements.txt lives beside settings.py, inside the Django config package.
+REQUIREMENTS_FILE="$BACKEND_PATH/otp_backend/requirements.txt"
+HEALTH_URL="http://127.0.0.1:$PORT/api/health/"
 
 # Superuser credentials
 SUPERUSER_USERNAME="felixmokayabeatz"
@@ -49,16 +52,27 @@ show_menu() {
     echo -n "Choose option: "
 }
 
-# Function to check if port is in use
+# Function to check if port is in use.
+# A listener on $PORT is the healthy state here - that is gunicorn serving Django.
 check_port() {
     if sudo netstat -tlnp | grep -q ":$PORT "; then
-        echo -e "${YELLOW}⚠ Port $PORT is in use${NC}"
+        echo -e "${GREEN}✓ Port $PORT has a listener (expected: gunicorn)${NC}"
         sudo netstat -tlnp | grep ":$PORT "
         return 0
     else
-        echo -e "${GREEN}✓ Port $PORT is free${NC}"
+        echo -e "${RED}✗ Nothing is listening on port $PORT${NC}"
         return 1
     fi
+}
+
+# Install python dependencies from the real requirements path.
+install_requirements() {
+    if [ ! -f "$REQUIREMENTS_FILE" ]; then
+        echo -e "${RED}✗ Requirements file not found at $REQUIREMENTS_FILE${NC}"
+        return 1
+    fi
+
+    pip install -r "$REQUIREMENTS_FILE" "$@"
 }
 
 # Function to install SSL certificate
@@ -133,7 +147,9 @@ check_services() {
     
     echo ""
     echo -e "${BLUE}SSL Certificate ($DOMAIN):${NC}"
-    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+    # /etc/letsencrypt/live is root-only, so this test must run under sudo or it
+    # reports "not installed" for a certificate that is actually present.
+    if sudo test -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
         echo -e "${GREEN}✓ Installed${NC}"
         EXPIRY=$(sudo certbot certificates 2>/dev/null | grep -A 5 "$DOMAIN" | grep "Expiry Date" | head -1 | sed 's/.*Expiry Date: //')
         if [ ! -z "$EXPIRY" ]; then
@@ -149,11 +165,26 @@ check_services() {
     
     echo ""
     echo -e "${BLUE}API Endpoint Test:${NC}"
-    if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$PORT/api/ | grep -q "200\|301\|302"; then
-        echo -e "${GREEN}✓ API responding on port $PORT${NC}"
-    else
-        echo -e "${RED}✗ API not responding${NC}"
-    fi
+    # /api/ is the DRF router root and always answers 401, so it can never prove
+    # the app is healthy. /api/health/ is unauthenticated and also checks the DB.
+    HEALTH_CODE=$(curl -s -m 10 -o /dev/null -w "%{http_code}" "$HEALTH_URL")
+    case "$HEALTH_CODE" in
+        200)
+            echo -e "${GREEN}✓ API healthy on port $PORT (200 from /api/health/)${NC}"
+            ;;
+        503)
+            echo -e "${RED}✗ API is up but the database is unreachable (503)${NC}"
+            ;;
+        000)
+            echo -e "${RED}✗ API not responding (no HTTP reply on port $PORT)${NC}"
+            ;;
+        404)
+            echo -e "${YELLOW}⚠ /api/health/ returned 404 - deploy the backend commit that adds it${NC}"
+            ;;
+        *)
+            echo -e "${RED}✗ API returned unexpected status $HEALTH_CODE${NC}"
+            ;;
+    esac
 }
 
 # Function to create Django superuser
@@ -164,8 +195,11 @@ create_superuser() {
     cd $BACKEND_PATH
     
     echo -e "${BLUE}Checking if superuser exists...${NC}"
-    USER_EXISTS=$(python manage.py shell -c "from django.contrib.auth.models import User; print(User.objects.filter(username='$SUPERUSER_USERNAME').exists())" 2>/dev/null)
-    
+    # settings.py prints a debug banner and manage.py shell prints an
+    # "objects imported" line, both on stdout, so the raw capture is never a bare
+    # True/False. Tag the answer and grep it back out.
+    USER_EXISTS=$(python manage.py shell -c "from django.contrib.auth.models import User; print('BEATZLOCKSU|%s' % User.objects.filter(username='$SUPERUSER_USERNAME').exists())" 2>/dev/null | grep '^BEATZLOCKSU|' | tail -n 1 | cut -d'|' -f2 | tr -d '[:space:]')
+
     if [ "$USER_EXISTS" = "True" ]; then
         echo -e "${YELLOW}⚠ Superuser '$SUPERUSER_USERNAME' already exists.${NC}"
         echo -n "Do you want to delete and recreate? (y/N): "
@@ -200,7 +234,8 @@ EOF
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Superuser created successfully!${NC}"
         echo -e "${YELLOW}Login at: https://$DOMAIN/beatzlock_admin/${NC}"
-        echo -e "  Username: ${GREEN}$SUPERUSER_USERNAME${NC}"
+        # The admin login form takes an email address, matching the app's own login.
+        echo -e "  Email: ${GREEN}$SUPERUSER_EMAIL${NC}"
         echo -e "  Password: ${GREEN}$SUPERUSER_PASSWORD${NC}"
     else
         echo -e "${RED}✗ Failed to create superuser${NC}"
@@ -285,7 +320,7 @@ full_deploy() {
     source $VENV_PATH/bin/activate
     python3 -m ensurepip --upgrade
     pip install --upgrade pip
-    pip install -r $BACKEND_PATH/requirements.txt gunicorn psycopg2-binary
+    install_requirements gunicorn psycopg2-binary || return 1
     
     echo -e "${YELLOW}[6/9] Running migrations...${NC}"
     cd $BACKEND_PATH
@@ -342,7 +377,7 @@ quick_deploy() {
     
     echo -e "${BLUE}Updating dependencies...${NC}"
     source $VENV_PATH/bin/activate
-    pip install -r $BACKEND_PATH/requirements.txt
+    install_requirements || return 1
     
     echo -e "${BLUE}Running migrations...${NC}"
     cd $BACKEND_PATH
@@ -426,17 +461,35 @@ backup_db() {
     BACKUP_FILE="$BACKUP_DIR/totp_db_$BACKUP_STAMP.sqlite3"
     MEDIA_BACKUP_FILE="$BACKUP_DIR/totp_media_$BACKUP_STAMP.tar.gz"
     mkdir -p "$BACKUP_DIR"
-    if [ -f "$BACKEND_PATH/db.sqlite3" ]; then
-        sqlite3 $BACKEND_PATH/db.sqlite3 ".backup $BACKUP_FILE"
-        echo -e "${GREEN}✓ Database backed up to: $BACKUP_FILE${NC}"
+
+    # Ask Django where the live database actually is. Assuming
+    # $BACKEND_PATH/db.sqlite3 silently backed up nothing, because settings.py
+    # points DATABASES['default']['NAME'] somewhere else entirely.
+    source $VENV_PATH/bin/activate
+    cd $BACKEND_PATH
+    DB_INFO=$(python manage.py shell -c "from django.conf import settings; d = settings.DATABASES['default']; print('BEATZLOCKDB|%s|%s' % (d['ENGINE'], d['NAME']))" 2>/dev/null | grep '^BEATZLOCKDB|' | tail -n 1)
+    DB_ENGINE=$(printf '%s' "$DB_INFO" | cut -d'|' -f2)
+    DB_PATH=$(printf '%s' "$DB_INFO" | cut -d'|' -f3)
+
+    if [ -z "$DB_INFO" ]; then
+        echo -e "${RED}✗ Could not read the database path from Django settings${NC}"
+    elif [ "$DB_ENGINE" != "django.db.backends.sqlite3" ]; then
+        echo -e "${YELLOW}! Database engine is $DB_ENGINE - use pg_dump instead, sqlite backup skipped${NC}"
+    elif [ -f "$DB_PATH" ]; then
+        echo -e "${BLUE}Live database: $DB_PATH${NC}"
+        if sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"; then
+            echo -e "${GREEN}✓ Database backed up to: $BACKUP_FILE${NC}"
+        else
+            echo -e "${RED}✗ sqlite3 backup failed${NC}"
+        fi
     else
-        echo -e "${RED}✗ Database file not found${NC}"
+        echo -e "${RED}✗ Database file not found at: $DB_PATH${NC}"
     fi
 
     if [ -d "$BACKEND_PATH/media" ]; then
         tar -czf "$MEDIA_BACKUP_FILE" -C "$BACKEND_PATH/media" . 2>/dev/null || true
         if [ -f "$MEDIA_BACKUP_FILE" ]; then
-            echo -e "${GREEN}âœ“ Media backed up to: $MEDIA_BACKUP_FILE${NC}"
+            echo -e "${GREEN}✓ Media backed up to: $MEDIA_BACKUP_FILE${NC}"
         else
             echo -e "${YELLOW}! Media archive could not be created${NC}"
         fi
@@ -450,7 +503,7 @@ backup_db() {
         ls -t totp_media_* 2>/dev/null | tail -n +2 | xargs rm -f 2>/dev/null || true
     )
 
-    echo -e "${GREEN}âœ“ Backup directory: $BACKUP_DIR${NC}"
+    echo -e "${GREEN}✓ Backup directory: $BACKUP_DIR${NC}"
 }
 
 # Main loop
