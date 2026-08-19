@@ -15,7 +15,10 @@ from pathlib import Path
 
 # ==================== CONFIGURATION ====================
 SCRIPT_DIR = Path(__file__).resolve().parent
-WORKSPACE_DIR = SCRIPT_DIR.parent
+# Everything this script reads or writes -- inno_script/, vc_redist/, the build
+# outputs and the scratch package dirs -- lives inside otp_auth_app/, so the repo
+# root holds nothing but the three projects.
+WORKSPACE_DIR = SCRIPT_DIR
 PROJECT_DIR = str(SCRIPT_DIR)
 FINAL_BUILDS_DIR = WORKSPACE_DIR / "final_builds"
 BUILD_LOGS_DIR = SCRIPT_DIR / "build_logs"

@@ -89,21 +89,25 @@ beatzlock_*_amd64.deb
 !otp_auth_app/build_logs/**/*.json
 
 #=========================================================================
-# Django projects in this repo: the downloads site (./) and the
-# authenticator API (./otp_backend/)
+# The three projects in this repo, each self-contained:
+#   beatzlock_app/   downloads site, apps.felixmokayabeatz.online
+#   otp_backend/     authenticator API, api.felixmokayabeatz.online
+#   otp_auth_app/    Flutter client
 #=========================================================================
 
-# Both .env files carry live database and email credentials. Neither is ever
-# committed -- deploy/deploy.sh reads them from the server's own copy.
-.env
+# Both Django projects keep their own .env of live database and email
+# credentials. Neither is ever committed -- each project's deploy/deploy.sh
+# reads it from the server's own copy.
+beatzlock_app/.env
 otp_backend/.env
 
-# Virtualenvs. deploy/deploy.sh builds beatzlock_v_env and
-# otp_backend/totp_v_env, so the server's directory names match the local ones.
+# Virtualenvs. beatzlock_app/deploy/deploy.sh builds beatzlock_app/beatzlock_v_env
+# and otp_backend/deploy/deploy.sh builds otp_backend/totp_v_env, so the
+# server's directory names match the local ones.
 .venv/
 *_v_env/
 
-# collectstatic output and the pg_dump files deploy.sh writes.
+# collectstatic output and the pg_dump files the deploy scripts write.
 staticfiles/
 backups/
 

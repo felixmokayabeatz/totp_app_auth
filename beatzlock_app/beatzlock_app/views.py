@@ -17,7 +17,9 @@ import json
 import hashlib
 import re
 
-GEOIP_PATH = os.path.join(settings.BASE_DIR, 'data', 'GeoLite2-Country.mmdb')
+# Shipped with this app, not with the project, so the app folder can be moved
+# or copied without leaving its country database behind.
+GEOIP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'GeoLite2-Country.mmdb')
 PLATFORM_ORDER = ['windows', 'android', 'linux', 'macos', 'ios']
 LINUX_DISTRO_ICONS = {
     'ubuntu': 'fab fa-ubuntu',

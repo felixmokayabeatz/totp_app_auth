@@ -28,10 +28,11 @@ ARTIFACT_LABELS = {
 
 
 def _default_build_logs_dir() -> Path:
-    # The Flutter client is a sibling directory inside this repo now, so the
-    # logs it writes sit right next to this project rather than two levels up
-    # in a separate totp_app checkout.
-    return Path(settings.BASE_DIR).resolve() / "otp_auth_app" / "build_logs"
+    # The Flutter client is this project's sibling in the repo -- BASE_DIR is
+    # beatzlock_app/, so its build logs are one level up and across, not below.
+    # BEATZLOCK_BUILD_LOGS_DIR in .env overrides this and is what the server
+    # actually uses.
+    return Path(settings.BASE_DIR).resolve().parent / "otp_auth_app" / "build_logs"
 
 
 def _build_logs_dir() -> Path:

@@ -1,44 +1,48 @@
 # BeatzLock
 
-Everything BeatzLock in one repo: the authenticator API, the Flutter client
-that talks to it, and the site people download the client from.
+Everything BeatzLock in one repo, as three projects that share nothing but the
+checkout:
 
 ```text
 beatzlock_project/
-├── config/  beatzlock_app/  console/   the downloads & ratings site (Django)
-├── otp_backend/                        the authenticator API (Django)
-├── otp_auth_app/                       the Flutter client
-├── deploy/                             deploy script + service/nginx templates
-├── inno_script/  vc_redist/            Windows installer inputs
-├── release_notes/  tos_privacy/        content published by the downloads site
-└── build.py  github.py                 native build + release helpers
+├── beatzlock_app/     downloads & ratings site   (Django)
+├── otp_backend/       authenticator API          (Django)
+├── otp_auth_app/      Flutter client + the native build tooling
+├── build.py           wrapper that runs otp_auth_app/build.py
+└── github.py          git identity helper
 ```
+
+That is the whole top level. Each project owns everything it needs — its
+`.env`, `requirements.txt`, virtualenv, static files, templates, nginx config
+and its own `deploy/deploy.sh` — so working on one never means reading the
+other, and neither deploy script knows the other exists.
 
 ## The two Django projects
 
-They are separate projects. Separate settings, separate databases, separate
-`auth_user` tables, separate subdomains, separate systemd units — deployed
-independently from one script.
+Separate settings, separate databases, separate `auth_user` tables, separate
+subdomains, separate systemd units, separate deploy scripts.
 
 | | Downloads site | Authenticator API |
 |---|---|---|
-| Where | `./` | `./otp_backend/` |
+| Where | `./beatzlock_app/` | `./otp_backend/` |
+| Deploy | `./beatzlock_app/deploy/deploy.sh` | `./otp_backend/deploy/deploy.sh` |
 | Subdomain | `apps.felixmokayabeatz.online` | `api.felixmokayabeatz.online` |
 | Database | `felixmokayabeatz_beatzlock_db` | `felixmokayabeatz_totp_db` |
 | DB role | `Felix_Apps_Administrator` | `Felix_Apps_Administrator` |
-| Settings | `config/settings.py` | `otp_backend/otp_backend/settings.py` |
-| `.env` | `./.env` | `./otp_backend/.env` |
+| Settings | `beatzlock_app/config/settings.py` | `otp_backend/otp_backend/settings.py` |
+| `.env` | `beatzlock_app/.env` | `otp_backend/.env` |
 | WSGI | `config.wsgi` | `otp_backend.wsgi` |
 | Gunicorn port | `8012` | `8002` |
 | Dev port | `8005` | `8000` |
 | systemd unit | `beatzlock` | `beatzlock-api` |
-| Virtualenv | `beatzlock_v_env` | `otp_backend/totp_v_env` |
+| Virtualenv | `beatzlock_app/beatzlock_v_env` | `otp_backend/totp_v_env` |
 | Admin | `/beatzlock-admin/` | `/beatzlock_admin/` |
-| Apps | `beatzlock_app`, `console` | `accounts`, `api`, `twofa`, `beatzlocklogs` |
+| Django apps | `beatzlock_app`, `console` | `accounts`, `api`, `twofa`, `beatzlocklogs` |
+| Static | `beatzlock_app/static/` + each app's own `static/` | `otp_backend/static/` |
 
 Both roles are the shared `Felix_Apps_Administrator` used by the other
-felixmokayabeatz sites on the host, so `deploy.sh` never rewrites its password —
-it only creates the role if nothing on the host has one yet.
+felixmokayabeatz sites on the host, so neither `deploy.sh` ever rewrites its
+password — each only creates the role if nothing on the host has one yet.
 
 ### What each one serves
 
@@ -51,17 +55,34 @@ and `/api/ratings/…` JSON the native apps read, and the staff console at
 sessions, passwordless login, backup codes, 2FA and recovery codes, plus the
 log viewer at `/beatzlock_admin/logs/`. `/` redirects to the main site.
 
+### Where the files live
+
+Each Django app carries what belongs to it, so an app folder can be read,
+moved or copied without hunting for its assets:
+
+| | |
+|---|---|
+| `beatzlock_app/beatzlock_app/data/GeoLite2-Country.mmdb` | country lookup for the download stats; committed, the stats view reads it at runtime |
+| `beatzlock_app/beatzlock_app/static/beatzlock_app/` | assets owned by the downloads app |
+| `beatzlock_app/console/static/console/` | the staff console's CSS and JS |
+| `beatzlock_app/static/` | site-wide only: the favicons and the `fmb_theme` stylesheet the base templates load |
+| `beatzlock_app/templates/` | site-wide base templates; per-app templates live in the app |
+| `otp_backend/static/` | the API's favicon, used by its admin and log viewer |
+| `otp_auth_app/inno_script/`, `otp_auth_app/vc_redist/` | Windows installer inputs, read by `otp_auth_app/build.py` |
+| `otp_auth_app/build_logs/` | build metadata the console's build-history page reads |
+| `beatzlock_app/release_notes/`, `beatzlock_app/tos_privacy/` | content published by the downloads site |
+
 ## Deploy
 
-One script drives both projects. It reads each project's `.env` for the domain,
-the ports and the database credentials, so nothing is prompted for, and every
-step checks the current state first — it is safe to re-run.
+Each project deploys itself. Same script, same actions, same menu — one per
+project, each reading only its own `.env` for its domain, ports and database
+credentials, so nothing is prompted for and every step checks the current
+state first. Both are safe to re-run.
 
 ```bash
-sudo ./deploy/deploy.sh                  # menu: pick the project, then the action
-sudo ./deploy/deploy.sh --api --update   # or name both outright
-sudo ./deploy/deploy.sh --all --update   # both projects, one after the other
-sudo ./deploy/deploy.sh --site --status
+sudo ./beatzlock_app/deploy/deploy.sh            # menu: pick the action
+sudo ./beatzlock_app/deploy/deploy.sh --update   # or name it outright
+sudo ./otp_backend/deploy/deploy.sh --status
 ```
 
 | Action | What it does |
@@ -76,32 +97,51 @@ sudo ./deploy/deploy.sh --site --status
 | `--renew` | renew this subdomain's certificate |
 | `--uninstall` | remove the unit and the nginx site; keeps code, database and `.env` |
 
-`--all` is refused for `--database`, `--django` and `--uninstall`: those act on
-one database, one shell or one unit and must name their project.
+Deploying both is two commands, in either order — they touch different
+databases, different units and different nginx sites.
 
-TLS is not re-issued when an installed certificate already covers the subdomain
-— a wildcard counts. `deploy/nginx.site.conf.template`,
-`deploy/nginx.api.conf.template` and `deploy/gunicorn.service.template` are the
-single source of truth for what gets installed; edit the template, never the
-copy under `/etc/`.
+TLS is not re-issued when an installed certificate already covers the
+subdomain — a wildcard counts. Each project's `deploy/nginx.conf.template` and
+`deploy/gunicorn.service.template` are the single source of truth for what
+gets installed; edit the template, never the copy under `/etc/`. The files
+under each project's `nginx/` are reference copies of what those templates
+produce, kept for reading only.
 
 ## Moving the server to this layout
 
-The API used to live at `/home/felixmokayabeatz/totp_app/` with its own ad-hoc
-`deploy.sh`, and the two databases were named `beatzlock_app_db` and
-`beatzlock_db` under the role `beatzlock_user`. On the server, once:
+Two moves have happened since the server was last set up. The API used to live
+at `/home/felixmokayabeatz/totp_app/` with its own ad-hoc `deploy.sh` and the
+databases were named `beatzlock_app_db` and `beatzlock_db` under the role
+`beatzlock_user`; more recently the downloads site moved out of the repo root
+into `beatzlock_app/`. On the server, once:
 
-**1. Move the checkout.** The repo root is now `beatzlock_project`, and the API
-is a subdirectory of it:
+**1. Move the checkout.** The repo root is now `beatzlock_project`, with each
+project one directory below it:
 
 ```bash
 cd /home/felixmokayabeatz
 git clone <this repo> beatzlock_project      # or move the existing checkout
 ```
 
-**2. Rename the databases.** The deploy script creates an *empty* database when
-the name in `.env` does not exist — it will not carry the old rows over. Rename
-first, then deploy:
+**2. Bring the downloads site's untracked files along.** `.env`, the
+virtualenv, `logs/`, `media/`, `staticfiles/` and `backups/` are git-ignored,
+so pulling the restructure leaves them behind at the repo root while the code
+that reads them now lives in `beatzlock_app/`. Move them in — `media/`
+especially, it holds every uploaded binary:
+
+```bash
+cd /home/felixmokayabeatz/beatzlock_project
+for d in .env beatzlock_v_env logs media staticfiles backups; do
+    [ -e "$d" ] && mv "$d" beatzlock_app/
+done
+```
+
+The API's own copies of these were always inside `otp_backend/` and do not
+move. Nothing under `otp_auth_app/` moves either.
+
+**3. Rename the databases.** The deploy scripts create an *empty* database
+when the name in `.env` does not exist — they will not carry the old rows
+over. Rename first, then deploy:
 
 ```bash
 sudo -u postgres psql -c 'ALTER DATABASE beatzlock_app_db RENAME TO felixmokayabeatz_totp_db;'
@@ -118,25 +158,28 @@ A rename needs no other session on the database, so stop the old services
 first. Take a dump before any of this:
 `sudo -u postgres pg_dump -Fc beatzlock_app_db > totp.dump`.
 
-**3. Retire the old units and sites.**
+**4. Retire the old units and sites.**
 
 ```bash
 sudo systemctl disable --now beatzlock          # the old API unit
 sudo rm /etc/nginx/sites-enabled/beatzlock
 ```
 
-The new units are `beatzlock` (downloads site) and `beatzlock-api`. The old API
-unit shared the name `beatzlock`, so remove it before deploying the site, or
-the two will fight over it.
+The new units are `beatzlock` (downloads site) and `beatzlock-api`. The old
+API unit shared the name `beatzlock`, so remove it before deploying the site,
+or the two will fight over it.
 
-**4. Deploy both.**
+**5. Deploy both.** The rendered unit and nginx site carry the project
+directory in them, so this run is also what repoints them at
+`beatzlock_project/beatzlock_app/`:
 
 ```bash
-sudo ./deploy/deploy.sh --all --fresh
+sudo ./beatzlock_app/deploy/deploy.sh --fresh
+sudo ./otp_backend/deploy/deploy.sh  --fresh
 ```
 
-**5. Repoint the console's build-log path.** `BEATZLOCK_BUILD_LOGS_DIR` in the
-downloads site's `.env` now reads
+**6. Repoint the console's build-log path.** `BEATZLOCK_BUILD_LOGS_DIR` in
+`beatzlock_app/.env` reads
 `/home/felixmokayabeatz/beatzlock_project/otp_auth_app/build_logs`.
 
 ## Local development
@@ -147,6 +190,7 @@ tables above.
 **Downloads site:**
 
 ```bash
+cd beatzlock_app
 python -m venv beatzlock_v_env && . beatzlock_v_env/Scripts/activate   # Windows
 pip install -r requirements.txt
 python manage.py migrate
@@ -163,18 +207,15 @@ python manage.py migrate
 python manage.py runserver 8000
 ```
 
-`config/local.py` and `otp_backend/otp_backend/local.py` are git-ignored
-dev-only overrides, imported last so they win over everything — which is why
-`deploy.sh` refuses to run on a host where either exists. `otp_backend`'s
-currently just sets `DEBUG=True`.
+`beatzlock_app/config/local.py` and `otp_backend/otp_backend/local.py` are
+git-ignored dev-only overrides, imported last so they win over everything —
+which is why each `deploy.sh` refuses to run on a host where its project's one
+exists. `otp_backend`'s currently just sets `DEBUG=True`.
 
 Set `USE_X_ACCEL_REDIRECT=False` in the downloads site's `.env` for local work:
 in production nginx streams app binaries via `X-Accel-Redirect` so no gunicorn
-worker carries the payload (`beatzlock_app/utils/file_serving.py`), and there
-is no nginx in front of `runserver`.
-
-`data/GeoLite2-Country.mmdb` powers the per-country download statistics and is
-committed because the stats view needs it at runtime.
+worker carries the payload (`beatzlock_app/beatzlock_app/utils/file_serving.py`),
+and there is no nginx in front of `runserver`.
 
 ## Running the Flutter client
 
@@ -273,24 +314,28 @@ Debug run on Fedora:
 flutter run -d linux
 ```
 
-Build the Fedora RPM from the project root:
+Build the Fedora RPM from the repo root:
 
 ```bash
 python3 build.py
 ```
+
+`build.py` is a wrapper; the real script is `otp_auth_app/build.py` and every
+path it reads or writes — `inno_script/`, `vc_redist/`, `final_builds/` and the
+scratch package directories — sits inside `otp_auth_app/`.
 
 Choose option `3. Fedora .rpm final build`, or option `1. Linux package for this distro (.deb/.rpm)` while on Fedora.
 
 The RPM is written to:
 
 ```text
-final_builds/fedora/<version_build>/beatzlock_<version_build>_x86_64.rpm
+otp_auth_app/final_builds/fedora/<version_build>/beatzlock_<version_build>_x86_64.rpm
 ```
 
 Install the generated RPM:
 
 ```bash
-sudo dnf install ./final_builds/fedora/<version_build>/beatzlock_<version_build>_x86_64.rpm
+sudo dnf install ./otp_auth_app/final_builds/fedora/<version_build>/beatzlock_<version_build>_x86_64.rpm
 ```
 
 ## Android
@@ -415,13 +460,13 @@ flutter build appbundle --release
 
 ## Quick start
 
-Run whichever Django project you need, then the client:
+Each project runs from its own folder:
 
 ```bash
-python manage.py runserver 8005          # downloads site, from the repo root
-cd otp_backend && python manage.py runserver 8000   # authenticator API
-cd otp_auth_app && flutter run -d windows           # or -d linux, -d android
+cd beatzlock_app && python manage.py runserver 8005   # downloads site
+cd otp_backend  && python manage.py runserver 8000    # authenticator API
+cd otp_auth_app && flutter run -d windows             # or -d linux, -d android
 ```
 
-Deployment is `sudo ./deploy/deploy.sh` — see **Deploy** above. Be careful
-running it against the live server.
+Deployment is `sudo ./<project>/deploy/deploy.sh` — see **Deploy** above. Be
+careful running it against the live server.
