@@ -1,0 +1,386 @@
+{% extends "console_base.html" %}
+
+{% block title %}BeatzLock Download Statistics{% endblock %}
+{% block admin_kicker %}BeatzLock{% endblock %}
+{% block admin_title %}Download Statistics{% endblock %}
+{% block admin_subtitle %}Current builds, archived builds, platform breakdowns, and the countries driving your downloads.{% endblock %}
+
+{% block extra_head %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+  <section class="fmb-admin-grid" aria-label="Download totals">
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Current Downloads</p>
+      <p class="fmb-admin-value">{{ total_downloads_all|default:"0" }}</p>
+      <p class="fmb-admin-meta">Latest active builds across all platforms.</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Tracked Platforms</p>
+      <p class="fmb-admin-value">{{ app_stats|length }}</p>
+      <p class="fmb-admin-meta">Platform groups represented in the current view.</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Archived Downloads</p>
+      <p class="fmb-admin-value">{{ archived_downloads_all|default:"0" }}</p>
+      <p class="fmb-admin-meta">Older binaries counted outside the live builds.</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Lifetime Downloads</p>
+      <p class="fmb-admin-value">{{ lifetime_downloads_all|default:"0" }}</p>
+      <p class="fmb-admin-meta">All recorded BeatzLock downloads.</p>
+    </article>
+  </section>
+
+  <section class="fmb-admin-panel" style="margin-top:18px;">
+    <form method="get" class="fmb-admin-controls" aria-label="Download timeline controls" style="margin-bottom:0;">
+      <select name="range" id="downloadRange">
+        {% for option in range_options %}
+          <option value="{{ option.value }}"{% if selected_range == option.value %} selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+
+      <div id="customDateInputs" style="display:{% if selected_range == 'custom' %}flex{% else %}none{% endif %}; gap:10px; flex-wrap:wrap;">
+        <input type="date" name="start_date" id="downloadStartDate" value="{{ custom_start_date }}" aria-label="Download start date" />
+        <input type="date" name="end_date" id="downloadEndDate" value="{{ custom_end_date }}" aria-label="Download end date" />
+      </div>
+
+      <select name="country" aria-label="Timeline country filter">
+        <option value="">All countries</option>
+        {% for country in country_options %}
+          <option value="{{ country.country_code }}"{% if selected_country_code == country.country_code %} selected{% endif %}>
+            {{ country.country_name }} ({{ country.download_count }})
+          </option>
+        {% endfor %}
+      </select>
+
+      <select name="country_sort" aria-label="Country sort order">
+        {% for option in country_sort_options %}
+          <option value="{{ option.value }}"{% if country_sort == option.value %} selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Apply</button>
+      <a href="{% url 'download_stats' %}" class="fmb-admin-chip"><i class="fas fa-rotate-left" aria-hidden="true"></i> Reset</a>
+    </form>
+  </section>
+
+  <section class="fmb-admin-panel" style="margin-top:18px;">
+    <div style="display:flex; justify-content:space-between; gap:14px; align-items:flex-start; flex-wrap:wrap; margin-bottom:16px;">
+      <div>
+        <p class="fmb-admin-label">Downloads Over Time</p>
+        <p class="fmb-admin-meta" style="margin-top:0;">
+          {{ start_date|date:"M j, Y" }} to {{ end_date|date:"M j, Y" }} for {{ selected_country_name }}.
+          Current and archived downloads stay separated so the existing totals remain easy to compare.
+        </p>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <span class="fmb-admin-pill">Current {{ timeline_current_total }}</span>
+        <span class="fmb-admin-pill">Archived {{ timeline_archived_total }}</span>
+        <span class="fmb-admin-pill">Range Total {{ timeline_total }}</span>
+      </div>
+    </div>
+
+    {% if timeline_has_data %}
+      <div class="fmb-admin-chart" style="min-height:340px;">
+        <canvas id="timelineChart"></canvas>
+      </div>
+      <p class="fmb-admin-meta" style="margin-top:14px;">
+        Daily timeline data begins when the detailed tracker started recording downloads.
+        {% if earliest_daily_date %}Earliest tracked day: {{ earliest_daily_date|date:"M j, Y" }}.{% endif %}
+      </p>
+    {% else %}
+      <div class="fmb-admin-empty">
+        No daily timeline data is available in this range yet.
+        {% if earliest_daily_date %}Tracked download days start on {{ earliest_daily_date|date:"M j, Y" }}.{% endif %}
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="fmb-admin-panels" style="margin-top:18px;">
+    <article class="fmb-admin-panel">
+      <p class="fmb-admin-label">Top Countries</p>
+      <p class="fmb-admin-meta" style="margin-top:0; margin-bottom:14px;">Sorted by {{ country_sort_label }}.</p>
+      <div class="fmb-admin-list">
+        {% for country in top_countries %}
+          <div class="fmb-admin-list-row">
+            <span class="fmb-admin-rank">#{{ forloop.counter }}</span>
+            <img class="fmb-admin-flag" src="{{ country.flag_url }}" alt="{{ country.country_code }}" onerror="this.src='https://flagcdn.com/w80/un.png'" />
+            <span>{{ country.country_name }}</span>
+            <span class="fmb-admin-total">{{ country.total }}</span>
+          </div>
+        {% empty %}
+          <div class="fmb-admin-empty">No country download data yet.</div>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="fmb-admin-panel">
+      <p class="fmb-admin-label">Country Share</p>
+      <div class="fmb-admin-chart"><canvas id="countryChart"></canvas></div>
+    </article>
+  </section>
+
+  <section class="fmb-admin-panels" style="margin-top:18px;">
+    <article class="fmb-admin-panel">
+      <p class="fmb-admin-label">Downloads per Platform</p>
+      <div class="fmb-admin-chart" id="platformChartWrap"><canvas id="platformChart"></canvas></div>
+    </article>
+
+    <article class="fmb-admin-panel">
+      <p class="fmb-admin-label">Current Build Breakdown</p>
+      {% if app_stats %}
+        {% for app_data in app_stats %}
+          <section style="margin-bottom:18px;">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px;">
+              <span class="fmb-admin-pill">{{ app_data.platform_display }}</span>
+              <strong class="fmb-admin-total">{{ app_data.total_downloads }} downloads</strong>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+              {% for app in app_data.apps %}
+                <span class="fmb-admin-pill">v{{ app.version }}{% if app.build_number %} build {{ app.build_number }}{% endif %}</span>
+              {% endfor %}
+            </div>
+            <div class="fmb-admin-table-wrap">
+              <table class="fmb-admin-table">
+                <thead>
+                  <tr>
+                    <th>Flag</th>
+                    <th>Country</th>
+                    <th>Downloads</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for stat in app_data.country_stats|slice:":8" %}
+                    <tr>
+                      <td><img class="fmb-admin-flag" src="{{ stat.flag_url }}" alt="{{ stat.country_code }}" onerror="this.src='https://flagcdn.com/w80/un.png'" /></td>
+                      <td>{{ stat.country_name }}</td>
+                      <td><strong>{{ stat.download_count }}</strong></td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="3">No current data yet.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        {% endfor %}
+      {% else %}
+        <div class="fmb-admin-empty">No active app builds are available.</div>
+      {% endif %}
+    </article>
+  </section>
+
+  {% if archived_app_stats %}
+    <section class="fmb-admin-panel" style="margin-top:18px;">
+      <p class="fmb-admin-label">Archived Builds</p>
+      {% if archived_top_countries %}
+        <p class="fmb-admin-meta" style="margin-top:0; margin-bottom:16px;">
+          Top archived countries:
+          {% for country in archived_top_countries|slice:":3" %}
+            {% if not forloop.first %} | {% endif %}{{ country.country_name }} {{ country.total }}
+          {% endfor %}
+        </p>
+      {% endif %}
+      {% for app_data in archived_app_stats %}
+        <section style="margin-bottom:18px;">
+          <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px;">
+            <span class="fmb-admin-pill">{{ app_data.platform_display }} archived</span>
+            <strong class="fmb-admin-total">{{ app_data.total_downloads }} downloads</strong>
+          </div>
+
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            {% for app in app_data.apps %}
+              <span class="fmb-admin-pill">v{{ app.version }}{% if app.build_number %} build {{ app.build_number }}{% endif %}</span>
+            {% endfor %}
+          </div>
+
+          <div class="fmb-admin-table-wrap">
+            <table class="fmb-admin-table">
+              <thead>
+                <tr>
+                  <th>Flag</th>
+                  <th>Country</th>
+                  <th>Downloads</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for stat in app_data.country_stats|slice:":8" %}
+                  <tr>
+                    <td><img class="fmb-admin-flag" src="{{ stat.flag_url }}" alt="{{ stat.country_code }}" onerror="this.src='https://flagcdn.com/w80/un.png'" /></td>
+                    <td>{{ stat.country_name }}</td>
+                    <td><strong>{{ stat.download_count }}</strong></td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="3">No archived download data yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      {% endfor %}
+    </section>
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+  <script>
+    const TOP_COUNTRIES = [
+      {% for c in top_countries %}
+        { name: "{{ c.country_name|escapejs }}", total: {{ c.total }} },
+      {% endfor %}
+    ];
+
+    const APP_STATS = [
+      {% for a in app_stats %}
+        {
+          name: "{{ a.label|escapejs }}",
+          platform: "{{ a.platform_display|escapejs }}",
+          total: {{ a.total_downloads }},
+          color: "{{ a.chart_style.color }}",
+          borderColor: "{{ a.chart_style.border_color }}"
+        },
+      {% endfor %}
+    ];
+
+    const TIMELINE_LABELS = {{ timeline_labels_json|safe }};
+    const TIMELINE_CURRENT = {{ timeline_current_points_json|safe }};
+    const TIMELINE_ARCHIVED = {{ timeline_archived_points_json|safe }};
+
+    Chart.defaults.color = "#94a3b8";
+    Chart.defaults.font.family = "Inter, sans-serif";
+
+    const timelineCanvas = document.getElementById("timelineChart");
+    if (timelineCanvas) {
+      new Chart(timelineCanvas, {
+        type: "line",
+        data: {
+          labels: TIMELINE_LABELS,
+          datasets: [
+            {
+              label: "Current builds",
+              data: TIMELINE_CURRENT,
+              borderColor: "#06b6d4",
+              backgroundColor: "rgba(6, 182, 212, 0.14)",
+              fill: true,
+              tension: 0.35,
+              borderWidth: 2.5,
+              pointRadius: 2,
+            },
+            {
+              label: "Archived builds",
+              data: TIMELINE_ARCHIVED,
+              borderColor: "#f59e0b",
+              backgroundColor: "rgba(245, 158, 11, 0.10)",
+              fill: true,
+              tension: 0.35,
+              borderWidth: 2.5,
+              pointRadius: 2,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              labels: { color: "#cbd5e1" }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: "rgba(148, 163, 184, 0.12)" },
+              ticks: { maxTicksLimit: 10 }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(148, 163, 184, 0.12)" }
+            }
+          }
+        }
+      });
+    }
+
+    const countryCanvas = document.getElementById("countryChart");
+    const topFive = TOP_COUNTRIES.slice(0, 5);
+    const topFiveTotal = topFive.reduce(function (sum, country) { return sum + country.total; }, 0);
+
+    if (countryCanvas) {
+      new Chart(countryCanvas, {
+        type: "doughnut",
+        data: {
+          labels: topFive.map(function (item) { return item.name; }),
+          datasets: [{
+            data: topFive.map(function (item) { return item.total; }),
+            backgroundColor: ["#4f46e5", "#06b6d4", "#16a34a", "#f59e0b", "#ec4899"].slice(0, topFive.length),
+            borderColor: "#0f172a",
+            borderWidth: 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "66%",
+          plugins: {
+            legend: { position: "right", labels: { color: "#cbd5e1" } },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  const value = context.parsed || 0;
+                  const percent = topFiveTotal ? ((value / topFiveTotal) * 100).toFixed(1) : "0.0";
+                  return " " + value.toLocaleString() + " downloads (" + percent + "%)";
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    const platformCanvas = document.getElementById("platformChart");
+    const platformWrap = document.getElementById("platformChartWrap");
+    if (platformCanvas && platformWrap) {
+      platformWrap.style.height = Math.max(280, APP_STATS.length * 60) + "px";
+      new Chart(platformCanvas, {
+        type: "bar",
+        data: {
+          labels: APP_STATS.map(function (app) { return [app.name, app.platform]; }),
+          datasets: [{
+            label: "Downloads",
+            data: APP_STATS.map(function (app) { return app.total; }),
+            backgroundColor: APP_STATS.map(function (app) { return app.color; }),
+            borderColor: APP_STATS.map(function (app) { return app.borderColor; }),
+            borderWidth: 1.5,
+            borderRadius: 10,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, grid: { color: "rgba(148, 163, 184, 0.12)" } },
+            y: { grid: { display: false }, ticks: { color: "#cbd5e1" } }
+          }
+        }
+      });
+    }
+
+    const downloadRange = document.getElementById("downloadRange");
+    const customDateInputs = document.getElementById("customDateInputs");
+    if (downloadRange && customDateInputs) {
+      const syncCustomDateInputs = function () {
+        customDateInputs.style.display = downloadRange.value === "custom" ? "flex" : "none";
+      };
+      syncCustomDateInputs();
+      downloadRange.addEventListener("change", syncCustomDateInputs);
+    }
+  </script>
+{% endblock %}

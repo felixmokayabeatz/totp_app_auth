@@ -1,0 +1,79 @@
+# Authenticator API -- api.felixmokayabeatz.online
+#
+# Rendered by deploy/deploy.sh -- edit the template, not the installed copy in
+# /etc/nginx/sites-available/. Placeholders: __DOMAIN__, __SERVER_NAMES__,
+# __PROJECT_DIR__, __GUNICORN_PORT__, __ACME_ROOT__, __CERT_DIR__.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SERVER_NAMES__;
+
+    location /.well-known/acme-challenge/ {
+        root __ACME_ROOT__;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name __SERVER_NAMES__;
+
+    # The native apps upload nothing larger than a sync payload.
+    client_max_body_size 10M;
+
+    ssl_certificate __CERT_DIR__/fullchain.pem;
+    ssl_certificate_key __CERT_DIR__/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # The admin lives at /beatzlock_admin/ on this host. /admin/ is answered
+    # with 404 rather than proxied, so the default path scanners hammer never
+    # reaches Django at all.
+    location = /admin {
+        return 404;
+    }
+
+    location ^~ /admin/ {
+        return 404;
+    }
+
+    location = /beatzlock_admin {
+        return 302 /beatzlock_admin/;
+    }
+
+    location = /beatzlock_admin/logs {
+        return 302 /beatzlock_admin/logs/;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:__GUNICORN_PORT__;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+
+    # STATIC_URL is /static/ here, and collectstatic writes into staticfiles/.
+    location /static/ {
+        alias __PROJECT_DIR__/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        access_log off;
+        try_files $uri =404;
+    }
+
+    location /media/ {
+        alias __PROJECT_DIR__/media/;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000";
+        access_log off;
+        try_files $uri =404;
+    }
+}

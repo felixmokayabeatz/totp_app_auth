@@ -1,0 +1,191 @@
+<!-- beatzlock_app/templates/beatzlock_app/legal_page.html -->
+{% extends 'beatzlock_app/base.html' %}
+{% load static %}
+
+{% block title %}{{ page.title }} – BeatzLock Authenticator{% endblock %}
+
+{% block extra_css %}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
+
+  :root {
+    --bg:      #07071a;
+    --surface: rgba(255,255,255,0.04);
+    --border:  rgba(255,255,255,0.08);
+    --blue:    #4a9eff;
+    --purple:  #9d4edd;
+    --text:    #eeeef8;
+    --muted:   #8888aa;
+    --font-body: 'Space Grotesk', system-ui, sans-serif;
+    --font-head: 'Syne', sans-serif;
+  }
+
+  /* ── ambient blobs ── */
+  .blobs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .blob  { position: absolute; border-radius: 50%; filter: blur(130px); opacity: .10; animation: drift 26s ease-in-out infinite; }
+  .blob-a { width: 600px; height: 600px; background: var(--blue);   top: -200px; left: -180px; }
+  .blob-b { width: 450px; height: 450px; background: var(--purple); bottom: -140px; right: -130px; animation-delay: -10s; }
+  @keyframes drift { 0%,100%{transform:translate(0,0);} 50%{transform:translate(30px,30px);} }
+
+  /* ── page shell ── */
+  .legal-page { 
+    position: relative; 
+    z-index: 1; 
+    width: min(780px, 100%);
+    min-width: 0;
+    max-width: 780px; 
+    margin: 0 auto; 
+    padding: 48px 20px 60px; 
+  }
+
+  /* ── back link ── */
+  .back-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--blue); font-size: .85rem; font-weight: 600;
+    text-decoration: none; margin-bottom: 36px; transition: opacity .2s;
+  }
+  .back-link:hover { opacity: .72; }
+
+  /* ── header block ── */
+  .legal-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .legal-badge {
+    max-width: 100%;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(74,158,255,.12); border: 1px solid rgba(74,158,255,.22);
+    color: var(--blue); border-radius: 100px; padding: 4px 13px;
+    font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 18px;
+    overflow-wrap: anywhere;
+  }
+  .legal-title {
+    font-family: var(--font-head); font-size: clamp(1.9rem,5vw,3rem); font-weight: 800;
+    background: linear-gradient(135deg,#fff 30%,var(--blue));
+    -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 12px; line-height: 1.1;
+    overflow-wrap: anywhere;
+  }
+  .legal-meta { display: flex; gap: 20px; flex-wrap: wrap; }
+  .legal-meta span { min-width: 0; font-size: .8rem; color: var(--muted); display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+
+  /* ── TinyMCE content area ── */
+  /* Every HTML element TinyMCE can produce is styled to look good on the dark bg */
+  .legal-content { max-width: 100%; min-width: 0; font-size: .96rem; line-height: 1.85; color: #cccce0; overflow-wrap: anywhere; word-break: normal; }
+
+  .legal-content * { max-width: 100%; }
+
+  .legal-content [nowrap],
+  .legal-content [style*="white-space: nowrap"],
+  .legal-content [style*="white-space:nowrap"] { white-space: normal !important; }
+
+  .legal-content h1,
+  .legal-content h2,
+  .legal-content h3,
+  .legal-content h4,
+  .legal-content h5 {
+    font-family: var(--font-head); color: var(--text); margin: 1.8em 0 .6em; line-height: 1.2;
+  }
+  .legal-content h1 { font-size: 1.65rem; }
+  .legal-content h2 {
+    font-size: 1.25rem;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .legal-content h3 { font-size: 1.05rem; color: #d0d0ec; }
+  .legal-content h4 { font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  .legal-content p     { margin-bottom: 1em; overflow-wrap: anywhere; }
+  .legal-content ul,
+  .legal-content ol    { padding-left: 1.25em; margin-bottom: 1em; overflow-wrap: anywhere; }
+  .legal-content li    { margin-bottom: .5em; }
+  .legal-content li::marker { color: var(--blue); }
+
+  .legal-content a     { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+  .legal-content a:hover { opacity: .78; }
+
+  .legal-content strong { color: var(--text); font-weight: 600; }
+  .legal-content em     { font-style: italic; color: #b0b0cc; }
+  .legal-content u      { text-decoration-color: var(--blue); }
+  .legal-content s      { color: var(--muted); }
+
+  .legal-content blockquote {
+    border-left: 3px solid var(--blue); padding: 12px 18px;
+    color: var(--muted); margin: 1.4em 0; border-radius: 0 10px 10px 0;
+    background: rgba(74,158,255,.06);
+  }
+
+  .legal-content pre {
+    background: rgba(255,255,255,.06); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; overflow-x: auto;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    font-size: .85em; line-height: 1.6; margin-bottom: 1em;
+  }
+  .legal-content code {
+    background: rgba(255,255,255,.08); border-radius: 5px;
+    font-size: .85em; padding: 2px 6px;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .legal-content pre code { background: none; padding: 0; }
+
+  .legal-content table { width: 100%; display: block; border-collapse: collapse; margin-bottom: 1.2em; overflow-x: auto; overflow-y: hidden; }
+  .legal-content th,
+  .legal-content td    { border: 1px solid var(--border); padding: 10px 14px; font-size: .88rem; vertical-align: top; }
+  .legal-content th    { background: rgba(74,158,255,.1); color: var(--text); font-weight: 600; text-align: left; }
+  .legal-content tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+  .legal-content hr { border: none; border-top: 1px solid var(--border); margin: 2.5em 0; }
+
+  .legal-content img { max-width: 100%; border-radius: 10px; }
+
+  /* TinyMCE text alignment */
+  .legal-content .ql-align-center, .legal-content [style*="text-align: center"]  { text-align: center; }
+  .legal-content .ql-align-right,  .legal-content [style*="text-align: right"]   { text-align: right; }
+
+  /* TinyMCE inline colours — keep them visible on dark bg */
+  .legal-content [style*="color: rgb(0, 0, 0)"],
+  .legal-content [style*="color: #000000"],
+  .legal-content [style*="color:#000000"] { color: #e0e0ee !important; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: rgba(255,255,255,.04); }
+  ::-webkit-scrollbar-thumb { background: rgba(74,158,255,.3); border-radius: 3px; }
+
+  /* ── mobile ── */
+  @media (max-width: 600px) {
+    .legal-page { padding: 30px 14px 40px; }
+    .legal-header { margin-bottom: 30px; padding-bottom: 22px; }
+    .legal-meta { gap: 12px; }
+    .legal-meta span { width: 100%; }
+    .legal-title { font-size: 1.7rem; }
+    .legal-content { font-size: .92rem; }
+    .legal-content blockquote { padding: 12px 14px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="blobs">
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+</div>
+
+<div class="legal-page">
+  <a href="{% url 'beatzlock_app:download_list' %}" class="back-link">
+    <i class="fas fa-arrow-left"></i> Back to Downloads
+  </a>
+
+  <div class="legal-header">
+    <div class="legal-badge"><i class="fas fa-file-shield"></i> BeatzLock Authenticator</div>
+    <h1 class="legal-title">{{ page.title }}</h1>
+    <div class="legal-meta">
+      <span><i class="fas fa-calendar-check"></i> Last updated: {{ page.last_updated|date:"F j, Y" }}</span>
+      {% if page.page_type == 'terms' %}
+        <span><i class="fas fa-link"></i> <a href="{% url 'beatzlock_app:legal_privacy' %}" style="color:var(--blue);">View Privacy Policy →</a></span>
+      {% else %}
+        <span><i class="fas fa-link"></i> <a href="{% url 'beatzlock_app:legal_terms' %}" style="color:var(--blue);">View Terms of Service →</a></span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="legal-content">
+    {{ page.content|safe }}
+  </div>
+</div>
+{% endblock %}

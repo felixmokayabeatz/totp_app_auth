@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>{{ subject }}</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #eef4fb;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #101827;
+    }
+    table {
+      border-collapse: collapse;
+    }
+    a {
+      color: #0ea5e9;
+    }
+    .shell {
+      width: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 30%),
+        radial-gradient(circle at top right, rgba(99, 102, 241, 0.18), transparent 26%),
+        linear-gradient(180deg, #08111f 0%, #0f172a 18%, #eef4fb 18%, #eef4fb 100%);
+    }
+    .card {
+      width: 100%;
+      max-width: 640px;
+      overflow: hidden;
+      border: 1px solid #d9e6f3;
+      border-radius: 24px;
+      background: #ffffff;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+    }
+    .header {
+      padding: 34px 30px;
+      background:
+        radial-gradient(circle at top right, rgba(56, 189, 248, 0.16), transparent 34%),
+        linear-gradient(135deg, #08111f, #11203b 58%, #163056);
+      color: #ffffff;
+    }
+    .eyebrow {
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8edbff;
+    }
+    .title {
+      margin: 10px 0 0;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+    .subtitle {
+      margin: 10px 0 0;
+      color: #cdd8e8;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .content {
+      padding: 30px;
+    }
+    .greeting {
+      margin: 0 0 14px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .intro {
+      margin: 0 0 22px;
+      color: #475569;
+      line-height: 1.7;
+    }
+    .panel {
+      margin: 0 0 14px;
+      padding: 16px 18px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #f8fafc;
+    }
+    .reply-box {
+      margin: 0 0 20px;
+      padding: 18px;
+      border-radius: 18px;
+      border-left: 4px solid #2563eb;
+      background: #eff6ff;
+    }
+    .label {
+      display: block;
+      margin-bottom: 8px;
+      color: #48627f;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .panel-text,
+    .reply-text,
+    .meta,
+    .footer {
+      color: #334155;
+      line-height: 1.7;
+    }
+    .notice {
+      margin: 0 0 14px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border-left: 4px solid #0284c7;
+      background: #f0f9ff;
+    }
+    .footer {
+      padding: 22px 30px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      color: #64748b;
+      font-size: 13px;
+      text-align: center;
+    }
+    .preheader {
+      display: none !important;
+      visibility: hidden;
+      opacity: 0;
+      color: transparent;
+      height: 0;
+      width: 0;
+      overflow: hidden;
+      mso-hide: all;
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #08111f;
+        color: #e2e8f0;
+      }
+      .shell {
+        background:
+          radial-gradient(circle at top left, rgba(14, 165, 233, 0.2), transparent 30%),
+          radial-gradient(circle at top right, rgba(99, 102, 241, 0.22), transparent 26%),
+          linear-gradient(180deg, #08111f 0%, #0f172a 100%);
+      }
+      .card {
+        border-color: #1e293b;
+        background: #0f172a;
+        box-shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
+      }
+      .greeting,
+      .panel-text,
+      .reply-text,
+      .meta,
+      .footer {
+        color: #cbd5e1 !important;
+      }
+      .intro {
+        color: #dbe5f1 !important;
+      }
+      .panel {
+        border-color: #22334b;
+        background: #111c31;
+      }
+      .reply-box {
+        background: #13233d;
+      }
+      .notice {
+        background: #0f2434;
+      }
+      .label {
+        color: #93a8c2 !important;
+      }
+      .footer {
+        background: #0b1324;
+        border-top-color: #1e293b;
+      }
+    }
+    @media (max-width: 600px) {
+      .header,
+      .content,
+      .footer {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+      .card {
+        border-radius: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="preheader">BeatzLock replied to your {{ platform_label }} review.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="shell">
+    <tr>
+      <td align="center" style="padding: 28px 12px;">
+        <table role="presentation" class="card" cellpadding="0" cellspacing="0">
+          <tr>
+            <td class="header">
+              <div class="eyebrow">BeatzLock Authenticator</div>
+              <h1 class="title">Reply to your review</h1>
+              <p class="subtitle">A BeatzLock team reply was added to your {{ platform_label }} review.</p>
+            </td>
+          </tr>
+          <tr>
+            <td class="content">
+              <p class="greeting">Hello {{ display_name }},</p>
+              <p class="intro">Thanks for rating BeatzLock on <strong>{{ platform_label }}</strong>. Your review now has a reply from the BeatzLock team.</p>
+
+              <div class="panel">
+                <span class="label">Your rating</span>
+                <div class="panel-text">{{ stars }}/5 stars</div>
+              </div>
+
+              <div class="panel">
+                <span class="label">Comment</span>
+                <div class="panel-text">{{ comment|linebreaksbr }}</div>
+              </div>
+
+              <div class="panel">
+                <span class="label">Suggestion</span>
+                <div class="panel-text">{{ suggestion|linebreaksbr }}</div>
+              </div>
+
+              <div class="reply-box">
+                <span class="label">BeatzLock Authenticator reply</span>
+                <div class="reply-text">{{ admin_reply|linebreaksbr }}</div>
+              </div>
+
+              <div class="notice">
+                <span class="label">In-app notice</span>
+                <div class="meta">You will also see this reply inside your BeatzLock app notifications if you are signed in.</div>
+              </div>
+
+              <p class="meta">
+                This is an automated product message, please do not reply.
+                {% if support_email %}
+                  Need help? Email <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+                {% endif %}
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td class="footer">
+              <strong>BeatzLock Authenticator</strong><br>
+              Secure two-factor authentication for your account.<br><br>
+              &copy; {{ current_year }} BeatzLock. All rights reserved.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

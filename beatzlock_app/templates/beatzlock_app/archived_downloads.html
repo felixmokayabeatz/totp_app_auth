@@ -1,0 +1,314 @@
+{% extends 'beatzlock_app/base.html' %}
+
+{% block title %}Older BeatzLock Versions{% endblock %}
+
+{% block extra_css %}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
+
+  :root {
+    --bg: #07071a;
+    --surface: rgba(255,255,255,0.04);
+    --surface-hover: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --border-hi: rgba(74,158,255,0.40);
+    --blue: #4a9eff;
+    --purple: #9d4edd;
+    --pink: #d4a0ff;
+    --text: #eeeef8;
+    --muted: #8888aa;
+    --font-body: 'Space Grotesk', system-ui, sans-serif;
+    --font-head: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-body); background: var(--bg); color: var(--text); min-height: 100vh; }
+  .page { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 34px; flex-wrap: wrap; }
+  .back-link {
+    display: inline-flex; align-items: center; gap: 8px; color: #dbeafe;
+    background: rgba(74,158,255,.14); border: 1px solid rgba(74,158,255,.35);
+    border-radius: 999px; padding: 9px 15px; font-size: .82rem; font-weight: 700;
+    text-decoration: none; text-transform: uppercase; letter-spacing: .02em;
+  }
+  .back-link:hover { color: #fff; background: rgba(74,158,255,.24); }
+  .hero { margin-bottom: 34px; }
+  .hero h1 {
+    font-family: var(--font-head); font-size: clamp(2rem,5vw,3.2rem); line-height: 1.08;
+    background: linear-gradient(135deg,#fff 30%,var(--blue) 62%,var(--purple));
+    -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 12px;
+  }
+  .hero p { color: var(--muted); max-width: 680px; line-height: 1.7; font-size: .96rem; }
+  .archive-note {
+    max-width: 760px; margin-top: 18px; padding: 14px 16px; border-radius: 14px;
+    background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.28);
+    color: #f8e7bd; line-height: 1.6; font-size: .9rem;
+  }
+  .archive-note i { color: #f59e0b; margin-right: 7px; }
+  .platform-block { margin-top: 34px; }
+  .platform-title {
+    display: flex; align-items: center; gap: 10px; font-family: var(--font-head);
+    font-size: 1.25rem; margin-bottom: 16px;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(280px,1fr)); gap: 18px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 22px; backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 14px;
+  }
+  .card:hover { background: var(--surface-hover); border-color: var(--border-hi); }
+  .pills { display: flex; flex-wrap: wrap; gap: 7px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 100px; padding: 3px 11px; font-size: .72rem; font-weight: 600; }
+  .pill-version { background: rgba(74,158,255,.12); border: 1px solid rgba(74,158,255,.22); color: var(--blue); }
+  .pill-build { background: rgba(157,78,221,.12); border: 1px solid rgba(157,78,221,.22); color: var(--pink); }
+  .pill-archive { background: rgba(255,255,255,.06); border: 1px solid var(--border); color: #d7d7ea; }
+  .meta-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+    color: var(--muted); font-size: .8rem; border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border); padding: 11px 0;
+  }
+  .meta-row span { display: flex; align-items: center; gap: 6px; }
+  .download-link {
+    display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+    border-radius: 12px; padding: 12px 16px; color: #fff; text-decoration: none; font-weight: 700;
+    background: linear-gradient(135deg,var(--blue),var(--purple));
+  }
+  .actions { display: flex; gap: 10px; margin-top: auto; }
+  .notes-button {
+    display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+    border-radius: 12px; padding: 12px 14px; color: var(--blue); font-weight: 700;
+    border: 1px solid var(--border-hi); background: rgba(74,158,255,.14);
+    font-family: var(--font-body); cursor: pointer;
+  }
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 9000;
+    background: rgba(7,7,26,.82); backdrop-filter: blur(8px);
+    align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: #111128; border: 1px solid var(--border-hi); border-radius: 22px;
+    padding: 30px 26px 26px; max-width: 560px; width: 100%; max-height: 88vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 32px 80px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+  .modal-head h3 { font-family: var(--font-head); font-size: 1.2rem; }
+  .modal-close {
+    background: rgba(255,255,255,.07); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .notes-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .notes-version-label { font-size: .78rem; color: var(--muted); margin-bottom: 4px; }
+  .notes-body {
+    flex: 1; overflow-y: auto; font-size: .88rem; color: #cccce0; line-height: 1.8;
+    white-space: pre-wrap; padding-right: 4px; border-top: 1px solid var(--border); padding-top: 14px;
+  }
+  .empty-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 44px 22px; color: var(--muted); text-align: center;
+  }
+
+  html[data-fmb-theme="light"] {
+    --bg: #f4f8ff;
+    --surface: rgba(255,255,255,0.9);
+    --surface-hover: rgba(255,255,255,0.98);
+    --border: rgba(18, 37, 63, 0.12);
+    --border-hi: rgba(37, 99, 235, 0.28);
+    --blue: #2f7ddf;
+    --purple: #7c3aed;
+    --pink: #db2777;
+    --text: #15233b;
+    --muted: #5d6b82;
+  }
+
+  html[data-fmb-theme="light"] body {
+    background:
+      radial-gradient(circle at top left, rgba(96, 165, 250, 0.16), transparent 28%),
+      radial-gradient(circle at top right, rgba(167, 139, 250, 0.14), transparent 24%),
+      linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%);
+    color: var(--text);
+  }
+
+  html[data-fmb-theme="light"] .back-link {
+    color: #1d4ed8;
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.24);
+  }
+
+  html[data-fmb-theme="light"] .back-link:hover {
+    color: #0f172a;
+    background: rgba(59, 130, 246, 0.16);
+  }
+
+  html[data-fmb-theme="light"] .hero h1 {
+    background: linear-gradient(135deg, #0f172a 8%, #2f7ddf 54%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  html[data-fmb-theme="light"] .archive-note {
+    background: rgba(245, 158, 11, 0.09);
+    border-color: rgba(245, 158, 11, 0.28);
+    color: #8a5a12;
+  }
+
+  html[data-fmb-theme="light"] .platform-title,
+  html[data-fmb-theme="light"] .reviewer-name,
+  html[data-fmb-theme="light"] .modal-head h3 {
+    color: var(--text);
+  }
+
+  html[data-fmb-theme="light"] .card,
+  html[data-fmb-theme="light"] .empty-card,
+  html[data-fmb-theme="light"] .modal-box {
+    box-shadow: 0 18px 40px rgba(39, 76, 119, 0.08);
+  }
+
+  html[data-fmb-theme="light"] .pill-archive {
+    background: rgba(15, 23, 42, 0.04);
+    color: #475569;
+  }
+
+  html[data-fmb-theme="light"] .meta-row,
+  html[data-fmb-theme="light"] .notes-version-label,
+  html[data-fmb-theme="light"] .notes-body {
+    color: var(--muted);
+  }
+
+  html[data-fmb-theme="light"] .notes-body {
+    border-top-color: var(--border);
+  }
+
+  html[data-fmb-theme="light"] .modal-box {
+    background: #ffffff;
+  }
+
+  html[data-fmb-theme="light"] .modal-close {
+    background: rgba(15, 23, 42, 0.04);
+    color: #64748b;
+  }
+  @media (max-width: 640px) {
+    .page { padding-top: 24px; }
+    .grid { grid-template-columns: 1fr; }
+    .actions { flex-direction: column; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div class="topbar">
+    <a class="back-link" href="{% url 'beatzlock_app:download_list' %}">
+      <i class="fas fa-arrow-left"></i>
+      Latest Downloads
+    </a>
+  </div>
+
+  <section class="hero">
+    <h1>Older BeatzLock Versions</h1>
+    <p>Selected stable and major releases are kept here. Each platform shows only the latest 2 archived versions.</p>
+    <div class="archive-note">
+      <i class="fas fa-triangle-exclamation"></i>
+      Older versions may not work correctly if the BeatzLock API has changed. If sign in, sync, or pass checks fail, download the latest version instead.
+    </div>
+  </section>
+
+  {% for group in archive_groups %}
+    <section class="platform-block">
+      <h2 class="platform-title">
+        <i class="{{ group.icon }}"></i>
+        {{ group.title }}
+      </h2>
+      <div class="grid">
+        {% for app in group.apps %}
+          <article class="card">
+            <div class="pills">
+              <span class="pill pill-version"><i class="fas fa-tag"></i> v{{ app.version }}</span>
+              {% if app.build_number %}
+                <span class="pill pill-build"><i class="fas fa-hammer"></i> build {{ app.build_number }}</span>
+              {% endif %}
+              {% if app.release.is_major_release %}
+                <span class="pill pill-archive"><i class="fas fa-code-branch"></i> Major</span>
+              {% else %}
+                <span class="pill pill-archive"><i class="fas fa-circle-check"></i> Stable</span>
+              {% endif %}
+            </div>
+
+            <div class="meta-row">
+              <span><i class="fas fa-weight-hanging"></i> {{ app.file_size }}</span>
+              <span><i class="fas fa-calendar-check"></i> {{ app.release.released_at|date:"M d, Y" }}</span>
+            </div>
+
+            <div class="actions">
+              {% if app.has_release_notes %}
+                <button class="notes-button"
+                  onclick="openNotes('{{ app.version|escapejs }}','{{ app.build_number|escapejs }}',{{ app.id }})">
+                  <i class="fas fa-file-lines"></i>
+                  Notes
+                </button>
+              {% endif %}
+              <a class="download-link" href="{% url 'beatzlock_app:download_file' app.id %}">
+                <i class="fas fa-download"></i>
+                Download
+              </a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% empty %}
+    <div class="empty-card">No archived versions are published yet.</div>
+  {% endfor %}
+</div>
+
+<div class="modal-overlay" id="notesModal" role="dialog" aria-modal="true" aria-labelledby="notesTitle">
+  <div class="modal-box notes-modal">
+    <div class="modal-head">
+      <h3 id="notesTitle"><i class="fas fa-file-lines" style="color:var(--blue);margin-right:8px;"></i>Release Notes</h3>
+      <button class="modal-close" onclick="closeModal('notesModal')" aria-label="Close"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="notes-meta" id="notesMeta"></div>
+    <p class="notes-version-label">These release notes apply to all platforms for this release.</p>
+    <div class="notes-body" id="notesBody">Loading...</div>
+  </div>
+</div>
+
+<script>
+  function openModal(id) {
+    document.getElementById(id).classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.modal-overlay').forEach(el =>
+    el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); })
+  );
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay.open').forEach(el => closeModal(el.id));
+    }
+  });
+
+  function openNotes(version, build, appId) {
+    const meta = document.getElementById('notesMeta');
+    const body = document.getElementById('notesBody');
+
+    let html = `<span class="pill pill-version"><i class="fas fa-tag"></i> v${version}</span>`;
+    if (build) html += `<span class="pill pill-build"><i class="fas fa-hammer"></i> build ${build}</span>`;
+    meta.innerHTML = html;
+    body.textContent = 'Loading...';
+    openModal('notesModal');
+
+    fetch(`/beatzlock-apps/release-notes/${appId}/`)
+      .then(r => r.json())
+      .then(d => { body.textContent = d.notes || 'No release notes available for this version.'; })
+      .catch(() => { body.textContent = 'Could not load release notes. Please try again.'; });
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,483 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-fmb-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="{% block meta_description %}BeatzLock console{% endblock %}"
+    />
+    <title>{% block title %}BeatzLock Console{% endblock %}</title>
+
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("felixmokayabeatz-theme");
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.dataset.fmbTheme = theme;
+          }
+        } catch (error) {}
+      })();
+    </script>
+
+    {% include 'partials/favicon_links.html' %}
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{% static 'fmb_theme/fmb.css' %}" />
+    {% include 'partials/google_tag.html' %}
+    <style>
+      :root {
+        --fmb-admin-border: rgba(99, 102, 241, 0.16);
+        --fmb-admin-panel: color-mix(in srgb, var(--fmb-surface) 84%, transparent);
+        --fmb-admin-panel-strong: color-mix(in srgb, var(--fmb-surface-2) 90%, transparent);
+        --fmb-admin-shadow: 0 28px 70px rgba(2, 6, 23, 0.22);
+        --fmb-admin-blue: #4f46e5;
+        --fmb-admin-cyan: #06b6d4;
+        --fmb-admin-pink: #ec4899;
+        --fmb-admin-amber: #f59e0b;
+        --fmb-admin-green: #16a34a;
+        --fmb-admin-red: #dc2626;
+      }
+
+      [data-fmb-theme="dark"] {
+        --fmb-admin-border: rgba(125, 211, 252, 0.16);
+        --fmb-admin-panel: rgba(9, 15, 31, 0.8);
+        --fmb-admin-panel-strong: rgba(12, 19, 37, 0.92);
+        --fmb-admin-shadow: 0 30px 80px rgba(2, 6, 23, 0.46);
+      }
+
+      [data-fmb-theme="light"] {
+        --fmb-admin-border: rgba(8, 47, 73, 0.12);
+        --fmb-admin-panel: rgba(255, 255, 255, 0.92);
+        --fmb-admin-panel-strong: rgba(248, 250, 252, 0.96);
+        --fmb-admin-shadow: 0 24px 60px rgba(148, 163, 184, 0.18);
+      }
+
+      body.fmb-admin-body {
+        background:
+          radial-gradient(circle at top left, rgba(79, 70, 229, 0.18), transparent 34%),
+          radial-gradient(circle at top right, rgba(6, 182, 212, 0.14), transparent 28%),
+          linear-gradient(180deg, var(--fmb-bg), color-mix(in srgb, var(--fmb-surface) 40%, var(--fmb-bg)));
+      }
+
+      [data-fmb-theme="light"] body.fmb-admin-body {
+        background:
+          radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 32%),
+          radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 28%),
+          linear-gradient(180deg, #f8fbff, #eef4fb);
+      }
+
+      .fmb-admin-shell {
+        width: min(1440px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+
+      .fmb-admin-hero,
+      .fmb-admin-card,
+      .fmb-admin-panel,
+      .fmb-admin-table-wrap {
+        border: 1px solid var(--fmb-admin-border);
+        border-radius: 24px;
+        background: var(--fmb-admin-panel);
+        box-shadow: var(--fmb-admin-shadow);
+        backdrop-filter: blur(24px);
+      }
+
+      .fmb-admin-hero {
+        padding: 28px;
+        margin-bottom: 22px;
+      }
+
+      .fmb-admin-kicker {
+        margin: 0 0 10px;
+        color: var(--fmb-admin-cyan);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .fmb-admin-heading-row {
+        display: grid;
+        gap: 24px;
+      }
+
+      .fmb-admin-heading-copy {
+        max-width: 760px;
+      }
+
+      .fmb-admin-title {
+        margin: 0;
+        max-width: 9ch;
+        font-size: clamp(2.4rem, 5vw, 4.5rem);
+        line-height: 0.96;
+        letter-spacing: -0.04em;
+      }
+
+      .fmb-admin-subtitle {
+        margin: 12px 0 0;
+        max-width: 760px;
+        color: var(--fmb-text-muted);
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      .fmb-admin-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: stretch;
+        max-width: 980px;
+      }
+
+      .fmb-admin-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 16px;
+        border: 1px solid var(--fmb-admin-border);
+        border-radius: 999px;
+        background: var(--fmb-admin-panel-strong);
+        color: var(--fmb-text);
+        text-decoration: none;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      [data-fmb-theme="light"] .fmb-admin-subtitle,
+      [data-fmb-theme="light"] .fmb-admin-meta,
+      [data-fmb-theme="light"] .fmb-admin-footer,
+      [data-fmb-theme="light"] .fmb-admin-label,
+      [data-fmb-theme="light"] .fmb-admin-message {
+        color: #475569;
+      }
+
+      [data-fmb-theme="light"] .fmb-admin-title,
+      [data-fmb-theme="light"] .fmb-admin-value,
+      [data-fmb-theme="light"] .fmb-admin-chip,
+      [data-fmb-theme="light"] .fmb-admin-table th,
+      [data-fmb-theme="light"] .fmb-admin-table td {
+        color: #0f172a;
+      }
+
+      button.fmb-admin-chip {
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .fmb-admin-chip.is-primary {
+        border-color: transparent;
+        background: linear-gradient(135deg, var(--fmb-admin-blue), var(--fmb-admin-cyan));
+        color: #fff;
+      }
+
+      .fmb-admin-grid,
+      .fmb-admin-panels {
+        display: grid;
+        gap: 16px;
+      }
+
+      .fmb-admin-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .fmb-admin-panels {
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+
+      .fmb-admin-card,
+      .fmb-admin-panel {
+        padding: 20px;
+      }
+
+      .fmb-admin-label {
+        margin: 0 0 10px;
+        color: var(--fmb-text-muted);
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .fmb-admin-value {
+        margin: 0;
+        font-size: clamp(1.75rem, 4vw, 2.8rem);
+        font-weight: 900;
+        letter-spacing: -0.04em;
+      }
+
+      .fmb-admin-meta {
+        margin: 10px 0 0;
+        color: var(--fmb-text-muted);
+        line-height: 1.6;
+      }
+
+      .fmb-admin-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+
+      .fmb-admin-controls select,
+      .fmb-admin-controls input,
+      .fmb-admin-controls button {
+        min-height: 46px;
+        padding: 0 16px;
+        border: 1px solid var(--fmb-admin-border);
+        border-radius: 14px;
+        background: var(--fmb-admin-panel-strong);
+        color: var(--fmb-text);
+        font: inherit;
+      }
+
+      .fmb-admin-controls button {
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .fmb-admin-table-wrap {
+        overflow-x: auto;
+        margin-top: 18px;
+      }
+
+      .fmb-admin-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .fmb-admin-table th,
+      .fmb-admin-table td {
+        padding: 14px 12px;
+        border-bottom: 1px solid var(--fmb-admin-border);
+        text-align: left;
+      }
+
+      .fmb-admin-table th {
+        color: var(--fmb-text-muted);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .fmb-admin-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border: 1px solid var(--fmb-admin-border);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--fmb-admin-panel-strong) 88%, transparent);
+        color: var(--fmb-text-muted);
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+
+      .fmb-admin-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .fmb-admin-list-row {
+        display: grid;
+        grid-template-columns: 36px 32px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 12px;
+        border: 1px solid var(--fmb-admin-border);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--fmb-admin-panel-strong) 75%, transparent);
+      }
+
+      .fmb-admin-rank,
+      .fmb-admin-total {
+        font-weight: 800;
+      }
+
+      .fmb-admin-rank {
+        color: var(--fmb-text-muted);
+      }
+
+      .fmb-admin-total {
+        color: var(--fmb-admin-cyan);
+      }
+
+      .fmb-admin-flag {
+        width: 32px;
+        height: 22px;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 1px solid var(--fmb-admin-border);
+      }
+
+      .fmb-admin-empty {
+        padding: 26px;
+        text-align: center;
+        color: var(--fmb-text-muted);
+      }
+
+      .fmb-admin-chart {
+        position: relative;
+        min-height: 300px;
+      }
+
+      .fmb-admin-messages {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .fmb-admin-message {
+        padding: 14px 16px;
+        border: 1px solid var(--fmb-admin-border);
+        border-radius: 16px;
+        background: var(--fmb-admin-panel);
+      }
+
+      .fmb-admin-message.success {
+        border-color: rgba(22, 163, 74, 0.3);
+      }
+
+      .fmb-admin-message.error {
+        border-color: rgba(220, 38, 38, 0.3);
+      }
+
+      .fmb-admin-footer {
+        margin-top: 26px;
+        color: var(--fmb-text-muted);
+        text-align: center;
+      }
+
+      .fmb-admin-log-shell {
+        margin-top: 18px;
+        padding: 18px;
+        background: color-mix(in srgb, var(--fmb-admin-panel-strong) 92%, transparent);
+      }
+
+      .fmb-admin-log-container {
+        max-height: 70vh;
+        overflow: auto;
+        font-family: Consolas, Monaco, "Courier New", monospace;
+        font-size: 0.88rem;
+        line-height: 1.6;
+      }
+
+      .fmb-admin-log-entry {
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        border-radius: 14px;
+        border-left: 4px solid var(--fmb-admin-blue);
+        background: color-mix(in srgb, var(--fmb-admin-panel) 92%, transparent);
+        color: var(--fmb-text);
+      }
+
+      .fmb-admin-log-entry.level-info {
+        border-left-color: var(--fmb-admin-cyan);
+      }
+
+      .fmb-admin-log-entry.level-warning {
+        border-left-color: var(--fmb-admin-amber);
+      }
+
+      .fmb-admin-log-entry.level-error,
+      .fmb-admin-log-entry.level-critical {
+        border-left-color: var(--fmb-admin-red);
+      }
+
+      .fmb-admin-log-timestamp {
+        color: #7dd3fc;
+        font-weight: 700;
+      }
+
+      [data-fmb-theme="light"] .fmb-admin-log-shell {
+        background: color-mix(in srgb, var(--fmb-admin-panel-strong) 96%, white 4%);
+      }
+
+      [data-fmb-theme="light"] .fmb-admin-log-entry {
+        background: rgba(248, 250, 252, 0.92);
+        color: #0f172a;
+      }
+
+      [data-fmb-theme="light"] .fmb-admin-log-timestamp {
+        color: #0369a1;
+      }
+
+      @media (max-width: 860px) {
+        .fmb-admin-actions {
+          width: 100%;
+          justify-content: flex-start;
+          max-width: none;
+        }
+
+        .fmb-admin-chip {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .fmb-admin-shell {
+          width: min(100% - 20px, 100%);
+          padding-top: 18px;
+        }
+
+        .fmb-admin-list-row {
+          grid-template-columns: 32px minmax(0, 1fr) auto;
+        }
+
+        .fmb-admin-rank {
+          display: none;
+        }
+      }
+    </style>
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body class="fmb-admin-body">
+    <main class="fmb-admin-shell">
+      <section class="fmb-admin-hero">
+        <p class="fmb-admin-kicker">{% block admin_kicker %}BeatzLock Console{% endblock %}</p>
+        <div class="fmb-admin-heading-row">
+          <div class="fmb-admin-heading-copy">
+            <h1 class="fmb-admin-title">{% block admin_title %}Dashboard{% endblock %}</h1>
+            <p class="fmb-admin-subtitle">{% block admin_subtitle %}Downloads, ratings, and release builds for the BeatzLock apps.{% endblock %}</p>
+          </div>
+          <nav class="fmb-admin-actions" aria-label="Admin shortcuts">
+            <a href="{% url 'admin:index' %}" class="fmb-admin-chip"><i class="fas fa-shield-halved" aria-hidden="true"></i> Django Admin</a>
+            <a href="{% url 'download_stats' %}" class="fmb-admin-chip is-primary"><i class="fas fa-download" aria-hidden="true"></i> Download Stats</a>
+            <a href="{% url 'review_replies' %}" class="fmb-admin-chip"><i class="fas fa-reply" aria-hidden="true"></i> Review Replies</a>
+            <a href="{% url 'build_history' %}" class="fmb-admin-chip"><i class="fas fa-boxes-stacked" aria-hidden="true"></i> Build History</a>
+            <a href="{% url 'beatzlock_app:download_list' %}" class="fmb-admin-chip"><i class="fas fa-globe" aria-hidden="true"></i> Public Apps</a>
+            <button type="button" class="fmb-admin-chip" data-fmb-theme-toggle aria-label="Switch theme">
+              <i class="fas fa-sun" aria-hidden="true"></i><span>Light</span>
+            </button>
+          </nav>
+        </div>
+      </section>
+
+      {% if messages %}
+        <section class="fmb-admin-messages" aria-live="polite">
+          {% for message in messages %}
+            <div class="fmb-admin-message {{ message.tags }}">{{ message }}</div>
+          {% endfor %}
+        </section>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+
+      <footer class="fmb-admin-footer">
+        {% now "Y" as fallback_year %}
+        &copy; {{ current_year|default:fallback_year }} Felix Mokaya. Internal admin surface.
+      </footer>
+    </main>
+
+    <script src="{% static 'fmb_theme/fmb.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+  </body>
+</html>

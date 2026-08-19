@@ -21,3 +21,6 @@ soupsieve==2.8.3
 sqlparse==0.5.5
 typing_extensions==4.15.0
 tzdata==2026.2
+
+# WSGI server used by the systemd unit that deploy/deploy.sh installs.
+gunicorn==26.0.0

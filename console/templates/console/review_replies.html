@@ -1,0 +1,285 @@
+{% extends "console_base.html" %}
+
+{% block title %}BeatzLock Review Replies{% endblock %}
+{% block admin_kicker %}BeatzLock{% endblock %}
+{% block admin_title %}Review Replies{% endblock %}
+{% block admin_subtitle %}Reply to each platform review here without leaving Admin Tools. One user stays on one record, and each platform reply can be sent, updated, or deleted on its own tab.{% endblock %}
+
+{% block content %}
+  <style>
+    .fmb-admin-reply-preview,
+    .fmb-admin-reply-editor {
+      margin-left: clamp(18px, 3vw, 36px);
+      padding: 16px 18px;
+      border: 1px solid rgba(74, 158, 255, 0.22);
+      border-left: 4px solid rgba(74, 158, 255, 0.44);
+      border-radius: 18px;
+      background: rgba(74, 158, 255, 0.08);
+    }
+
+    .fmb-admin-reply-preview .fmb-admin-label,
+    .fmb-admin-reply-editor .fmb-admin-label {
+      color: var(--fmb-text);
+      margin-bottom: 6px;
+    }
+
+    .fmb-admin-reply-textarea {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: rgba(15, 23, 42, 0.06);
+      color: var(--fmb-text);
+      padding: 12px 14px;
+      min-height: 116px;
+      resize: vertical;
+      font: inherit;
+    }
+
+    .fmb-admin-reply-date {
+      display: block;
+      margin-top: 10px;
+      color: var(--fmb-text-muted);
+      font-size: 0.82rem;
+    }
+
+    html[data-fmb-theme="light"] .fmb-admin-reply-preview,
+    html[data-fmb-theme="light"] .fmb-admin-reply-editor {
+      border-color: rgba(37, 99, 235, 0.18);
+      border-left-color: rgba(37, 99, 235, 0.4);
+      background: rgba(37, 99, 235, 0.06);
+    }
+  </style>
+
+  <section class="fmb-admin-grid" aria-label="Review reply counts">
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Pending</p>
+      <p class="fmb-admin-value">{{ counts.pending }}</p>
+      <p class="fmb-admin-meta">Platform reviews with no admin reply yet.</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Drafted</p>
+      <p class="fmb-admin-value">{{ counts.draft }}</p>
+      <p class="fmb-admin-meta">Replies saved but not delivered yet.</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Delivered</p>
+      <p class="fmb-admin-value">{{ counts.sent }}</p>
+      <p class="fmb-admin-meta">Replies already sent by email and in-app notification.</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Total Reviews</p>
+      <p class="fmb-admin-value">{{ counts.total }}</p>
+      <p class="fmb-admin-meta">All platform reviews currently in the queue.</p>
+    </article>
+  </section>
+
+  <form class="fmb-admin-controls" method="get" style="margin-top:18px;">
+    <select name="status" aria-label="Reply status">
+      <option value="" {% if not status_filter %}selected{% endif %}>All statuses</option>
+      <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Needs reply</option>
+      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft reply</option>
+      <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Delivered</option>
+    </select>
+
+    <select name="platform" aria-label="Platform">
+      <option value="" {% if not platform %}selected{% endif %}>All platforms</option>
+      {% for value, label in platform_choices %}
+        <option value="{{ value }}" {% if platform == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+
+    <input
+      type="search"
+      name="q"
+      value="{{ search_query }}"
+      placeholder="Search name, email, comment, or reply"
+      aria-label="Search reviews"
+      style="min-width:260px;"
+    />
+    <button type="submit">Filter</button>
+  </form>
+
+  <section class="fmb-admin-panel" style="margin-top:18px;">
+    <p class="fmb-admin-label">Reply Queue</p>
+
+    {% if rating_groups %}
+      <div class="fmb-admin-list" style="margin-top:14px; display:grid; gap:14px;">
+        {% for group in rating_groups %}
+          <article class="fmb-admin-card" style="padding:18px;" data-reply-group="{{ group.group_id }}">
+            <div style="display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+              <div>
+                <strong style="font-size:1.05rem;">{{ group.display_name }}</strong>
+                <p class="fmb-admin-meta" style="margin-top:8px;">
+                  {% if group.account_email %}{{ group.account_email }}{% else %}No email stored{% endif %}
+                  {% if group.account_username %} · {{ group.account_username }}{% endif %}
+                </p>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;" role="tablist" aria-label="{{ group.display_name }} platform replies">
+              {% for entry in group.entries %}
+                <button
+                  type="button"
+                  class="fmb-admin-chip{% if entry.platform == group.active_platform %} is-primary{% endif %}"
+                  data-reply-group="{{ group.group_id }}"
+                  data-reply-platform="{{ entry.platform }}"
+                >
+                  {{ entry.platform_label }}
+                </button>
+              {% endfor %}
+            </div>
+
+            {% for entry in group.entries %}
+              <div
+                data-reply-group="{{ group.group_id }}"
+                data-reply-panel="{{ entry.platform }}"
+                style="margin-top:16px;{% if entry.platform != group.active_platform %} display:none;{% endif %}"
+              >
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                  <span class="fmb-admin-pill">{{ entry.platform_label }}</span>
+                  <span class="fmb-admin-pill">{{ entry.stars }}/5 stars</span>
+                  <span class="fmb-admin-pill">{{ entry.reply_status_label }}</span>
+                  <span class="fmb-admin-pill">Useful {{ entry.useful_count }}</span>
+                </div>
+
+                {% if entry.comment_preview %}
+                  <div style="margin-top:14px;">
+                    <p class="fmb-admin-label" style="margin-bottom:6px;">Comment</p>
+                    <p class="fmb-admin-meta" style="margin:0; color:var(--fmb-text);">{{ entry.comment_preview }}</p>
+                  </div>
+                {% endif %}
+
+                {% if entry.suggestion_preview %}
+                  <div style="margin-top:12px;">
+                    <p class="fmb-admin-label" style="margin-bottom:6px;">Suggestion</p>
+                    <p class="fmb-admin-meta" style="margin:0; color:var(--fmb-text);">{{ entry.suggestion_preview }}</p>
+                  </div>
+                {% endif %}
+
+                {% if entry.admin_reply_preview %}
+                  <div class="fmb-admin-reply-preview" style="margin-top:12px;">
+                    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center;">
+                      <p class="fmb-admin-label" style="margin-bottom:0;">BeatzLock Authenticator reply</p>
+                      <button
+                        type="button"
+                        class="fmb-admin-chip"
+                        data-edit-reply-target="reply-{{ group.rating_id }}-{{ entry.platform }}"
+                      >
+                        <i class="fas fa-pen" aria-hidden="true"></i> Edit Reply
+                      </button>
+                    </div>
+                    <p class="fmb-admin-meta" style="margin:10px 0 0; color:var(--fmb-text);">{{ entry.admin_reply_preview }}</p>
+                    {% if entry.admin_replied_at %}
+                      <span class="fmb-admin-reply-date">Replied {{ entry.admin_replied_at|date:"M j, Y g:i A" }}</span>
+                    {% endif %}
+                  </div>
+                {% endif %}
+
+                <form method="post" class="fmb-admin-reply-editor" style="margin-top:16px; display:grid; gap:10px;">
+                  {% csrf_token %}
+                  <input type="hidden" name="rating_id" value="{{ group.rating_id }}">
+                  <input type="hidden" name="platform" value="{{ entry.platform }}">
+                  <input type="hidden" name="next" value="{{ current_path }}">
+                  <label class="fmb-admin-label" for="reply-{{ group.rating_id }}-{{ entry.platform }}">BeatzLock Authenticator reply</label>
+                  <textarea
+                    id="reply-{{ group.rating_id }}-{{ entry.platform }}"
+                    class="fmb-admin-reply-textarea"
+                    name="admin_reply"
+                    rows="4"
+                    placeholder="Write the reply that should be emailed and sent in-app..."
+                  >{{ entry.reply_text }}</textarea>
+                  <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                    <button
+                      type="submit"
+                      name="action"
+                      value="delete_reply"
+                      class="fmb-admin-chip"
+                      data-confirm-delete="Delete the reply for {{ entry.platform_label }}?"
+                      {% if not entry.reply_text %}disabled{% endif %}
+                    >
+                      <i class="fas fa-trash" aria-hidden="true"></i> Delete Reply
+                    </button>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                      <button
+                        type="button"
+                        class="fmb-admin-chip"
+                        data-edit-reply-target="reply-{{ group.rating_id }}-{{ entry.platform }}"
+                      >
+                        <i class="fas fa-pen" aria-hidden="true"></i> Edit Reply
+                      </button>
+                      <button type="submit" name="action" value="save_reply" class="fmb-admin-chip is-primary">
+                        <i class="fas fa-paper-plane" aria-hidden="true"></i> {% if entry.reply_text %}Update Reply{% else %}Send Reply{% endif %}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+
+                <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px;">
+                  <span class="fmb-admin-meta">
+                    Added {{ entry.created_at|date:"M j, Y g:i A" }} · Edited {{ entry.updated_at|date:"M j, Y g:i A" }}
+                  </span>
+                  <span class="fmb-admin-meta">
+                    {% if entry.admin_reply_sent_at %}
+                      Sent {{ entry.admin_reply_sent_at|date:"M j, Y g:i A" }}
+                    {% elif entry.admin_replied_at %}
+                      Drafted {{ entry.admin_replied_at|date:"M j, Y g:i A" }}
+                    {% else %}
+                      No reply sent yet
+                    {% endif %}
+                  </span>
+                </div>
+              </div>
+            {% endfor %}
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="fmb-admin-empty">No reviews match this filter right now.</div>
+    {% endif %}
+  </section>
+
+  <script>
+    document.addEventListener('click', function (event) {
+      const deleteButton = event.target.closest('[data-confirm-delete]');
+      if (deleteButton) {
+        const message = deleteButton.dataset.confirmDelete || 'Delete this reply?';
+        if (!window.confirm(message)) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      const editButton = event.target.closest('[data-edit-reply-target]');
+      if (editButton) {
+        const targetId = editButton.dataset.editReplyTarget;
+        const textarea = document.getElementById(targetId);
+        if (textarea) {
+          textarea.focus();
+          const end = textarea.value.length;
+          textarea.setSelectionRange(end, end);
+        }
+        return;
+      }
+
+      const button = event.target.closest('[data-reply-platform]');
+      if (!button) {
+        return;
+      }
+
+      const groupId = button.dataset.replyGroup;
+      const platform = button.dataset.replyPlatform;
+
+      document
+        .querySelectorAll('[data-reply-group="' + groupId + '"][data-reply-platform]')
+        .forEach(function (item) {
+          item.classList.toggle('is-primary', item === button);
+        });
+
+      document
+        .querySelectorAll('[data-reply-group="' + groupId + '"][data-reply-panel]')
+        .forEach(function (panel) {
+          panel.style.display = panel.dataset.replyPanel === platform ? '' : 'none';
+        });
+    });
+  </script>
+{% endblock %}

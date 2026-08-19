@@ -1,0 +1,122 @@
+{% load static humanize %}
+<!DOCTYPE html>
+<html lang="en" data-fmb-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="{% block meta_description %}BeatzLock Authenticator downloads, ratings, release notes, and legal pages.{% endblock %}" />
+    <meta name="author" content="Felix Mokaya" />
+    <title>{% block title %}{{ site_name }}{% endblock %}</title>
+
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("felixmokayabeatz-theme");
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.dataset.fmbTheme = theme;
+          }
+        } catch (error) {}
+      })();
+    </script>
+
+    {% include 'partials/favicon_links.html' %}
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{% static 'fmb_theme/fmb.css' %}" />
+    {% include 'partials/google_tag.html' %}
+    {% block extra_head %}{% endblock %}
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body class="{% block body_class %}{% endblock %}">
+    <div class="fmb-shell">
+      <header class="fmb-nav">
+        <div class="fmb-nav-inner">
+          <a href="{% url 'beatzlock_app:download_list' %}" class="fmb-brand" aria-label="{{ site_name }} home">
+            <img src="{% static 'favicon/felixmokayabeatz_favicon.png' %}" alt="" width="36" height="36" />
+            <span class="fmb-brand-name">{{ site_name }}</span>
+          </a>
+
+          <nav class="fmb-nav-links" aria-label="Main navigation">
+            <a href="{% url 'beatzlock_app:download_list' %}" class="fmb-nav-link"><i class="fas fa-shield-halved" aria-hidden="true"></i> Downloads</a>
+            <a href="{% url 'beatzlock_app:archived_downloads' %}" class="fmb-nav-link"><i class="fas fa-box-archive" aria-hidden="true"></i> Archive</a>
+            <a href="{% url 'beatzlock_app:rate_app' %}" class="fmb-nav-link"><i class="fas fa-star" aria-hidden="true"></i> Reviews</a>
+            <a href="{{ main_site_url }}" class="fmb-nav-link"><i class="fas fa-house" aria-hidden="true"></i> Main site</a>
+            {% if user.is_staff %}
+              <a href="{% url 'download_stats' %}" class="fmb-nav-link" style="color:var(--accent-gold,#C8A96E);"><i class="fas fa-chart-line" aria-hidden="true"></i> Console</a>
+            {% endif %}
+          </nav>
+
+          <div class="fmb-actions">
+            <button type="button" class="fmb-theme-toggle" data-fmb-theme-toggle aria-label="Switch theme">
+              <i class="fas fa-sun" aria-hidden="true"></i><span>Light</span>
+            </button>
+            {% if user.is_authenticated %}
+              <span class="fmb-user-pill">{{ user.first_name|default:user.username }}</span>
+              <form action="{% url 'logout' %}" method="post" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="fmb-nav-link" style="background:none;border:none;cursor:pointer;">Logout</button>
+              </form>
+            {% else %}
+              <a href="{% url 'login' %}" class="fmb-btn fmb-btn-secondary fmb-btn-sm">Login</a>
+            {% endif %}
+            <button type="button" class="fmb-mobile-toggle" data-fmb-menu-toggle aria-label="Open navigation" aria-expanded="false" aria-controls="fmbMobileNav">
+              <i class="fas fa-bars" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+
+        <nav class="fmb-mobile-panel" id="fmbMobileNav" aria-label="Mobile navigation">
+          <a href="{% url 'beatzlock_app:download_list' %}"><i class="fas fa-shield-halved" aria-hidden="true"></i> Downloads</a>
+          <a href="{% url 'beatzlock_app:archived_downloads' %}"><i class="fas fa-box-archive" aria-hidden="true"></i> Archive</a>
+          <a href="{% url 'beatzlock_app:rate_app' %}"><i class="fas fa-star" aria-hidden="true"></i> Reviews</a>
+          <a href="{{ main_site_url }}"><i class="fas fa-house" aria-hidden="true"></i> Main site</a>
+          {% if user.is_staff %}
+            <a href="{% url 'download_stats' %}" style="color:#C8A96E;"><i class="fas fa-chart-line" aria-hidden="true"></i> Console</a>
+          {% endif %}
+          {% if user.is_authenticated %}
+            <form action="{% url 'logout' %}" method="post">
+              {% csrf_token %}
+              <button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font:inherit;"><i class="fas fa-right-from-bracket" aria-hidden="true"></i> Logout</button>
+            </form>
+          {% else %}
+            <a href="{% url 'login' %}"><i class="fas fa-right-to-bracket" aria-hidden="true"></i> Login</a>
+          {% endif %}
+        </nav>
+      </header>
+
+      {% if messages %}
+        <div class="fmb-flash-wrap" role="status" aria-live="polite">
+          {% for message in messages %}
+            <div class="fmb-flash fmb-flash-{{ message.tags }}"{% if 'toast-message' in message.tags %} data-fmb-toast-trigger="true"{% endif %}>{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <main class="fmb-main {% block main_class %}{% endblock %}">
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="fmb-footer">
+        <div class="fmb-footer-inner">
+          <div class="fmb-footer-brand">
+            <img src="{% static 'favicon/felixmokayabeatz_favicon.png' %}" alt="" width="24" height="24" />
+            <span>{{ site_name }}</span>
+          </div>
+          <div class="fmb-footer-links">
+            <a href="{% url 'beatzlock_app:legal_terms' %}">Terms of Service</a>
+            <a href="{% url 'beatzlock_app:legal_privacy' %}">Privacy Policy</a>
+            {% block footer_links_extra %}{% endblock %}
+          </div>
+          {% now "Y" as fallback_year %}
+          <div>&copy; {{ current_year|default:fallback_year }} Felix Mokaya. All rights reserved.</div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="{% static 'fmb_theme/fmb.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+  </body>
+</html>

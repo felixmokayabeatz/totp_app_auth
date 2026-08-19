@@ -1,0 +1,763 @@
+from datetime import timedelta
+from unittest import mock
+
+from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.base import ContentFile
+from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.urls import reverse
+from django.utils import timezone
+import json
+import os
+import shutil
+import tempfile
+import uuid
+
+from .models import AppRating, AppRelease, DownloadDailyStat, DownloadStats, DownloadableApp, TotalDownloadCount
+from .review_replies import dispatch_review_reply
+from console.download_stats import build_download_stats_context
+from .views import _group_ratings_for_display, _parse_build_number, submit_rating, update_check
+
+
+def _workspace_temp_dir(prefix='beatzlock-test-'):
+    root = os.path.join(settings.BASE_DIR, '.tmp_test_media')
+    os.makedirs(root, exist_ok=True)
+    path = os.path.join(root, f'{prefix}{uuid.uuid4().hex}')
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+class _FakeApp:
+    def __init__(self, platform, version, build_number, app_id=1):
+        self.platform = platform
+        self.version = version
+        self.build_number = build_number
+        self.id = app_id
+        self.release = type('Release', (), {'released_at': None})()
+        self.release_notes_text = 'Bug fixes'
+
+
+class UpdateRuleTests(SimpleTestCase):
+    def test_build_number_parser_handles_plain_numeric_values(self):
+        self.assertEqual(_parse_build_number('2'), 2)
+
+    def test_build_number_parser_handles_prefixed_values(self):
+        self.assertEqual(_parse_build_number('build-47'), 47)
+
+
+class AppRatingTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _submit_rating(self, reviewer_key, platform, display_name=''):
+        request = self.factory.post(
+            '/beatzlock-apps/api/ratings/submit/',
+            data=json.dumps({
+                'reviewer_key': reviewer_key,
+                'platform': platform,
+                'display_name': display_name,
+                'stars': 5,
+                'comment': 'Solid app',
+                'account_user_id': '42',
+                'account_email': 'felix@example.com',
+                'account_username': 'felix',
+            }),
+            content_type='application/json',
+        )
+        return submit_rating(request)
+
+    def test_same_user_gets_one_review_per_platform(self):
+        self._submit_rating('same-user', 'android', display_name='Felix')
+        self._submit_rating('same-user', 'windows', display_name='Felix')
+
+        rating = AppRating.objects.get()
+        self.assertEqual(AppRating.objects.count(), 1)
+        self.assertEqual(rating.platform_values, ['android', 'windows'])
+        self.assertEqual(set(rating.platform_reviews.keys()), {'android', 'windows'})
+
+    def test_same_user_edit_updates_only_that_platform_review(self):
+        self._submit_rating('same-user', 'android', display_name='Felix')
+        self._submit_rating('same-user', 'windows', display_name='Felix')
+        request = self.factory.post(
+            '/beatzlock-apps/api/ratings/submit/',
+            data=json.dumps({
+                'reviewer_key': 'same-user',
+                'platform': 'android',
+                'display_name': 'Felix',
+                'stars': 3,
+                'comment': 'Needs work',
+            }),
+            content_type='application/json',
+        )
+        submit_rating(request)
+
+        rating = AppRating.objects.get()
+        self.assertEqual(AppRating.objects.count(), 1)
+        self.assertEqual(rating.get_platform_review('android')['comment'], 'Needs work')
+        self.assertEqual(rating.get_platform_review('android')['stars'], 3)
+        self.assertEqual(rating.get_platform_review('windows')['comment'], 'Solid app')
+
+    def test_blank_display_name_falls_back_to_anonymous_user(self):
+        self._submit_rating('anonymous-user', 'android')
+
+        rating = AppRating.objects.get()
+        self.assertEqual(rating.display_name, '')
+        self.assertEqual(rating.display_name_or_anonymous, 'Anonymous user')
+
+    def test_delete_rating_removes_only_selected_platform(self):
+        self._submit_rating('same-user', 'android', display_name='Felix')
+        self._submit_rating('same-user', 'windows', display_name='Felix')
+
+        response = self.client.post(
+            reverse('beatzlock_app:delete_rating'),
+            data=json.dumps({
+                'reviewer_key': 'same-user',
+                'platform': 'windows',
+            }),
+            content_type='application/json',
+        )
+
+        rating = AppRating.objects.get()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['deleted'])
+        self.assertEqual(rating.platform_values, ['android'])
+        self.assertIsNone(rating.get_platform_review('windows'))
+
+
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    DEFAULT_FROM_EMAIL='noreply@example.com',
+    SUPPORT_EMAIL='felixmokayabeatz@proton.me',
+    BEATZLOCK_API_BASE_URL='https://api.example.com/api/',
+    BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-secret',
+)
+class ReviewReplyDispatchTests(TestCase):
+    @mock.patch('beatzlock_app.review_replies.requests.post')
+    def test_dispatch_review_reply_sends_email_and_app_notification(self, mock_post):
+        mock_post.return_value.raise_for_status.return_value = None
+        rating = AppRating.objects.create(
+            reviewer_key='reply-user',
+            platform='android',
+            display_name='Felix',
+            stars=5,
+            comment='Nice app',
+            account_user_id='88',
+            account_email='felix@example.com',
+            account_username='felix',
+            admin_reply='Thanks for the feedback.',
+            platform_reviews={
+                'android': {
+                    'platform': 'android',
+                    'stars': 5,
+                    'comment': 'Nice app',
+                    'suggestion': '',
+                    'app_version': '',
+                    'build_number': '',
+                    'device_label': '',
+                    'created_at': timezone.now().isoformat(),
+                    'updated_at': timezone.now().isoformat(),
+                    'admin_reply': 'Thanks for the feedback.',
+                    'admin_replied_at': timezone.now().isoformat(),
+                    'admin_reply_sent_at': None,
+                    'useful_count': 0,
+                }
+            },
+            platform_history='|android|',
+        )
+
+        result = dispatch_review_reply(rating, platform='android', entry=rating.get_platform_review('android'))
+
+        self.assertTrue(result['email_sent'])
+        self.assertTrue(result['notification_sent'])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('Thanks for the feedback.', mail.outbox[0].body)
+        self.assertEqual(mail.outbox[0].reply_to, ['felixmokayabeatz@proton.me'])
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        self.assertEqual(mail.outbox[0].alternatives[0].mimetype, 'text/html')
+        self.assertIn('BeatzLock Authenticator reply', mail.outbox[0].alternatives[0].content)
+        mock_post.assert_called_once()
+        self.assertEqual(
+            mock_post.call_args.args[0],
+            'https://api.example.com/api/external/review-reply/',
+        )
+
+
+
+class RatingGroupingTests(TestCase):
+    def test_grouping_keeps_one_card_per_user_with_platform_tabs(self):
+        rating = AppRating.objects.create(
+            reviewer_key='same-user',
+            platform='linux',
+            display_name='Felix',
+            stars=5,
+            comment='Linux review',
+            platform_history='|linux|android|',
+            platform_reviews={
+                'linux': {
+                    'platform': 'linux',
+                    'stars': 5,
+                    'comment': 'Linux review',
+                    'suggestion': '',
+                    'app_version': '',
+                    'build_number': '',
+                    'device_label': '',
+                    'created_at': timezone.now().isoformat(),
+                    'updated_at': timezone.now().isoformat(),
+                    'admin_reply': '',
+                    'admin_replied_at': None,
+                    'admin_reply_sent_at': None,
+                    'useful_count': 0,
+                },
+                'android': {
+                    'platform': 'android',
+                    'stars': 4,
+                    'comment': 'Android review',
+                    'suggestion': '',
+                    'app_version': '',
+                    'build_number': '',
+                    'device_label': '',
+                    'created_at': timezone.now().isoformat(),
+                    'updated_at': timezone.now().isoformat(),
+                    'admin_reply': '',
+                    'admin_replied_at': None,
+                    'admin_reply_sent_at': None,
+                    'useful_count': 0,
+                },
+            },
+        )
+
+        groups = _group_ratings_for_display([rating], 'linux')
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['active_platform'], 'linux')
+        self.assertEqual(len(groups[0]['entries']), 2)
+
+
+class RatingUsefulVoteTests(TestCase):
+    def test_same_browser_can_only_vote_once_per_platform(self):
+        now_iso = timezone.now().isoformat()
+        rating = AppRating.objects.create(
+            reviewer_key='same-user',
+            platform='android',
+            display_name='Felix',
+            stars=5,
+            comment='Nice app',
+            platform_history='|android|windows|',
+            platform_reviews={
+                'android': {
+                    'platform': 'android',
+                    'stars': 5,
+                    'comment': 'Nice app',
+                    'suggestion': '',
+                    'app_version': '',
+                    'build_number': '',
+                    'device_label': '',
+                    'created_at': now_iso,
+                    'updated_at': now_iso,
+                    'admin_reply': '',
+                    'admin_replied_at': None,
+                    'admin_reply_sent_at': None,
+                    'useful_count': 0,
+                },
+                'windows': {
+                    'platform': 'windows',
+                    'stars': 4,
+                    'comment': 'Windows app',
+                    'suggestion': '',
+                    'app_version': '',
+                    'build_number': '',
+                    'device_label': '',
+                    'created_at': now_iso,
+                    'updated_at': now_iso,
+                    'admin_reply': '',
+                    'admin_replied_at': None,
+                    'admin_reply_sent_at': None,
+                    'useful_count': 0,
+                },
+            },
+        )
+
+        url = reverse('beatzlock_app:mark_rating_useful', args=[rating.pk])
+        response = self.client.post(url, {'platform': 'android'}, HTTP_ACCEPT='application/json')
+        second = self.client.post(url, {'platform': 'android'}, HTTP_ACCEPT='application/json')
+        other_platform = self.client.post(url, {'platform': 'windows'}, HTTP_ACCEPT='application/json')
+
+        rating.refresh_from_db()
+        self.assertEqual(response.json()['useful_count'], 1)
+        self.assertFalse(second.json()['created'])
+        self.assertEqual(other_platform.json()['useful_count'], 1)
+        self.assertEqual(rating.get_platform_review('android')['useful_count'], 1)
+        self.assertEqual(rating.get_platform_review('windows')['useful_count'], 1)
+
+
+class ReviewRepliesToolTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username='admin',
+            email='admin@example.com',
+            password='password123',
+        )
+
+    @mock.patch('console.review_replies.dispatch_review_reply')
+    def test_reply_tool_saves_platform_reply_without_redirecting_to_django_admin(self, mock_dispatch):
+        mock_dispatch.return_value = {
+            'email_sent': True,
+            'notification_sent': True,
+            'errors': [],
+        }
+        now_iso = timezone.now().isoformat()
+        rating = AppRating.objects.create(
+            reviewer_key='reply-user',
+            platform='android',
+            display_name='Felix',
+            stars=5,
+            comment='Nice app',
+            account_user_id='88',
+            account_email='felix@example.com',
+            platform_history='|android|',
+            platform_reviews={
+                'android': {
+                    'platform': 'android',
+                    'stars': 5,
+                    'comment': 'Nice app',
+                    'suggestion': '',
+                    'app_version': '',
+                    'build_number': '',
+                    'device_label': '',
+                    'created_at': now_iso,
+                    'updated_at': now_iso,
+                    'admin_reply': '',
+                    'admin_replied_at': None,
+                    'admin_reply_sent_at': None,
+                    'useful_count': 0,
+                }
+            },
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse('review_replies'),
+            {
+                'rating_id': rating.pk,
+                'platform': 'android',
+                'admin_reply': 'Thanks for the review.',
+                'next': reverse('review_replies'),
+            },
+        )
+
+        rating.refresh_from_db()
+        entry = rating.get_platform_review('android')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('review_replies'))
+        self.assertEqual(entry['admin_reply'], 'Thanks for the review.')
+        self.assertIsNotNone(entry['admin_reply_sent_at'])
+        mock_dispatch.assert_called_once()
+
+    def test_reply_tool_can_delete_platform_reply(self):
+        now_iso = timezone.now().isoformat()
+        rating = AppRating.objects.create(
+            reviewer_key='reply-user',
+            platform='android',
+            display_name='Felix',
+            stars=5,
+            comment='Nice app',
+            account_user_id='88',
+            account_email='felix@example.com',
+            platform_history='|android|',
+            platform_reviews={
+                'android': {
+                    'platform': 'android',
+                    'stars': 5,
+                    'comment': 'Nice app',
+                    'suggestion': '',
+                    'app_version': '',
+                    'build_number': '',
+                    'device_label': '',
+                    'created_at': now_iso,
+                    'updated_at': now_iso,
+                    'admin_reply': 'Old reply',
+                    'admin_replied_at': now_iso,
+                    'admin_reply_sent_at': now_iso,
+                    'useful_count': 0,
+                }
+            },
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse('review_replies'),
+            {
+                'rating_id': rating.pk,
+                'platform': 'android',
+                'action': 'delete_reply',
+                'next': reverse('review_replies'),
+            },
+        )
+
+        rating.refresh_from_db()
+        entry = rating.get_platform_review('android')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(entry['admin_reply'], '')
+        self.assertIsNone(entry['admin_reply_sent_at'])
+
+
+class DownloadStatsAggregationTests(TestCase):
+    def setUp(self):
+        self.app = DownloadableApp.objects.create(
+            name='BeatzLock Authenticator',
+            platform='android',
+            file=SimpleUploadedFile('beatzlock.apk', b'apk-binary'),
+        )
+
+    def test_record_download_keeps_one_row_per_country(self):
+        DownloadStats.record_download(self.app, 'KE', 'Kenya')
+        DownloadStats.record_download(self.app, 'KE', 'Kenya')
+
+        stats = DownloadStats.objects.get(app=self.app, country_code='KE')
+        self.assertEqual(DownloadStats.objects.count(), 1)
+        self.assertEqual(stats.download_count, 2)
+
+    def test_record_download_also_tracks_daily_totals(self):
+        tracked_day = timezone.localdate() - timedelta(days=2)
+        DownloadStats.record_download(self.app, 'KE', 'Kenya', download_date=tracked_day)
+        DownloadStats.record_download(self.app, 'KE', 'Kenya', download_date=tracked_day)
+
+        daily_stat = DownloadDailyStat.objects.get(
+            app=self.app,
+            country_code='KE',
+            download_date=tracked_day,
+        )
+        self.assertEqual(DownloadDailyStat.objects.count(), 1)
+        self.assertEqual(daily_stat.download_count, 2)
+
+    def test_total_download_counter_increments(self):
+        total = TotalDownloadCount.increment()
+        total = TotalDownloadCount.increment()
+
+        self.assertEqual(total, 2)
+        self.assertEqual(TotalDownloadCount.get_total(), 2)
+
+
+class DownloadStatsPageContextTests(TestCase):
+    def setUp(self):
+        self.media_root = _workspace_temp_dir()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+
+    def tearDown(self):
+        self.override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def _create_build(self, version, platform='android'):
+        release = AppRelease.objects.create(version=version, released_at=timezone.now())
+        return DownloadableApp.objects.create(
+            name='BeatzLock Authenticator',
+            platform=platform,
+            release=release,
+            file=SimpleUploadedFile(f'beatzlock-{platform}-{version}.apk', b'apk-binary'),
+        )
+
+    def test_current_and_archived_downloads_are_counted_separately_by_platform(self):
+        archived = self._create_build('1.0.0')
+        current = self._create_build('2.0.0')
+        today = timezone.localdate()
+
+        DownloadStats.record_download(archived, 'KE', 'Kenya', download_date=today - timedelta(days=5))
+        DownloadStats.record_download(archived, 'KE', 'Kenya', download_date=today - timedelta(days=5))
+        DownloadStats.record_download(archived, 'US', 'United States', download_date=today - timedelta(days=2))
+        DownloadStats.record_download(current, 'KE', 'Kenya', download_date=today - timedelta(days=1))
+        DownloadStats.record_download(current, 'KE', 'Kenya', download_date=today - timedelta(days=1))
+        DownloadStats.record_download(current, 'KE', 'Kenya', download_date=today)
+
+        context = build_download_stats_context()
+
+        self.assertEqual(context['total_downloads_all'], 3)
+        self.assertEqual(context['archived_downloads_all'], 3)
+        self.assertEqual(len(context['app_stats']), 1)
+        self.assertEqual(len(context['archived_app_stats']), 1)
+        self.assertEqual(context['app_stats'][0]['platform'], 'android')
+        self.assertEqual(context['app_stats'][0]['total_downloads'], 3)
+        self.assertEqual(context['archived_app_stats'][0]['platform'], 'android')
+        self.assertEqual(context['archived_app_stats'][0]['total_downloads'], 3)
+        self.assertEqual(context['top_countries'][0]['country_code'], 'KE')
+        self.assertEqual(context['top_countries'][0]['total'], 3)
+        self.assertEqual(len(context['timeline_labels']), 30)
+        self.assertEqual(sum(context['timeline_current_points']), 3)
+        self.assertEqual(sum(context['timeline_archived_points']), 3)
+        self.assertTrue(context['timeline_has_data'])
+
+    def test_context_applies_custom_range_country_filter_and_country_sort(self):
+        archived = self._create_build('3.0.0')
+        current = self._create_build('4.0.0')
+        today = timezone.localdate()
+
+        DownloadStats.record_download(current, 'KE', 'Kenya', download_date=today - timedelta(days=3))
+        DownloadStats.record_download(current, 'KE', 'Kenya', download_date=today - timedelta(days=1))
+        DownloadStats.record_download(current, 'US', 'United States', download_date=today - timedelta(days=1))
+        DownloadStats.record_download(archived, 'US', 'United States', download_date=today - timedelta(days=2))
+
+        request = RequestFactory().get(
+            '/console/stats/',
+            {
+                'range': 'custom',
+                'start_date': (today - timedelta(days=3)).isoformat(),
+                'end_date': (today - timedelta(days=1)).isoformat(),
+                'country': 'KE',
+                'country_sort': 'country_asc',
+            },
+        )
+
+        context = build_download_stats_context(request)
+
+        self.assertEqual(context['selected_range'], 'custom')
+        self.assertEqual(context['selected_country_code'], 'KE')
+        self.assertEqual(context['country_sort'], 'country_asc')
+        self.assertEqual(context['start_date'], today - timedelta(days=3))
+        self.assertEqual(context['end_date'], today - timedelta(days=1))
+        self.assertEqual(context['timeline_current_total'], 2)
+        self.assertEqual(context['timeline_archived_total'], 0)
+        self.assertEqual(context['timeline_current_points'], [1, 0, 1])
+        self.assertEqual(context['timeline_archived_points'], [0, 0, 0])
+
+
+class DownloadListViewTests(TestCase):
+    def setUp(self):
+        self.media_root = _workspace_temp_dir()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+
+    def tearDown(self):
+        self.override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def _create_build(self, version, platform='android', linux_distribution=''):
+        release = AppRelease.objects.create(version=version, released_at=timezone.now())
+        extension = 'apk'
+        if platform == 'linux':
+            extension = 'rpm' if linux_distribution == 'fedora' else 'deb'
+        return DownloadableApp.objects.create(
+            name='BeatzLock Authenticator',
+            platform=platform,
+            linux_distribution=linux_distribution,
+            release=release,
+            file=SimpleUploadedFile(f'beatzlock-{platform}-{version}.{extension}', b'app-binary'),
+        )
+
+    def test_download_list_only_shows_uploaded_linux_distributions(self):
+        self._create_build('1.0.0', platform='linux', linux_distribution='ubuntu')
+        self._create_build('2.0.0', platform='linux', linux_distribution='fedora')
+
+        response = self.client.get(reverse('beatzlock_app:download_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [option['value'] for option in response.context['linux_distribution_options']],
+            ['ubuntu', 'fedora'],
+        )
+        self.assertContains(response, 'Ubuntu / Debian (.deb)')
+        self.assertContains(response, 'Fedora (.rpm)')
+        self.assertNotContains(response, 'Kali Linux (.deb)')
+        self.assertNotContains(response, 'Build slot reserved for a future release.')
+        self.assertNotContains(response, 'Coming Soon')
+        self.assertNotContains(response, 'More later')
+
+
+class DownloadableAppRetentionTests(TestCase):
+    def setUp(self):
+        self.media_root = _workspace_temp_dir()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+
+    def tearDown(self):
+        self.override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def _create_build(
+        self,
+        version,
+        platform='android',
+        linux_distribution='',
+        keep_in_archive=False,
+        is_major_release=False,
+    ):
+        release = AppRelease.objects.create(
+            version=version,
+            released_at=timezone.now(),
+            keep_in_archive=keep_in_archive,
+            is_major_release=is_major_release,
+        )
+        extension = 'apk'
+        if platform == 'linux':
+            extension = 'rpm' if linux_distribution == 'fedora' else 'deb'
+        return DownloadableApp.objects.create(
+            name='BeatzLock Authenticator',
+            platform=platform,
+            linux_distribution=linux_distribution,
+            release=release,
+            file=SimpleUploadedFile(f'beatzlock-{version}.{extension}', b'app-binary'),
+        )
+
+    def test_new_upload_keeps_current_build_and_two_archive_fallbacks_per_platform(self):
+        for version in ['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']:
+            self._create_build(version)
+
+        versions = set(
+            DownloadableApp.objects.filter(platform='android')
+            .select_related('release')
+            .values_list('release__version', flat=True)
+        )
+
+        self.assertEqual(versions, {'1.2.0', '1.3.0', '1.4.0'})
+
+    def test_archived_or_major_builds_are_protected_from_cleanup(self):
+        self._create_build('1.0.0', keep_in_archive=True)
+        for version in ['1.1.0', '1.2.0', '1.3.0', '1.4.0']:
+            self._create_build(version)
+
+        versions = set(
+            DownloadableApp.objects.filter(platform='android')
+            .select_related('release')
+            .values_list('release__version', flat=True)
+        )
+
+        self.assertEqual(versions, {'1.0.0', '1.2.0', '1.3.0', '1.4.0'})
+
+    def test_same_day_same_filename_replaces_existing_file_without_random_suffix(self):
+        first_release = AppRelease.objects.create(version='2.0.0', released_at=timezone.now())
+        first_app = DownloadableApp.objects.create(
+            name='BeatzLock Authenticator',
+            platform='android',
+            release=first_release,
+            file=SimpleUploadedFile('beatzlock.apk', b'old-apk'),
+        )
+
+        second_release = AppRelease.objects.create(version='2.1.0', released_at=timezone.now())
+        second_app = DownloadableApp.objects.create(
+            name='BeatzLock Authenticator',
+            platform='android',
+            release=second_release,
+            file=SimpleUploadedFile('beatzlock.apk', b'new-apk'),
+        )
+
+        self.assertEqual(second_app.file.name.rsplit('/', 1)[-1], 'beatzlock.apk')
+        self.assertFalse(DownloadableApp.objects.filter(pk=first_app.pk).exists())
+        folder = second_app.file.name.rsplit('/', 1)[0]
+        _, filenames = second_app.file.storage.listdir(folder)
+        self.assertEqual(filenames, ['beatzlock.apk'])
+        with second_app.file.storage.open(second_app.file.name, 'rb') as uploaded_file:
+            self.assertEqual(uploaded_file.read(), b'new-apk')
+
+    def test_upload_removes_old_orphan_files_for_same_platform_across_months(self):
+        old_file = 'downloads/apps/2026/01/10/android/old.apk'
+        other_platform_file = 'downloads/apps/2026/01/10/windows/old.exe'
+
+        storage = DownloadableApp._meta.get_field('file').storage
+        storage.save(old_file, ContentFile(b'old-android'))
+        storage.save(other_platform_file, ContentFile(b'old-windows'))
+
+        self._create_build('3.0.0', platform='android')
+
+        self.assertFalse(storage.exists(old_file))
+        self.assertTrue(storage.exists(other_platform_file))
+
+    def test_linux_distribution_builds_are_retained_separately(self):
+        for version in ['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']:
+            self._create_build(version, platform='linux', linux_distribution='ubuntu')
+
+        fedora = self._create_build('2.0.0', platform='linux', linux_distribution='fedora')
+
+        ubuntu_versions = set(
+            DownloadableApp.objects.filter(platform='linux', linux_distribution='ubuntu')
+            .select_related('release')
+            .values_list('release__version', flat=True)
+        )
+
+        self.assertEqual(ubuntu_versions, {'1.2.0', '1.3.0', '1.4.0'})
+        self.assertTrue(DownloadableApp.objects.filter(pk=fedora.pk).exists())
+
+    def test_linux_rpm_upload_without_distribution_defaults_to_fedora(self):
+        release = AppRelease.objects.create(version='5.0.0', released_at=timezone.now())
+        app = DownloadableApp.objects.create(
+            name='BeatzLock Authenticator',
+            platform='linux',
+            release=release,
+            file=SimpleUploadedFile('beatzlock-fedora.rpm', b'rpm-binary'),
+        )
+
+        self.assertEqual(app.linux_distribution, 'fedora')
+        self.assertIn('/linux-fedora/', app.file.name)
+
+    def test_update_check_can_target_linux_distribution(self):
+        self.factory = RequestFactory()
+        self._create_build('1.0.0', platform='linux', linux_distribution='ubuntu')
+        self._create_build('2.0.0', platform='linux', linux_distribution='fedora')
+
+        request = self.factory.get(
+            '/beatzlock-apps/api/update-check/',
+            {
+                'platform': 'linux',
+                'distribution': 'fedora',
+                'version': '1.0.0',
+                'build_number': '0',
+            },
+        )
+        response = update_check(request)
+        payload = json.loads(response.content)
+
+        self.assertEqual(payload['linux_distribution'], 'fedora')
+        self.assertEqual(payload['latest_version'], '2.0.0')
+        self.assertEqual(payload['platform_display'], 'Fedora (.rpm)')
+
+    def test_file_size_uses_storage_size(self):
+        app = self._create_build('4.0.0', platform='android')
+
+        self.assertEqual(app.file_size, '10.0 B')
+
+
+class AppReleaseNotesUploadTests(TestCase):
+    def setUp(self):
+        self.media_root = _workspace_temp_dir()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+
+    def tearDown(self):
+        self.override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def test_reuploading_same_version_replaces_existing_release_notes_file(self):
+        release = AppRelease.objects.create(
+            version='5.0.0',
+            released_at=timezone.now(),
+            release_notes_file=SimpleUploadedFile('v5.0.0.txt', b'old notes'),
+        )
+
+        release.release_notes_file = SimpleUploadedFile('v5.0.0.txt', b'updated notes')
+        release.save()
+
+        self.assertEqual(release.release_notes_file.name, 'downloads/release_notes/v5.0.0/v5.0.0.txt')
+        folder = release.release_notes_file.name.rsplit('/', 1)[0]
+        _, filenames = release.release_notes_file.storage.listdir(folder)
+        self.assertEqual(filenames, ['v5.0.0.txt'])
+        with release.release_notes_file.storage.open(release.release_notes_file.name, 'rb') as uploaded_file:
+            self.assertEqual(uploaded_file.read(), b'updated notes')
+
+    def test_reuploading_release_notes_clears_other_files_from_same_version_folder(self):
+        release = AppRelease.objects.create(
+            version='5.1.0',
+            released_at=timezone.now(),
+            release_notes_file=SimpleUploadedFile('old.txt', b'old notes'),
+        )
+        storage = release.release_notes_file.storage
+        folder = release.release_notes_file.name.rsplit('/', 1)[0]
+        storage.save(f'{folder}/stray.txt', ContentFile(b'stray'))
+
+        release.release_notes_file = SimpleUploadedFile('fresh.txt', b'fresh notes')
+        release.save()
+
+        self.assertFalse(storage.exists(f'{folder}/old.txt'))
+        self.assertFalse(storage.exists(f'{folder}/stray.txt'))
+        self.assertEqual(release.release_notes_file.name, f'{folder}/fresh.txt')
+        _, filenames = storage.listdir(folder)
+        self.assertEqual(filenames, ['fresh.txt'])

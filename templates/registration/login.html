@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign in — {{ site_name }}{% endblock %}
+{% block meta_description %}Sign in to {{ site_name }}.{% endblock %}
+
+{% block content %}
+<section class="fmb-panel" style="max-width:420px;margin:3rem auto;padding:2rem;">
+  <h1 style="margin-top:0;font-size:1.5rem;">Sign in</h1>
+
+  {% if form.errors %}
+    <div class="fmb-flash fmb-flash-error" style="margin-bottom:1rem;">
+      Your username and password didn't match. Please try again.
+    </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'login' %}">
+    {% csrf_token %}
+    <label for="{{ form.username.id_for_label }}" style="display:block;margin-bottom:.35rem;">Username</label>
+    {{ form.username }}
+    <label for="{{ form.password.id_for_label }}" style="display:block;margin:1rem 0 .35rem;">Password</label>
+    {{ form.password }}
+    <button type="submit" class="fmb-btn" style="margin-top:1.5rem;width:100%;">Sign in</button>
+    <input type="hidden" name="next" value="{{ next }}" />
+  </form>
+</section>
+{% endblock %}

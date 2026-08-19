@@ -3,11 +3,15 @@ from datetime import timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('SECRET_KEY')
+# .env lives at the project root next to manage.py -- the same place every
+# other felixmokayabeatz site keeps it, and where deploy/deploy.sh reads it.
+load_dotenv(BASE_DIR / '.env')
+
+# DJANGO_SECRET_KEY is the name deploy/deploy.sh reads and can generate; the
+# bare SECRET_KEY is still honoured so an older .env keeps working.
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or os.getenv('SECRET_KEY')
 
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
@@ -18,6 +22,10 @@ try:
 except ImportError:
     pass
 #====================================================================
+
+SITE_DOMAIN = os.getenv('SITE_DOMAIN', 'api.felixmokayabeatz.online')
+SITE_URL = os.getenv('SITE_URL', 'https://' + SITE_DOMAIN)
+
 
 def _split_csv_env(*names):
     values = []
@@ -33,14 +41,16 @@ if DEBUG:
     ALLOWED_HOSTS = ['*']
 else:
     allowed_hosts = _split_csv_env('ALLOWED_HOSTS', 'DJANGO_ALLOWED_HOSTS')
-    # '153.75.247.17' accepts requests that reach the server by bare IP instead of
-    # the domain; without it those hit DisallowedHost before any view runs.
+    # SERVER_IP accepts requests that reach the server by bare IP instead of the
+    # domain; without it those hit DisallowedHost before any view runs.
     ALLOWED_HOSTS = list(dict.fromkeys(
         allowed_hosts + [
-            'localhost',
-            '127.0.0.1',
-            'api.felixmokayabeatz.online',
-            '153.75.247.17',
+            host for host in (
+                'localhost',
+                '127.0.0.1',
+                SITE_DOMAIN,
+                os.getenv('SERVER_IP'),
+            ) if host
         ]
     ))
     
@@ -105,9 +115,7 @@ if DEBUG:
         "http://api.felixmokayabeatz.online",
     ]
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://api.felixmokayabeatz.online",
-]
+CSRF_TRUSTED_ORIGINS = _split_csv_env('CSRF_TRUSTED_ORIGINS') or [SITE_URL]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
@@ -146,21 +154,20 @@ WSGI_APPLICATION = 'otp_backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': '/home/felixmokayabeatz/Uploads/home/felixmokayabeatz/backups/2026/week_21/totp_db_2026-05-18_21-05-04.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DJANGO_DB_NAME', 'felixmokayabeatz_totp_db'),
+        'USER': os.getenv('DJANGO_DB_USER'),
+        'PASSWORD': os.getenv('DJANGO_DB_PASSWORD'),
+        'HOST': os.getenv('DJANGO_DB_HOST', 'localhost'),
+        # DJANGO_DB_PORT_POSTGRESQL was the old name for this key; it is still
+        # read so a stale .env cannot silently fall through to the default.
+        'PORT': (
+            os.getenv('DJANGO_DB_PORT')
+            or os.getenv('DJANGO_DB_PORT_POSTGRESQL')
+            or '5432'
+        ),
     }
 }
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.getenv('DJANGO_DB_NAME'),
-#         'USER': os.getenv('DJANGO_DB_USER'),
-#         'PASSWORD': os.getenv('DJANGO_DB_PASSWORD'),
-#         'HOST': os.getenv('DJANGO_DB_HOST'),
-#         'PORT': os.getenv('DJANGO_DB_PORT_POSTGRESQL'),
-#     }
-# }
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -179,7 +186,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'Africa/Nairobi'
+TIME_ZONE = os.getenv('TIME_ZONE', 'Africa/Nairobi')
 USE_I18N = True
 USE_TZ = True
 

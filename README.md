@@ -1,57 +1,182 @@
-# BeatzLock Authenticator
+# BeatzLock
 
-This project has two parts:
-
-- `otp_backend/` - Django backend API and admin
-- `otp_auth_app/` - Flutter client app
-
-## Project Structure
+Everything BeatzLock in one repo: the authenticator API, the Flutter client
+that talks to it, and the site people download the client from.
 
 ```text
-totp_app/
-├── otp_backend/
-└── otp_auth_app/
+beatzlock_project/
+├── config/  beatzlock_app/  console/   the downloads & ratings site (Django)
+├── otp_backend/                        the authenticator API (Django)
+├── otp_auth_app/                       the Flutter client
+├── deploy/                             deploy script + service/nginx templates
+├── inno_script/  vc_redist/            Windows installer inputs
+├── release_notes/  tos_privacy/        content published by the downloads site
+└── build.py  github.py                 native build + release helpers
 ```
 
-## 1. Run The Django Backend
+## The two Django projects
 
-Open a terminal in the project root:
+They are separate projects. Separate settings, separate databases, separate
+`auth_user` tables, separate subdomains, separate systemd units — deployed
+independently from one script.
+
+| | Downloads site | Authenticator API |
+|---|---|---|
+| Where | `./` | `./otp_backend/` |
+| Subdomain | `apps.felixmokayabeatz.online` | `api.felixmokayabeatz.online` |
+| Database | `felixmokayabeatz_beatzlock_db` | `felixmokayabeatz_totp_db` |
+| DB role | `Felix_Apps_Administrator` | `Felix_Apps_Administrator` |
+| Settings | `config/settings.py` | `otp_backend/otp_backend/settings.py` |
+| `.env` | `./.env` | `./otp_backend/.env` |
+| WSGI | `config.wsgi` | `otp_backend.wsgi` |
+| Gunicorn port | `8012` | `8002` |
+| Dev port | `8005` | `8000` |
+| systemd unit | `beatzlock` | `beatzlock-api` |
+| Virtualenv | `beatzlock_v_env` | `otp_backend/totp_v_env` |
+| Admin | `/beatzlock-admin/` | `/beatzlock_admin/` |
+| Apps | `beatzlock_app`, `console` | `accounts`, `api`, `twofa`, `beatzlocklogs` |
+
+Both roles are the shared `Felix_Apps_Administrator` used by the other
+felixmokayabeatz sites on the host, so `deploy.sh` never rewrites its password —
+it only creates the role if nothing on the host has one yet.
+
+### What each one serves
+
+**Downloads site** — `/downloads/`, `/downloads/archive/`, `/rate/`,
+`/legal/terms-of-service/`, `/legal/privacy-policy/`, the `/api/update-check/`
+and `/api/ratings/…` JSON the native apps read, and the staff console at
+`/console/stats/`, `/console/review-replies/`, `/console/build-history/`.
+
+**Authenticator API** — `/api/` for the native clients: auth, sync, device
+sessions, passwordless login, backup codes, 2FA and recovery codes, plus the
+log viewer at `/beatzlock_admin/logs/`. `/` redirects to the main site.
+
+## Deploy
+
+One script drives both projects. It reads each project's `.env` for the domain,
+the ports and the database credentials, so nothing is prompted for, and every
+step checks the current state first — it is safe to re-run.
+
+```bash
+sudo ./deploy/deploy.sh                  # menu: pick the project, then the action
+sudo ./deploy/deploy.sh --api --update   # or name both outright
+sudo ./deploy/deploy.sh --all --update   # both projects, one after the other
+sudo ./deploy/deploy.sh --site --status
+```
+
+| Action | What it does |
+|---|---|
+| `--fresh` | apt, PostgreSQL role + database, virtualenv, dependencies, migrate, collectstatic, superuser, systemd unit, nginx, firewall |
+| `--update` | routine deploy: dependencies, migrate, collectstatic, re-render unit and nginx site, restart |
+| `--restart` | restart gunicorn, reload nginx |
+| `--status` | service, port, database, migrations, certificate, end-to-end request |
+| `--logs` | gunicorn, nginx and Django logs |
+| `--database` | create/repair, back up, restore, psql shell, reset |
+| `--django …` | any `manage.py` command, e.g. `--django createsuperuser` |
+| `--renew` | renew this subdomain's certificate |
+| `--uninstall` | remove the unit and the nginx site; keeps code, database and `.env` |
+
+`--all` is refused for `--database`, `--django` and `--uninstall`: those act on
+one database, one shell or one unit and must name their project.
+
+TLS is not re-issued when an installed certificate already covers the subdomain
+— a wildcard counts. `deploy/nginx.site.conf.template`,
+`deploy/nginx.api.conf.template` and `deploy/gunicorn.service.template` are the
+single source of truth for what gets installed; edit the template, never the
+copy under `/etc/`.
+
+## Moving the server to this layout
+
+The API used to live at `/home/felixmokayabeatz/totp_app/` with its own ad-hoc
+`deploy.sh`, and the two databases were named `beatzlock_app_db` and
+`beatzlock_db` under the role `beatzlock_user`. On the server, once:
+
+**1. Move the checkout.** The repo root is now `beatzlock_project`, and the API
+is a subdirectory of it:
+
+```bash
+cd /home/felixmokayabeatz
+git clone <this repo> beatzlock_project      # or move the existing checkout
+```
+
+**2. Rename the databases.** The deploy script creates an *empty* database when
+the name in `.env` does not exist — it will not carry the old rows over. Rename
+first, then deploy:
+
+```bash
+sudo -u postgres psql -c 'ALTER DATABASE beatzlock_app_db RENAME TO felixmokayabeatz_totp_db;'
+sudo -u postgres psql -c 'ALTER DATABASE beatzlock_db     RENAME TO felixmokayabeatz_beatzlock_db;'
+
+# Hand both to the shared role the other sites already use.
+sudo -u postgres psql -c 'ALTER DATABASE felixmokayabeatz_totp_db      OWNER TO "Felix_Apps_Administrator";'
+sudo -u postgres psql -c 'ALTER DATABASE felixmokayabeatz_beatzlock_db OWNER TO "Felix_Apps_Administrator";'
+sudo -u postgres psql -d felixmokayabeatz_totp_db      -c 'REASSIGN OWNED BY beatzlock_user TO "Felix_Apps_Administrator";'
+sudo -u postgres psql -d felixmokayabeatz_beatzlock_db -c 'REASSIGN OWNED BY beatzlock_user TO "Felix_Apps_Administrator";'
+```
+
+A rename needs no other session on the database, so stop the old services
+first. Take a dump before any of this:
+`sudo -u postgres pg_dump -Fc beatzlock_app_db > totp.dump`.
+
+**3. Retire the old units and sites.**
+
+```bash
+sudo systemctl disable --now beatzlock          # the old API unit
+sudo rm /etc/nginx/sites-enabled/beatzlock
+```
+
+The new units are `beatzlock` (downloads site) and `beatzlock-api`. The old API
+unit shared the name `beatzlock`, so remove it before deploying the site, or
+the two will fight over it.
+
+**4. Deploy both.**
+
+```bash
+sudo ./deploy/deploy.sh --all --fresh
+```
+
+**5. Repoint the console's build-log path.** `BEATZLOCK_BUILD_LOGS_DIR` in the
+downloads site's `.env` now reads
+`/home/felixmokayabeatz/beatzlock_project/otp_auth_app/build_logs`.
+
+## Local development
+
+Neither `.env` is committed. Copy the server's, or write your own from the
+tables above.
+
+**Downloads site:**
+
+```bash
+python -m venv beatzlock_v_env && . beatzlock_v_env/Scripts/activate   # Windows
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver 8005
+```
+
+**Authenticator API:**
 
 ```bash
 cd otp_backend
-```
-
-Install backend dependencies:
-
-```bash
+python -m venv totp_v_env && . totp_v_env/Scripts/activate
 pip install -r requirements.txt
-```
-
-Run migrations:
-
-```bash
 python manage.py migrate
+python manage.py runserver 8000
 ```
 
-Start the backend server:
+`config/local.py` and `otp_backend/otp_backend/local.py` are git-ignored
+dev-only overrides, imported last so they win over everything — which is why
+`deploy.sh` refuses to run on a host where either exists. `otp_backend`'s
+currently just sets `DEBUG=True`.
 
-```bash
-python manage.py runserver
-```
+Set `USE_X_ACCEL_REDIRECT=False` in the downloads site's `.env` for local work:
+in production nginx streams app binaries via `X-Accel-Redirect` so no gunicorn
+worker carries the payload (`beatzlock_app/utils/file_serving.py`), and there
+is no nginx in front of `runserver`.
 
-Default backend URL:
+`data/GeoLite2-Country.mmdb` powers the per-country download statistics and is
+committed because the stats view needs it at runtime.
 
-```text
-http://127.0.0.1:8000/
-```
-
-Admin panel:
-
-```text
-http://127.0.0.1:8000/admin/
-```
-
-## 2. Run The Flutter App
+## Running the Flutter client
 
 Open a second terminal in the Flutter app folder:
 
@@ -288,57 +413,15 @@ Build an Android App Bundle:
 flutter build appbundle --release
 ```
 
-## Quick Start
+## Quick start
 
-Run the backend first:
-
-```bash
-cd otp_backend
-python manage.py migrate
-python manage.py runserver
-```
-
-Then run the Flutter app in another terminal.
-
-### Windows
+Run whichever Django project you need, then the client:
 
 ```bash
-cd otp_auth_app
-flutter pub get
-flutter run -d windows
+python manage.py runserver 8005          # downloads site, from the repo root
+cd otp_backend && python manage.py runserver 8000   # authenticator API
+cd otp_auth_app && flutter run -d windows           # or -d linux, -d android
 ```
 
-### Kali Linux
-
-```bash
-cd otp_auth_app
-flutter pub get
-flutter run -d linux
-```
-
-### Fedora Linux
-
-```bash
-cd otp_auth_app
-flutter pub get
-flutter run -d linux
-```
-
-### Android
-
-```bash
-cd otp_auth_app
-flutter pub get
-flutter run -d android
-```
-
-## Deployment Script
-
-If you are deploying on the server, use:
-
-```bash
-chmod +x deploy.sh
-./deploy.sh
-```
-
-Be careful when running the deployment script on a live server.
+Deployment is `sudo ./deploy/deploy.sh` — see **Deploy** above. Be careful
+running it against the live server.

@@ -1,0 +1,147 @@
+#header,
+#footer {
+  background: linear-gradient(135deg, #0f172a, #1d4ed8);
+  color: #fff;
+}
+
+#header h1 a,
+#user-tools,
+#user-tools a,
+.breadcrumbs,
+.breadcrumbs a {
+  color: #fff !important;
+}
+
+.module caption,
+.inline-group h2 {
+  background: linear-gradient(135deg, #1d4ed8, #0891b2);
+  color: #fff;
+}
+
+.module caption a.section:link,
+.module caption a.section:visited,
+#nav-sidebar .current-app .section:link,
+#nav-sidebar .current-app .section:visited {
+  color: #fff;
+}
+
+input[type="submit"],
+button,
+.button,
+a.button {
+  border-radius: 8px;
+}
+
+html[data-theme="light"] .module caption,
+html[data-theme="light"] .inline-group h2 {
+  background: linear-gradient(135deg, #dbeafe, #e0f2fe);
+  color: #0f172a;
+}
+
+html[data-theme="light"] .module caption a.section:link,
+html[data-theme="light"] .module caption a.section:visited,
+html[data-theme="light"] #nav-sidebar .current-app .section:link,
+html[data-theme="light"] #nav-sidebar .current-app .section:visited {
+  color: #0f172a;
+}
+
+html[data-theme="light"] #nav-sidebar {
+  background: #f8fafc;
+}
+
+html[data-theme="light"] #nav-filter {
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+}
+
+html[data-theme="light"] #nav-sidebar .current-model {
+  background: #fef3c7;
+}
+
+html[data-theme="light"] thead th,
+html[data-theme="light"] tfoot td {
+  color: #334155;
+}
+
+.fmb-admin-upload-progress {
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--hairline-color);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(29, 78, 216, 0.09), rgba(8, 145, 178, 0.09));
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+}
+
+.fmb-admin-upload-progress[hidden] {
+  display: none !important;
+}
+
+.fmb-admin-upload-progress__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.fmb-admin-upload-progress__title {
+  font-weight: 700;
+  color: var(--body-fg);
+}
+
+.fmb-admin-upload-progress__percent {
+  min-width: 52px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--link-fg);
+}
+
+.fmb-admin-upload-progress__bar {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.24);
+}
+
+.fmb-admin-upload-progress__fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #1d4ed8, #06b6d4);
+  transition: width 180ms ease;
+}
+
+.fmb-admin-upload-progress.is-indeterminate .fmb-admin-upload-progress__fill {
+  width: 42%;
+  animation: fmb-admin-upload-slide 1.2s ease-in-out infinite;
+}
+
+.fmb-admin-upload-progress__status {
+  margin: 10px 0 0;
+  color: var(--body-quiet-color);
+  line-height: 1.5;
+}
+
+.fmb-admin-is-uploading .submit-row input,
+.fmb-admin-is-uploading .submit-row button {
+  opacity: 0.75;
+}
+
+html[data-theme="light"] .fmb-admin-upload-progress {
+  border-color: #cbd5e1;
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.92), rgba(224, 242, 254, 0.92));
+}
+
+@keyframes fmb-admin-upload-slide {
+  0% {
+    transform: translateX(-115%);
+  }
+
+  100% {
+    transform: translateX(245%);
+  }
+}

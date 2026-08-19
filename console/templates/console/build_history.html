@@ -1,0 +1,102 @@
+{% extends "console_base.html" %}
+
+{% block title %}Build History | Felixmokayabeatz Admin{% endblock %}
+{% block admin_kicker %}BeatzLock Observability{% endblock %}
+{% block admin_title %}Build History{% endblock %}
+{% block admin_subtitle %}Pick a platform and scan the recorded build history by version, build number, artifact, and exact timestamp.{% endblock %}
+
+{% block content %}
+  <section class="fmb-admin-panel">
+    <div class="fmb-admin-actions" style="justify-content:flex-start;">
+      {% for summary in platform_summaries %}
+        <a
+          href="{% url 'build_history' %}?{{ summary.query_string }}"
+          class="fmb-admin-chip{% if selected_platform == summary.platform %} is-primary{% endif %}"
+        >
+          <i class="fas fa-box-archive" aria-hidden="true"></i>
+          {{ summary.platform_label }}: {{ summary.count }} entr{{ summary.count|pluralize:"y,ies" }}
+        </a>
+      {% endfor %}
+      <button type="button" onclick="window.location.reload()" class="fmb-admin-chip">
+        <i class="fas fa-rotate-right" aria-hidden="true"></i> Refresh
+      </button>
+    </div>
+  </section>
+
+  <section class="fmb-admin-panel" style="margin-top:18px;">
+    <form method="get" class="fmb-admin-controls" style="margin-bottom:0;">
+      <input type="hidden" name="platform" value="{{ selected_platform }}" />
+      <input type="date" name="date" value="{{ selected_date }}" />
+      <button type="submit"><i class="fas fa-calendar-day" aria-hidden="true"></i> Filter Day</button>
+      <a href="{% url 'build_history' %}?platform={{ selected_platform }}" class="fmb-admin-chip"><i class="fas fa-filter-circle-xmark" aria-hidden="true"></i> Clear Day</a>
+    </form>
+  </section>
+
+  <section class="fmb-admin-grid" aria-label="Build history summary" style="margin-top:18px;">
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Selected Platform</p>
+      <p class="fmb-admin-value">{{ selected_platform_label }}</p>
+      <p class="fmb-admin-meta">Showing the simplified build timeline for this platform.</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Visible Entries</p>
+      <p class="fmb-admin-value">{{ filtered_entries_count }}</p>
+      <p class="fmb-admin-meta">{% if selected_date %}Filtered to {{ selected_date }}.{% else %}One stored release row per platform log entry.{% endif %}</p>
+    </article>
+    <article class="fmb-admin-card">
+      <p class="fmb-admin-label">Latest Build Time</p>
+      <p class="fmb-admin-value" style="font-size:1.5rem;">{% if latest_timestamp %}{{ latest_timestamp|date:"Y-m-d H:i:s" }}{% else %}None{% endif %}</p>
+      <p class="fmb-admin-meta">Newest recorded timestamp in the selected platform log.</p>
+    </article>
+  </section>
+
+  {% if missing_files %}
+    <section class="fmb-admin-message error" style="margin-top:18px;">
+      Missing build log files:
+      {% for file in missing_files %}
+        {{ file.platform_label }}{% if not forloop.last %}, {% endif %}
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  <section class="fmb-admin-panel" style="margin-top:18px;">
+    {% if entries %}
+      <div class="fmb-admin-table-wrap" style="margin-top:0;">
+        <table class="fmb-admin-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Version</th>
+              <th>Build Number</th>
+              <th>ArtifactVersion</th>
+              <th>Artifact</th>
+              <th>Date / Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+              <tr>
+                <td>{{ entry.row_number }}</td>
+                <td>{{ entry.version }}</td>
+                <td>{{ entry.build_number }}</td>
+                <td>{{ entry.artifact_version }}</td>
+                <td>{{ entry.artifact }}</td>
+                <td>{% if entry.timestamp_dt %}{{ entry.timestamp_dt|date:"Y-m-d H:i:s" }}{% else %}{{ entry.timestamp }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif has_any_entries %}
+      <div class="fmb-admin-empty">
+        <h3 style="margin:0 0 8px;">No {{ selected_platform_label }} history yet</h3>
+        <p style="margin:0;">The current files do not contain any {{ selected_platform_label|lower }} build entries{% if selected_date %} on {{ selected_date }}{% endif %}.</p>
+      </div>
+    {% else %}
+      <div class="fmb-admin-empty">
+        <h3 style="margin:0 0 8px;">No build entries found</h3>
+        <p style="margin:0;">Run a BeatzLock build or place real build history files in the platform folders to populate this view.</p>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

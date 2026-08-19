@@ -1,0 +1,81 @@
+# Downloads site -- apps.felixmokayabeatz.online
+#
+# Rendered by deploy/deploy.sh -- edit the template, not the installed copy in
+# /etc/nginx/sites-available/. Placeholders: __DOMAIN__, __SERVER_NAMES__,
+# __PROJECT_DIR__, __GUNICORN_PORT__, __ACME_ROOT__, __CERT_DIR__.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SERVER_NAMES__;
+
+    # Kept on port 80 so an HTTP-01 renewal can be answered on this name
+    # without the redirect below swallowing the challenge.
+    location /.well-known/acme-challenge/ {
+        root __ACME_ROOT__;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name __SERVER_NAMES__;
+
+    # App binaries are uploaded through the Django admin; installers are large.
+    client_max_body_size 500M;
+
+    # __CERT_DIR__ is the certificate that already covers this subdomain --
+    # deploy.sh finds it and checks the SANs.
+    ssl_certificate __CERT_DIR__/fullchain.pem;
+    ssl_certificate_key __CERT_DIR__/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:__GUNICORN_PORT__;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_redirect off;
+    }
+
+    # STATIC_URL is /staticfiles/ and the names are content-hashed, so these
+    # can be cached hard.
+    location /staticfiles/ {
+        alias __PROJECT_DIR__/staticfiles/;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        access_log off;
+        try_files $uri =404;
+    }
+
+    # Django counts the download and authorises it, then hands the file back
+    # here with X-Accel-Redirect so no gunicorn worker ever streams a payload.
+    # beatzlock_app/utils/file_serving.py is the other half of this; it needs
+    # USE_X_ACCEL_REDIRECT=True in .env.
+    location /internal-media/ {
+        internal;
+        alias __PROJECT_DIR__/media/;
+        sendfile on;
+        tcp_nopush on;
+        add_header Accept-Ranges bytes always;
+    }
+
+    # Binaries still enter through Django so the download counts stay accurate;
+    # only the payload itself is handed off above.
+    location /media/ {
+        proxy_pass http://127.0.0.1:__GUNICORN_PORT__;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+    }
+}

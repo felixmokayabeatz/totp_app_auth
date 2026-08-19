@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+
+{% block meta_description %}BeatzLock Authenticator downloads, ratings, release notes, and legal pages.{% endblock %}
+{% block main_class %}beatzlock-main{% endblock %}
+
+{% block footer_links_extra %}
+  <a href="{% url 'beatzlock_app:legal_terms' %}">BeatzLock Terms</a>
+  <a href="{% url 'beatzlock_app:legal_privacy' %}">BeatzLock Privacy</a>
+{% endblock %}
+
+{% block extra_head %}
+  {{ block.super }}
+  {% block extra_css %}{% endblock %}
+  <style>
+    .fmb-main.beatzlock-main {
+      width: min(var(--fmb-max), calc(100% - 32px));
+      margin: 0 auto;
+      padding-top: 34px;
+    }
+
+    .beatzlock-main .page,
+    .beatzlock-main .ratings-page,
+    .beatzlock-main .legal-page {
+      color: var(--text, var(--fmb-text));
+    }
+
+    html[data-fmb-theme="light"] {
+      --bg: #ffffff;
+      --surface: rgba(255, 255, 255, 0.9);
+      --surface-hover: rgba(248, 251, 255, 0.98);
+      --border: rgba(28, 41, 71, 0.13);
+      --border-hi: rgba(56, 189, 248, 0.46);
+      --blue: #0284c7;
+      --purple: #7c3aed;
+      --pink: #db2777;
+      --text: #101827;
+      --muted: #48556d;
+      --glow: rgba(43, 71, 120, 0.13);
+    }
+
+    html[data-fmb-theme="light"] .blobs {
+      opacity: 0.85;
+    }
+
+    html[data-fmb-theme="light"] .blob {
+      opacity: 0.09;
+    }
+
+    html[data-fmb-theme="light"] .hero-title,
+    html[data-fmb-theme="light"] .section-head h2,
+    html[data-fmb-theme="light"] .legal-title {
+      background: linear-gradient(135deg, var(--text) 24%, var(--blue) 62%, var(--purple));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    html[data-fmb-theme="light"] .ratings-title,
+    html[data-fmb-theme="light"] .card-name,
+    html[data-fmb-theme="light"] .platform-title,
+    html[data-fmb-theme="light"] .legal-content h1,
+    html[data-fmb-theme="light"] .legal-content h2,
+    html[data-fmb-theme="light"] .legal-content h3,
+    html[data-fmb-theme="light"] .legal-content h4,
+    html[data-fmb-theme="light"] .legal-content strong {
+      color: var(--text);
+    }
+
+    html[data-fmb-theme="light"] .ratings-copy,
+    html[data-fmb-theme="light"] .legal-content,
+    html[data-fmb-theme="light"] .confirm-body,
+    html[data-fmb-theme="light"] .hero-sub,
+    html[data-fmb-theme="light"] .section-head p,
+    html[data-fmb-theme="light"] .meta-row,
+    html[data-fmb-theme="light"] .stat-label,
+    html[data-fmb-theme="light"] .legal-meta span {
+      color: var(--muted);
+    }
+
+    html[data-fmb-theme="light"] .hero,
+    html[data-fmb-theme="light"] .card,
+    html[data-fmb-theme="light"] .feat-card,
+    html[data-fmb-theme="light"] .rating-score,
+    html[data-fmb-theme="light"] .rating-card,
+    html[data-fmb-theme="light"] .legal-content blockquote,
+    html[data-fmb-theme="light"] .legal-content pre,
+    html[data-fmb-theme="light"] .modal-box {
+      box-shadow: 0 24px 70px rgba(43, 71, 120, 0.11);
+    }
+
+    html[data-fmb-theme="light"] .modal-overlay {
+      background: rgba(239, 246, 255, 0.78);
+    }
+
+    html[data-fmb-theme="light"] .modal-box {
+      background: #ffffff;
+      border-color: rgba(37, 99, 235, 0.28);
+    }
+
+    html[data-fmb-theme="light"] .modal-head h3,
+    html[data-fmb-theme="light"] .distro-title {
+      color: var(--text);
+    }
+
+    html[data-fmb-theme="light"] .notes-version-label,
+    html[data-fmb-theme="light"] .notes-body,
+    html[data-fmb-theme="light"] .confirm-body,
+    html[data-fmb-theme="light"] .confirm-privacy,
+    html[data-fmb-theme="light"] .distro-status {
+      color: var(--muted);
+    }
+
+    html[data-fmb-theme="light"] .notes-body {
+      border-top-color: var(--border);
+    }
+
+    html[data-fmb-theme="light"] .modal-close {
+      background: rgba(15, 23, 42, 0.04);
+      border-color: rgba(18, 37, 63, 0.12);
+      color: #64748b;
+    }
+
+    html[data-fmb-theme="light"] .modal-close:hover {
+      background: rgba(59, 130, 246, 0.12);
+      color: var(--text);
+    }
+
+    html[data-fmb-theme="light"] .distro-card {
+      background: rgba(15, 23, 42, 0.035);
+    }
+
+    html[data-fmb-theme="light"] .distro-card.available:hover {
+      background: rgba(2, 132, 199, 0.07);
+    }
+
+    html[data-fmb-theme="light"] .distro-status {
+      background: rgba(15, 23, 42, 0.05);
+    }
+
+    html[data-fmb-theme="light"] .distro-card.available .distro-status {
+      color: #047857;
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    html[data-fmb-theme="light"] .confirm-privacy {
+      background: rgba(2, 132, 199, 0.08);
+      border-color: rgba(2, 132, 199, 0.2);
+    }
+
+    html[data-fmb-theme="light"] .btn-cancel:hover {
+      background: rgba(15, 23, 42, 0.06);
+      color: var(--text);
+    }
+
+    html[data-fmb-theme="light"] .archive-note {
+      color: #7c4a03;
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.28);
+    }
+
+    html[data-fmb-theme="light"] .pill-archive {
+      color: var(--muted);
+      background: rgba(16, 24, 39, 0.04);
+    }
+
+    @media (max-width: 640px) {
+      .fmb-main.beatzlock-main {
+        width: min(100% - 24px, var(--fmb-max));
+        padding-top: 24px;
+      }
+    }
+</style>
+{% endblock %}

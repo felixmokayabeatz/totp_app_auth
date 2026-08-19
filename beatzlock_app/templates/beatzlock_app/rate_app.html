@@ -1,0 +1,527 @@
+{% extends 'beatzlock_app/base.html' %}
+{% load static %}
+
+{% block title %}BeatzLock Ratings{% endblock %}
+
+{% block extra_css %}
+<style>
+  :root {
+    --ratings-shortcut-text: #dbeafe;
+    --ratings-shortcut-bg: rgba(74,158,255,.14);
+    --ratings-shortcut-border: rgba(74,158,255,.35);
+    --ratings-shortcut-hover-text: #ffffff;
+    --ratings-shortcut-hover-bg: rgba(74,158,255,.24);
+    --ratings-shortcut-hover-border: rgba(74,158,255,.62);
+    --ratings-surface: rgba(255,255,255,.04);
+    --ratings-surface-strong: rgba(255,255,255,.045);
+    --ratings-border: rgba(255,255,255,.08);
+    --ratings-text-strong: #ffffff;
+    --ratings-text: #ddddef;
+    --ratings-text-soft: #c9c9dc;
+    --ratings-muted: #a0a0b8;
+    --ratings-muted-2: #8888aa;
+    --ratings-select-bg: rgba(255,255,255,.05);
+    --ratings-select-text: #eeeef8;
+    --ratings-select-border: rgba(255,255,255,.12);
+    --ratings-useful-bg: rgba(255,255,255,.06);
+    --ratings-useful-text: #eeeef8;
+    --ratings-useful-border: rgba(255,255,255,.12);
+    --ratings-reply-bg: rgba(74,158,255,.12);
+    --ratings-reply-border: rgba(74,158,255,.32);
+    --ratings-reply-label: #dbeafe;
+  }
+
+  .ratings-page {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 56px 20px 72px;
+  }
+
+  .ratings-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 28px;
+    align-items: end;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--ratings-border);
+  }
+
+  .ratings-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ratings-shortcut-text);
+    background: var(--ratings-shortcut-bg);
+    border: 1px solid var(--ratings-shortcut-border);
+    border-radius: 999px;
+    padding: 8px 13px;
+    font-size: .82rem;
+    font-weight: 700;
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    margin-bottom: 12px;
+    transition: background .2s, border-color .2s, color .2s;
+  }
+
+  .ratings-back-link:hover {
+    color: var(--ratings-shortcut-hover-text);
+    background: var(--ratings-shortcut-hover-bg);
+    border-color: var(--ratings-shortcut-hover-border);
+  }
+
+  .ratings-title {
+    color: var(--ratings-text-strong);
+    font-size: clamp(2rem, 5vw, 3.1rem);
+    line-height: 1.05;
+    margin: 0 0 14px;
+    text-shadow: 0 2px 22px rgba(0,0,0,.35);
+  }
+
+  .ratings-copy {
+    color: var(--ratings-text-soft);
+    line-height: 1.7;
+    max-width: 680px;
+    margin: 0;
+  }
+
+  .rating-score {
+    min-width: 210px;
+    background: var(--ratings-surface);
+    border: 1px solid var(--ratings-border);
+    border-radius: 18px;
+    padding: 22px;
+    text-align: center;
+  }
+
+  .rating-score strong {
+    display: block;
+    color: var(--ratings-text-strong);
+    font-size: 2.7rem;
+    line-height: 1;
+  }
+
+  .stars {
+    color: #facc15;
+    font-size: 1.05rem;
+    white-space: nowrap;
+  }
+
+  .rating-score span:last-child {
+    display: block;
+    color: var(--ratings-muted);
+    font-size: .86rem;
+    margin-top: 8px;
+  }
+
+  .rating-toolbar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 28px 0;
+  }
+
+  .rating-toolbar select {
+    min-width: 180px;
+    color: var(--ratings-select-text);
+    background: var(--ratings-select-bg);
+    border: 1px solid var(--ratings-select-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    color-scheme: dark;
+  }
+
+  .rating-toolbar select option {
+    color: #f8fafc;
+    background: #111827;
+  }
+
+  .rating-toolbar select:focus {
+    outline: 2px solid rgba(74,158,255,.55);
+    outline-offset: 2px;
+  }
+
+  .platform-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .platform-card {
+    background: var(--ratings-surface);
+    border: 1px solid var(--ratings-border);
+    border-radius: 14px;
+    padding: 14px;
+  }
+
+  .platform-card b {
+    display: block;
+    color: var(--ratings-text-strong);
+    margin-bottom: 7px;
+  }
+
+  .platform-card small {
+    color: var(--ratings-muted);
+  }
+
+  .review-platform-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .review-platform-tab {
+    color: var(--ratings-text-soft);
+    background: transparent;
+    border: 1px solid var(--ratings-border);
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: .78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .2s, border-color .2s, color .2s;
+  }
+
+  .review-platform-tab.is-active {
+    color: #ffffff;
+    background: rgba(74,158,255,.18);
+    border-color: rgba(74,158,255,.48);
+  }
+
+  .review-platform-panel {
+    display: none;
+  }
+
+  .review-platform-panel.is-active {
+    display: block;
+  }
+
+  .reviews-list {
+    display: grid;
+    gap: 14px;
+  }
+
+  .review-card {
+    background: var(--ratings-surface-strong);
+    border: 1px solid var(--ratings-border);
+    border-radius: 18px;
+    padding: 20px;
+  }
+
+  .review-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .platform-badge {
+    display: inline-flex;
+    color: #4a9eff;
+    background: rgba(74,158,255,.12);
+    border: 1px solid rgba(74,158,255,.20);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: .76rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .reviewer-name {
+    color: var(--ratings-text-strong);
+    font-size: 1rem;
+    font-weight: 800;
+    margin: 0 0 8px;
+  }
+
+  .review-date {
+    color: var(--ratings-text-soft);
+    font-size: .82rem;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .review-text {
+    color: var(--ratings-text);
+    line-height: 1.7;
+    margin: 10px 0 0;
+  }
+
+  .review-label {
+    color: var(--ratings-muted-2);
+    display: block;
+    font-size: .78rem;
+    font-weight: 700;
+    margin-top: 14px;
+    text-transform: uppercase;
+  }
+
+  .review-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--ratings-border);
+    color: var(--ratings-muted);
+    font-size: .84rem;
+  }
+
+  .review-reply-card {
+    margin-top: 16px;
+    margin-left: clamp(18px, 4vw, 42px);
+    padding: 16px 18px;
+    border: 1px solid var(--ratings-reply-border);
+    border-left: 4px solid var(--ratings-reply-border);
+    border-radius: 18px;
+    background: var(--ratings-reply-bg);
+  }
+
+  .review-reply-card .review-label {
+    margin-top: 0;
+    color: var(--ratings-reply-label);
+  }
+
+  .review-reply-card .review-text {
+    margin-top: 8px;
+  }
+
+  .review-reply-date {
+    display: block;
+    margin-top: 10px;
+    color: var(--ratings-muted);
+    font-size: .8rem;
+  }
+
+  .useful-button {
+    color: var(--ratings-useful-text);
+    background: var(--ratings-useful-bg);
+    border: 1px solid var(--ratings-useful-border);
+    border-radius: 999px;
+    padding: 8px 13px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .useful-button:hover {
+    border-color: rgba(74,158,255,.45);
+  }
+
+  .empty-ratings {
+    background: var(--ratings-surface);
+    border: 1px solid var(--ratings-border);
+    border-radius: 18px;
+    padding: 28px;
+    color: var(--ratings-text-soft);
+    line-height: 1.7;
+  }
+
+  html[data-fmb-theme="light"] {
+    --ratings-shortcut-text: #0f3f75;
+    --ratings-shortcut-bg: rgba(2, 132, 199, 0.12);
+    --ratings-shortcut-border: rgba(2, 132, 199, 0.3);
+    --ratings-shortcut-hover-text: #082f49;
+    --ratings-shortcut-hover-bg: rgba(2, 132, 199, 0.18);
+    --ratings-shortcut-hover-border: rgba(2, 132, 199, 0.48);
+    --ratings-surface: rgba(255,255,255,.88);
+    --ratings-surface-strong: rgba(248, 251, 255, .96);
+    --ratings-border: rgba(28, 41, 71, 0.13);
+    --ratings-text-strong: #101827;
+    --ratings-text: #243247;
+    --ratings-text-soft: #3f4f67;
+    --ratings-muted: #5d6b82;
+    --ratings-muted-2: #66768f;
+    --ratings-select-bg: rgba(255,255,255,.94);
+    --ratings-select-text: #101827;
+    --ratings-select-border: rgba(28, 41, 71, 0.16);
+    --ratings-useful-bg: rgba(16, 24, 39, 0.04);
+    --ratings-useful-text: #0f172a;
+    --ratings-useful-border: rgba(28, 41, 71, 0.14);
+    --ratings-reply-bg: rgba(37,99,235,.08);
+    --ratings-reply-border: rgba(37,99,235,.22);
+    --ratings-reply-label: #1d4ed8;
+  }
+
+  html[data-fmb-theme="light"] .rating-toolbar select {
+    color-scheme: light;
+  }
+
+  html[data-fmb-theme="light"] .rating-toolbar select option {
+    color: #101827;
+    background: #ffffff;
+  }
+
+  html[data-fmb-theme="light"] .review-platform-tab {
+    color: #1559a6;
+    background: rgba(2, 132, 199, 0.08);
+    border-color: rgba(2, 132, 199, 0.22);
+  }
+
+  html[data-fmb-theme="light"] .review-platform-tab.is-active {
+    color: #ffffff;
+    background: #2563eb;
+    border-color: #2563eb;
+  }
+
+  @media (max-width: 720px) {
+    .ratings-hero {
+      grid-template-columns: 1fr;
+    }
+
+    .rating-score {
+      width: 100%;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="ratings-page">
+  <div class="ratings-hero">
+    <div>
+      <a class="ratings-back-link" href="{% url 'beatzlock_app:download_list' %}">
+        <i class="fas fa-arrow-left" aria-hidden="true"></i>
+        Go to Apps Download
+      </a>
+      <h1 class="ratings-title">BeatzLock ratings</h1>
+      <p class="ratings-copy">Reviews here come straight from the BeatzLock app. They are grouped by platform now, separate from Google Play and iOS store ratings that can be added later.</p>
+    </div>
+    <div class="rating-score">
+      <strong>{{ overall_summary.average }}</strong>
+      <div class="stars" aria-label="Average rating">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+      <span>{{ overall_summary.count }} total review{{ overall_summary.count|pluralize }}</span>
+    </div>
+  </div>
+
+  <form class="rating-toolbar" method="get">
+    <select name="platform" onchange="this.form.submit()" aria-label="Filter platform">
+      <option value="" {% if not selected_platform %}selected{% endif %}>All platforms</option>
+      {% for value, label in platform_choices %}
+        <option value="{{ value }}" {% if selected_platform == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="sort" onchange="this.form.submit()" aria-label="Sort reviews">
+      {% for value, label in sort_options %}
+        <option value="{{ value }}" {% if sort == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+
+  <div class="platform-grid">
+    {% for platform in platform_summaries %}
+      <a class="platform-card" href="?platform={{ platform.value }}&sort={{ sort }}" style="text-decoration:none;">
+        <b>{{ platform.label }}</b>
+        <div class="stars">&#9733; {{ platform.average }}</div>
+        <small>{{ platform.count }} review{{ platform.count|pluralize }}</small>
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="reviews-list">
+    {% for group in rating_groups %}
+      <article class="review-card" data-rating-group="{{ group.group_id }}">
+        <h2 class="reviewer-name">{{ group.display_name }}</h2>
+        <div class="review-platform-nav" role="tablist" aria-label="{{ group.display_name }} platform reviews">
+          {% for rating in group.entries %}
+            <button
+              class="review-platform-tab{% if rating.platform == group.active_platform %} is-active{% endif %}"
+              type="button"
+              data-rating-group="{{ group.group_id }}"
+              data-platform="{{ rating.platform }}"
+            >
+              {{ rating.platform_display }}
+            </button>
+          {% endfor %}
+        </div>
+
+        {% for rating in group.entries %}
+          <div
+            class="review-platform-panel{% if rating.platform == group.active_platform %} is-active{% endif %}"
+            data-rating-group="{{ group.group_id }}"
+            data-platform-panel="{{ rating.platform }}"
+          >
+            <div class="review-top" style="margin-top:18px;">
+              <div>
+                <div class="stars" aria-label="{{ rating.stars }} out of 5 stars">
+                  {% for item in "12345"|make_list %}
+                    {% if forloop.counter <= rating.stars %}&#9733;{% else %}&#9734;{% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="review-date">
+                <time datetime="{{ rating.created_at }}">Added {{ rating.created_at_dt|date:"M j, Y g:i A" }}</time><br>
+                <time datetime="{{ rating.updated_at }}">Edited {{ rating.updated_at_dt|date:"M j, Y g:i A" }}</time>
+              </div>
+            </div>
+
+            {% if rating.comment %}
+              <span class="review-label">Comment</span>
+              <p class="review-text">{{ rating.comment|linebreaksbr }}</p>
+            {% endif %}
+
+            {% if rating.suggestion %}
+              <span class="review-label">Suggestion</span>
+              <p class="review-text">{{ rating.suggestion|linebreaksbr }}</p>
+            {% endif %}
+
+            {% if rating.admin_reply %}
+              <div class="review-reply-card">
+                <span class="review-label">BeatzLock Authenticator reply</span>
+                <p class="review-text">{{ rating.admin_reply|linebreaksbr }}</p>
+                {% if rating.admin_replied_at_dt %}
+                  <span class="review-reply-date">Replied {{ rating.admin_replied_at_dt|date:"M j, Y g:i A" }}</span>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            <div class="review-meta">
+              <span>
+                {% if rating.app_version %}Version {{ rating.app_version }}{% endif %}
+                {% if rating.build_number %} build {{ rating.build_number }}{% endif %}
+              </span>
+              <form method="post" action="{% url 'beatzlock_app:mark_rating_useful_web' group.rating_id %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ current_path }}">
+                <input type="hidden" name="platform" value="{{ rating.platform }}">
+                <button class="useful-button" type="submit">Useful ({{ rating.useful_count }})</button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </article>
+    {% empty %}
+      <div class="empty-ratings">No public reviews match this filter yet. Once users rate inside the app, their approved reviews will appear here with platform tabs, dates, stars, comments, suggestions, replies, and useful votes for each platform separately.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<script>
+  document.addEventListener('click', function (event) {
+    const button = event.target.closest('.review-platform-tab');
+    if (!button) {
+      return;
+    }
+
+    const groupId = button.dataset.ratingGroup;
+    const platform = button.dataset.platform;
+
+    document
+      .querySelectorAll('.review-platform-tab[data-rating-group="' + groupId + '"]')
+      .forEach(function (item) {
+        item.classList.toggle('is-active', item === button);
+      });
+
+    document
+      .querySelectorAll('.review-platform-panel[data-rating-group="' + groupId + '"]')
+      .forEach(function (panel) {
+        panel.classList.toggle('is-active', panel.dataset.platformPanel === platform);
+      });
+  });
+</script>
+{% endblock %}
