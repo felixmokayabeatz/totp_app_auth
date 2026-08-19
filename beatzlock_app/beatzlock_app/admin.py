@@ -1,7 +1,13 @@
-﻿from django.contrib import admin, messages
+﻿from django import forms
+from django.contrib import admin, messages
+from django.contrib.admin.forms import AdminAuthenticationForm
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.forms import UserChangeForm, UserCreationForm
+from django.contrib.auth.models import User
 from django.utils import timezone
 from django.utils.html import format_html
 
+from .identity import find_user_by_login_identifier, normalize_email
 from .review_replies import dispatch_review_reply
 from .models import (
     AppRating,
@@ -368,3 +374,123 @@ class TotalDownloadCountAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+# ==============================================================================
+# STAFF ACCOUNTS
+# ==============================================================================
+# Email addresses are the login here -- see identity.py. The admin neither
+# shows nor asks for a username; it is written from the email address on save,
+# so the two can never drift apart.
+
+
+class EmailAdminAuthenticationForm(AdminAuthenticationForm):
+    """Sign in to the admin with an email address, like the rest of the site."""
+
+    # Deliberately a text input, not an email input: the browser's type="email"
+    # validation would block the legacy username fallback below.
+    username = forms.CharField(
+        label="Email",
+        widget=forms.TextInput(
+            attrs={"autofocus": True, "autocomplete": "email", "inputmode": "email"}
+        ),
+    )
+
+    error_messages = {
+        **AdminAuthenticationForm.error_messages,
+        "invalid_login": (
+            "Please enter the correct email and password for a staff account. "
+            "Note that both fields may be case-sensitive."
+        ),
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # AuthenticationForm clamps this to the username field's max_length.
+        self.fields["username"].max_length = 254
+        self.fields["username"].widget.attrs["maxlength"] = 254
+
+    def clean_username(self):
+        identifier = self.cleaned_data.get("username", "")
+        user = find_user_by_login_identifier(identifier)
+        return user.username if user is not None else identifier
+
+
+admin.site.login_form = EmailAdminAuthenticationForm
+
+
+class StaffCreationForm(UserCreationForm):
+    email = forms.EmailField(label="Email address", required=True)
+
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("email",)
+
+    def clean_email(self):
+        email = normalize_email(self.cleaned_data.get("email"))
+        if find_user_by_login_identifier(email) is not None:
+            raise forms.ValidationError("An account already exists for this address.")
+        return email
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.email = self.cleaned_data["email"]
+        user.username = user.email
+        if commit:
+            user.save()
+        return user
+
+
+class StaffChangeForm(UserChangeForm):
+    email = forms.EmailField(label="Email address", required=True)
+
+    class Meta(UserChangeForm.Meta):
+        model = User
+        # The admin drops username from the form anyway, by way of the
+        # fieldsets below. Excluding it here too means the form behaves the
+        # same wherever else it is used.
+        exclude = ("username",)
+
+    def clean_email(self):
+        email = normalize_email(self.cleaned_data.get("email"))
+        clash = find_user_by_login_identifier(email)
+        if clash is not None and clash.pk != self.instance.pk:
+            raise forms.ValidationError("Another account already uses this address.")
+        return email
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        # Changing the address changes the login, so the username column moves
+        # with it rather than being left pointing at the old one.
+        user.username = user.email
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class StaffAdmin(BaseUserAdmin):
+    add_form = StaffCreationForm
+    form = StaffChangeForm
+    list_display = ('email', 'first_name', 'last_name', 'is_staff', 'is_superuser', 'last_login')
+    list_filter = ('is_staff', 'is_superuser', 'is_active')
+    search_fields = ('email', 'first_name', 'last_name')
+    ordering = ('email',)
+    fieldsets = (
+        (None, {'fields': ('email', 'password')}),
+        ('Personal info', {'fields': ('first_name', 'last_name')}),
+        ('Permissions', {
+            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+        }),
+        ('Important dates', {'fields': ('last_login', 'date_joined')}),
+    )
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('email', 'password1', 'password2'),
+        }),
+    )

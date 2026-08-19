@@ -54,6 +54,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ========================
 
 INSTALLED_APPS = [
+    # console comes first only so that its management/commands/createsuperuser.py
+    # wins over django.contrib.auth's: Django resolves a duplicated command name
+    # to whichever app is listed earlier. beatzlock_app has to stay *after*
+    # django.contrib.auth, on the other hand, because its admin module
+    # unregisters the User admin that django.contrib.auth registers.
+    "console",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -63,7 +69,6 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "corsheaders",
     "beatzlock_app",
-    "console",
 ]
 
 MIDDLEWARE = [

@@ -6,7 +6,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.files.base import ContentFile
 from django.contrib.auth import get_user_model
 from django.conf import settings
-from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 import json
@@ -16,6 +18,7 @@ import tempfile
 import uuid
 
 from .models import AppRating, AppRelease, DownloadDailyStat, DownloadStats, DownloadableApp, TotalDownloadCount
+from .admin import StaffChangeForm, StaffCreationForm
 from .review_replies import dispatch_review_reply
 from console.download_stats import build_download_stats_context
 from .views import _group_ratings_for_display, _parse_build_number, submit_rating, update_check
@@ -761,3 +764,107 @@ class AppReleaseNotesUploadTests(TestCase):
         self.assertEqual(release.release_notes_file.name, f'{folder}/fresh.txt')
         _, filenames = storage.listdir(folder)
         self.assertEqual(filenames, ['fresh.txt'])
+
+
+class EmailAsLoginTests(TestCase):
+    """The site has no usernames: the email address is the login."""
+
+    password = 'Str0ng-Passw0rd!x'
+
+    def _make_user(self, email, **extra):
+        return get_user_model().objects.create_user(
+            username=email, email=email, password=self.password, **extra
+        )
+
+    def test_createsuperuser_takes_an_email_and_asks_for_no_username(self):
+        call_command(
+            'createsuperuser',
+            interactive=False,
+            email='Deploy.Admin@Example.com',
+            verbosity=0,
+        )
+        user = get_user_model().objects.get()
+        self.assertTrue(user.is_superuser)
+        self.assertEqual(user.email, 'deploy.admin@example.com')
+        # The column still exists, so it is kept equal to the address.
+        self.assertEqual(user.username, 'deploy.admin@example.com')
+
+    def test_createsuperuser_refuses_an_address_already_in_use(self):
+        self._make_user('taken@example.com')
+        with self.assertRaises(CommandError):
+            call_command(
+                'createsuperuser',
+                interactive=False,
+                email='TAKEN@example.com',
+                verbosity=0,
+            )
+
+    def test_sign_in_with_the_email_address_whatever_its_case(self):
+        self._make_user('staff@example.com', is_staff=True)
+        response = self.client.post(
+            reverse('login'),
+            {'username': 'STAFF@Example.com', 'password': self.password},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('_auth_user_id', self.client.session)
+
+    def test_sign_in_rejects_a_wrong_password_and_an_unknown_address(self):
+        self._make_user('staff@example.com')
+        for identifier, password in (
+            ('staff@example.com', 'not-the-password'),
+            ('nobody@example.com', self.password),
+        ):
+            with self.subTest(identifier=identifier):
+                client = Client()
+                client.post(
+                    reverse('login'),
+                    {'username': identifier, 'password': password},
+                )
+                self.assertNotIn('_auth_user_id', client.session)
+
+    def test_legacy_account_with_a_separate_username_can_still_sign_in(self):
+        # Nothing here creates these, but a restored dump can carry them.
+        get_user_model().objects.create_user(
+            username='felixmokayabeatz',
+            email='legacy@example.com',
+            password=self.password,
+        )
+        for identifier in ('legacy@example.com', 'felixmokayabeatz'):
+            with self.subTest(identifier=identifier):
+                client = Client()
+                client.post(
+                    reverse('login'),
+                    {'username': identifier, 'password': self.password},
+                )
+                self.assertIn('_auth_user_id', client.session)
+
+    def test_the_admin_add_form_asks_for_an_email_and_writes_both_columns(self):
+        form = StaffCreationForm(data={
+            'email': 'New.Staff@Example.com',
+            'password1': self.password,
+            'password2': self.password,
+        })
+        self.assertNotIn('username', form.fields)
+        self.assertTrue(form.is_valid(), form.errors)
+        user = form.save()
+        self.assertEqual(user.email, 'new.staff@example.com')
+        self.assertEqual(user.username, 'new.staff@example.com')
+
+    def test_changing_the_address_in_the_admin_moves_the_username_with_it(self):
+        user = self._make_user('before@example.com')
+        form = StaffChangeForm(
+            instance=user,
+            data={
+                'email': 'after@example.com',
+                'first_name': '',
+                'last_name': '',
+                'is_active': True,
+                'is_staff': False,
+                'is_superuser': False,
+                'date_joined': user.date_joined,
+            },
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        changed = form.save()
+        self.assertEqual(changed.email, 'after@example.com')
+        self.assertEqual(changed.username, 'after@example.com')

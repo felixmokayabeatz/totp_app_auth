@@ -37,6 +37,7 @@ subdomains, separate systemd units, separate deploy scripts.
 | systemd unit | `beatzlock` | `beatzlock-api` |
 | Virtualenv | `beatzlock_app/beatzlock_v_env` | `otp_backend/totp_v_env` |
 | Admin | `/beatzlock-admin/` | `/beatzlock_admin/` |
+| Sign-in | email address | email address |
 | Django apps | `beatzlock_app`, `console` | `accounts`, `api`, `twofa`, `beatzlocklogs` |
 | Static | `beatzlock_app/static/` + each app's own `static/` | `otp_backend/static/` |
 
@@ -72,6 +73,27 @@ moved or copied without hunting for its assets:
 | `otp_auth_app/build_logs/` | build metadata the console's build-history page reads |
 | `beatzlock_app/release_notes/`, `beatzlock_app/tos_privacy/` | content published by the downloads site |
 
+### Signing in
+
+Both projects sign people in by **email address**. Neither asks for a username
+anywhere: not on the sign-in page, not in the admin, not when the deploy script
+creates the first superuser. `createsuperuser` is overridden in both to take an
+email and nothing else, and it writes that address into Django's `username`
+column too, so the two can never drift apart. Changing the address in the admin
+moves the username with it.
+
+Django's `username` column is NOT NULL and unique, so it cannot simply be
+dropped — that would mean a custom user model and an `AUTH_USER_MODEL` swap
+that a restore of an older dump would then fight with. Keeping it equal to the
+email costs nothing and leaves every old dump restorable.
+
+The API has accounts older than this rule whose username is not their email.
+Nothing here rewrites them: `find_user_by_login_identifier` — in
+`otp_backend/accounts/identity.py`, mirrored in
+`beatzlock_app/beatzlock_app/identity.py` — resolves the email first and falls
+back to the username, so those accounts keep signing in while everything
+created from now on is email-only.
+
 ## Deploy
 
 Each project deploys itself. Same script, same actions, same menu — one per
@@ -99,6 +121,12 @@ sudo ./otp_backend/deploy/deploy.sh --status
 
 Deploying both is two commands, in either order — they touch different
 databases, different units and different nginx sites.
+
+Each subdomain needs a DNS A record pointing at this server *before* its
+first deploy: the certificate is issued over an HTTP-01 challenge, which can
+only be answered for a name that already resolves here. The scripts check this
+before calling certbot and print the exact record to create, because a failed
+issuance still counts against the Let's Encrypt rate limit for the week.
 
 TLS is not re-issued when an installed certificate already covers the
 subdomain — a wildcard counts. Each project's `deploy/nginx.conf.template` and

@@ -70,6 +70,10 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 BEATZLOCK_INTERNAL_SERVICE_SECRET = os.getenv('BEATZLOCK_INTERNAL_SERVICE_SECRET', '')
 
 INSTALLED_APPS = [
+    # accounts comes first only so that its management/commands/createsuperuser.py
+    # wins over django.contrib.auth's: Django resolves a duplicated command name
+    # to whichever app is listed earlier.
+    'accounts',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -79,7 +83,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
-    'accounts',
     'api',
     'twofa',
     'beatzlocklogs',
