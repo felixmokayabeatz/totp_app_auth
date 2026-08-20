@@ -303,6 +303,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _pendingLoginEmail!,
       _passwordController.text,
     );
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
@@ -361,6 +362,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
     final sent = await _syncService.sendPasswordResetCode(email);
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });

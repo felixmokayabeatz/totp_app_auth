@@ -60,6 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
 
     final profile = await _profileService.getProfile();
+    if (!mounted) return;
 
     if (profile != null) {
       setState(() {
@@ -85,6 +86,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
 
       if (image != null) {
+        if (!mounted) return;
         setState(() {
           _profileImage = File(image.path);
         });

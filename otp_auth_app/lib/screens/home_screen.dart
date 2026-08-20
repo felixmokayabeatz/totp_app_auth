@@ -309,6 +309,7 @@ class _HomeScreenState extends State<HomeScreen>
       enabled: canShowPasswordless,
     );
 
+    if (!mounted) return;
     setState(() {
       _canShowPasswordlessPrompt = canShowPasswordless;
       _canShowBulkDeletePrompt = canShowBulkDelete;
@@ -1169,6 +1170,12 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  // secondsRemaining() counts down to the end of the current TOTP window, so a
+  // value larger than the previous tick's means the window rolled over and the
+  // codes are genuinely new. Every other tick -- 29 out of 30 -- only the
+  // countdown has changed.
+  int _lastOtpSecondsRemaining = -1;
+
   void _startTimer() {
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
@@ -1180,18 +1187,39 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _updateAllOTPs() async {
     if (_userBox == null) return;
-    final newOTPs = <String, String>{};
+
+    // One window for every account, so this is read once rather than per row.
+    final remaining = _otpService.secondsRemaining();
+    final accountIds = <String>{};
     final newTimers = <String, int>{};
 
     for (var account in _userBox!.values) {
-      newOTPs[account.id] = await _otpService.generateOTP(account.secret);
-      newTimers[account.id] = _otpService.secondsRemaining();
+      accountIds.add(account.id);
+      newTimers[account.id] = remaining;
       blurredCodes.putIfAbsent(account.id, () => false);
+    }
+
+    // Regenerating every second meant a storage read, a decrypt and an HMAC per
+    // account per second, producing the same six digits 29 times out of 30.
+    // Codes are rebuilt on a rollover, and whenever the accounts on screen
+    // changed -- so one just added shows its code on the next tick instead of
+    // waiting for the window to turn over.
+    final rolledOver = remaining > _lastOtpSecondsRemaining;
+    final accountsChanged = currentOTPs.length != accountIds.length ||
+        !accountIds.every((id) => currentOTPs.containsKey(id));
+    _lastOtpSecondsRemaining = remaining;
+
+    Map<String, String>? newOTPs;
+    if (rolledOver || accountsChanged) {
+      newOTPs = <String, String>{};
+      for (var account in _userBox!.values) {
+        newOTPs[account.id] = await _otpService.generateOTP(account.secret);
+      }
     }
 
     if (mounted) {
       setState(() {
-        currentOTPs = newOTPs;
+        if (newOTPs != null) currentOTPs = newOTPs;
         timers = newTimers;
       });
     }
@@ -2813,6 +2841,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted || !unlocked) return;
 
       await _syncService.deleteAccountLocalOnly(accountId);
+      if (!mounted) return;
       setState(() {
         currentOTPs.remove(accountId);
         timers.remove(accountId);
@@ -2865,6 +2894,7 @@ class _HomeScreenState extends State<HomeScreen>
         confirmationPhrase: deleteEverywherePhrase,
       );
       if (ok) {
+        if (!mounted) return;
         setState(() {
           currentOTPs.remove(accountId);
           timers.remove(accountId);
@@ -3264,6 +3294,7 @@ class _HomeScreenState extends State<HomeScreen>
       return;
     }
 
+    if (!mounted) return;
     setState(() => _isSyncing = true);
     try {
       final success = await _syncService.syncAccounts();

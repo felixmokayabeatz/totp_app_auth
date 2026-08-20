@@ -296,6 +296,7 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
     final password = await _askForAccountPassword(session);
     if (password == null) return;
 
+    if (!mounted) return;
     setState(() => _primaryUpdateSessionId = session.id);
     final success = await _syncService.setPrimaryDeviceSession(
       session.id,

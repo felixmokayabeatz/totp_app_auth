@@ -685,6 +685,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       if (authenticated) {
         await _appLockService.recordAppActivity();
+        if (!mounted) return;
         setState(() {
           _isLocked = false;
           _backgroundedAt = null;
@@ -715,6 +716,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       if (authenticated) {
         await _appLockService.recordAppActivity();
+        if (!mounted) return;
         setState(() {
           _isLocked = false;
           _backgroundedAt = null;
