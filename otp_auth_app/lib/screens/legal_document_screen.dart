@@ -82,7 +82,7 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
   }
 
   String _formatUpdatedAt(DateTime? value) {
-    if (value == null) return 'Last updated unavailable';
+    if (value == null) return '';
     return 'Last updated ${_formatReadableDate(value)}';
   }
 
@@ -148,10 +148,34 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      _formatUpdatedAt(document.lastUpdated),
-                      style: TextStyle(color: _textSecondary, fontSize: 12),
-                    ),
+                    if (document.comingSoon)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: _accent.withValues(alpha: 0.28),
+                          ),
+                        ),
+                        child: Text(
+                          'Not yet published',
+                          style: TextStyle(
+                            color: _accent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      )
+                    else if (_formatUpdatedAt(document.lastUpdated).isNotEmpty)
+                      Text(
+                        _formatUpdatedAt(document.lastUpdated),
+                        style: TextStyle(color: _textSecondary, fontSize: 12),
+                      ),
                     const SizedBox(height: 16),
                     _LegalHtmlContent(
                       html: document.contentHtml,
