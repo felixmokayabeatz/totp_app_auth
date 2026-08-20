@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -9,11 +10,15 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
 from django.utils.dateparse import parse_datetime
 
+logger = logging.getLogger(__name__)
 
-PLATFORMS = ("windows", "linux", "android")
+# Every platform otp_auth_app/build.py writes a log for. Fedora was missing
+# here, so its builds were being written and then never shown.
+PLATFORMS = ("windows", "linux", "fedora", "android")
 PLATFORM_LABELS = {
     "windows": "Windows",
     "linux": "Linux",
+    "fedora": "Fedora",
     "android": "Android",
 }
 ARTIFACT_LABELS = {
@@ -36,8 +41,30 @@ def _default_build_logs_dir() -> Path:
 
 
 def _build_logs_dir() -> Path:
+    """Where the Flutter client's build logs are read from.
+
+    BEATZLOCK_BUILD_LOGS_DIR in .env wins -- but only while it exists. It is an
+    absolute path, so it goes stale the moment the checkout is moved or cloned
+    under a different name, and the page then renders empty with nothing to say
+    why. When it points at nothing, fall back to the copy in this repo, which
+    is where build.py writes and which cannot drift.
+    """
     configured = getattr(settings, "BEATZLOCK_BUILD_LOGS_DIR", "") or os.getenv("BEATZLOCK_BUILD_LOGS_DIR", "")
-    return Path(configured).expanduser().resolve() if configured else _default_build_logs_dir().resolve()
+    default = _default_build_logs_dir().resolve()
+    if not configured:
+        return default
+
+    resolved = Path(configured).expanduser().resolve()
+    if resolved.is_dir():
+        return resolved
+
+    logger.warning(
+        "BEATZLOCK_BUILD_LOGS_DIR is %s, which does not exist on this host; "
+        "reading build logs from %s instead.",
+        resolved,
+        default,
+    )
+    return default
 
 
 def _build_log_file(platform_name: str) -> Path:

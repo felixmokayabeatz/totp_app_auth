@@ -6,27 +6,31 @@ class AppConfig {
   // Development environment
   static const String devApiUrlDesktop = 'http://localhost:8000/api/';
   static const String devMediaUrlDesktop = 'http://localhost:8000/media/';
+  // The downloads site is a separate Django project and runs on 8005 in
+  // development; 8000 above is the authenticator API. It is mounted at the
+  // root of its own host, so there is no path prefix any more.
+  static const String devBeatzLockAppsBaseDesktop = 'http://localhost:8005/';
   static const String devUpdateApiDesktop =
-      'http://localhost:8002/beatzlock-apps/api/update-check/';
-  static const String devBeatzLockAppsBaseDesktop =
-      'http://localhost:8002/beatzlock-apps/';
+      '${devBeatzLockAppsBaseDesktop}api/update-check/';
 
   // For Android emulator - 10.0.2.2 is alias for host machine's localhost
   static const String devApiUrlAndroid = 'http://10.0.2.2:8000/api/';
   static const String devMediaUrlAndroid = 'http://10.0.2.2:8000/media/';
+  static const String devBeatzLockAppsBaseAndroid = 'http://10.0.2.2:8005/';
   static const String devUpdateApiAndroid =
-      'http://10.0.2.2:8002/beatzlock-apps/api/update-check/';
-  static const String devBeatzLockAppsBaseAndroid =
-      'http://10.0.2.2:8002/beatzlock-apps/';
+      '${devBeatzLockAppsBaseAndroid}api/update-check/';
 
   // Production environment (your VPS)
   static const String prodApiUrl = 'https://api.felixmokayabeatz.online/api/';
   static const String prodMediaUrl =
       'https://api.felixmokayabeatz.online/media/';
-  static const String prodUpdateApiUrl =
-      'https://felixmokayabeatz.online/beatzlock-apps/api/update-check/';
+  // The downloads site has its own subdomain now and is mounted at the root of
+  // it -- it used to be felixmokayabeatz.online/beatzlock-apps/. Every URL
+  // below is built from this one string so the two cannot drift apart again.
   static const String prodBeatzLockAppsBaseUrl =
-      'https://felixmokayabeatz.online/beatzlock-apps/';
+      'https://apps.felixmokayabeatz.online/';
+  static const String prodUpdateApiUrl =
+      '${prodBeatzLockAppsBaseUrl}api/update-check/';
   static const String creatorWebsiteUrl = 'http://example.com/';
   static const String creatorGithubUrl = 'http://github.com/felixmokayabeatz/';
 

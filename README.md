@@ -252,19 +252,90 @@ in production nginx streams app binaries via `X-Accel-Redirect` so no gunicorn
 worker carries the payload (`beatzlock_app/beatzlock_app/utils/file_serving.py`),
 and there is no nginx in front of `runserver`.
 
-## Running the Flutter client
+## The Flutter client
 
-Open a second terminal in the Flutter app folder:
+`otp_auth_app/` is self-contained: the Dart source, the Windows installer
+inputs (`inno_script/`, `vc_redist/`), the build logs and every build output
+live inside it. Nothing it produces is written outside that folder.
 
-```bash
-cd otp_auth_app
+### Where its endpoints come from
+
+Every URL the app calls is in `lib/config/app_config.dart`. Each environment is
+built from one base string per server, so the halves cannot drift apart:
+
+| | Authenticator API | Downloads site |
+|---|---|---|
+| Production | `https://api.felixmokayabeatz.online/api/` | `https://apps.felixmokayabeatz.online/` |
+| Desktop dev | `http://localhost:8000/api/` | `http://localhost:8005/` |
+| Android emulator dev | `http://10.0.2.2:8000/api/` | `http://10.0.2.2:8005/` |
+
+`10.0.2.2` is the emulator's alias for the host machine's localhost, and the
+dev ports are the two `runserver` ports from **Local development** above.
+`AppConfig.isDevelopment` chooses between the columns — it must be `false` in
+anything you ship.
+
+The downloads site used to be mounted at `felixmokayabeatz.online/beatzlock-apps/`
+and now sits at the root of its own subdomain. Everything the app reads from it
+hangs off that single base URL:
+
+| `AppConfig` member | Path | What answers it |
+|---|---|---|
+| `updateApiUrl` | `api/update-check/` | update check, including the release notes text |
+| `legalDocumentApiUrl(type)` | `api/legal/<type>/` | terms / privacy as JSON |
+| `legalDocumentWebUrl(type)` | `legal/terms-of-service/`, `legal/privacy-policy/` | the same documents as web pages |
+| `ratingsApiUrl`, `myRatingApiUrl`, `ratingSubmitApiUrl`, `ratingDeleteApiUrl` | `api/ratings/…` | reviews |
+| `rateAppUrl` | `rate/` | the review form |
+| `manualDownloadUrl` | `downloads/` | the downloads page |
+
+If in-app release notes, ratings or update checks stop working while the same
+things still work in a browser, this file is the first place to look: the app
+is talking to a host or a path the site no longer serves.
+
+### The update check
+
+```text
+GET /api/update-check/?platform=<platform>&version=<version>&build_number=<n>
 ```
 
-Install Flutter packages:
+Add `&linux_distribution=<distro>` for Linux builds. The response carries
+`update_available`, `force_update`, `latest_version`, `latest_build_number`,
+`download_url`, `downloads_page_url`, `release_notes` and a human-readable
+`reason`. An update is forced once a client is five or more releases or builds
+behind. `download_url` and `downloads_page_url` are reversed from the site's
+`urls.py`, never written out by hand, so remounting the site cannot hand the
+app a dead link.
+
+### Developing against the local servers
+
+Three terminals — both Django projects, then the client:
 
 ```bash
-flutter pub get
+cd beatzlock_app && python manage.py runserver 8005   # downloads site
+cd otp_backend  && python manage.py runserver 8000    # authenticator API
+cd otp_auth_app && flutter pub get && flutter run -d windows
 ```
+
+Set `isDevelopment = true` in `lib/config/app_config.dart` first, and set it
+back before building anything you intend to release. Use `-d linux`, `-d
+android` or `-d windows` to pick the target; the platform sections below cover
+each one in detail.
+
+### Releasing a build
+
+1. **Build.** `python3 build.py` from the repo root opens the menu. Artifacts
+   land in `otp_auth_app/final_builds/<platform>/<version>/`, and the metadata
+   for each one is appended to `otp_auth_app/build_logs/<platform>/build_log.json`.
+2. **Publish.** In the downloads site admin, create the **App Release** first —
+   version, build number and the release-notes `.txt`, which covers every
+   platform — then add one **Platform Build** per binary pointing at it.
+3. **Check the history.** `/console/build-history/` lists what was built from
+   those `build_log.json` files, per platform and per day. It reads
+   `otp_auth_app/build_logs/` next to the site by itself; set
+   `BEATZLOCK_BUILD_LOGS_DIR` in the site's `.env` only if the Flutter checkout
+   lives somewhere else entirely. A stale absolute path there is ignored, with
+   a warning in the log, rather than leaving the page silently empty.
+4. **Ship.** The next update check each client makes returns the new version,
+   its notes and its download URL.
 
 ## Windows
 
