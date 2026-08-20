@@ -218,7 +218,13 @@ USE_TZ = True
 # ========================
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
-FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+
+# Django's default, deliberately: anything larger than this is streamed to a
+# temporary file instead of being held in the worker's memory. App binaries are
+# hundreds of megabytes, and at the previous 50MB three workers could hold
+# 150MB of upload in RAM between them -- enough to get one of them OOM-killed
+# on a small host, which drops the connection mid-upload with no response.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2621440
 
 # ========================
 # BRANDING (template use)
