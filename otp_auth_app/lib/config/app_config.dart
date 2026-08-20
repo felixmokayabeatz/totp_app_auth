@@ -36,9 +36,9 @@ class AppConfig {
 
   // ==================================================================
   // Uncommentany of the two to what you are running
-  // static const bool isDevelopment = false;
+  static const bool isDevelopment = false;
 
-  static const bool isDevelopment = true;
+  // static const bool isDevelopment = true;
   // ==================================================================
 
   static String get apiUrl {
