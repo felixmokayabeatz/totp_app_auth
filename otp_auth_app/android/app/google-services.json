@@ -1,26 +1,36 @@
 {
   "project_info": {
-    "project_number": "32356741377",
-    "project_id": "felixmokayabeatz-b5c94",
-    "storage_bucket": "felixmokayabeatz-b5c94.firebasestorage.app"
+    "project_number": "12371075678",
+    "project_id": "felixmokayabeatz",
+    "storage_bucket": "felixmokayabeatz.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:32356741377:android:357717a2ed4b689c7dab00",
+        "mobilesdk_app_id": "1:12371075678:android:c845065de19782c36ccacf",
         "android_client_info": {
           "package_name": "com.beatzlock.otp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "12371075678-m7urjg4fk444mt7lelidljiovm0v7ro1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCkoCWVeMrIYsoJe3MvYbGIdRYYjEXN00I"
+          "current_key": "AIzaSyDvoKQhT9EOn2XXsp-mEpkcBEnMATIgaP0"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "12371075678-m7urjg4fk444mt7lelidljiovm0v7ro1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
