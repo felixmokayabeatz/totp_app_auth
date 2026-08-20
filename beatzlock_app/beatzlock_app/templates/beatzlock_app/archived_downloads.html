@@ -295,6 +295,11 @@
     }
   });
 
+  // Paths come from urls.py. This app was mounted under /beatzlock-apps/ back
+  // when it was part of the main site; it now sits at the root of its own
+  // subdomain, so nothing here may spell a prefix out by hand.
+  const releaseNotesUrl = id => "{% url 'beatzlock_app:release_notes_json' 0 %}".replace('/0/', `/${id}/`);
+
   function openNotes(version, build, appId) {
     const meta = document.getElementById('notesMeta');
     const body = document.getElementById('notesBody');
@@ -305,7 +310,7 @@
     body.textContent = 'Loading...';
     openModal('notesModal');
 
-    fetch(`/beatzlock-apps/release-notes/${appId}/`)
+    fetch(releaseNotesUrl(appId))
       .then(r => r.json())
       .then(d => { body.textContent = d.notes || 'No release notes available for this version.'; })
       .catch(() => { body.textContent = 'Could not load release notes. Please try again.'; });

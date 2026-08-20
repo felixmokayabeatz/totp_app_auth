@@ -657,6 +657,12 @@
 
   // ── Release Notes ──────────────────────────────────────────────────────────
   // Notes are shared across all platforms — we fetch once per app_id.
+  // Paths come from urls.py. This app was mounted under /beatzlock-apps/ back
+  // when it was part of the main site; it now sits at the root of its own
+  // subdomain, so nothing here may spell a prefix out by hand.
+  const releaseNotesUrl = id => "{% url 'beatzlock_app:release_notes_json' 0 %}".replace('/0/', `/${id}/`);
+  const downloadUrl     = id => "{% url 'beatzlock_app:download_file' 0 %}".replace('/0/', `/${id}/`);
+
   // The modal makes clear: "these notes apply to all platforms for this release."
   function openNotes(version, build, appId, returnModalId = '') {
     const meta = document.getElementById('notesMeta');
@@ -673,7 +679,7 @@
     body.textContent = 'Loading…';
     openModal('notesModal');
 
-    fetch(`/beatzlock-apps/release-notes/${appId}/`)
+    fetch(releaseNotesUrl(appId))
       .then(r => r.json())
       .then(d => { body.textContent = d.notes || 'No release notes available for this version.'; })
       .catch(() => { body.textContent = 'Could not load release notes. Please try again.'; });
@@ -689,7 +695,7 @@
     document.getElementById('confirmTitle').textContent = `Download ${name}`;
     document.getElementById('confirmBody').innerHTML =
       `You are about to download <strong>${name} v${version}</strong> for <strong>${platform}</strong>.`;
-    document.getElementById('confirmLink').href = `/beatzlock-apps/download/${appId}/`;
+    document.getElementById('confirmLink').href = downloadUrl(appId);
     openModal('confirmModal');
   }
 

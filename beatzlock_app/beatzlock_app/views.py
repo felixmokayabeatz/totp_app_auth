@@ -11,6 +11,7 @@ from django.utils.dateparse import parse_datetime
 from .models import DownloadableApp, DownloadStats, TotalDownloadCount, LegalPage, AppRating, AppRatingUsefulVote
 from .utils.file_serving import x_accel_file_response
 from django.conf import settings
+from django.urls import reverse
 from django.db.models import Q
 import os
 import json
@@ -105,8 +106,12 @@ def _build_update_payload(current_version, current_build_number, latest_app, req
         else:
             reason = 'A newer bug-fix update is available.'
 
-    download_path = f'/beatzlock-apps/download/{latest_app.id}/'
-    downloads_page_path = '/beatzlock-apps/downloads/'
+    # Reversed, never written out: this app was mounted under /beatzlock-apps/
+    # when it was part of the main site and now sits at the root of its own
+    # subdomain. These two go out to the native clients as the update's
+    # download link, so a stale prefix here is a dead button in the app.
+    download_path = reverse('beatzlock_app:download_file', args=[latest_app.id])
+    downloads_page_path = reverse('beatzlock_app:download_list')
 
     return {
         'platform': latest_app.platform,
@@ -411,7 +416,9 @@ def update_check(request):
                 'force_update': False,
                 'reason': 'No active release is currently published for this platform.',
                 'download_url': '',
-                'downloads_page_url': request.build_absolute_uri('/beatzlock-apps/downloads/'),
+                'downloads_page_url': request.build_absolute_uri(
+                    reverse('beatzlock_app:download_list')
+                ),
                 'release_notes': '',
             }
         )
@@ -501,9 +508,7 @@ def legal_document_json(request, page_type):
 
     page = get_object_or_404(LegalPage, page_type=normalized_type)
     web_name = 'legal_terms' if normalized_type == 'terms' else 'legal_privacy'
-    web_url = request.build_absolute_uri(
-        f"/beatzlock-apps/legal/{'terms-of-service' if normalized_type == 'terms' else 'privacy-policy'}/"
-    )
+    web_url = request.build_absolute_uri(reverse('beatzlock_app:{}'.format(web_name)))
     return JsonResponse({
         'type': page.page_type,
         'title': page.title,
@@ -992,5 +997,6 @@ def mark_rating_useful(request, rating_id):
         })
         return _ensure_rating_voter_cookie(request, response)
 
-    response = redirect(request.POST.get('next') or request.META.get('HTTP_REFERER') or '/beatzlock-apps/rate/')
+    fallback = reverse('beatzlock_app:rate_app')
+    response = redirect(request.POST.get('next') or request.META.get('HTTP_REFERER') or fallback)
     return _ensure_rating_voter_cookie(request, response)

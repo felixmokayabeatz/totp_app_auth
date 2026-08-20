@@ -56,7 +56,7 @@ class AppRatingTests(TestCase):
 
     def _submit_rating(self, reviewer_key, platform, display_name=''):
         request = self.factory.post(
-            '/beatzlock-apps/api/ratings/submit/',
+            '/api/ratings/submit/',
             data=json.dumps({
                 'reviewer_key': reviewer_key,
                 'platform': platform,
@@ -84,7 +84,7 @@ class AppRatingTests(TestCase):
         self._submit_rating('same-user', 'android', display_name='Felix')
         self._submit_rating('same-user', 'windows', display_name='Felix')
         request = self.factory.post(
-            '/beatzlock-apps/api/ratings/submit/',
+            '/api/ratings/submit/',
             data=json.dumps({
                 'reviewer_key': 'same-user',
                 'platform': 'android',
@@ -698,7 +698,7 @@ class DownloadableAppRetentionTests(TestCase):
         self._create_build('2.0.0', platform='linux', linux_distribution='fedora')
 
         request = self.factory.get(
-            '/beatzlock-apps/api/update-check/',
+            '/api/update-check/',
             {
                 'platform': 'linux',
                 'distribution': 'fedora',
