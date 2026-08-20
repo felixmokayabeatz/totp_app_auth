@@ -3,10 +3,12 @@
 {% block meta_description %}BeatzLock Authenticator downloads, ratings, release notes, and legal pages.{% endblock %}
 {% block main_class %}beatzlock-main{% endblock %}
 
-{# The footer in base.html already links this subdomain's Terms and Privacy.
-   This block used to add a second, "BeatzLock"-prefixed pair to tell them apart
-   from the main site's -- a distinction with no meaning on a subdomain that
-   serves nothing but BeatzLock, and four links to two pages. #}
+{% comment %}
+  The footer in base.html already links this subdomain's Terms and Privacy.
+  This block used to add a second, "BeatzLock"-prefixed pair to tell them apart
+  from the main site's -- a distinction with no meaning on a subdomain that
+  serves nothing but BeatzLock, and four links to two pages.
+{% endcomment %}
 
 {% block extra_head %}
   {{ block.super }}

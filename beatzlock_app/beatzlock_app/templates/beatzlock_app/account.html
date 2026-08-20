@@ -154,8 +154,10 @@
     </div>
   </form>
 
-  {# Its own form: a password submitted together with the avatar above would
-     mean every image upload posted a half-empty password form. #}
+  {% comment %}
+    Its own form: a password submitted together with the avatar above would
+    mean every image upload posted a half-empty password form.
+  {% endcomment %}
   <form method="post" class="account-card" style="margin-top:22px;">
     {% csrf_token %}
     <h2>Sign-in</h2>
