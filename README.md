@@ -128,6 +128,13 @@ only be answered for a name that already resolves here. The scripts check this
 before calling certbot and print the exact record to create, because a failed
 issuance still counts against the Let's Encrypt rate limit for the week.
 
+`HTTP2=off` in a project's `.env` drops that site back to HTTP/1.1 over the
+same TLS on the next deploy. It exists for one symptom: a large upload through
+the admin that stalls and leaves the browser reporting
+`ERR_HTTP2_PING_FAILED`, which happens when the HTTP/2 path between a client
+and this host cannot carry a big request body. Everything else is unaffected —
+the setting defaults to `on`, and `--status` prints which is in force.
+
 TLS is not re-issued when an installed certificate already covers the
 subdomain — a wildcard counts. Each project's `deploy/nginx.conf.template` and
 `deploy/gunicorn.service.template` are the single source of truth for what
