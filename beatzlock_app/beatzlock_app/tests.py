@@ -1066,3 +1066,88 @@ class AccountPageTests(TestCase):
         self.user.first_name, self.user.last_name = 'Felix', 'Mokaya'
         self.user.save(update_fields=['first_name', 'last_name'])
         self.assertEqual(profile_for(self.user).initials, 'FM')
+
+
+class SignUpTests(TestCase):
+    """Two names, an email, a password. No confirmation step."""
+
+    url = '/accounts/signup/'
+    password = 'Str0ng-Passw0rd!x'
+
+    def _payload(self, **overrides):
+        payload = {
+            'first_name': 'Brand',
+            'last_name': 'New',
+            'email': 'Brand.New@Example.com',
+            'password1': self.password,
+            'password2': self.password,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_the_form_asks_for_names_email_and_a_password(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        for field in ('first_name', 'last_name', 'email', 'password1', 'password2'):
+            self.assertContains(response, 'name="{}"'.format(field))
+
+    def test_signing_up_creates_the_account_and_signs_straight_in(self):
+        response = self.client.post(self.url, self._payload())
+        user = get_user_model().objects.get(email='brand.new@example.com')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('_auth_user_id', self.client.session)
+        # The email is the login here, so the username column follows it.
+        self.assertEqual(user.username, 'brand.new@example.com')
+        self.assertEqual((user.first_name, user.last_name), ('Brand', 'New'))
+        self.assertTrue(user.check_password(self.password))
+
+    def test_an_address_that_already_has_an_account_is_refused(self):
+        get_user_model().objects.create_user(
+            username='taken@example.com', email='taken@example.com', password=self.password
+        )
+        response = self.client.post(self.url, self._payload(email='TAKEN@example.com'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'already exists')
+        self.assertEqual(
+            get_user_model().objects.filter(email__iexact='taken@example.com').count(), 1
+        )
+
+    def test_a_mistyped_confirmation_creates_nothing(self):
+        response = self.client.post(
+            self.url, self._payload(password2='something-else!x')
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            get_user_model().objects.filter(email='brand.new@example.com').exists()
+        )
+
+    def test_django_password_validators_still_apply(self):
+        response = self.client.post(
+            self.url, self._payload(password1='password', password2='password')
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'too common')
+        self.assertFalse(
+            get_user_model().objects.filter(email='brand.new@example.com').exists()
+        )
+
+    def test_someone_already_signed_in_is_sent_to_their_account(self):
+        user = get_user_model().objects.create_user(
+            username='here@example.com', email='here@example.com', password=self.password
+        )
+        self.client.force_login(user)
+        response = self.client.get(self.url)
+        self.assertRedirects(
+            response, reverse('beatzlock_app:account'), fetch_redirect_response=False
+        )
+
+    def test_the_two_pages_link_to_each_other(self):
+        self.assertContains(self.client.get('/accounts/login/'), self.url)
+        self.assertContains(self.client.get(self.url), reverse('login'))
+
+    def test_signup_only_redirects_back_into_this_site(self):
+        response = self.client.post(
+            self.url + '?next=https://evil.example.com/', self._payload()
+        )
+        self.assertEqual(response['Location'], reverse('beatzlock_app:account'))
