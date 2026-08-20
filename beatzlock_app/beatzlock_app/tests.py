@@ -1151,3 +1151,93 @@ class SignUpTests(TestCase):
             self.url + '?next=https://evil.example.com/', self._payload()
         )
         self.assertEqual(response['Location'], reverse('beatzlock_app:account'))
+
+
+class AccountPasswordTests(TestCase):
+    """Someone who arrived through Google can give themselves a password."""
+
+    url = '/account/'
+    new_password = 'Str0ng-Passw0rd!x'
+
+    def _google_user(self):
+        user = get_user_model().objects.create_user(
+            username='googler@example.com', email='googler@example.com'
+        )
+        user.set_unusable_password()
+        user.save()
+        profile = profile_for(user)
+        profile.google_sub = 'google-uid-9'
+        profile.save(update_fields=['google_sub'])
+        return user
+
+    def test_a_google_user_is_offered_a_password_without_being_asked_for_one(self):
+        self.client.force_login(self._google_user())
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Set a password')
+        self.assertContains(response, 'new_password1')
+        # They have never had one, so there is nothing to confirm against.
+        self.assertNotContains(response, 'old_password')
+
+    def test_setting_a_password_keeps_them_signed_in_and_adds_the_second_way_in(self):
+        user = self._google_user()
+        self.client.force_login(user)
+        response = self.client.post(self.url, {
+            'set_password': '1',
+            'new_password1': self.new_password,
+            'new_password2': self.new_password,
+        })
+        user.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(user.has_usable_password())
+        # update_session_auth_hash, or the new hash would log them straight out.
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        # Google still works: the link is untouched.
+        self.assertEqual(profile_for(user).google_sub, 'google-uid-9')
+
+        fresh = Client()
+        fresh.post(reverse('login'), {
+            'username': 'googler@example.com', 'password': self.new_password,
+        })
+        self.assertIn('_auth_user_id', fresh.session)
+
+    def test_someone_with_a_password_must_give_the_old_one(self):
+        user = get_user_model().objects.create_user(
+            username='haspw@example.com', email='haspw@example.com', password='Old-Passw0rd!x'
+        )
+        self.client.force_login(user)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Change password')
+        self.assertContains(response, 'old_password')
+
+        response = self.client.post(self.url, {
+            'set_password': '1',
+            'old_password': 'not-the-old-one',
+            'new_password1': self.new_password,
+            'new_password2': self.new_password,
+        })
+        user.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(user.check_password('Old-Passw0rd!x'))
+
+        self.client.post(self.url, {
+            'set_password': '1',
+            'old_password': 'Old-Passw0rd!x',
+            'new_password1': self.new_password,
+            'new_password2': self.new_password,
+        })
+        user.refresh_from_db()
+        self.assertTrue(user.check_password(self.new_password))
+
+    def test_saving_details_does_not_disturb_the_password(self):
+        user = get_user_model().objects.create_user(
+            username='both@example.com', email='both@example.com', password='Old-Passw0rd!x'
+        )
+        self.client.force_login(user)
+        response = self.client.post(self.url, {'first_name': 'Felix', 'last_name': 'Mokaya'})
+        user.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual((user.first_name, user.last_name), ('Felix', 'Mokaya'))
+        # The two forms post separately; one must not half-submit the other.
+        self.assertTrue(user.check_password('Old-Passw0rd!x'))

@@ -51,7 +51,8 @@
   /* ── fields ── */
   .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
   .field label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 6px; }
-  .field input[type="text"] {
+  .field input[type="text"],
+  .field input[type="password"] {
     width: 100%; padding: 11px 13px; border-radius: 11px;
     border: 1px solid var(--border, rgba(255,255,255,.14));
     background: rgba(255,255,255,.05); color: inherit; font: inherit;
@@ -147,22 +148,60 @@
       </div>
     </div>
 
-    <div class="account-card">
-      <h2>Sign-in</h2>
-      <div class="signin-note">
-        {% if profile.google_sub %}
-          <i class="fab fa-google" aria-hidden="true"></i>
-          <span>Connected to Google.{% if not has_password %} You sign in with Google.{% endif %}</span>
-        {% else %}
-          <i class="fas fa-key" aria-hidden="true"></i>
-          <span>You sign in with your email address and password.</span>
-        {% endif %}
-      </div>
-    </div>
-
     <div class="account-actions">
       <button type="submit" class="fmb-btn">Save changes</button>
       <a href="{% url 'beatzlock_app:download_list' %}" class="fmb-btn fmb-btn-secondary">Back to downloads</a>
+    </div>
+  </form>
+
+  {# Its own form: a password submitted together with the avatar above would
+     mean every image upload posted a half-empty password form. #}
+  <form method="post" class="account-card" style="margin-top:22px;">
+    {% csrf_token %}
+    <h2>Sign-in</h2>
+
+    <div class="signin-note" style="margin-bottom:18px;">
+      {% if profile.google_sub %}
+        <i class="fab fa-google" aria-hidden="true"></i>
+        <span>
+          Connected to Google.{% if not has_password %} Right now that is your only way in.{% endif %}
+        </span>
+      {% else %}
+        <i class="fas fa-key" aria-hidden="true"></i>
+        <span>You sign in with your email address and password.</span>
+      {% endif %}
+    </div>
+
+    <p class="avatar-hint" style="margin:0 0 16px;">
+      {% if has_password %}
+        Change the password you use with {{ user.email|default:user.username }}.
+      {% else %}
+        Set a password if you would also like to sign in with your email address.
+        Signing in with Google keeps working either way.
+      {% endif %}
+    </p>
+
+    {% if password_form.non_field_errors %}
+      <ul class="errorlist">
+        {% for error in password_form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    {% for field in password_form %}
+      <div class="field" style="margin-bottom:14px;">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}{{ field.errors }}{% endif %}
+        {% if field.help_text %}
+          <p class="avatar-hint" style="margin-top:6px;">{{ field.help_text|safe }}</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <div class="account-actions">
+      <button type="submit" name="set_password" value="1" class="fmb-btn">
+        {% if has_password %}Change password{% else %}Set a password{% endif %}
+      </button>
     </div>
   </form>
 </section>

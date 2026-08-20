@@ -14,8 +14,9 @@ from .google_auth import google_enabled
 from .utils.file_serving import x_accel_file_response
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login as auth_login
+from django.contrib.auth import login as auth_login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.urls import reverse
 from django.db.models import Q
 import os
@@ -1050,13 +1051,26 @@ def mark_rating_useful(request, rating_id):
 
 @login_required
 def account(request):
-    """One page: the name shown on reviews, and the profile image."""
+    """The name shown on reviews, the profile image, and the password.
+
+    Someone who arrived through Google has no usable password, so Google is
+    their only way in. SetPasswordForm gives them one without asking for a
+    password they have never had; anyone who already has one gets
+    PasswordChangeForm, which asks for the old one first.
+
+    The page posts from two separate forms -- the details and the password --
+    so each is bound only when its own button was pressed. Nesting them in one
+    form would submit a half-empty password form on every avatar upload.
+    """
     profile = profile_for(request.user)
+    has_password = request.user.has_usable_password()
+    password_form_class = PasswordChangeForm if has_password else SetPasswordForm
+
+    account_form = AccountForm(instance=request.user)
+    avatar_form = AvatarForm(instance=profile)
+    password_form = password_form_class(request.user)
 
     if request.method == 'POST':
-        account_form = AccountForm(request.POST, instance=request.user)
-        avatar_form = AvatarForm(request.POST, request.FILES, instance=profile)
-
         if 'remove_avatar' in request.POST:
             if profile.avatar:
                 profile.avatar.delete(save=False)
@@ -1065,21 +1079,35 @@ def account(request):
                 messages.success(request, "Profile image removed.")
             return redirect('beatzlock_app:account')
 
-        if account_form.is_valid() and avatar_form.is_valid():
-            account_form.save()
-            avatar_form.save()
-            messages.success(request, "Account updated.")
-            return redirect('beatzlock_app:account')
-    else:
-        account_form = AccountForm(instance=request.user)
-        avatar_form = AvatarForm(instance=profile)
+        if 'set_password' in request.POST:
+            password_form = password_form_class(request.user, request.POST)
+            if password_form.is_valid():
+                user = password_form.save()
+                # Changing the password rotates the session hash, which would
+                # otherwise sign them out on the very next request.
+                update_session_auth_hash(request, user)
+                messages.success(
+                    request,
+                    "Password updated." if has_password else
+                    "Password set. You can now sign in with your email address too.",
+                )
+                return redirect('beatzlock_app:account')
+        else:
+            account_form = AccountForm(request.POST, instance=request.user)
+            avatar_form = AvatarForm(request.POST, request.FILES, instance=profile)
+            if account_form.is_valid() and avatar_form.is_valid():
+                account_form.save()
+                avatar_form.save()
+                messages.success(request, "Account updated.")
+                return redirect('beatzlock_app:account')
 
     return render(request, 'beatzlock_app/account.html', {
         'profile': profile,
         'account_form': account_form,
         'avatar_form': avatar_form,
+        'password_form': password_form,
         'google_enabled': google_enabled(),
-        'has_password': request.user.has_usable_password(),
+        'has_password': has_password,
     })
 
 
