@@ -34,8 +34,12 @@ class AppConfig {
   static const String creatorWebsiteUrl = 'http://example.com/';
   static const String creatorGithubUrl = 'http://github.com/felixmokayabeatz/';
 
-  // Change this to false when building for production
-  static const bool isDevelopment = false;
+  // ==================================================================
+  // Uncommentany of the two to what you are running
+  // static const bool isDevelopment = false;
+
+  static const bool isDevelopment = true;
+  // ==================================================================
 
   static String get apiUrl {
     if (!isDevelopment) return prodApiUrl;

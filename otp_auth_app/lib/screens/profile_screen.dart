@@ -227,8 +227,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       'November',
       'December',
     ];
+    // joined_on is a real timestamp from the API (date_joined), so it carries
+    // a time; toLocal turns the server's UTC into whatever this device is set
+    // to before any of it is read.
     final local = dateTime.toLocal();
-    return '${monthNames[local.month - 1]} ${local.day}, ${local.year}';
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '${monthNames[local.month - 1]} ${local.day}, ${local.year} '
+        'at $hour:$minute';
   }
 
   @override
