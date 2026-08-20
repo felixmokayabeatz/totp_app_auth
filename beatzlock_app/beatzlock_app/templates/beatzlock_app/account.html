@@ -1,0 +1,169 @@
+{% extends 'beatzlock_app/base.html' %}
+{% load static %}
+
+{% block title %}Your account — {{ site_name }}{% endblock %}
+{% block meta_description %}Manage your BeatzLock account: display name and profile image.{% endblock %}
+
+{% block extra_css %}
+<style>
+  .account-page { width: min(720px, 100%); margin: 0 auto; padding: 40px 0 60px; }
+
+  .account-head { margin-bottom: 32px; }
+  .account-title {
+    font-size: clamp(1.8rem, 5vw, 2.4rem); font-weight: 800; line-height: 1.15;
+    margin: 0 0 8px; color: var(--text, var(--fmb-text));
+  }
+  .account-sub { color: var(--muted, var(--fmb-muted)); margin: 0; }
+
+  .account-card {
+    background: var(--surface, rgba(255,255,255,.04));
+    border: 1px solid var(--border, rgba(255,255,255,.08));
+    border-radius: 18px; padding: 26px; margin-bottom: 22px;
+  }
+  .account-card h2 {
+    font-size: .78rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted, var(--fmb-muted)); margin: 0 0 18px;
+  }
+
+  /* ── avatar ── */
+  .avatar-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .avatar, .avatar-fallback {
+    width: 84px; height: 84px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid var(--border-hi, rgba(74,158,255,.4));
+    object-fit: cover; background: rgba(74,158,255,.12);
+  }
+  .avatar-fallback {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; font-weight: 800; color: var(--blue, #4a9eff);
+  }
+  .avatar-controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; flex: 1 1 260px; }
+  .avatar-hint { font-size: .82rem; color: var(--muted, var(--fmb-muted)); margin: 0; }
+
+  input[type="file"] {
+    color: var(--muted, var(--fmb-muted)); font-size: .88rem; max-width: 100%;
+  }
+  input[type="file"]::file-selector-button {
+    margin-right: 12px; padding: 9px 14px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--border, rgba(255,255,255,.14));
+    background: rgba(255,255,255,.06); color: inherit; font: inherit; font-weight: 600;
+  }
+
+  /* ── fields ── */
+  .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .field label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 6px; }
+  .field input[type="text"] {
+    width: 100%; padding: 11px 13px; border-radius: 11px;
+    border: 1px solid var(--border, rgba(255,255,255,.14));
+    background: rgba(255,255,255,.05); color: inherit; font: inherit;
+  }
+  .field .readonly { opacity: .65; }
+
+  .errorlist { list-style: none; padding: 0; margin: 6px 0 0; color: #f87171; font-size: .84rem; }
+
+  .account-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
+  .btn-danger-quiet {
+    background: none; border: 1px solid var(--border, rgba(255,255,255,.14));
+    color: var(--muted, var(--fmb-muted)); border-radius: 11px; padding: 10px 16px;
+    font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .btn-danger-quiet:hover { color: #f87171; border-color: rgba(248,113,113,.4); }
+
+  .signin-note {
+    display: flex; align-items: center; gap: 10px;
+    font-size: .88rem; color: var(--muted, var(--fmb-muted));
+  }
+
+  @media (max-width: 560px) {
+    .account-page { padding: 26px 0 44px; }
+    .account-card { padding: 20px 16px; }
+    .field-grid { grid-template-columns: minmax(0, 1fr); }
+    .account-actions .fmb-btn, .btn-danger-quiet { width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="account-page">
+  <div class="account-head">
+    <h1 class="account-title">Your account</h1>
+    <p class="account-sub">Signed in as {{ user.email|default:user.username }}</p>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="fmb-flash {% if message.tags == 'error' %}fmb-flash-error{% endif %}" style="margin-bottom:16px;">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    <div class="account-card">
+      <h2>Profile image</h2>
+      <div class="avatar-row">
+        {% if profile.avatar_url %}
+          <img class="avatar" src="{{ profile.avatar_url }}" alt="" width="84" height="84" />
+        {% else %}
+          <div class="avatar-fallback" aria-hidden="true">{{ profile.initials }}</div>
+        {% endif %}
+
+        <div class="avatar-controls">
+          {{ avatar_form.avatar }}
+          <p class="avatar-hint">JPG, PNG or WebP, up to 2MB. Square images look best.</p>
+          {% if avatar_form.avatar.errors %}{{ avatar_form.avatar.errors }}{% endif %}
+        </div>
+      </div>
+
+      {% if profile.avatar %}
+        <div class="account-actions">
+          <button type="submit" name="remove_avatar" value="1" class="btn-danger-quiet">
+            Remove image
+          </button>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="account-card">
+      <h2>Details</h2>
+      <div class="field-grid">
+        <div class="field">
+          <label for="{{ account_form.first_name.id_for_label }}">First name</label>
+          {{ account_form.first_name }}
+          {{ account_form.first_name.errors }}
+        </div>
+        <div class="field">
+          <label for="{{ account_form.last_name.id_for_label }}">Last name</label>
+          {{ account_form.last_name }}
+          {{ account_form.last_name.errors }}
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:16px;">
+        <label>Email address</label>
+        <input type="text" value="{{ user.email|default:user.username }}" readonly class="readonly" />
+        <p class="avatar-hint" style="margin-top:6px;">This is your sign-in. Contact us to change it.</p>
+      </div>
+    </div>
+
+    <div class="account-card">
+      <h2>Sign-in</h2>
+      <div class="signin-note">
+        {% if profile.google_sub %}
+          <i class="fab fa-google" aria-hidden="true"></i>
+          <span>Connected to Google.{% if not has_password %} You sign in with Google.{% endif %}</span>
+        {% else %}
+          <i class="fas fa-key" aria-hidden="true"></i>
+          <span>You sign in with your email address and password.</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="account-actions">
+      <button type="submit" class="fmb-btn">Save changes</button>
+      <a href="{% url 'beatzlock_app:download_list' %}" class="fmb-btn fmb-btn-secondary">Back to downloads</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

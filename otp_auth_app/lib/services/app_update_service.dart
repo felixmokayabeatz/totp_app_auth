@@ -872,6 +872,12 @@ fi
         return 'Could not check for updates right now.';
       case DioExceptionType.cancel:
         return 'Update check was cancelled.';
+      // dio adds values to DioExceptionType between releases -- transformTimeout
+      // arrived in one of them and broke this switch's exhaustiveness. A default
+      // keeps a future addition from failing the build; the cost is that the
+      // analyzer no longer flags a newly added type here.
+      default:
+        return 'Could not check for updates right now.';
     }
   }
 }

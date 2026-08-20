@@ -8,9 +8,14 @@ from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from .models import DownloadableApp, DownloadStats, TotalDownloadCount, LegalPage, AppRating, AppRatingUsefulVote
+from .models import DownloadableApp, DownloadStats, TotalDownloadCount, LegalPage, AppRating, AppRatingUsefulVote, profile_for
+from .forms import AccountForm, AvatarForm, SignUpForm
+from .google_auth import google_enabled
 from .utils.file_serving import x_accel_file_response
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import login as auth_login
+from django.contrib.auth.decorators import login_required
 from django.urls import reverse
 from django.db.models import Q
 import os
@@ -434,14 +439,50 @@ def update_check(request):
 
 # â”€â”€ Standalone legal pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+LEGAL_COMING_SOON_HTML = (
+    '<p>This document is being written and will be published here shortly.</p>'
+)
+
+
+def _legal_page_or_placeholder(page_type):
+    """The stored page, or an unsaved stand-in that reads "coming soon".
+
+    A legal document nobody has written yet is not a missing URL. Both pages are
+    linked from every download listing and from inside the native apps, so a 404
+    there reads as a broken site rather than as work in progress. The stand-in
+    carries the same attributes the template and the JSON endpoint read, and its
+    last_updated stays None -- auto_now only fills on save -- so neither shows a
+    date that does not exist.
+    """
+    page = LegalPage.objects.filter(page_type=page_type).first()
+    if page is not None:
+        return page, False
+
+    title = dict(LegalPage.PAGE_CHOICES).get(page_type, 'Legal')
+    placeholder = LegalPage(
+        page_type=page_type,
+        title=title,
+        content=LEGAL_COMING_SOON_HTML,
+    )
+    return placeholder, True
+
+
 def legal_terms(request):
-    page = get_object_or_404(LegalPage, page_type='terms')
-    return render(request, 'beatzlock_app/legal_page.html', {'page': page})
+    page, coming_soon = _legal_page_or_placeholder('terms')
+    return render(
+        request,
+        'beatzlock_app/legal_page.html',
+        {'page': page, 'coming_soon': coming_soon},
+    )
 
 
 def legal_privacy(request):
-    page = get_object_or_404(LegalPage, page_type='privacy')
-    return render(request, 'beatzlock_app/legal_page.html', {'page': page})
+    page, coming_soon = _legal_page_or_placeholder('privacy')
+    return render(
+        request,
+        'beatzlock_app/legal_page.html',
+        {'page': page, 'coming_soon': coming_soon},
+    )
 
 
 # â”€â”€ File download â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -506,7 +547,9 @@ def legal_document_json(request, page_type):
     if normalized_type not in ('terms', 'privacy'):
         return JsonResponse({'error': 'Unknown legal document.'}, status=404)
 
-    page = get_object_or_404(LegalPage, page_type=normalized_type)
+    # Same stand-in as the web pages, so a client that asks before the
+    # document exists is told it is coming rather than handed a 404.
+    page, coming_soon = _legal_page_or_placeholder(normalized_type)
     web_name = 'legal_terms' if normalized_type == 'terms' else 'legal_privacy'
     web_url = request.build_absolute_uri(reverse('beatzlock_app:{}'.format(web_name)))
     return JsonResponse({
@@ -515,6 +558,7 @@ def legal_document_json(request, page_type):
         'content_html': page.content,
         'last_updated': page.last_updated.isoformat() if page.last_updated else None,
         'web_url': web_url,
+        'coming_soon': coming_soon,
     })
 
 
@@ -1000,3 +1044,72 @@ def mark_rating_useful(request, rating_id):
     fallback = reverse('beatzlock_app:rate_app')
     response = redirect(request.POST.get('next') or request.META.get('HTTP_REFERER') or fallback)
     return _ensure_rating_voter_cookie(request, response)
+
+
+# ── Account ────────────────────────────────────────────────────────────────
+
+@login_required
+def account(request):
+    """One page: the name shown on reviews, and the profile image."""
+    profile = profile_for(request.user)
+
+    if request.method == 'POST':
+        account_form = AccountForm(request.POST, instance=request.user)
+        avatar_form = AvatarForm(request.POST, request.FILES, instance=profile)
+
+        if 'remove_avatar' in request.POST:
+            if profile.avatar:
+                profile.avatar.delete(save=False)
+                profile.avatar = None
+                profile.save()
+                messages.success(request, "Profile image removed.")
+            return redirect('beatzlock_app:account')
+
+        if account_form.is_valid() and avatar_form.is_valid():
+            account_form.save()
+            avatar_form.save()
+            messages.success(request, "Account updated.")
+            return redirect('beatzlock_app:account')
+    else:
+        account_form = AccountForm(instance=request.user)
+        avatar_form = AvatarForm(instance=profile)
+
+    return render(request, 'beatzlock_app/account.html', {
+        'profile': profile,
+        'account_form': account_form,
+        'avatar_form': avatar_form,
+        'google_enabled': google_enabled(),
+        'has_password': request.user.has_usable_password(),
+    })
+
+
+def _safe_redirect_target(candidate, fallback_name='beatzlock_app:account'):
+    """Only ever send someone back into this site."""
+    if candidate and candidate.startswith('/') and not candidate.startswith('//'):
+        return candidate
+    return reverse(fallback_name)
+
+
+def signup(request):
+    """Create an account and sign straight in. No confirmation step."""
+    if request.user.is_authenticated:
+        return redirect('beatzlock_app:account')
+
+    next_url = request.POST.get('next') or request.GET.get('next') or ''
+
+    if request.method == 'POST':
+        form = SignUpForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            # Nothing authenticated them, so login() has to be told which
+            # backend to record on the session.
+            auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+            messages.success(request, "Welcome to {}.".format(settings.SITE_NAME))
+            return redirect(_safe_redirect_target(next_url))
+    else:
+        form = SignUpForm()
+
+    return render(request, 'registration/signup.html', {
+        'form': form,
+        'next': next_url,
+    })

@@ -54,7 +54,12 @@
               <i class="fas fa-sun" aria-hidden="true"></i><span>Light</span>
             </button>
             {% if user.is_authenticated %}
-              <span class="fmb-user-pill">{{ user.first_name|default:user.username }}</span>
+              <a href="{% url 'beatzlock_app:account' %}" class="fmb-user-pill" title="Your account">
+                {% if user.profile.avatar_url %}
+                  <img src="{{ user.profile.avatar_url }}" alt="" width="24" height="24" />
+                {% endif %}
+                <span>{{ user.first_name|default:user.email|default:user.username }}</span>
+              </a>
               <form action="{% url 'logout' %}" method="post" style="display:inline;">
                 {% csrf_token %}
                 <button type="submit" class="fmb-nav-link" style="background:none;border:none;cursor:pointer;">Logout</button>
@@ -73,6 +78,9 @@
           <a href="{% url 'beatzlock_app:archived_downloads' %}"><i class="fas fa-box-archive" aria-hidden="true"></i> Archive</a>
           <a href="{% url 'beatzlock_app:rate_app' %}"><i class="fas fa-star" aria-hidden="true"></i> Reviews</a>
           <a href="{{ main_site_url }}"><i class="fas fa-house" aria-hidden="true"></i> Main site</a>
+          {% if user.is_authenticated %}
+            <a href="{% url 'beatzlock_app:account' %}"><i class="fas fa-circle-user" aria-hidden="true"></i> Your account</a>
+          {% endif %}
           {% if user.is_staff %}
             <a href="{% url 'download_stats' %}" style="color:#C8A96E;"><i class="fas fa-chart-line" aria-hidden="true"></i> Console</a>
           {% endif %}
@@ -101,17 +109,44 @@
 
       <footer class="fmb-footer">
         <div class="fmb-footer-inner">
-          <div class="fmb-footer-brand">
-            <img src="{% static 'favicon/felixmokayabeatz_favicon.png' %}" alt="" width="24" height="24" />
-            <span>{{ site_name }}</span>
+          <div class="fmb-footer-top">
+            <div class="fmb-footer-about">
+              <a href="{% url 'beatzlock_app:download_list' %}" class="fmb-footer-brand">
+                <img src="{% static 'favicon/felixmokayabeatz_favicon.png' %}" alt="" width="28" height="28" />
+                <span>{{ site_name }}</span>
+              </a>
+              <p class="fmb-footer-tagline">{{ site_tagline }}</p>
+            </div>
+
+            <nav class="fmb-footer-col" aria-labelledby="footer-col-apps">
+              <h2 class="fmb-footer-heading" id="footer-col-apps">BeatzLock</h2>
+              <a href="{% url 'beatzlock_app:download_list' %}">Downloads</a>
+              <a href="{% url 'beatzlock_app:archived_downloads' %}">Older versions</a>
+              <a href="{% url 'beatzlock_app:rate_app' %}">Reviews</a>
+            </nav>
+
+            <nav class="fmb-footer-col" aria-labelledby="footer-col-more">
+              <h2 class="fmb-footer-heading" id="footer-col-more">More from Felix Mokaya</h2>
+              {% for link in fmb_site_links %}
+                <a href="{{ link.url }}" rel="noopener">
+                  <i class="fas {{ link.icon }}" aria-hidden="true"></i> {{ link.name }}
+                </a>
+              {% endfor %}
+            </nav>
+
+            <nav class="fmb-footer-col" aria-labelledby="footer-col-legal">
+              <h2 class="fmb-footer-heading" id="footer-col-legal">Legal</h2>
+              <a href="{% url 'beatzlock_app:legal_terms' %}">Terms of Service</a>
+              <a href="{% url 'beatzlock_app:legal_privacy' %}">Privacy Policy</a>
+              {% block footer_links_extra %}{% endblock %}
+            </nav>
           </div>
-          <div class="fmb-footer-links">
-            <a href="{% url 'beatzlock_app:legal_terms' %}">Terms of Service</a>
-            <a href="{% url 'beatzlock_app:legal_privacy' %}">Privacy Policy</a>
-            {% block footer_links_extra %}{% endblock %}
+
+          <div class="fmb-footer-bottom">
+            {% now "Y" as fallback_year %}
+            <span>&copy; {{ current_year|default:fallback_year }} Felix Mokaya. All rights reserved.</span>
+            <span class="fmb-footer-built">Built for {{ site_name }}</span>
           </div>
-          {% now "Y" as fallback_year %}
-          <div>&copy; {{ current_year|default:fallback_year }} Felix Mokaya. All rights reserved.</div>
         </div>
       </footer>
     </div>

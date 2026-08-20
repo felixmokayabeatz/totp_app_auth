@@ -32,6 +32,18 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# C++/WinRT falls back to <experimental/coroutine> whenever it is compiled as
+# C++17, which APPLY_STANDARD_SETTINGS below does. MSVC 14.51 (VS BuildTools 18)
+# turned the deprecation of that header into a hard error -- STL1011 -- which
+# breaks any plugin using WinRT coroutines, local_auth_windows among them. This
+# is the escape hatch the error message itself names. It has to be set here,
+# before the plugin subdirectories are added below, so that it reaches them.
+#
+# It is a stopgap: Microsoft say the header will be removed. The durable fix is
+# cxx_std_20 in APPLY_STANDARD_SETTINGS, which makes WinRT use the real
+# <coroutine>, once every plugin in the build is happy on C++20.
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

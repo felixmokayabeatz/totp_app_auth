@@ -886,3 +886,96 @@ class TotalDownloadCount(models.Model):
 
         obj.refresh_from_db(fields=['total_downloads', 'updated_at'])
         return obj.total_downloads
+
+
+def avatar_upload_path(instance, filename):
+    """Profile images land at:
+      accounts/avatars/<user_id>/<filename>
+
+    One folder per user, cleared on replace, so an account never accumulates
+    every picture it has ever had.
+    """
+    folder = posixpath.join('accounts', 'avatars', str(instance.user_id))
+    delete_existing_app_file(folder, filename)
+    return posixpath.join(folder, filename)
+
+
+class UserProfile(models.Model):
+    """Everything about an account that Django's User does not already hold."""
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='profile',
+    )
+    avatar = models.ImageField(
+        upload_to=avatar_upload_path,
+        blank=True,
+        null=True,
+        help_text="Square images look best. Anything larger than 2MB is rejected.",
+    )
+    # Google's stable account identifier. Kept so a user who later changes the
+    # email on their Google account is still recognised as the same person.
+    google_sub = models.CharField(max_length=64, blank=True, default='', db_index=True)
+    # Google hosts the picture itself, so only the URL is stored. It is the
+    # fallback when nothing has been uploaded here.
+    google_avatar_url = models.URLField(blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User Profile"
+        verbose_name_plural = "User Profiles"
+
+    def __str__(self):
+        return self.user.email or self.user.username
+
+    def save(self, *args, **kwargs):
+        # Replacing the image leaves the old file behind otherwise; the upload
+        # path only clears the folder for files it is about to write into.
+        if self.pk:
+            previous = (
+                UserProfile.objects.filter(pk=self.pk)
+                .values_list('avatar', flat=True)
+                .first()
+            )
+            current = self.avatar.name if self.avatar else ''
+            if previous and previous != current:
+                storage = self._meta.get_field('avatar').storage
+                if storage.exists(previous):
+                    storage.delete(previous)
+        super().save(*args, **kwargs)
+
+    @property
+    def avatar_url(self):
+        """Uploaded image first, then whatever Google gave us, then nothing."""
+        if self.avatar:
+            try:
+                return self.avatar.url
+            except ValueError:
+                pass
+        return self.google_avatar_url or ''
+
+    @property
+    def initials(self):
+        """Two letters for the fallback badge when there is no picture."""
+        source = (
+            f"{self.user.first_name} {self.user.last_name}".strip()
+            or self.user.email
+            or self.user.username
+        )
+        parts = [part for part in re.split(r'[\s._@-]+', source) if part]
+        if not parts:
+            return '?'
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        return (parts[0][:1] + parts[1][:1]).upper()
+
+
+def profile_for(user):
+    """The user's profile, created on first use.
+
+    Signals would tie profile creation to every User.save() anywhere, including
+    the admin and createsuperuser; this keeps it to the one place that needs it.
+    """
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return profile

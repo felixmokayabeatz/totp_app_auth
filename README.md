@@ -242,10 +242,29 @@ python manage.py migrate
 python manage.py runserver 8000
 ```
 
+### local.py
+
 `beatzlock_app/config/local.py` and `otp_backend/otp_backend/local.py` are
-git-ignored dev-only overrides, imported last so they win over everything —
-which is why each `deploy.sh` refuses to run on a host where its project's one
-exists. `otp_backend`'s currently just sets `DEBUG=True`.
+git-ignored, development-only overrides. Each settings module imports its own
+immediately after `DEBUG` is read from `.env` and before anything derived from
+it — the static files storage, the WhiteNoise middleware, `ALLOWED_HOSTS`, the
+secure-cookie flags — so one line there switches all of them together. Each
+`deploy.sh` refuses to run on a host where its project's copy exists, because
+it would quietly serve the site with `DEBUG=True`.
+
+Both `.env` files carry `DEBUG=False`, since they start life as copies of the
+server's. Without a `local.py`, `runserver` therefore runs in production mode:
+static files are resolved through a manifest that only `collectstatic` writes,
+and the first page you open dies with `Missing staticfiles manifest entry for
+'favicon/favicon.ico'`. The whole fix is one line:
+
+```python
+# beatzlock_app/config/local.py
+DEBUG = True
+```
+
+Per-machine values that are not `DEBUG` — database credentials, ports, hosts —
+belong in `.env`, which is per-machine already.
 
 Set `USE_X_ACCEL_REDIRECT=False` in the downloads site's `.env` for local work:
 in production nginx streams app binaries via `X-Accel-Redirect` so no gunicorn

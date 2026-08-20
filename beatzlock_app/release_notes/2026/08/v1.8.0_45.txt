@@ -1,0 +1,6 @@
+v1.8.0 (Build 45)
+
+What's New
+- Release notes, update checks, reviews and the legal pages work inside the app again. The app was still asking the old website address for them after the site moved to its own home.
+- Restoring accounts or passwords to the cloud now tells you when an upload did not go through, instead of finishing quietly as if it had.
+- Updated Firebase, networking and notification libraries, and fixed the Windows build against the latest Visual Studio tools.

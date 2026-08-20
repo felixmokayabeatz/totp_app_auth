@@ -204,6 +204,12 @@ class SyncService {
           return 'Could not reach the server. This device may have a DNS or internet issue.';
         }
         return fallback;
+      // dio adds values to DioExceptionType between releases -- transformTimeout
+      // arrived in one of them and broke this switch's exhaustiveness. A default
+      // keeps a future addition from failing the build; the cost is that the
+      // analyzer no longer flags a newly added type here.
+      default:
+        return fallback;
     }
   }
 
@@ -2029,7 +2035,7 @@ class SyncService {
         jsonEncode(finalData),
         _encryptionKey!,
       );
-      return uploadEncryptedSyncData(
+      return await uploadEncryptedSyncData(
         'otp_accounts',
         encryptedContent: encrypted,
         version: cloudVersion + 1,
@@ -2090,7 +2096,7 @@ class SyncService {
         _encryptionKey!,
         context: 'password-entries-sync',
       );
-      return uploadEncryptedSyncData(
+      return await uploadEncryptedSyncData(
         'password_entries',
         encryptedContent: encrypted,
         version: cloudVersion + 1,

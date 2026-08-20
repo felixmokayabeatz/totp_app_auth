@@ -5,6 +5,8 @@ from django.contrib.auth.views import LoginView
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from beatzlock_app import google_auth
+from beatzlock_app import views as account_views
 from beatzlock_app.forms import EmailAuthenticationForm
 
 urlpatterns = [
@@ -16,9 +18,22 @@ urlpatterns = [
     # than the username nobody on this site has.
     path(
         "accounts/login/",
-        LoginView.as_view(authentication_form=EmailAuthenticationForm),
+        LoginView.as_view(
+            authentication_form=EmailAuthenticationForm,
+            # LoginView puts its own site_name in the context -- the request's
+            # host, since django.contrib.sites is not installed -- and view
+            # context beats context processors. Without this the nav and footer
+            # on this one page read "127.0.0.1:8005" instead of the site name.
+            # extra_context is merged last, so it wins.
+            extra_context={"site_name": settings.SITE_NAME},
+        ),
         name="login",
     ),
+    # Ahead of the include as well: django.contrib.auth.urls has no google/
+    # routes, so these would otherwise fall through to the catch-all below.
+    path("accounts/signup/", account_views.signup, name="signup"),
+    path("accounts/google/login/", google_auth.google_login, name="google_login"),
+    path("accounts/google/callback/", google_auth.google_callback, name="google_callback"),
     path("accounts/", include("django.contrib.auth.urls")),
 
     # Staff console: download stats, review replies, build history.

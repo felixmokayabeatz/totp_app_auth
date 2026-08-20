@@ -37,6 +37,24 @@ def env_list(name, default=""):
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 DEBUG = env_bool("DEBUG", False)
 
+# ====================================================================
+# Local settings for development
+#
+# Sits here, straight after DEBUG and before anything derived from it, for the
+# same reason the API's copy does: the static storage, the middleware and the
+# cookie flags below are all decided by DEBUG, so an override that arrived
+# later would leave them set for production. Per-machine values that are not
+# DEBUG -- database credentials, ports, hosts -- belong in .env, which is
+# per-machine already.
+#
+# local.py is git-ignored and dev-only. deploy/deploy.sh refuses to run on any
+# host where it exists, because it would quietly serve the site with DEBUG=True.
+# ====================================================================
+try:
+    from .local import *  # noqa: F401,F403
+except ImportError:
+    pass
+
 SITE_DOMAIN = os.getenv("SITE_DOMAIN", "apps.felixmokayabeatz.online")
 SITE_URL = os.getenv("SITE_URL", "https://" + SITE_DOMAIN)
 
@@ -74,7 +92,12 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+    # WhiteNoise serves the collectstatic output, which does not exist until
+    # collectstatic has run -- so in development it only warns "No directory at:
+    # .../staticfiles/" on every start. runserver's own staticfiles app serves
+    # those files straight from the apps there, so WhiteNoise is loaded in
+    # production only, where deploy.sh has run collectstatic.
+    *([] if DEBUG else ["whitenoise.middleware.WhiteNoiseMiddleware"]),
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -184,6 +207,17 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL") or "BeatzLock Authenticator
 # BEATZLOCK SERVICE CONFIGURATION
 # ================================
 
+# ==========================================
+# GOOGLE SIGN-IN
+# ==========================================
+# Client ID and secret come from the Google Cloud console, project credentials.
+# The redirect URI is built from the request at run time, so the only thing that
+# has to match there is the callback path:
+#   https://apps.felixmokayabeatz.online/accounts/google/callback/
+#   http://localhost:8005/accounts/google/callback/   (development)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
 BEATZLOCK_API_BASE_URL = os.getenv("BEATZLOCK_API_BASE_URL", "")
 BEATZLOCK_INTERNAL_SERVICE_SECRET = os.getenv("BEATZLOCK_INTERNAL_SERVICE_SECRET", "")
 BEATZLOCK_BUILD_LOGS_DIR = os.getenv("BEATZLOCK_BUILD_LOGS_DIR", "")
@@ -232,6 +266,21 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2621440
 
 SITE_NAME = os.getenv("SITE_NAME", "BeatzLock Apps")
 MAIN_SITE_URL = os.getenv("MAIN_SITE_URL", "https://felixmokayabeatz.online")
+SITE_TAGLINE = os.getenv(
+    "SITE_TAGLINE",
+    "The BeatzLock Authenticator: downloads, release notes and reviews, "
+    "straight from the people who build it.",
+)
+
+# The other felixmokayabeatz sites, listed in the footer. Each is its own
+# project on its own subdomain, so each URL can be pointed elsewhere from .env
+# without touching the template.
+FMB_SITE_LINKS = [
+    {"name": "Main site", "url": MAIN_SITE_URL, "icon": "fa-house"},
+    {"name": "Blog", "url": os.getenv("BLOG_URL", "https://blog.felixmokayabeatz.online"), "icon": "fa-feather-pointed"},
+    {"name": "Portfolio", "url": os.getenv("PORTFOLIO_URL", "https://portfolio.felixmokayabeatz.online"), "icon": "fa-briefcase"},
+    {"name": "Invoices", "url": os.getenv("INVOICES_URL", "https://invoices.felixmokayabeatz.online"), "icon": "fa-file-invoice"},
+]
 GOOGLE_ANALYTICS_MEASUREMENT_ID = os.getenv("GOOGLE_ANALYTICS_MEASUREMENT_ID", "")
 
 # ========================

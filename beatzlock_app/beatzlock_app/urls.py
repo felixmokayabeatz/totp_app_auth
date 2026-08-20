@@ -6,6 +6,9 @@ from . import views
 app_name = 'beatzlock_app'
 
 urlpatterns = [
+    # Signed-in account: display name and profile image
+    path('account/', views.account, name='account'),
+
     # Main download listing page
     path('downloads/', views.download_list, name='download_list'),
     path('downloads/archive/', views.archived_downloads, name='archived_downloads'),

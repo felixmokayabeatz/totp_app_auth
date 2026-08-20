@@ -267,6 +267,27 @@ html[data-fmb-theme="light"] .fmb-mobile-toggle:focus-visible {
   white-space: nowrap;
 }
 
+/* The pill is a link to the account page now, and its grid's first column is
+   where the profile image goes. */
+.fmb-user-pill {
+  text-decoration: none;
+}
+
+.fmb-user-pill img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.fmb-user-pill:hover,
+.fmb-user-pill:focus-visible {
+  color: var(--fmb-text);
+  border-color: var(--fmb-border-hi, var(--fmb-border));
+  outline: none;
+}
+
 .fmb-notification-shell {
   display: inline-flex;
   position: relative;
@@ -738,43 +759,132 @@ html[data-fmb-theme="light"] .fmb-footer {
 
 .fmb-footer-inner {
   width: min(var(--fmb-max), calc(100% - 32px));
-  min-height: 80px;
   margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  padding: 52px 0 26px;
   color: var(--fmb-muted);
   font-size: 0.92rem;
 }
 
-.fmb-footer-brand,
-.fmb-footer-links {
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
+/* Brand column is wider than the link columns; the three link columns share
+   what is left and never fall below a readable width. */
+.fmb-footer-top {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.6fr) repeat(3, minmax(140px, 1fr));
+  gap: 36px 30px;
+  padding-bottom: 30px;
+}
+
+.fmb-footer-about {
+  max-width: 380px;
 }
 
 .fmb-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
   color: var(--fmb-text);
   font-weight: 800;
+  font-size: 1.02rem;
+  text-decoration: none;
 }
 
 .fmb-footer-brand img {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
 }
 
-.fmb-footer-links a {
-  text-decoration: none;
-  font-weight: 700;
+.fmb-footer-tagline {
+  margin: 12px 0 0;
+  line-height: 1.65;
+  color: var(--fmb-muted);
 }
 
-.fmb-footer-links a:hover,
-.fmb-footer-links a:focus-visible {
+.fmb-footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-width: 0;
+}
+
+.fmb-footer-heading {
+  margin: 0 0 4px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fmb-text);
+}
+
+.fmb-footer-col a {
+  color: var(--fmb-muted);
+  text-decoration: none;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  transition: color 0.2s;
+}
+
+.fmb-footer-col a i {
+  width: 16px;
+  opacity: 0.75;
+}
+
+.fmb-footer-col a:hover,
+.fmb-footer-col a:focus-visible {
   color: var(--fmb-text);
   outline: none;
+}
+
+.fmb-footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding-top: 22px;
+  border-top: 1px solid var(--fmb-border);
+  font-size: 0.86rem;
+}
+
+.fmb-footer-built {
+  opacity: 0.72;
+}
+
+/* Tablet: brand spans the full width, the three link columns pair up. */
+@media (max-width: 940px) {
+  .fmb-footer-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px 24px;
+  }
+
+  .fmb-footer-about {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+}
+
+/* Phone: one column, everything left-aligned so the link lists stay scannable,
+   and tap targets kept apart. */
+@media (max-width: 560px) {
+  .fmb-footer-inner {
+    padding: 38px 0 22px;
+  }
+
+  .fmb-footer-top {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    padding-bottom: 24px;
+  }
+
+  .fmb-footer-col {
+    gap: 13px;
+  }
+
+  .fmb-footer-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }
 
 @media (max-width: 940px) {
@@ -912,17 +1022,7 @@ html[data-fmb-theme="light"] .fmb-footer {
     grid-template-columns: 1fr;
   }
 
-  .fmb-footer-inner {
-    padding: 22px 0;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
-
-  .fmb-footer-brand,
-  .fmb-footer-links {
-    justify-content: center;
+  .fmb-footer-brand {
     flex-wrap: wrap;
   }
 }

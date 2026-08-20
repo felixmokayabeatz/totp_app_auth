@@ -1,5 +1,6 @@
 from datetime import timedelta
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -11,13 +12,15 @@ from django.core.management.base import CommandError
 from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+import io
 import json
 import os
 import shutil
 import tempfile
 import uuid
 
-from .models import AppRating, AppRelease, DownloadDailyStat, DownloadStats, DownloadableApp, TotalDownloadCount
+from .models import AppRating, AppRelease, DownloadDailyStat, DownloadStats, DownloadableApp, TotalDownloadCount, profile_for
+from . import google_auth
 from .admin import StaffChangeForm, StaffCreationForm
 from .review_replies import dispatch_review_reply
 from console.download_stats import build_download_stats_context
@@ -868,3 +871,198 @@ class EmailAsLoginTests(TestCase):
         changed = form.save()
         self.assertEqual(changed.email, 'after@example.com')
         self.assertEqual(changed.username, 'after@example.com')
+
+
+class _FakeGoogleResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+@override_settings(GOOGLE_CLIENT_ID='fake-client-id', GOOGLE_CLIENT_SECRET='fake-secret')
+class GoogleSignInTests(TestCase):
+    """The OAuth flow, with Google's two endpoints stubbed."""
+
+    def _begin(self, client=None):
+        """Start the flow and hand back the state Google would echo."""
+        client = client or Client()
+        response = client.get(reverse('google_login'))
+        query = parse_qs(urlparse(response['Location']).query)
+        return client, response, query
+
+    def _finish(self, client, state, userinfo):
+        with mock.patch.object(
+            google_auth.requests, 'post',
+            return_value=_FakeGoogleResponse({'access_token': 'fake-token'}),
+        ), mock.patch.object(
+            google_auth.requests, 'get',
+            return_value=_FakeGoogleResponse(userinfo),
+        ):
+            return client.get(
+                reverse('google_callback'), {'code': 'good-code', 'state': state}
+            )
+
+    def test_login_redirects_to_google_without_leaking_the_secret(self):
+        client, response, query = self._begin()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(urlparse(response['Location']).netloc, 'accounts.google.com')
+        self.assertEqual(query['scope'][0], 'openid email profile')
+        self.assertEqual(query['response_type'][0], 'code')
+        self.assertNotIn('client_secret', query)
+        # The state is what makes a forged callback detectable.
+        self.assertEqual(client.session['google_oauth_state'], query['state'][0])
+
+    def test_callback_refuses_a_state_it_did_not_issue(self):
+        client, _, _ = self._begin()
+        response = client.get(
+            reverse('google_callback'), {'code': 'x', 'state': 'not-the-state'}
+        )
+        self.assertRedirects(response, reverse('login'), fetch_redirect_response=False)
+        self.assertNotIn('_auth_user_id', client.session)
+
+    def test_a_new_google_user_gets_an_account_keyed_on_their_email(self):
+        client, _, query = self._begin()
+        response = self._finish(client, query['state'][0], {
+            'sub': 'google-uid-1',
+            'email': 'NewPerson@Example.com',
+            'email_verified': True,
+            'given_name': 'New',
+            'family_name': 'Person',
+            'picture': 'https://lh3.googleusercontent.com/fake',
+        })
+
+        user = get_user_model().objects.get(email='newperson@example.com')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('_auth_user_id', client.session)
+        self.assertEqual(user.username, 'newperson@example.com')
+        self.assertEqual((user.first_name, user.last_name), ('New', 'Person'))
+        # Nothing was typed, so there is no password to guess.
+        self.assertFalse(user.has_usable_password())
+
+        profile = user.profile
+        self.assertEqual(profile.google_sub, 'google-uid-1')
+        self.assertEqual(profile.avatar_url, 'https://lh3.googleusercontent.com/fake')
+
+    def test_an_unverified_google_email_is_refused(self):
+        client, _, query = self._begin()
+        response = self._finish(client, query['state'][0], {
+            'sub': 'google-uid-2',
+            'email': 'sneaky@example.com',
+            'email_verified': False,
+        })
+        self.assertRedirects(response, reverse('login'), fetch_redirect_response=False)
+        self.assertNotIn('_auth_user_id', client.session)
+        self.assertFalse(
+            get_user_model().objects.filter(email='sneaky@example.com').exists()
+        )
+
+    def test_signing_in_with_google_links_an_existing_account(self):
+        existing = get_user_model().objects.create_user(
+            username='existing@example.com',
+            email='existing@example.com',
+            password='Str0ng-Passw0rd!x',
+        )
+        client, _, query = self._begin()
+        self._finish(client, query['state'][0], {
+            'sub': 'google-uid-3',
+            'email': 'existing@example.com',
+            'email_verified': True,
+        })
+
+        self.assertEqual(
+            get_user_model().objects.filter(email='existing@example.com').count(), 1
+        )
+        self.assertEqual(client.session['_auth_user_id'], str(existing.pk))
+        existing.refresh_from_db()
+        # Linking Google must not cost them their password.
+        self.assertTrue(existing.has_usable_password())
+
+
+@override_settings(GOOGLE_CLIENT_ID='', GOOGLE_CLIENT_SECRET='')
+class GoogleSignInDisabledTests(TestCase):
+    def test_the_routes_are_absent_when_no_credentials_are_configured(self):
+        self.assertEqual(Client().get(reverse('google_login')).status_code, 404)
+
+
+class AccountPageTests(TestCase):
+    password = 'Str0ng-Passw0rd!x'
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username='acct@example.com',
+            email='acct@example.com',
+            password=self.password,
+        )
+        self.client.force_login(self.user)
+        self.media_root = _workspace_temp_dir('beatzlock-avatars-')
+
+    def tearDown(self):
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    @staticmethod
+    def _png(size=(120, 120)):
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new('RGB', size, (74, 158, 255)).save(buffer, format='PNG')
+        return buffer.getvalue()
+
+    def test_the_account_page_needs_a_login(self):
+        client = Client()
+        response = client.get(reverse('beatzlock_app:account'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response['Location'])
+
+    def test_saving_a_display_name(self):
+        response = self.client.post(reverse('beatzlock_app:account'), {
+            'first_name': 'Felix', 'last_name': 'Mokaya',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertEqual((self.user.first_name, self.user.last_name), ('Felix', 'Mokaya'))
+
+    def test_uploading_and_removing_a_profile_image(self):
+        with override_settings(MEDIA_ROOT=self.media_root):
+            self.client.post(reverse('beatzlock_app:account'), {
+                'first_name': '', 'last_name': '',
+                'avatar': SimpleUploadedFile('me.png', self._png(), content_type='image/png'),
+            })
+            profile = self.user.profile
+            profile.refresh_from_db()
+            self.assertTrue(profile.avatar)
+            # One folder per user, so nothing collides between accounts.
+            self.assertTrue(
+                profile.avatar.name.startswith(f'accounts/avatars/{self.user.pk}/')
+            )
+
+            self.client.post(reverse('beatzlock_app:account'), {'remove_avatar': '1'})
+            profile.refresh_from_db()
+            self.assertFalse(profile.avatar)
+
+    def test_an_image_over_the_size_limit_is_refused(self):
+        oversized = SimpleUploadedFile(
+            'huge.png',
+            self._png((2000, 2000)) + b'\0' * (2 * 1024 * 1024),
+            content_type='image/png',
+        )
+        with override_settings(MEDIA_ROOT=self.media_root):
+            response = self.client.post(reverse('beatzlock_app:account'), {
+                'first_name': '', 'last_name': '', 'avatar': oversized,
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'under 2MB')
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.avatar)
+
+    def test_initials_stand_in_for_a_missing_picture(self):
+        # profile_for is the accessor: profiles are created on first use, not by
+        # a signal on every User.save() anywhere.
+        profile = profile_for(self.user)
+        self.assertEqual(profile.initials, 'AE')  # acct@example.com
+        self.user.first_name, self.user.last_name = 'Felix', 'Mokaya'
+        self.user.save(update_fields=['first_name', 'last_name'])
+        self.assertEqual(profile_for(self.user).initials, 'FM')

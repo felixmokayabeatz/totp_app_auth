@@ -142,6 +142,19 @@
   .legal-content [style*="color: #000000"],
   .legal-content [style*="color:#000000"] { color: #e0e0ee !important; }
 
+  /* ── coming soon ── */
+  .coming-soon {
+    text-align: center; padding: 56px 24px;
+    border: 1px dashed var(--border); border-radius: 14px;
+    background: var(--surface);
+  }
+  .coming-soon i { font-size: 1.9rem; color: var(--blue); opacity: .9; }
+  .coming-soon h2 {
+    font-family: var(--font-head); font-size: 1.5rem; color: var(--text);
+    border: none; padding: 0; margin: 16px 0 8px;
+  }
+  .coming-soon p { color: var(--muted); margin: 0; }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: rgba(255,255,255,.04); }
@@ -175,7 +188,9 @@
     <div class="legal-badge"><i class="fas fa-file-shield"></i> BeatzLock Authenticator</div>
     <h1 class="legal-title">{{ page.title }}</h1>
     <div class="legal-meta">
-      <span><i class="fas fa-calendar-check"></i> Last updated: {{ page.last_updated|date:"F j, Y" }}</span>
+      {% if page.last_updated %}
+        <span><i class="fas fa-calendar-check"></i> Last updated: {{ page.last_updated|date:"F j, Y" }}</span>
+      {% endif %}
       {% if page.page_type == 'terms' %}
         <span><i class="fas fa-link"></i> <a href="{% url 'beatzlock_app:legal_privacy' %}" style="color:var(--blue);">View Privacy Policy →</a></span>
       {% else %}
@@ -185,7 +200,15 @@
   </div>
 
   <div class="legal-content">
-    {{ page.content|safe }}
+    {% if coming_soon %}
+      <div class="coming-soon">
+        <i class="fas fa-hourglass-half"></i>
+        <h2>Coming soon</h2>
+        <p>Stay tuned — this document is being written and will appear here shortly.</p>
+      </div>
+    {% else %}
+      {{ page.content|safe }}
+    {% endif %}
   </div>
 </div>
 {% endblock %}
