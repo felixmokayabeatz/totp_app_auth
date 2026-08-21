@@ -367,6 +367,13 @@ def sync_inno_setup_script(script_path: Path):
     app_source_dir = to_inno_path(get_windows_app_dir())
     output_dir = to_inno_path(get_windows_installer_dir())
     vc_redist_path = to_inno_path(VC_REDIST_DIR / "VC_redist.x64.exe")
+    # The installer icon: the Flutter runner's own .ico, resolved from this
+    # checkout. It used to be carried forward verbatim from whichever .iss was
+    # seeded, which meant an absolute path baked in on someone's machine years
+    # ago -- it finally broke when the repo moved to a new folder.
+    setup_icon_path = to_inno_path(
+        SCRIPT_DIR / "windows" / "runner" / "resources" / "app_icon.ico"
+    )
 
     lines = script_path.read_text(encoding="utf-8").splitlines()
     updated_lines = []
@@ -398,6 +405,10 @@ def sync_inno_setup_script(script_path: Path):
 
         if stripped.startswith("AppVerName="):
             updated_lines.append("AppVerName={#MyAppName} {#MyAppVersion}")
+            continue
+
+        if stripped.startswith("SetupIconFile="):
+            updated_lines.append(f"SetupIconFile={setup_icon_path}")
             continue
 
         if stripped.startswith("OutputDir="):

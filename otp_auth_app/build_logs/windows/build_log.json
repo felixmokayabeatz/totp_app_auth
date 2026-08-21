@@ -530,5 +530,19 @@
     "build_number": "44",
     "artifact_version": "1.7.7_44",
     "host_platform": "Windows"
+  },
+  {
+    "sequence": 39,
+    "platform": "windows",
+    "artifact_type": "exe_bundle",
+    "file": "app",
+    "path": "C:\\Programming\\felixmokayabeatz_workspace\\beatzlock_project\\otp_auth_app\\final_builds\\windows\\1.8.0_45\\app",
+    "relative_path": "final_builds/windows/1.8.0_45/app",
+    "is_directory": true,
+    "timestamp": "2026-08-21T09:15:22",
+    "version": "1.8.0+45",
+    "build_number": "45",
+    "artifact_version": "1.8.0_45",
+    "host_platform": "Windows"
   }
 ]
