@@ -1258,7 +1258,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // â”€â”€â”€ Header with account count - FIXED for desktop right alignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Header with account count - FIXED for desktop right alignment ──────────────────
   Widget _buildHeader(bool isDark, int accountCount, bool isWideScreen) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final actionButtons = Wrap(
@@ -1551,7 +1551,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // â”€â”€â”€ Search bar with responsive width â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Search bar with responsive width ───────────────────────────────────────────
   Widget _buildSearchBar(bool isDark, bool isWideScreen) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -1714,7 +1714,7 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  // â”€â”€â”€ Accounts list with creation date â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Accounts list with creation date ─────────────────────────────────────
   Widget _buildAccountsList(bool isDark) {
     if (_isLoadingVault) {
       return Center(
@@ -2696,7 +2696,7 @@ class _HomeScreenState extends State<HomeScreen>
     return null;
   }
 
-  // â”€â”€â”€ Delete account dialog with enhanced warnings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Delete account dialog with enhanced warnings ─────────────────────────
   void _showDeleteAccountDialog(String accountId, String serviceName) async {
     const deleteEverywherePhrase = 'Delete Account Everywhere';
     final isLoggedIn = await _syncService.isLoggedIn();
@@ -3114,7 +3114,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Helpers ──────────────────────────────────────────────────────────────
   String _formatOtp(String otp) {
     if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
     return otp;

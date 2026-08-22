@@ -352,7 +352,7 @@ def archived_downloads(request):
     return render(request, 'beatzlock_app/archived_downloads.html', context)
 
 
-# â”€â”€ Release notes JSON (for modal fetch) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Release notes JSON (for modal fetch) ─────────────────────────────────────
 
 def release_notes_json(request, app_id):
     """Returns the shared release notes text for a given platform build."""
@@ -438,7 +438,7 @@ def update_check(request):
     return JsonResponse(payload)
 
 
-# â”€â”€ Standalone legal pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Standalone legal pages ────────────────────────────────────────────────────
 
 LEGAL_COMING_SOON_HTML = (
     '<p>This document is being written and will be published here shortly.</p>'
@@ -486,7 +486,7 @@ def legal_privacy(request):
     )
 
 
-# â”€â”€ File download â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── File download ─────────────────────────────────────────────────────────────
 
 @never_cache
 def download_file(request, app_id):
@@ -503,12 +503,12 @@ def download_file(request, app_id):
     else:
         ip_address = request.META.get('REMOTE_ADDR', '0.0.0.0')
 
-    # â”€â”€ DEBUG override â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── DEBUG override ────────────────────────────────────────────────────────
     if settings.DEBUG:
         print(f"DEBUG: Client IP: {ip_address}")
         ip_address = '41.207.81.1'
         print(f"DEBUG: Using test IP: {ip_address}")
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────────────────────────────────────────────────────────
 
     already_counted = _is_duplicate_request(ip_address, app_id)
 
@@ -525,7 +525,7 @@ def download_file(request, app_id):
         TotalDownloadCount.increment()
     else:
         if settings.DEBUG:
-            print(f"DEBUG: Duplicate request â€” not counting")
+            print("DEBUG: Duplicate request - not counting")
 
     try:
         # Serve via nginx X-Accel-Redirect in production so large app binaries

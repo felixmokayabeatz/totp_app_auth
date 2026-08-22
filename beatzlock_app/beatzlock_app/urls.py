@@ -29,10 +29,10 @@ urlpatterns = [
     # File download (triggers count + serves binary)
     path('download/<int:app_id>/', views.download_file, name='download_file'),
 
-    # Release notes JSON â€” fetched by the modal
+    # Release notes JSON — fetched by the modal
     path('release-notes/<int:app_id>/', views.release_notes_json, name='release_notes_json'),
 
-    # Standalone legal pages â€” each at its own URL
+    # Standalone legal pages — each at its own URL
     path('legal/terms-of-service/', views.legal_terms,   name='legal_terms'),
     path('legal/privacy-policy/',   views.legal_privacy, name='legal_privacy'),
 ]
