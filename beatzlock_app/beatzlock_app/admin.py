@@ -6,6 +6,7 @@ from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.utils.html import format_html
+from django.forms import Textarea
 
 from .identity import find_user_by_login_identifier, normalize_email
 from .review_replies import dispatch_review_reply
@@ -20,11 +21,24 @@ from .models import (
     TotalDownloadCount,
 )
 
-try:
-    from tinymce.widgets import TinyMCE
-    TINYMCE_AVAILABLE = True
-except ImportError:
-    TINYMCE_AVAILABLE = False
+class LegalContentEditor(Textarea):
+    class Media:
+        js = (
+            'https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js',
+            'beatzlock_app/admin_legal_tinymce.js',
+        )
+
+    def __init__(self, attrs=None):
+        editor_attrs = {
+            'class': 'beatzlock-legal-tinymce',
+            'rows': 24,
+            'placeholder': (
+                'Write the legal page content here. Use headings, lists, links '
+                'and tables as needed.'
+            ),
+        }
+        editor_attrs.update(attrs or {})
+        super().__init__(attrs=editor_attrs)
 
 
 @admin.register(AppRelease)
@@ -138,8 +152,8 @@ class LegalPageAdmin(admin.ModelAdmin):
     )
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
-        if db_field.name == 'content' and TINYMCE_AVAILABLE:
-            kwargs['widget'] = TinyMCE()
+        if db_field.name == 'content':
+            kwargs['widget'] = LegalContentEditor()
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def has_add_permission(self, request):
