@@ -53,6 +53,9 @@
     </form>
 
     <div class="auth-links">
+      <p>
+        <a href="{% url 'password_reset' %}">Forgot your password?</a>
+      </p>
       New here?
       <a href="{% url 'signup' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Create an account</a>
     </div>

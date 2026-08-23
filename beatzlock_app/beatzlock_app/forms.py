@@ -1,9 +1,27 @@
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm, UserChangeForm, UserCreationForm
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import (
+    AuthenticationForm,
+    PasswordResetForm,
+    SetPasswordForm,
+    UserChangeForm,
+    UserCreationForm,
+)
 from django.contrib.auth.models import User
+from django.core.mail import EmailMultiAlternatives
+from django.template import loader
+import logging
+from email.utils import parseaddr
 
 from .identity import find_user_by_login_identifier, normalize_email
 from .models import UserProfile
+
+logger = logging.getLogger(__name__)
+
+
+def default_email_brand_name():
+    return parseaddr(settings.DEFAULT_FROM_EMAIL)[0] or settings.SITE_NAME
 
 
 class EmailAuthenticationForm(AuthenticationForm):
@@ -53,6 +71,79 @@ class EmailAuthenticationForm(AuthenticationForm):
         identifier = self.cleaned_data.get("username", "")
         user = find_user_by_login_identifier(identifier)
         return user.username if user is not None else identifier
+
+
+class EmailPasswordResetForm(PasswordResetForm):
+    """Send reset links to the normalized email address used for sign-in."""
+
+    email = forms.EmailField(
+        label="Email address",
+        max_length=254,
+        widget=forms.EmailInput(
+            attrs={
+                "autocomplete": "email",
+                "autofocus": True,
+                "placeholder": "you@example.com",
+            }
+        ),
+    )
+
+    def clean_email(self):
+        return normalize_email(self.cleaned_data.get("email"))
+
+    def get_users(self, email):
+        email_field_name = get_user_model().get_email_field_name()
+        return get_user_model()._default_manager.filter(
+            **{
+                "%s__iexact" % email_field_name: email,
+                "is_active": True,
+            }
+        )
+
+    def send_mail(
+        self,
+        subject_template_name,
+        email_template_name,
+        context,
+        from_email,
+        to_email,
+        html_email_template_name=None,
+    ):
+        from_email = from_email or settings.DEFAULT_FROM_EMAIL
+        context = {
+            **context,
+            "email_brand_name": default_email_brand_name(),
+            "support_email": settings.SUPPORT_EMAIL,
+        }
+        subject = "".join(
+            loader.render_to_string(subject_template_name, context).splitlines()
+        )
+        body = loader.render_to_string(email_template_name, context)
+        reply_to = [settings.SUPPORT_EMAIL] if settings.SUPPORT_EMAIL else None
+        email_message = EmailMultiAlternatives(
+            subject, body, from_email, [to_email], reply_to=reply_to
+        )
+        if html_email_template_name is not None:
+            html_email = loader.render_to_string(html_email_template_name, context)
+            email_message.attach_alternative(html_email, "text/html")
+
+        try:
+            email_message.send()
+        except Exception:
+            logger.exception(
+                "Failed to send password reset email to %s", context["user"].pk
+            )
+
+
+class EmailSetPasswordForm(SetPasswordForm):
+    def __init__(self, user, *args, **kwargs):
+        super().__init__(user, *args, **kwargs)
+        self.fields["new_password1"].widget.attrs.update({
+            "placeholder": "Enter a new password",
+        })
+        self.fields["new_password2"].widget.attrs.update({
+            "placeholder": "Type the new password again",
+        })
 
 
 # 2MB. Big enough for a photo off a phone, small enough that nobody fills the
@@ -130,8 +221,6 @@ class SignUpForm(UserCreationForm):
         self.fields["password1"].widget.attrs.update({
             "placeholder": "At least 8 characters", "autocomplete": "new-password",
         })
-        # Kept rather than dropped for brevity: this site has no password-reset
-        # flow, so a typo in a single password box locks someone out for good.
         self.fields["password2"].widget.attrs.update({
             "placeholder": "Type it again", "autocomplete": "new-password",
         })

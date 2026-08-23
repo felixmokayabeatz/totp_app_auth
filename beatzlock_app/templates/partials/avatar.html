@@ -1,0 +1,23 @@
+{% comment %}
+Someone's picture, or their initials when there is none. Never nothing.
+
+  {% include 'partials/avatar.html' with avatar_user=user size=26 %}
+
+The initials badge is markup rather than a placeholder image: nothing to fetch,
+nothing to 404, and it stays sharp at any size. The colour is fixed rather than
+derived, because this site only ever shows one person's badge at a time.
+{% endcomment %}
+{% load avatars %}
+{% with url=avatar_user|avatar_url %}
+  {% if url %}
+    <img class="fmb-avatar" src="{{ url }}" alt=""
+         width="{{ size|default:26 }}" height="{{ size|default:26 }}"
+         style="width:{{ size|default:26 }}px;height:{{ size|default:26 }}px;"
+         loading="lazy" decoding="async" />
+  {% else %}
+    <span class="fmb-avatar fmb-avatar-initials" aria-hidden="true"
+          style="width:{{ size|default:26 }}px;height:{{ size|default:26 }}px;font-size:{{ size|default:26 }}px;">
+      <span>{{ avatar_user|initials }}</span>
+    </span>
+  {% endif %}
+{% endwith %}

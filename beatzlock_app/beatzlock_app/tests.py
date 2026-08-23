@@ -15,6 +15,7 @@ from django.utils import timezone
 import io
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -840,6 +841,80 @@ class EmailAsLoginTests(TestCase):
                     {'username': identifier, 'password': self.password},
                 )
                 self.assertIn('_auth_user_id', client.session)
+
+    def test_login_links_to_the_password_reset_page(self):
+        self.assertEqual(reverse('password_reset'), '/accounts/password_reset/')
+        response = self.client.get(reverse('login'))
+        self.assertContains(response, reverse('password_reset'))
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='Felixmokayabeatz <noreply@example.com>',
+        SUPPORT_EMAIL='support@example.com',
+    )
+    def test_password_reset_sends_an_email_to_the_account_address(self):
+        self._make_user('reset@example.com')
+        response = self.client.post(
+            reverse('password_reset'), {'email': 'RESET@Example.com'}
+        )
+
+        self.assertRedirects(response, reverse('password_reset_done'))
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ['reset@example.com'])
+        self.assertEqual(message.from_email, 'Felixmokayabeatz <noreply@example.com>')
+        self.assertEqual(message.reply_to, ['support@example.com'])
+        self.assertEqual(message.subject, 'Reset your Felixmokayabeatz password')
+        self.assertIn('BeatzLock Apps account', message.body)
+        self.assertIn('/accounts/reset/', message.body)
+        self.assertEqual(len(message.alternatives), 1)
+        self.assertEqual(message.alternatives[0].mimetype, 'text/html')
+        self.assertIn('Reset password</a>', message.alternatives[0].content)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='Felixmokayabeatz <noreply@example.com>',
+    )
+    def test_password_reset_sends_for_a_google_only_account(self):
+        user = get_user_model().objects.create_user(
+            username='google-only@example.com',
+            email='google-only@example.com',
+        )
+        user.set_unusable_password()
+        user.save()
+
+        self.client.post(reverse('password_reset'), {'email': 'google-only@example.com'})
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['google-only@example.com'])
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='Felixmokayabeatz <noreply@example.com>',
+    )
+    def test_password_reset_link_sets_a_new_password(self):
+        user = self._make_user('reset-me@example.com')
+        self.client.post(reverse('password_reset'), {'email': 'reset-me@example.com'})
+        link = re.search(
+            r'https?://[^/]+(?P<path>/accounts/reset/\S+)', mail.outbox[0].body
+        ).group('path')
+
+        response = self.client.get(link)
+        self.assertEqual(response.status_code, 302)
+        response = self.client.post(response['Location'], {
+            'new_password1': 'New-Str0ng-Passw0rd!x',
+            'new_password2': 'New-Str0ng-Passw0rd!x',
+        })
+        user.refresh_from_db()
+
+        self.assertRedirects(response, reverse('password_reset_complete'))
+        self.assertTrue(user.check_password('New-Str0ng-Passw0rd!x'))
+        fresh = Client()
+        fresh.post(reverse('login'), {
+            'username': 'reset-me@example.com',
+            'password': 'New-Str0ng-Passw0rd!x',
+        })
+        self.assertIn('_auth_user_id', fresh.session)
 
     def test_the_admin_add_form_asks_for_an_email_and_writes_both_columns(self):
         form = StaffCreationForm(data={

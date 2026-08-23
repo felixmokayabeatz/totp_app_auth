@@ -4780,3 +4780,35 @@ html[data-fmb-theme="light"] .audio-player {
   }
 }
 /* End shared mobile polish */
+
+/* ── Avatars ──────────────────────────────────────────────────────────
+   Either the picture or a circle of initials. Same shape and size either
+   way, so swapping one for the other never shifts the nav. */
+
+.fmb-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  overflow: hidden;
+  background: var(--fmb-panel-strong);
+  border: 1px solid var(--fmb-border-strong);
+}
+
+.fmb-avatar-initials {
+  color: #fff;
+  background: linear-gradient(135deg, var(--fmb-blue), var(--fmb-purple));
+  border-color: transparent;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  user-select: none;
+}
+
+/* The wrapper carries the pixel size as font-size so the letters scale with
+   it rather than needing a size for every place an avatar appears. */
+.fmb-avatar-initials > span { font-size: 0.4em; }
+
+.fmb-mobile-panel .fmb-avatar { margin-right: 6px; vertical-align: middle; }
