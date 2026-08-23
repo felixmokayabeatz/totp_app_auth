@@ -8,7 +8,7 @@ BeatzLock is designed for security and privacy. A key goal is to collect only wh
 
 BeatzLock Authenticator is provided by Felix Mokaya / felixmokayabeatz.
 
-Contact: felixmokayabeatz@proton.me
+Contact: support@felixmokayabeatz.online
 
 Website: https://www.felixmokayabeatz.online/
 
@@ -130,7 +130,7 @@ Depending on your location, you may have rights to:
 - Withdraw consent where processing is based on consent.
 - Lodge a complaint with a privacy or data protection authority.
 
-You can exercise available in-app controls where provided, or contact BeatzLock at felixmokayabeatz@proton.me.
+You can exercise available in-app controls where provided, or contact BeatzLock at support@felixmokayabeatz.online.
 
 BeatzLock may need to verify your identity before fulfilling some requests.
 
@@ -144,7 +144,7 @@ No method of storage or transmission is completely secure. You should protect yo
 
 BeatzLock is not intended for children under 13, and it is not designed to knowingly collect personal information from children under 13.
 
-If you believe a child has provided personal information through BeatzLock, contact felixmokayabeatz@proton.me so the issue can be reviewed.
+If you believe a child has provided personal information through BeatzLock, contact support@felixmokayabeatz.online so the issue can be reviewed.
 
 ## 14. International use
 
@@ -164,6 +164,6 @@ For privacy questions or requests, contact:
 
 Felix Mokaya / felixmokayabeatz
 
-Email: felixmokayabeatz@proton.me
+Email: support@felixmokayabeatz.online
 
 Website: https://www.felixmokayabeatz.online/

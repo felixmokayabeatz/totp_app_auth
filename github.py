@@ -10,6 +10,9 @@ import os
 
 # Your details
 USERNAME = "felixmokayabeatz"
+# The git commit address, not a site address. It stays on Proton
+# because that is the one verified on the GitHub account -- changing it
+# would leave new commits unattributed.
 EMAIL = "felixmokayabeatz.git@proton.me"
 
 def run_git_command(args):

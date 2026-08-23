@@ -135,7 +135,7 @@ class AppRatingTests(TestCase):
 @override_settings(
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     DEFAULT_FROM_EMAIL='noreply@example.com',
-    SUPPORT_EMAIL='felixmokayabeatz@proton.me',
+    SUPPORT_EMAIL='info@felixmokayabeatz.online',
     BEATZLOCK_API_BASE_URL='https://api.example.com/api/',
     BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-secret',
 )
@@ -179,7 +179,7 @@ class ReviewReplyDispatchTests(TestCase):
         self.assertTrue(result['notification_sent'])
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('Thanks for the feedback.', mail.outbox[0].body)
-        self.assertEqual(mail.outbox[0].reply_to, ['felixmokayabeatz@proton.me'])
+        self.assertEqual(mail.outbox[0].reply_to, ['info@felixmokayabeatz.online'])
         self.assertEqual(len(mail.outbox[0].alternatives), 1)
         self.assertEqual(mail.outbox[0].alternatives[0].mimetype, 'text/html')
         self.assertIn('BeatzLock Authenticator reply', mail.outbox[0].alternatives[0].content)

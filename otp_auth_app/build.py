@@ -49,7 +49,7 @@ RPM_PACKAGE_NAME = "beatzlock"
 RPM_ARCH = "x86_64"
 RPM_LICENSE = "LicenseRef-Proprietary"
 LINUX_APPLICATION_ID = "com.beatzlock.auth"
-APP_MAINTAINER = "Felix Mokaya <felixmokayabeatz@proton.me>"
+APP_MAINTAINER = "Felix Mokaya <info@felixmokayabeatz.online>"
 APP_DESCRIPTION = "BeatzLock OTP Authentication App"
 
 # Color codes for terminal output (Windows & Linux compatible)
