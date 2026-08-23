@@ -1118,6 +1118,20 @@ class AccountPageTests(TestCase):
             profile.refresh_from_db()
             self.assertFalse(profile.avatar)
 
+    def test_existing_profile_image_does_not_show_path_or_clear_checkbox(self):
+        with override_settings(MEDIA_ROOT=self.media_root):
+            self.client.post(reverse('beatzlock_app:account'), {
+                'first_name': '', 'last_name': '',
+                'avatar': SimpleUploadedFile('me.png', self._png(), content_type='image/png'),
+            })
+            response = self.client.get(reverse('beatzlock_app:account'))
+
+        self.assertContains(response, 'Remove image')
+        self.assertContains(response, 'type="file"')
+        self.assertNotContains(response, 'Currently:')
+        self.assertNotContains(response, 'Clear')
+        self.assertNotContains(response, '>accounts/avatars/')
+
     def test_an_image_over_the_size_limit_is_refused(self):
         oversized = SimpleUploadedFile(
             'huge.png',

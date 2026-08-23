@@ -166,6 +166,11 @@ class AvatarForm(forms.ModelForm):
         model = UserProfile
         fields = ('avatar',)
         labels = {'avatar': 'Profile image'}
+        widgets = {
+            'avatar': forms.FileInput(attrs={
+                'accept': 'image/jpeg,image/png,image/webp',
+            }),
+        }
 
     def clean_avatar(self):
         avatar = self.cleaned_data.get('avatar')
