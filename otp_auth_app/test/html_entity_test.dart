@@ -54,4 +54,34 @@ void main() {
     );
     expect(text, '· café au lait');
   });
+
+  group('last updated line', () {
+    test('shows the local time, not just the date', () {
+      // The shape the live API actually returns: a full UTC timestamp.
+      final value = DateTime.parse('2026-08-28T21:47:02.634415+00:00');
+      final local = value.toLocal();
+      final hh = local.hour.toString().padLeft(2, '0');
+      final mm = local.minute.toString().padLeft(2, '0');
+
+      expect(
+        LegalHtmlTestHooks.updatedAt(value),
+        'Last updated August ${local.day}, ${local.year} at $hh:$mm',
+      );
+    });
+
+    test('converts out of UTC rather than printing the raw wall clock', () {
+      final utc = DateTime.utc(2026, 8, 28, 21, 47);
+      final line = LegalHtmlTestHooks.updatedAt(utc);
+      final local = utc.toLocal();
+      final hh = local.hour.toString().padLeft(2, '0');
+      expect(line, contains('at $hh:'));
+      if (local.hour != utc.hour) {
+        expect(line, isNot(contains('at 21:')));
+      }
+    });
+
+    test('says nothing when the server sent no timestamp', () {
+      expect(LegalHtmlTestHooks.updatedAt(null), '');
+    });
+  });
 }

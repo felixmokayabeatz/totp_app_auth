@@ -6,6 +6,42 @@ import '../config/app_config.dart';
 import '../services/legal_document_service.dart';
 import '../services/server_lockdown_service.dart';
 
+String _formatReadableDate(DateTime value) {
+  const monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  final local = value.toLocal();
+  return '${monthNames[local.month - 1]} ${local.day}, ${local.year}';
+}
+
+/// Zero-padded 24-hour local time, matching how device sessions,
+/// notifications and sign-in requests already print theirs.
+String _formatReadableTime(DateTime value) {
+  final local = value.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String _formatUpdatedAt(DateTime? value) {
+  if (value == null) return '';
+  // The date alone left it ambiguous which of two same-day revisions you
+  // were looking at. The server sends a full timestamp, so show it.
+  return 'Last updated ${_formatReadableDate(value)} '
+      'at ${_formatReadableTime(value)}';
+}
+
 class LegalDocumentScreen extends StatefulWidget {
   const LegalDocumentScreen({
     super.key,
@@ -59,30 +95,6 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
     );
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
-  String _formatReadableDate(DateTime value) {
-    const monthNames = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    final local = value.toLocal();
-    return '${monthNames[local.month - 1]} ${local.day}, ${local.year}';
-  }
-
-  String _formatUpdatedAt(DateTime? value) {
-    if (value == null) return '';
-    return 'Last updated ${_formatReadableDate(value)}';
   }
 
   @override
@@ -562,6 +574,10 @@ class LegalHtmlTestHooks {
   const LegalHtmlTestHooks._();
 
   static String plainText(String html) => _HtmlParser.plainText(html);
+
+  /// The user-visible "Last updated ..." line, including its local-time
+  /// conversion.
+  static String updatedAt(DateTime? value) => _formatUpdatedAt(value);
 
   static String inlineText(String html, TextStyle baseStyle) =>
       _HtmlParser.inlineFragments(
