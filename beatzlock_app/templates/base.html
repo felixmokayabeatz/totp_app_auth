@@ -8,6 +8,25 @@
     <meta name="author" content="Felix Mokaya" />
     <title>{% block title %}{{ site_name }}{% endblock %}</title>
 
+    {% comment %} ── SEO ────────────────────────────────────────────────────────────
+       Pages that must not be indexed override meta_robots with
+       "noindex, nofollow". Everything else is indexable and self-canonical. {% endcomment %}
+    <meta name="robots" content="{% block meta_robots %}index, follow{% endblock %}" />
+    <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}" />
+
+    <meta property="og:site_name" content="BeatzLock Authenticator" />
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}" />
+    <meta property="og:title" content="{% block og_title %}BeatzLock Authenticator{% endblock %}" />
+    <meta property="og:description" content="{% block og_description %}BeatzLock Authenticator - free two-factor authentication app for Windows, Android, Linux and macOS. Encrypted cloud sync and offline TOTP codes.{% endblock %}" />
+    <meta property="og:url" content="{{ request.build_absolute_uri }}" />
+    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'favicon/felixmokayabeatz_favicon.png' %}{% endblock %}" />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="{% block twitter_card %}summary_large_image{% endblock %}" />
+    <meta name="twitter:title" content="{% block twitter_title %}BeatzLock Authenticator{% endblock %}" />
+    <meta name="twitter:description" content="{% block twitter_description %}BeatzLock Authenticator - free two-factor authentication app for Windows, Android, Linux and macOS. Encrypted cloud sync and offline TOTP codes.{% endblock %}" />
+    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'favicon/felixmokayabeatz_favicon.png' %}{% endblock %}" />
+
     <script>
       (function () {
         try {

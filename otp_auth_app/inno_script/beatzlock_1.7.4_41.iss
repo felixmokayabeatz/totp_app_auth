@@ -6,7 +6,7 @@
 #define MyAppVersion "1.7.4+41"
 #define MyAppArtifactVersion "1.7.4_41"
 #define MyAppPublisher "felixmokayabeatz Inc."
-#define MyAppURL "https://www.felixmokayabeatz.online/"
+#define MyAppURL "https://www.example.com/"
 #define MyAppExeName "otp_auth_app.exe"
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"

@@ -144,7 +144,7 @@ flutter test
 # 3. Build
 python build.py         # option 4, 5, 6 ...
 
-# 4. Publish in the admin at https://apps.felixmokayabeatz.online/beatzlock-admin/
+# 4. Publish in the admin at https://apps.example.com/beatzlock-admin/
 #    App Release first  -- version, build number, the notes .txt
 #    Platform Build     -- one per binary, pointing at that release
 

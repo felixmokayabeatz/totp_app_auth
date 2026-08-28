@@ -26,7 +26,7 @@ subdomains, separate systemd units, separate deploy scripts.
 |---|---|---|
 | Where | `./beatzlock_app/` | `./otp_backend/` |
 | Deploy | `./beatzlock_app/deploy/deploy.sh` | `./otp_backend/deploy/deploy.sh` |
-| Subdomain | `apps.felixmokayabeatz.online` | `api.felixmokayabeatz.online` |
+| Subdomain | `apps.example.com` | `api.example.com` |
 | Database | `felixmokayabeatz_beatzlock_db` | `felixmokayabeatz_totp_db` |
 | DB role | `Felix_Apps_Administrator` | `Felix_Apps_Administrator` |
 | Settings | `beatzlock_app/config/settings.py` | `otp_backend/otp_backend/settings.py` |
@@ -284,7 +284,7 @@ built from one base string per server, so the halves cannot drift apart:
 
 | | Authenticator API | Downloads site |
 |---|---|---|
-| Production | `https://api.felixmokayabeatz.online/api/` | `https://apps.felixmokayabeatz.online/` |
+| Production | `https://api.example.com/api/` | `https://apps.example.com/` |
 | Desktop dev | `http://localhost:8000/api/` | `http://localhost:8005/` |
 | Android emulator dev | `http://10.0.2.2:8000/api/` | `http://10.0.2.2:8005/` |
 
@@ -293,7 +293,7 @@ dev ports are the two `runserver` ports from **Local development** above.
 `AppConfig.isDevelopment` chooses between the columns — it must be `false` in
 anything you ship.
 
-The downloads site used to be mounted at `felixmokayabeatz.online/beatzlock-apps/`
+The downloads site used to be mounted at `example.com/beatzlock-apps/`
 and now sits at the root of its own subdomain. Everything the app reads from it
 hangs off that single base URL:
 

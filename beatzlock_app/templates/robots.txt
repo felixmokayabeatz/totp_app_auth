@@ -1,0 +1,14 @@
+# apps.example.com
+
+User-agent: *
+Disallow: /accounts/
+Disallow: /beatzlock-admin/
+Disallow: /console/
+Disallow: /api/
+# Download URLs count a download and stream a large binary; a crawler
+# following them would skew the statistics and waste bandwidth.
+Disallow: /download/
+Disallow: /release-notes/
+Allow: /
+
+Sitemap: https://apps.example.com/sitemap.xml

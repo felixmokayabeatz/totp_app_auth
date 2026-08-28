@@ -90,8 +90,8 @@ beatzlock_*_amd64.deb
 
 #=========================================================================
 # The three projects in this repo, each self-contained:
-#   beatzlock_app/   downloads site, apps.felixmokayabeatz.online
-#   otp_backend/     authenticator API, api.felixmokayabeatz.online
+#   beatzlock_app/   downloads site, apps.example.com
+#   otp_backend/     authenticator API, api.example.com
 #   otp_auth_app/    Flutter client
 #=========================================================================
 

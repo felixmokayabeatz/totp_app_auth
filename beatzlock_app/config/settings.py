@@ -55,7 +55,7 @@ try:
 except ImportError:
     pass
 
-SITE_DOMAIN = os.getenv("SITE_DOMAIN", "apps.felixmokayabeatz.online")
+SITE_DOMAIN = os.getenv("SITE_DOMAIN", "apps.example.com")
 SITE_URL = os.getenv("SITE_URL", "https://" + SITE_DOMAIN)
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", SITE_DOMAIN)
@@ -72,6 +72,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ========================
 
 INSTALLED_APPS = [
+    "django.contrib.sitemaps",
     # console comes first only so that its management/commands/createsuperuser.py
     # wins over django.contrib.auth's: Django resolves a duplicated command name
     # to whichever app is listed earlier. beatzlock_app has to stay *after*
@@ -213,7 +214,7 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL") or "BeatzLock Authenticator
 # Client ID and secret come from the Google Cloud console, project credentials.
 # The redirect URI is built from the request at run time, so the only thing that
 # has to match there is the callback path:
-#   https://apps.felixmokayabeatz.online/accounts/google/callback/
+#   https://apps.example.com/accounts/google/callback/
 #   http://localhost:8005/accounts/google/callback/   (development)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
@@ -265,7 +266,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2621440
 # ========================
 
 SITE_NAME = os.getenv("SITE_NAME", "BeatzLock Apps")
-MAIN_SITE_URL = os.getenv("MAIN_SITE_URL", "https://felixmokayabeatz.online")
+MAIN_SITE_URL = os.getenv("MAIN_SITE_URL", "https://example.com")
 SITE_TAGLINE = os.getenv(
     "SITE_TAGLINE",
     "The BeatzLock Authenticator: downloads, release notes and reviews, "
@@ -277,9 +278,9 @@ SITE_TAGLINE = os.getenv(
 # without touching the template.
 FMB_SITE_LINKS = [
     {"name": "Main site", "url": MAIN_SITE_URL, "icon": "fa-house"},
-    {"name": "Blog", "url": os.getenv("BLOG_URL", "https://blog.felixmokayabeatz.online"), "icon": "fa-feather-pointed"},
-    {"name": "Portfolio", "url": os.getenv("PORTFOLIO_URL", "https://portfolio.felixmokayabeatz.online"), "icon": "fa-briefcase"},
-    {"name": "Invoices", "url": os.getenv("INVOICES_URL", "https://invoices.felixmokayabeatz.online"), "icon": "fa-file-invoice"},
+    {"name": "Blog", "url": os.getenv("BLOG_URL", "https://blog.example.com"), "icon": "fa-feather-pointed"},
+    {"name": "Portfolio", "url": os.getenv("PORTFOLIO_URL", "https://portfolio.example.com"), "icon": "fa-briefcase"},
+    {"name": "Invoices", "url": os.getenv("INVOICES_URL", "https://invoices.example.com"), "icon": "fa-file-invoice"},
 ]
 GOOGLE_ANALYTICS_MEASUREMENT_ID = os.getenv("GOOGLE_ANALYTICS_MEASUREMENT_ID", "")
 

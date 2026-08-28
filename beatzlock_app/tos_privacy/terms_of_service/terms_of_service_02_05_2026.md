@@ -8,9 +8,9 @@ By creating an account, signing in, syncing data, downloading updates, or otherw
 
 BeatzLock Authenticator is provided by Felix Mokaya / felixmokayabeatz.
 
-Contact: support@felixmokayabeatz.online
+Contact: support@example.com
 
-Website: https://www.felixmokayabeatz.online/
+Website: https://www.example.com/
 
 ## 2. What BeatzLock does
 
@@ -143,6 +143,6 @@ For questions about these terms, contact:
 
 Felix Mokaya / felixmokayabeatz
 
-Email: support@felixmokayabeatz.online
+Email: support@example.com
 
-Website: https://www.felixmokayabeatz.online/
+Website: https://www.example.com/

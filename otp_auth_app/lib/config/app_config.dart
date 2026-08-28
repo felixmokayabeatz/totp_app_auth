@@ -21,14 +21,14 @@ class AppConfig {
       '${devBeatzLockAppsBaseAndroid}api/update-check/';
 
   // Production environment (your VPS)
-  static const String prodApiUrl = 'https://api.felixmokayabeatz.online/api/';
+  static const String prodApiUrl = 'https://api.example.com/api/';
   static const String prodMediaUrl =
-      'https://api.felixmokayabeatz.online/media/';
+      'https://api.example.com/media/';
   // The downloads site has its own subdomain now and is mounted at the root of
-  // it -- it used to be felixmokayabeatz.online/beatzlock-apps/. Every URL
+  // it -- it used to be example.com/beatzlock-apps/. Every URL
   // below is built from this one string so the two cannot drift apart again.
   static const String prodBeatzLockAppsBaseUrl =
-      'https://apps.felixmokayabeatz.online/';
+      'https://apps.example.com/';
   static const String prodUpdateApiUrl =
       '${prodBeatzLockAppsBaseUrl}api/update-check/';
   static const String creatorWebsiteUrl = 'http://example.com/';

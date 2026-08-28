@@ -4,7 +4,10 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.views import LoginView
 from django.urls import include, path, reverse_lazy
-from django.views.generic import RedirectView
+from django.contrib.sitemaps.views import sitemap
+from django.views.generic import RedirectView, TemplateView
+
+from beatzlock_app.sitemaps import sitemaps
 
 from beatzlock_app import google_auth
 from beatzlock_app import views as account_views
@@ -117,6 +120,11 @@ urlpatterns = [
         "favicon.ico",
         RedirectView.as_view(url=settings.STATIC_URL + "favicon/favicon.ico"),
     ),
+
+    path("robots.txt", TemplateView.as_view(
+        template_name="robots.txt", content_type="text/plain")),
+    path("sitemap.xml", sitemap, {"sitemaps": sitemaps},
+         name="django.contrib.sitemaps.views.sitemap"),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

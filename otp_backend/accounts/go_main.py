@@ -10,4 +10,4 @@ def go_to_main_site(request):
         print("Redirecting to LOCAL")
         return redirect('http://127.0.0.1:8002')
 
-    return redirect('https://felixmokayabeatz.online')
+    return redirect('https://example.com')

@@ -140,7 +140,7 @@ class AppRatingTests(TestCase):
 @override_settings(
     EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
     DEFAULT_FROM_EMAIL='noreply@example.com',
-    SUPPORT_EMAIL='info@felixmokayabeatz.online',
+    SUPPORT_EMAIL='info@example.com',
     BEATZLOCK_API_BASE_URL='https://api.example.com/api/',
     BEATZLOCK_INTERNAL_SERVICE_SECRET='shared-secret',
 )
@@ -184,7 +184,7 @@ class ReviewReplyDispatchTests(TestCase):
         self.assertTrue(result['notification_sent'])
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn('Thanks for the feedback.', mail.outbox[0].body)
-        self.assertEqual(mail.outbox[0].reply_to, ['info@felixmokayabeatz.online'])
+        self.assertEqual(mail.outbox[0].reply_to, ['info@example.com'])
         self.assertEqual(len(mail.outbox[0].alternatives), 1)
         self.assertEqual(mail.outbox[0].alternatives[0].mimetype, 'text/html')
         self.assertIn('BeatzLock Authenticator reply', mail.outbox[0].alternatives[0].content)
@@ -1671,3 +1671,58 @@ class LegalTimestampFormatTests(TestCase):
         ):
             body = self.client.get(url).content.decode()
             self.assertIsNone(bare_date.search(body), f'date without a time on {url}')
+
+
+class SitemapTests(TestCase):
+    HOST = 'apps.example.com'
+
+    def _locs(self):
+        r = self.client.get('/sitemap.xml', HTTP_HOST=self.HOST, secure=True)
+        self.assertEqual(r.status_code, 200)
+        return re.findall(r'<loc>(.*?)</loc>', r.content.decode())
+
+    def test_download_and_binary_urls_are_excluded(self):
+        locs = self._locs()
+        self.assertTrue(any(l.endswith('/downloads/') for l in locs))
+        # Counted-download and binary endpoints must never be crawled.
+        self.assertFalse([l for l in locs if '/download/' in l])
+        self.assertFalse([l for l in locs if '/release-notes/' in l])
+        self.assertFalse([l for l in locs if '/api/' in l])
+
+    def test_unpublished_legal_is_not_listed(self):
+        LegalPage.objects.create(page_type='terms', title='T', content='<p>d</p>')
+        locs = self._locs()
+        self.assertFalse([l for l in locs if 'terms-of-service' in l])
+
+    def test_published_legal_and_archive_are_listed(self):
+        LegalPage.objects.create(page_type='terms', title='T',
+                                 content='<p>v1</p>', is_published=True)
+        LegalPage.objects.create(page_type='terms', title='T',
+                                 content='<p>v2</p>', is_published=True)
+        locs = self._locs()
+        self.assertIn(f'https://{self.HOST}/legal/terms-of-service/', locs)
+        self.assertIn(f'https://{self.HOST}/legal/terms-of-service/archive/', locs)
+        # Individual revisions are noindex, so they stay out of the sitemap.
+        old = LegalPage.archive_for('terms')[0]
+        self.assertNotIn(
+            f'https://{self.HOST}/legal/terms-of-service/archive/{old.pk}/', locs)
+        r = self.client.get(
+            f'/legal/terms-of-service/archive/{old.pk}/',
+            HTTP_HOST=self.HOST, secure=True)
+        self.assertContains(r, 'noindex, follow')
+
+    def test_robots_declares_the_sitemap(self):
+        r = self.client.get('/robots.txt', HTTP_HOST=self.HOST, secure=True)
+        self.assertEqual(r.status_code, 200)
+        body = r.content.decode()
+        self.assertIn(f'Sitemap: https://{self.HOST}/sitemap.xml', body)
+        self.assertIn('Disallow: /download/', body)
+
+    def test_all_sitemap_urls_resolve(self):
+        LegalPage.objects.create(page_type='privacy', title='P',
+                                 content='<p>x</p>', is_published=True)
+        for loc in self._locs():
+            path = loc.split(self.HOST, 1)[1]
+            r = self.client.get(path, HTTP_HOST=self.HOST, secure=True)
+            self.assertIn(r.status_code, (200, 301, 302),
+                          f'{path} returned {r.status_code}')

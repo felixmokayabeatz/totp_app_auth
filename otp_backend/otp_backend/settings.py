@@ -23,7 +23,7 @@ except ImportError:
     pass
 #====================================================================
 
-SITE_DOMAIN = os.getenv('SITE_DOMAIN', 'api.felixmokayabeatz.online')
+SITE_DOMAIN = os.getenv('SITE_DOMAIN', 'api.example.com')
 SITE_URL = os.getenv('SITE_URL', 'https://' + SITE_DOMAIN)
 
 
@@ -106,16 +106,16 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "https://api.felixmokayabeatz.online",
-    "http://api.felixmokayabeatz.online",
+    "https://api.example.com",
+    "http://api.example.com",
 ]
 
 if DEBUG:
     CORS_ALLOWED_ORIGINS += [
         "http://localhost:8000",
         "http://127.0.0.1:8000",
-        "https://api.felixmokayabeatz.online",
-        "http://api.felixmokayabeatz.online",
+        "https://api.example.com",
+        "http://api.example.com",
     ]
 
 CSRF_TRUSTED_ORIGINS = _split_csv_env('CSRF_TRUSTED_ORIGINS') or [SITE_URL]

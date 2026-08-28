@@ -4,6 +4,13 @@
 
 {% block title %}{{ page.title }} – BeatzLock Authenticator{% endblock %}
 
+{% comment %} A superseded revision is near-identical to the live one. Keep it readable
+   and crawlable, but out of the index so it cannot outrank the current text.
+   A staff preview of an unpublished draft must never be indexed either. {% endcomment %}
+{% if is_archived_view or is_preview %}
+{% block meta_robots %}noindex, follow{% endblock %}
+{% endif %}
+
 {% block extra_css %}
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
