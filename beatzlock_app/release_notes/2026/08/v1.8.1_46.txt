@@ -9,6 +9,7 @@ What's New
 - A brighter, more polished look: twelve named accent colours to pick from, softer cards, rounder controls, tidier text and consistent pop-ups everywhere.
 
 Fixes and Performance
+- The Terms of Service and Privacy Policy now read the same in the app as on the website. Characters like the bullet separator, dashes, curly quotes and accents used to show up as raw codes such as "&middot;".
 - Pop-ups with a text box no longer push their buttons off screen in landscape, so Confirm and Cancel stay reachable on tablets and sideways phones.
 - On Windows and Linux the window can no longer be dragged smaller than it can actually draw, which used to leave striped bars across the header and the code cards. On a genuinely narrow screen the six-digit code now moves below the account name instead of being squeezed.
 - The home screen no longer rebuilds and re-sorts your whole vault every second just to move the countdown. Large vaults scroll smoothly and use less battery.

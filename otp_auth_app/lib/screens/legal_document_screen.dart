@@ -554,6 +554,24 @@ class _InlineStyleFrame {
   final String? href;
 }
 
+/// Test-only access to the HTML helpers, which are otherwise private to this
+/// screen. The entity decoding they do is the difference between a legal
+/// document reading `&middot;` and reading `·`, so it is worth pinning down.
+@visibleForTesting
+class LegalHtmlTestHooks {
+  const LegalHtmlTestHooks._();
+
+  static String plainText(String html) => _HtmlParser.plainText(html);
+
+  static String inlineText(String html, TextStyle baseStyle) =>
+      _HtmlParser.inlineFragments(
+        html,
+        baseStyle,
+        const Color(0xFF000000),
+        const Color(0xFF000000),
+      ).map((fragment) => fragment.text).join();
+}
+
 class _HtmlParser {
   static final RegExp _scriptOrStylePattern = RegExp(
     r'<(script|style)[\s\S]*?</\1>',
@@ -632,7 +650,7 @@ class _HtmlParser {
 
     void addText(String text) {
       final decoded = _decode(text)
-          .replaceAll(RegExp(r'[ \t\f\v]+'), ' ')
+          .replaceAll(RegExp(r'[ \t\f\v\u00A0]+'), ' ')
           .replaceAll(RegExp(r'\n{3,}'), '\n\n');
       if (decoded.isEmpty) return;
       fragments.add(
@@ -667,7 +685,7 @@ class _HtmlParser {
           .replaceAll(_tagPattern, ' '),
     )
         .split('\n')
-        .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
+        .map((line) => line.replaceAll(RegExp(r'[\s\u00A0]+'), ' ').trim())
         .where((line) => line.isNotEmpty)
         .join('\n');
   }
@@ -860,23 +878,198 @@ class _HtmlParser {
     return null;
   }
 
+  /// The HTML4 Latin-1 entity names, in code point order from 160 (`&nbsp;`)
+  /// through 255 (`&yuml;`). Held as a list because the set is contiguous --
+  /// ninety-six map literals would say the same thing at six times the size.
+  /// `&middot;` lives here, at 183.
+  static const List<String> _latin1EntityNames = [
+    'nbsp',
+    'iexcl',
+    'cent',
+    'pound',
+    'curren',
+    'yen',
+    'brvbar',
+    'sect',
+    'uml',
+    'copy',
+    'ordf',
+    'laquo',
+    'not',
+    'shy',
+    'reg',
+    'macr',
+    'deg',
+    'plusmn',
+    'sup2',
+    'sup3',
+    'acute',
+    'micro',
+    'para',
+    'middot',
+    'cedil',
+    'sup1',
+    'ordm',
+    'raquo',
+    'frac14',
+    'frac12',
+    'frac34',
+    'iquest',
+    'Agrave',
+    'Aacute',
+    'Acirc',
+    'Atilde',
+    'Auml',
+    'Aring',
+    'AElig',
+    'Ccedil',
+    'Egrave',
+    'Eacute',
+    'Ecirc',
+    'Euml',
+    'Igrave',
+    'Iacute',
+    'Icirc',
+    'Iuml',
+    'ETH',
+    'Ntilde',
+    'Ograve',
+    'Oacute',
+    'Ocirc',
+    'Otilde',
+    'Ouml',
+    'times',
+    'Oslash',
+    'Ugrave',
+    'Uacute',
+    'Ucirc',
+    'Uuml',
+    'Yacute',
+    'THORN',
+    'szlig',
+    'agrave',
+    'aacute',
+    'acirc',
+    'atilde',
+    'auml',
+    'aring',
+    'aelig',
+    'ccedil',
+    'egrave',
+    'eacute',
+    'ecirc',
+    'euml',
+    'igrave',
+    'iacute',
+    'icirc',
+    'iuml',
+    'eth',
+    'ntilde',
+    'ograve',
+    'oacute',
+    'ocirc',
+    'otilde',
+    'ouml',
+    'divide',
+    'oslash',
+    'ugrave',
+    'uacute',
+    'ucirc',
+    'uuml',
+    'yacute',
+    'thorn',
+    'yuml',
+  ];
+
+  /// The core five, plus the punctuation and symbols a rich-text editor
+  /// actually emits into a legal document.
+  static const Map<String, int> _extraEntities = {
+    'amp': 0x26,
+    'lt': 0x3C,
+    'gt': 0x3E,
+    'quot': 0x22,
+    'apos': 0x27,
+    'ensp': 0x2002,
+    'emsp': 0x2003,
+    'thinsp': 0x2009,
+    'zwnj': 0x200C,
+    'zwj': 0x200D,
+    'ndash': 0x2013,
+    'mdash': 0x2014,
+    'minus': 0x2212,
+    'lsquo': 0x2018,
+    'rsquo': 0x2019,
+    'sbquo': 0x201A,
+    'ldquo': 0x201C,
+    'rdquo': 0x201D,
+    'bdquo': 0x201E,
+    'lsaquo': 0x2039,
+    'rsaquo': 0x203A,
+    'dagger': 0x2020,
+    'Dagger': 0x2021,
+    'bull': 0x2022,
+    'hellip': 0x2026,
+    'permil': 0x2030,
+    'prime': 0x2032,
+    'Prime': 0x2033,
+    'trade': 0x2122,
+    'euro': 0x20AC,
+    'larr': 0x2190,
+    'uarr': 0x2191,
+    'rarr': 0x2192,
+    'darr': 0x2193,
+    'harr': 0x2194,
+    'le': 0x2264,
+    'ge': 0x2265,
+    'ne': 0x2260,
+    'asymp': 0x2248,
+    'infin': 0x221E,
+    'radic': 0x221A,
+    'sum': 0x2211,
+    'prod': 0x220F,
+    'part': 0x2202,
+    'int': 0x222B,
+  };
+
+  static final Map<String, int> _namedEntities = <String, int>{
+    for (var i = 0; i < _latin1EntityNames.length; i++)
+      _latin1EntityNames[i]: 160 + i,
+    ..._extraEntities,
+  };
+
+  static final RegExp _entityPattern = RegExp(
+    r'&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});',
+  );
+
+  /// Resolves HTML character references in one pass.
+  ///
+  /// One pass matters: the old chained `replaceAll` decoded `&amp;` before the
+  /// rest, so `&amp;lt;` came out as `<` instead of the literal `&lt;` the
+  /// document asked for. Here each reference is resolved exactly once and the
+  /// result is never rescanned.
   static String _decode(String value) {
-    return value
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#34;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&apos;', "'")
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAllMapped(RegExp(r'&#(\d+);'), (match) {
-      final code = int.tryParse(match.group(1) ?? '');
-      if (code == null) return match.group(0) ?? '';
-      return String.fromCharCode(code);
-    }).replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (match) {
-      final code = int.tryParse(match.group(1) ?? '', radix: 16);
-      if (code == null) return match.group(0) ?? '';
+    if (!value.contains('&')) return value;
+
+    return value.replaceAllMapped(_entityPattern, (match) {
+      final token = match.group(1)!;
+      int? code;
+      if (token.startsWith('#x') || token.startsWith('#X')) {
+        code = int.tryParse(token.substring(2), radix: 16);
+      } else if (token.startsWith('#')) {
+        code = int.tryParse(token.substring(1));
+      } else {
+        code = _namedEntities[token];
+      }
+
+      // An unknown name, or a code point that is not a usable character, is
+      // left exactly as written -- better a visible `&foo;` than silently
+      // dropping something the document meant to show.
+      if (code == null ||
+          code < 0 ||
+          code > 0x10FFFF ||
+          (code >= 0xD800 && code <= 0xDFFF)) {
+        return match.group(0)!;
+      }
       return String.fromCharCode(code);
     });
   }
