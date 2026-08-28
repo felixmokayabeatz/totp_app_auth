@@ -142,6 +142,39 @@
   .legal-content [style*="color: #000000"],
   .legal-content [style*="color:#000000"] { color: #e0e0ee !important; }
 
+  /* ── revision notice (preview / archived) ── */
+  .revision-notice {
+    display: flex; align-items: flex-start; gap: 12px;
+    border-radius: 12px; padding: 14px 18px; margin-bottom: 28px;
+    font-size: .86rem; line-height: 1.6;
+  }
+  .revision-notice i { margin-top: 3px; flex-shrink: 0; }
+  .revision-notice a { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+  .revision-notice.is-archived {
+    background: rgba(255,176,32,.09); border: 1px solid rgba(255,176,32,.28); color: #ffcf80;
+  }
+  .revision-notice.is-archived a { color: #ffcf80; }
+  .revision-notice.is-preview {
+    background: rgba(157,78,221,.10); border: 1px solid rgba(157,78,221,.30); color: #d2aef5;
+  }
+  .revision-notice.is-preview a { color: #d2aef5; }
+
+  /* ── archive footer link ── */
+  .archive-link-row {
+    margin-top: 46px; padding-top: 24px; border-top: 1px solid var(--border);
+  }
+  .archive-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); border-radius: 10px; padding: 10px 16px;
+    font-size: .85rem; font-weight: 600; text-decoration: none; transition: border-color .2s, color .2s;
+  }
+  .archive-link:hover { border-color: rgba(74,158,255,.45); color: var(--blue); }
+  .archive-link .count {
+    background: rgba(74,158,255,.14); color: var(--blue);
+    border-radius: 100px; padding: 1px 9px; font-size: .74rem;
+  }
+
   /* ── coming soon ── */
   .coming-soon {
     text-align: center; padding: 56px 24px;
@@ -188,8 +221,8 @@
     <div class="legal-badge"><i class="fas fa-file-shield"></i> BeatzLock Authenticator</div>
     <h1 class="legal-title">{{ page.title }}</h1>
     <div class="legal-meta">
-      {% if page.last_updated %}
-        <span><i class="fas fa-calendar-check"></i> Last updated: {{ page.last_updated|date:"F j, Y" }}</span>
+      {% if page.effective_at %}
+        <span><i class="fas fa-calendar-check"></i> {% if is_archived_view %}Published{% else %}Last updated{% endif %}: {{ page.effective_at|date:"F j, Y, H:i T" }}</span>
       {% endif %}
       {% if page.page_type == 'terms' %}
         <span><i class="fas fa-link"></i> <a href="{% url 'beatzlock_app:legal_privacy' %}" style="color:var(--blue);">View Privacy Policy →</a></span>
@@ -198,6 +231,27 @@
       {% endif %}
     </div>
   </div>
+
+  {% if is_preview %}
+    <div class="revision-notice is-preview">
+      <i class="fas fa-eye"></i>
+      <div>
+        <strong>Staff preview.</strong>
+        You are looking at revision #{{ page.pk }}{% if not page.is_published %} (a draft){% elif not page.is_current %} (archived){% endif %}.
+        Visitors still see the published document at
+        <a href="{% url 'beatzlock_app:'|add:page_url_name %}">this page</a>.
+      </div>
+    </div>
+  {% elif is_archived_view %}
+    <div class="revision-notice is-archived">
+      <i class="fas fa-clock-rotate-left"></i>
+      <div>
+        <strong>This is an older version of this document.</strong>
+        It is kept for reference and no longer applies.
+        <a href="{% url 'beatzlock_app:'|add:page_url_name %}">Read the current {{ page.get_page_type_display }}</a>.
+      </div>
+    </div>
+  {% endif %}
 
   <div class="legal-content">
     {% if coming_soon %}
@@ -210,5 +264,15 @@
       {{ page.content|safe }}
     {% endif %}
   </div>
+
+  {% if archive_count %}
+    <div class="archive-link-row">
+      <a class="archive-link" href="{% url 'beatzlock_app:'|add:archive_url_name %}">
+        <i class="fas fa-clock-rotate-left"></i>
+        Previous versions of this document
+        <span class="count">{{ archive_count }}</span>
+      </a>
+    </div>
+  {% endif %}
 </div>
 {% endblock %}

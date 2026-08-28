@@ -490,27 +490,102 @@ class DownloadableApp(models.Model):
 
 
 class LegalPage(models.Model):
+    """One row per *revision* of a legal document, not one row per document.
+
+    Saving in the admin used to publish immediately, because a single row per
+    page_type was the whole document. Now every edit is a new row that starts
+    as a draft: nothing reaches the public pages or the app until
+    ``is_published`` is ticked. Publishing a newer revision does not delete the
+    older one -- it demotes it to the archive, so a user can still read the
+    terms they actually agreed to.
+    """
+
     PAGE_CHOICES = [
         ('terms', 'Terms of Service'),
         ('privacy', 'Privacy Policy'),
     ]
 
-    page_type = models.CharField(max_length=20, choices=PAGE_CHOICES, unique=True)
+    page_type = models.CharField(max_length=20, choices=PAGE_CHOICES, db_index=True)
     title = models.CharField(max_length=200)
+    app_version = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        help_text=(
+            "The release this revision ships with, picked from App Releases. "
+            "Internal only -- it is never shown to users, on the site or in the app."
+        ),
+    )
     content = models.TextField(
         help_text=(
             "Write using the TinyMCE rich-text editor. "
             "Headings, lists, links, tables and colours are all rendered on the front end."
         )
     )
+    is_published = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "Off until you are ready. A draft is invisible to users and to the app -- "
+            "the previously published revision stays live. Tick this to publish; the "
+            "revision that was live moves to the archive."
+        ),
+    )
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set automatically the first time this revision is published.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
     last_updated = models.DateTimeField(auto_now=True)
 
     class Meta:
+        ordering = ['-published_at', '-created_at', '-id']
         verbose_name = "Legal Page"
         verbose_name_plural = "Legal Pages"
+        indexes = [
+            models.Index(fields=['page_type', 'is_published', '-published_at']),
+        ]
 
     def __str__(self):
-        return self.get_page_type_display()
+        label = self.get_page_type_display()
+        version = f" v{self.app_version}" if self.app_version else ""
+        state = "" if self.is_published else " (draft)"
+        return f"{label}{version}{state}"
+
+    def save(self, *args, **kwargs):
+        # Stamp the moment of first publication and keep it stamped. Later edits
+        # to a live revision must not rewrite the date users were shown, and
+        # un-ticking then re-ticking should not invent a second "first" date.
+        if self.is_published and self.published_at is None:
+            self.published_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    @property
+    def effective_at(self):
+        """The date to show users: when it went live, else when it was written."""
+        return self.published_at or self.created_at
+
+    @property
+    def is_current(self):
+        current = type(self).current(self.page_type)
+        return bool(current and self.pk and current.pk == self.pk)
+
+    @classmethod
+    def published_for(cls, page_type):
+        """Every published revision of one document, newest first."""
+        return cls.objects.filter(page_type=page_type, is_published=True)
+
+    @classmethod
+    def current(cls, page_type):
+        """The revision users and the app should see, or None if never published."""
+        return cls.published_for(page_type).first()
+
+    @classmethod
+    def archive_for(cls, page_type):
+        """Superseded published revisions, newest first. Drafts never appear."""
+        published = list(cls.published_for(page_type))
+        return published[1:]
 
 
 class AppRating(models.Model):

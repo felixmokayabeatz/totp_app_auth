@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
@@ -20,7 +20,11 @@ import shutil
 import tempfile
 import uuid
 
-from .models import AppRating, AppRelease, DownloadDailyStat, DownloadStats, DownloadableApp, TotalDownloadCount, profile_for
+from django.contrib.admin.sites import AdminSite
+from django.contrib.messages.storage.fallback import FallbackStorage
+
+from .admin import LegalPageAdmin
+from .models import AppRating, AppRelease, DownloadDailyStat, DownloadStats, DownloadableApp, LegalPage, TotalDownloadCount, profile_for
 from . import google_auth
 from .admin import StaffChangeForm, StaffCreationForm
 from .review_replies import dispatch_review_reply
@@ -1330,3 +1334,340 @@ class AccountPasswordTests(TestCase):
         self.assertEqual((user.first_name, user.last_name), ('Felix', 'Mokaya'))
         # The two forms post separately; one must not half-submit the other.
         self.assertTrue(user.check_password('Old-Passw0rd!x'))
+
+
+class LegalRevisionFlowTests(TestCase):
+    def test_draft_is_invisible_everywhere(self):
+        LegalPage.objects.create(
+            page_type='terms', title='Terms of Service',
+            app_version='1.8.0', content='<p>DRAFT BODY</p>',
+        )
+        self.assertIsNone(LegalPage.current('terms'))
+
+        resp = self.client.get(reverse('beatzlock_app:legal_terms'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, 'DRAFT BODY')
+        self.assertContains(resp, 'Coming soon')
+
+        api = self.client.get(reverse('beatzlock_app:legal_document_json', args=['terms']))
+        self.assertTrue(api.json()['coming_soon'])
+        self.assertNotIn('DRAFT BODY', api.json()['content_html'])
+
+    def test_publishing_makes_it_live_and_stamps_date(self):
+        page = LegalPage.objects.create(
+            page_type='privacy', title='Privacy Policy',
+            app_version='1.8.0', content='<p>V1 BODY</p>',
+        )
+        self.assertIsNone(page.published_at)
+
+        page.is_published = True
+        page.save()
+        page.refresh_from_db()
+        self.assertIsNotNone(page.published_at)
+
+        resp = self.client.get(reverse('beatzlock_app:legal_privacy'))
+        self.assertContains(resp, 'V1 BODY')
+
+        api = self.client.get(reverse('beatzlock_app:legal_document_json', args=['privacy'])).json()
+        self.assertFalse(api['coming_soon'])
+        self.assertNotIn('app_version', api)
+        self.assertNotIn('1.8.0', json.dumps(api))
+
+    def test_new_revision_supersedes_and_old_one_stays_readable(self):
+        v1 = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', app_version='1.7.0',
+            content='<p>V1 BODY</p>', is_published=True,
+        )
+        v2 = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', app_version='1.8.0',
+            content='<p>V2 BODY</p>', is_published=True,
+        )
+
+        self.assertEqual(LegalPage.current('terms').pk, v2.pk)
+        self.assertEqual([r.pk for r in LegalPage.archive_for('terms')], [v1.pk])
+
+        live = self.client.get(reverse('beatzlock_app:legal_terms'))
+        self.assertContains(live, 'V2 BODY')
+        self.assertNotContains(live, 'V1 BODY')
+        self.assertContains(live, 'Previous versions of this document')
+
+        archive = self.client.get(reverse('beatzlock_app:legal_terms_archive'))
+        self.assertEqual(archive.status_code, 200)
+        self.assertContains(archive, 'Current version')
+        self.assertContains(archive, 'In effect until')
+
+        old = self.client.get(reverse('beatzlock_app:legal_terms_revision', args=[v1.pk]))
+        self.assertContains(old, 'V1 BODY')
+        self.assertContains(old, 'This is an older version')
+
+    def test_app_version_never_reaches_the_front_end(self):
+        """It is an internal marker for the admin, not something users see."""
+        LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', app_version='1.7.0',
+            content='<p>V1 BODY</p>', is_published=True,
+        )
+        live = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', app_version='1.8.0',
+            content='<p>V2 BODY</p>', is_published=True,
+        )
+        old = LegalPage.objects.filter(app_version='1.7.0').get()
+
+        for response in (
+            self.client.get(reverse('beatzlock_app:legal_terms')),
+            self.client.get(reverse('beatzlock_app:legal_terms_archive')),
+            self.client.get(reverse('beatzlock_app:legal_terms_revision', args=[old.pk])),
+            self.client.get(reverse('beatzlock_app:legal_document_json', args=['terms'])),
+        ):
+            body = response.content.decode()
+            self.assertNotIn('1.8.0', body)
+            self.assertNotIn('1.7.0', body)
+            self.assertNotIn('App version', body)
+
+        # ...but it is still stored, for the admin's own reference.
+        live.refresh_from_db()
+        self.assertEqual(live.app_version, '1.8.0')
+
+    def test_archive_url_rejects_drafts_and_wrong_document(self):
+        draft = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', content='<p>D</p>',
+        )
+        privacy = LegalPage.objects.create(
+            page_type='privacy', title='Privacy Policy', content='<p>P</p>', is_published=True,
+        )
+        self.assertEqual(
+            self.client.get(reverse('beatzlock_app:legal_terms_revision', args=[draft.pk])).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(reverse('beatzlock_app:legal_terms_revision', args=[privacy.pk])).status_code,
+            404,
+        )
+
+    def test_preview_is_staff_only(self):
+        LegalPage.objects.create(
+            page_type='terms', title='Terms of Service',
+            content='<p>LIVE BODY</p>', is_published=True,
+        )
+        draft = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', content='<p>SECRET DRAFT</p>',
+        )
+        url = reverse('beatzlock_app:legal_terms') + f'?preview={draft.pk}'
+
+        anon = self.client.get(url)
+        self.assertNotContains(anon, 'SECRET DRAFT')
+        self.assertContains(anon, 'LIVE BODY')
+
+        staff = get_user_model().objects.create_user('boss@example.com', 'boss@example.com', 'pw', is_staff=True)
+        self.client.force_login(staff)
+        seen = self.client.get(url)
+        self.assertContains(seen, 'SECRET DRAFT')
+        self.assertContains(seen, 'Staff preview')
+
+    def test_unpublishing_falls_back_to_previous_revision(self):
+        v1 = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', content='<p>V1 BODY</p>', is_published=True,
+        )
+        v2 = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', content='<p>V2 BODY</p>', is_published=True,
+        )
+        v2.is_published = False
+        v2.save()
+        self.assertEqual(LegalPage.current('terms').pk, v1.pk)
+        self.assertContains(self.client.get(reverse('beatzlock_app:legal_terms')), 'V1 BODY')
+
+
+class LegalPageAdminActionTests(TestCase):
+    def setUp(self):
+        self.admin = LegalPageAdmin(LegalPage, AdminSite())
+        self.user = get_user_model().objects.create_superuser(
+            'boss@example.com', 'boss@example.com', 'pw'
+        )
+        self.request = RequestFactory().get('/admin/')
+        self.request.user = self.user
+        setattr(self.request, 'session', {})
+        setattr(self.request, '_messages', FallbackStorage(self.request))
+
+    def test_duplicate_creates_independent_draft(self):
+        live = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service', app_version='1.7.0',
+            content='<p>V1</p>', is_published=True,
+        )
+        self.admin.duplicate_as_draft(self.request, LegalPage.objects.filter(pk=live.pk))
+
+        self.assertEqual(LegalPage.objects.count(), 2)
+        draft = LegalPage.objects.exclude(pk=live.pk).get()
+        self.assertFalse(draft.is_published)
+        self.assertIsNone(draft.published_at)
+        self.assertEqual(draft.content, '<p>V1</p>')
+        live.refresh_from_db()
+        self.assertTrue(live.is_published)
+        self.assertEqual(LegalPage.current('terms').pk, live.pk)
+
+    def test_publish_action_stamps_and_supersedes(self):
+        v1 = LegalPage.objects.create(
+            page_type='terms', title='T', content='<p>V1</p>', is_published=True,
+        )
+        v2 = LegalPage.objects.create(page_type='terms', title='T', content='<p>V2</p>')
+        self.admin.publish_revisions(self.request, LegalPage.objects.filter(pk=v2.pk))
+
+        v2.refresh_from_db()
+        self.assertTrue(v2.is_published)
+        self.assertIsNotNone(v2.published_at)
+        self.assertEqual(LegalPage.current('terms').pk, v2.pk)
+        self.assertEqual([r.pk for r in LegalPage.archive_for('terms')], [v1.pk])
+
+    def test_status_badge_reads_draft_live_archived(self):
+        v1 = LegalPage.objects.create(
+            page_type='terms', title='T', content='<p>1</p>', is_published=True,
+        )
+        v2 = LegalPage.objects.create(
+            page_type='terms', title='T', content='<p>2</p>', is_published=True,
+        )
+        draft = LegalPage.objects.create(page_type='terms', title='T', content='<p>3</p>')
+        self.assertIn('Draft', self.admin.status_badge(draft))
+        self.assertIn('Live', self.admin.status_badge(v2))
+        self.assertIn('Archived', self.admin.status_badge(v1))
+
+    def test_live_links_render_after_save(self):
+        page = LegalPage.objects.create(page_type='privacy', title='P', content='<p>x</p>')
+        html = self.admin.live_links(page)
+        self.assertIn(f'/legal/privacy-policy/?preview={page.pk}', html)
+        self.assertIn('/legal/privacy-policy/archive/', html)
+        self.assertIn('Save this revision first', self.admin.live_links(LegalPage()))
+
+
+class LegalPageVersionDropdownTests(TestCase):
+    def setUp(self):
+        self.admin = LegalPageAdmin(LegalPage, AdminSite())
+        self.request = RequestFactory().get('/admin/')
+        self.request.user = get_user_model().objects.create_superuser(
+            'boss@example.com', 'boss@example.com', 'pw'
+        )
+        self.field = LegalPage._meta.get_field('app_version')
+
+    def _formfield(self, obj=None):
+        self.request._legalpage_obj = obj
+        return self.admin.formfield_for_dbfield(self.field, self.request)
+
+    def test_lists_releases_newest_first_with_blank_option(self):
+        now = timezone.now()
+        AppRelease.objects.create(version='1.7.0', released_at=now - timedelta(days=40))
+        AppRelease.objects.create(version='1.8.0', build_number='45', released_at=now)
+
+        field = self._formfield()
+        values = [value for value, _ in field.choices]
+        self.assertEqual(values, ['', '1.8.0', '1.7.0'])
+        labels = dict(field.choices)
+        self.assertIn('build 45', labels['1.8.0'])
+        self.assertFalse(field.required)
+
+    def test_selecting_a_listed_version_validates(self):
+        AppRelease.objects.create(version='1.8.0')
+        field = self._formfield()
+        self.assertEqual(field.clean('1.8.0'), '1.8.0')
+        self.assertEqual(field.clean(''), '')
+        with self.assertRaises(Exception):
+            field.clean('9.9.9')
+
+    def test_keeps_value_whose_release_row_was_deleted(self):
+        AppRelease.objects.create(version='1.8.0')
+        old = LegalPage.objects.create(
+            page_type='terms', title='T', app_version='1.5.0',
+            content='<p>x</p>', is_published=True,
+        )
+        field = self._formfield(obj=old)
+        values = [value for value, _ in field.choices]
+        self.assertIn('1.5.0', values)
+        self.assertEqual(field.clean('1.5.0'), '1.5.0')
+        self.assertIn('release record removed', dict(field.choices)['1.5.0'])
+
+    def test_falls_back_to_text_input_when_no_releases_exist(self):
+        field = self._formfield()
+        self.assertFalse(hasattr(field, 'choices'))
+        self.assertEqual(field.clean('2.0.0-beta'), '2.0.0-beta')
+
+    def test_change_form_renders_a_select(self):
+        AppRelease.objects.create(version='1.8.0')
+        page = LegalPage.objects.create(page_type='terms', title='T', content='<p>x</p>')
+        self.client.force_login(self.request.user)
+        url = reverse('admin:beatzlock_app_legalpage_change', args=[page.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        html = resp.content.decode()
+        self.assertIn('<select name="app_version"', html)
+        self.assertIn('<option value="1.8.0">v1.8.0', html)
+        self.assertIn('--- Not tied to a version ---', html)
+
+
+class LegalTimestampFormatTests(TestCase):
+    """Timestamps render in 24-hour form, in the site timezone, everywhere."""
+
+    def _published(self, when, content):
+        page = LegalPage.objects.create(
+            page_type='terms', title='Terms of Service',
+            content=content, is_published=True,
+        )
+        LegalPage.objects.filter(pk=page.pk).update(published_at=when)
+        page.refresh_from_db()
+        return page
+
+    def test_afternoon_time_is_not_shown_as_12_hour(self):
+        # 16:45 UTC is 19:45 in Africa/Nairobi -- a time a 12-hour clock would
+        # render as "7:45 p.m.", so it catches both bugs at once.
+        old = self._published(
+            datetime(2026, 7, 19, 16, 45, tzinfo=dt_timezone.utc), '<p>V1</p>'
+        )
+        self._published(
+            datetime(2026, 8, 28, 6, 7, tzinfo=dt_timezone.utc), '<p>V2</p>'
+        )
+
+        live = self.client.get(reverse('beatzlock_app:legal_terms'))
+        self.assertContains(live, 'Last updated: August 28, 2026, 09:07 EAT')
+
+        archived = self.client.get(
+            reverse('beatzlock_app:legal_terms_revision', args=[old.pk])
+        )
+        self.assertContains(archived, 'Published: July 19, 2026, 19:45 EAT')
+
+        archive = self.client.get(reverse('beatzlock_app:legal_terms_archive'))
+        self.assertContains(archive, 'Published August 28, 2026, 09:07 EAT')
+        self.assertContains(archive, 'Version of July 19, 2026, 19:45 EAT')
+        self.assertContains(archive, 'In effect until August 28, 2026, 09:07 EAT')
+
+        for resp in (live, archived, archive):
+            body = resp.content.decode()
+            self.assertNotIn('p.m.', body)
+            self.assertNotIn('a.m.', body)
+
+    def test_midnight_and_noon_stay_unambiguous(self):
+        # 21:00 UTC = 00:00 EAT next day; 09:00 UTC = 12:00 EAT.
+        page = self._published(
+            datetime(2026, 8, 27, 21, 0, tzinfo=dt_timezone.utc), '<p>midnight</p>'
+        )
+        resp = self.client.get(reverse('beatzlock_app:legal_terms'))
+        self.assertContains(resp, 'August 28, 2026, 00:00 EAT')
+
+        LegalPage.objects.filter(pk=page.pk).update(
+            published_at=datetime(2026, 8, 28, 9, 0, tzinfo=dt_timezone.utc)
+        )
+        resp = self.client.get(reverse('beatzlock_app:legal_terms'))
+        self.assertContains(resp, 'August 28, 2026, 12:00 EAT')
+
+    def test_every_rendered_legal_timestamp_carries_a_time(self):
+        old = self._published(
+            datetime(2026, 7, 19, 16, 45, tzinfo=dt_timezone.utc), '<p>V1</p>'
+        )
+        self._published(
+            datetime(2026, 8, 28, 6, 7, tzinfo=dt_timezone.utc), '<p>V2</p>'
+        )
+        bare_date = re.compile(
+            r'(January|February|March|April|May|June|July|August|September|'
+            r'October|November|December) \d{1,2}, \d{4}(?!, \d{2}:\d{2})'
+        )
+        for url in (
+            reverse('beatzlock_app:legal_terms'),
+            reverse('beatzlock_app:legal_terms_archive'),
+            reverse('beatzlock_app:legal_terms_revision', args=[old.pk]),
+        ):
+            body = self.client.get(url).content.decode()
+            self.assertIsNone(bare_date.search(body), f'date without a time on {url}')

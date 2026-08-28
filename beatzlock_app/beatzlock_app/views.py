@@ -327,8 +327,8 @@ def download_list(request):
     download_cards, linux_distribution_options = _build_download_cards()
 
     total_downloads = TotalDownloadCount.get_total()
-    terms_page   = LegalPage.objects.filter(page_type='terms').first()
-    privacy_page = LegalPage.objects.filter(page_type='privacy').first()
+    terms_page   = LegalPage.current('terms')
+    privacy_page = LegalPage.current('privacy')
 
     from datetime import datetime
     context = {
@@ -438,52 +438,163 @@ def update_check(request):
     return JsonResponse(payload)
 
 
-# ── Standalone legal pages ────────────────────────────────────────────────────
+# ── Standalone legal pages ────────────────────────────────────────
 
 LEGAL_COMING_SOON_HTML = (
     '<p>This document is being written and will be published here shortly.</p>'
 )
 
+LEGAL_PAGE_URL_NAMES = {
+    'terms': 'legal_terms',
+    'privacy': 'legal_privacy',
+}
 
-def _legal_page_or_placeholder(page_type):
-    """The stored page, or an unsaved stand-in that reads "coming soon".
+LEGAL_ARCHIVE_URL_NAMES = {
+    'terms': 'legal_terms_archive',
+    'privacy': 'legal_privacy_archive',
+}
 
-    A legal document nobody has written yet is not a missing URL. Both pages are
-    linked from every download listing and from inside the native apps, so a 404
-    there reads as a broken site rather than as work in progress. The stand-in
-    carries the same attributes the template and the JSON endpoint read, and its
-    last_updated stays None -- auto_now only fills on save -- so neither shows a
+
+def _legal_placeholder(page_type):
+    """An unsaved stand-in that reads "coming soon".
+
+    A legal document nobody has published yet is not a missing URL. Both pages
+    are linked from every download listing and from inside the native apps, so
+    a 404 there reads as a broken site rather than as work in progress. The
+    stand-in carries the same attributes the template and the JSON endpoint
+    read, and it is never saved, so its dates stay None rather than showing a
     date that does not exist.
     """
-    page = LegalPage.objects.filter(page_type=page_type).first()
-    if page is not None:
-        return page, False
-
     title = dict(LegalPage.PAGE_CHOICES).get(page_type, 'Legal')
-    placeholder = LegalPage(
+    return LegalPage(
         page_type=page_type,
         title=title,
         content=LEGAL_COMING_SOON_HTML,
     )
-    return placeholder, True
+
+
+def _legal_page_or_placeholder(page_type):
+    """The live revision, or the coming-soon stand-in. Drafts never show here."""
+    page = LegalPage.current(page_type)
+    if page is not None:
+        return page, False
+    return _legal_placeholder(page_type), True
+
+
+def _legal_preview_revision(request, page_type):
+    """A specific revision requested via ?preview=<id>, for staff only.
+
+    A draft you cannot look at is a draft you cannot check, so staff can open
+    any revision -- draft or archived -- on the real page before publishing it.
+    Anonymous visitors get None and fall through to the live document.
+    """
+    preview_id = (request.GET.get('preview') or '').strip()
+    if not preview_id.isdigit():
+        return None
+    if not (request.user.is_authenticated and request.user.is_staff):
+        return None
+    return LegalPage.objects.filter(pk=int(preview_id), page_type=page_type).first()
+
+
+def _legal_page_context(request, page_type):
+    preview = _legal_preview_revision(request, page_type)
+    if preview is not None:
+        page, coming_soon = preview, False
+    else:
+        page, coming_soon = _legal_page_or_placeholder(page_type)
+
+    archived_revisions = LegalPage.archive_for(page_type)
+    is_archived_view = bool(page.pk) and not page.is_current
+
+    return {
+        'page': page,
+        'coming_soon': coming_soon,
+        'is_preview': preview is not None,
+        'is_archived_view': is_archived_view,
+        'archive_count': len(archived_revisions),
+        'current_page': LegalPage.current(page_type),
+        'archive_url_name': LEGAL_ARCHIVE_URL_NAMES[page_type],
+        'page_url_name': LEGAL_PAGE_URL_NAMES[page_type],
+    }
+
+
+def _render_legal_page(request, page_type):
+    return render(
+        request,
+        'beatzlock_app/legal_page.html',
+        _legal_page_context(request, page_type),
+    )
+
+
+def _archive_entries(page_type):
+    """Superseded revisions, newest first, each with the date it stopped applying.
+
+    A reader coming here wants to know which version was in force when they
+    agreed, so pair every revision with the publication date of the one that
+    replaced it. Published revisions come back newest first, so the replacement
+    of entry i is always the entry before it.
+    """
+    published = list(LegalPage.published_for(page_type))
+    return [
+        {'revision': revision, 'superseded_at': published[index - 1].effective_at}
+        for index, revision in enumerate(published[1:], start=1)
+    ]
+
+
+def _render_legal_archive(request, page_type):
+    current = LegalPage.current(page_type)
+    revisions = _archive_entries(page_type)
+    title = dict(LegalPage.PAGE_CHOICES).get(page_type, 'Legal')
+    return render(
+        request,
+        'beatzlock_app/legal_archive.html',
+        {
+            'page_type': page_type,
+            'document_label': title,
+            'current_page': current,
+            'revisions': revisions,
+            'page_url_name': LEGAL_PAGE_URL_NAMES[page_type],
+        },
+    )
+
+
+def _render_legal_revision(request, page_type, revision_id):
+    """One superseded revision, read-only, so a user can revisit what they agreed to."""
+    revision = get_object_or_404(
+        LegalPage, pk=revision_id, page_type=page_type, is_published=True
+    )
+    context = _legal_page_context(request, page_type)
+    context.update({
+        'page': revision,
+        'coming_soon': False,
+        'is_preview': False,
+        'is_archived_view': not revision.is_current,
+    })
+    return render(request, 'beatzlock_app/legal_page.html', context)
 
 
 def legal_terms(request):
-    page, coming_soon = _legal_page_or_placeholder('terms')
-    return render(
-        request,
-        'beatzlock_app/legal_page.html',
-        {'page': page, 'coming_soon': coming_soon},
-    )
+    return _render_legal_page(request, 'terms')
 
 
 def legal_privacy(request):
-    page, coming_soon = _legal_page_or_placeholder('privacy')
-    return render(
-        request,
-        'beatzlock_app/legal_page.html',
-        {'page': page, 'coming_soon': coming_soon},
-    )
+    return _render_legal_page(request, 'privacy')
+
+
+def legal_terms_archive(request):
+    return _render_legal_archive(request, 'terms')
+
+
+def legal_privacy_archive(request):
+    return _render_legal_archive(request, 'privacy')
+
+
+def legal_terms_revision(request, revision_id):
+    return _render_legal_revision(request, 'terms', revision_id)
+
+
+def legal_privacy_revision(request, revision_id):
+    return _render_legal_revision(request, 'privacy', revision_id)
 
 
 # ── File download ─────────────────────────────────────────────────────────────
@@ -549,16 +660,25 @@ def legal_document_json(request, page_type):
         return JsonResponse({'error': 'Unknown legal document.'}, status=404)
 
     # Same stand-in as the web pages, so a client that asks before the
-    # document exists is told it is coming rather than handed a 404.
+    # document is published is told it is coming rather than handed a 404.
+    # Drafts are excluded here for the same reason they are on the web:
+    # nothing the app shows a user should be a document still being written.
     page, coming_soon = _legal_page_or_placeholder(normalized_type)
-    web_name = 'legal_terms' if normalized_type == 'terms' else 'legal_privacy'
+    web_name = LEGAL_PAGE_URL_NAMES[normalized_type]
+    archive_name = LEGAL_ARCHIVE_URL_NAMES[normalized_type]
     web_url = request.build_absolute_uri(reverse('beatzlock_app:{}'.format(web_name)))
+    archive_url = request.build_absolute_uri(reverse('beatzlock_app:{}'.format(archive_name)))
+    published_at = page.published_at if page.pk else None
     return JsonResponse({
         'type': page.page_type,
         'title': page.title,
         'content_html': page.content,
+        'revision_id': page.pk,
+        'published_at': published_at.isoformat() if published_at else None,
         'last_updated': page.last_updated.isoformat() if page.last_updated else None,
         'web_url': web_url,
+        'archive_url': archive_url,
+        'archive_count': len(LegalPage.archive_for(normalized_type)),
         'coming_soon': coming_soon,
     })
 

@@ -5,6 +5,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.urls import reverse
 from django.utils.html import format_html
 from django.forms import Textarea
 
@@ -138,22 +139,185 @@ class DownloadableAppAdmin(admin.ModelAdmin):
 
 @admin.register(LegalPage)
 class LegalPageAdmin(admin.ModelAdmin):
-    list_display = ('page_type', 'title', 'last_updated')
-    readonly_fields = ('last_updated',)
+    """Every save creates or edits a *revision*, and revisions start as drafts.
+
+    Nothing here publishes on save. You write, save, look at it with "Preview",
+    and only then tick Published -- at which point the revision that was live
+    slides into the public archive instead of being overwritten.
+    """
+
+    list_display = (
+        'page_type',
+        'title',
+        'app_version',
+        'status_badge',
+        'published_at',
+        'last_updated',
+    )
+    list_filter = ('page_type', 'is_published')
+    search_fields = ('title', 'app_version')
+    readonly_fields = ('published_at', 'created_at', 'last_updated', 'live_links')
+    actions = ('publish_revisions', 'unpublish_revisions', 'duplicate_as_draft')
+    ordering = ('page_type', '-published_at', '-created_at')
 
     fieldsets = (
-        (None, {
-            'fields': ('page_type', 'title', 'content', 'last_updated'),
+        ('Document', {
+            'fields': ('page_type', 'title', 'app_version'),
+            'description': (
+                'One record is one revision. To change a live document, do not edit it here -- '
+                'select it in the list and run "Duplicate as a new draft", edit the copy, '
+                'then publish the copy. The original stays readable in the public archive.'
+            ),
+        }),
+        ('Content', {
+            'fields': ('content',),
             'description': (
                 'Write your content using the TinyMCE editor. '
                 'Headings, lists, links, tables and inline styles are preserved on the front end.'
             ),
         }),
+        ('Publishing', {
+            'fields': ('is_published', 'published_at', 'live_links'),
+            'description': (
+                'A new record is a draft: invisible to users and to the app until you tick '
+                'Published. Publishing this revision moves the currently live one to the archive.'
+            ),
+        }),
+        ('Record', {
+            'fields': ('created_at', 'last_updated'),
+            'classes': ('collapse',),
+        }),
     )
+
+    @admin.display(description='Status')
+    def status_badge(self, obj):
+        if not obj.is_published:
+            colour, label = '#b8860b', 'Draft'
+        elif obj.is_current:
+            colour, label = '#1a7f37', 'Live'
+        else:
+            colour, label = '#6b7280', 'Archived'
+        return format_html(
+            '<span style="color:{};font-weight:600;">&#9679; {}</span>', colour, label
+        )
+
+    @admin.display(description='Links')
+    def live_links(self, obj):
+        if not obj or not obj.pk:
+            return 'Save this revision first, then a preview link appears here.'
+
+        page_name = 'legal_terms' if obj.page_type == 'terms' else 'legal_privacy'
+        archive_name = (
+            'legal_terms_archive' if obj.page_type == 'terms' else 'legal_privacy_archive'
+        )
+        page_url = reverse('beatzlock_app:{}'.format(page_name))
+        archive_url = reverse('beatzlock_app:{}'.format(archive_name))
+        return format_html(
+            '<a href="{}?preview={}" target="_blank">Preview this revision</a> &nbsp;|&nbsp; '
+            '<a href="{}" target="_blank">Live document</a> &nbsp;|&nbsp; '
+            '<a href="{}" target="_blank">Public archive</a>',
+            page_url, obj.pk, page_url, archive_url,
+        )
+
+    @admin.action(description='Publish selected revisions')
+    def publish_revisions(self, request, queryset):
+        published = 0
+        for revision in queryset.filter(is_published=False):
+            revision.is_published = True
+            revision.save()
+            published += 1
+
+        if published:
+            self.message_user(
+                request,
+                f"Published {published} revision(s). Any revision they replaced is now in the archive.",
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(request, 'Nothing to publish -- all selected revisions were already published.', messages.INFO)
+
+    @admin.action(description='Move selected back to draft (unpublish)')
+    def unpublish_revisions(self, request, queryset):
+        updated = queryset.filter(is_published=True).update(is_published=False)
+        if updated:
+            self.message_user(
+                request,
+                f"Moved {updated} revision(s) back to draft. If one of them was live, the "
+                f"previous published revision is now live again.",
+                messages.WARNING,
+            )
+        else:
+            self.message_user(request, 'Nothing to unpublish.', messages.INFO)
+
+    @admin.action(description='Duplicate as a new draft')
+    def duplicate_as_draft(self, request, queryset):
+        """The intended way to revise a live document: copy it, edit the copy."""
+        created = 0
+        for revision in queryset:
+            revision.pk = None
+            revision.id = None
+            revision.is_published = False
+            revision.published_at = None
+            revision.save()
+            created += 1
+
+        self.message_user(
+            request,
+            f"Created {created} draft copy(ies). Edit the copy, preview it, then publish it.",
+            messages.SUCCESS,
+        )
+
+    def get_form(self, request, obj=None, **kwargs):
+        # formfield_for_dbfield gets no obj, and the version dropdown needs to
+        # know the value already on this revision so a release deleted since
+        # then does not make the form unsavable.
+        request._legalpage_obj = obj
+        return super().get_form(request, obj, **kwargs)
+
+    def _app_version_choices(self, request):
+        """Released versions, newest first, so the version is a click not a typo."""
+        choices = []
+        seen = set()
+        for release in AppRelease.objects.all():
+            if release.version in seen:
+                continue
+            seen.add(release.version)
+            label = f"v{release.version}"
+            if release.build_number:
+                label += f" (build {release.build_number})"
+            if release.released_at:
+                label += f" - released {release.released_at:%d %b %Y}"
+            choices.append((release.version, label))
+
+        # An old revision may point at a version whose release row is gone.
+        # Keep it selectable rather than silently blanking the field on save.
+        current = getattr(request, '_legalpage_obj', None)
+        existing = current.app_version if current else ''
+        if existing and existing not in seen:
+            choices.append((existing, f"v{existing} (release record removed)"))
+
+        return choices
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == 'content':
             kwargs['widget'] = LegalContentEditor()
+
+        if db_field.name == 'app_version':
+            choices = self._app_version_choices(request)
+            # No releases recorded yet: a dropdown with nothing in it would be a
+            # dead end, so fall through to the normal text input.
+            if choices:
+                return forms.ChoiceField(
+                    choices=[('', '--- Not tied to a version ---')] + choices,
+                    required=False,
+                    label='App version',
+                    help_text=(
+                        'Pick the release this revision ships with. The list comes from '
+                        'App Releases -- add the release there first if it is missing. '
+                        'For your reference only; users never see it.'
+                    ),
+                )
+
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def has_add_permission(self, request):
@@ -164,7 +328,6 @@ class LegalPageAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
-
 
 
 @admin.register(AppRating)

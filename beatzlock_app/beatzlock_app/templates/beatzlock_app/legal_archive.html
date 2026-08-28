@@ -1,0 +1,213 @@
+<!-- beatzlock_app/templates/beatzlock_app/legal_archive.html -->
+{% extends 'beatzlock_app/base.html' %}
+{% load static %}
+
+{% block title %}{{ document_label }} archive – BeatzLock Authenticator{% endblock %}
+
+{% block extra_css %}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
+
+  :root {
+    --bg:      #07071a;
+    --surface: rgba(255,255,255,0.04);
+    --border:  rgba(255,255,255,0.08);
+    --blue:    #4a9eff;
+    --purple:  #9d4edd;
+    --text:    #eeeef8;
+    --muted:   #8888aa;
+    --font-body: 'Space Grotesk', system-ui, sans-serif;
+    --font-head: 'Syne', sans-serif;
+  }
+
+  /* ── ambient blobs ── */
+  .blobs { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .blob  { position: absolute; border-radius: 50%; filter: blur(130px); opacity: .10; animation: drift 26s ease-in-out infinite; }
+  .blob-a { width: 600px; height: 600px; background: var(--blue);   top: -200px; left: -180px; }
+  .blob-b { width: 450px; height: 450px; background: var(--purple); bottom: -140px; right: -130px; animation-delay: -10s; }
+  @keyframes drift { 0%,100%{transform:translate(0,0);} 50%{transform:translate(30px,30px);} }
+
+  /* ── page shell ── */
+  .legal-page {
+    position: relative; z-index: 1;
+    width: min(780px, 100%); min-width: 0; max-width: 780px;
+    margin: 0 auto; padding: 48px 20px 60px;
+  }
+
+  /* ── back link ── */
+  .back-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--blue); font-size: .85rem; font-weight: 600;
+    text-decoration: none; margin-bottom: 36px; transition: opacity .2s;
+  }
+  .back-link:hover { opacity: .72; }
+
+  /* ── header block ── */
+  .legal-header { margin-bottom: 34px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .legal-badge {
+    max-width: 100%;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(74,158,255,.12); border: 1px solid rgba(74,158,255,.22);
+    color: var(--blue); border-radius: 100px; padding: 4px 13px;
+    font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 18px;
+    overflow-wrap: anywhere;
+  }
+  .legal-title {
+    font-family: var(--font-head); font-size: clamp(1.7rem,4.6vw,2.6rem); font-weight: 800;
+    background: linear-gradient(135deg,#fff 30%,var(--blue));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    margin-bottom: 12px; line-height: 1.15; overflow-wrap: anywhere;
+  }
+  .legal-intro { font-size: .92rem; line-height: 1.75; color: #cccce0; margin: 0; overflow-wrap: anywhere; }
+
+  /* ── revision rows ── */
+  .rev-section-label {
+    font-family: var(--font-head); font-size: .78rem; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 14px;
+  }
+  .rev-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 40px; }
+
+  .rev-card {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 20px;
+    text-decoration: none; color: inherit;
+    transition: border-color .2s, transform .2s, background .2s;
+  }
+  .rev-card:hover { border-color: rgba(74,158,255,.42); transform: translateY(-1px); background: rgba(255,255,255,.055); }
+  .rev-card.is-current { border-color: rgba(48,209,120,.32); background: rgba(48,209,120,.06); }
+  .rev-card.is-current:hover { border-color: rgba(48,209,120,.5); }
+
+  .rev-icon {
+    width: 40px; height: 40px; flex-shrink: 0;
+    display: grid; place-items: center; border-radius: 11px;
+    background: rgba(74,158,255,.12); color: var(--blue); font-size: .95rem;
+  }
+  .rev-card.is-current .rev-icon { background: rgba(48,209,120,.14); color: #30d178; }
+
+  .rev-body { flex: 1 1 220px; min-width: 0; display: block; }
+  .rev-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .rev-version { font-family: var(--font-head); font-size: 1rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+  .rev-tag {
+    font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    border-radius: 100px; padding: 2px 9px;
+  }
+  .rev-tag.current { background: rgba(48,209,120,.16); color: #30d178; }
+  .rev-tag.past    { background: rgba(255,255,255,.07); color: var(--muted); }
+  .rev-meta { display: block; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+  .rev-go { color: var(--muted); font-size: .85rem; flex-shrink: 0; }
+  .rev-card:hover .rev-go { color: var(--blue); }
+
+  /* ── empty state ── */
+  .archive-empty {
+    text-align: center; padding: 52px 24px;
+    border: 1px dashed var(--border); border-radius: 14px; background: var(--surface);
+  }
+  .archive-empty i { font-size: 1.8rem; color: var(--blue); opacity: .9; }
+  .archive-empty h2 {
+    font-family: var(--font-head); font-size: 1.35rem; color: var(--text);
+    margin: 16px 0 8px; border: none; padding: 0;
+  }
+  .archive-empty p { color: var(--muted); margin: 0; font-size: .9rem; line-height: 1.7; }
+
+  .archive-note {
+    font-size: .82rem; color: var(--muted); line-height: 1.7;
+    border-top: 1px solid var(--border); padding-top: 20px; overflow-wrap: anywhere;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: rgba(255,255,255,.04); }
+  ::-webkit-scrollbar-thumb { background: rgba(74,158,255,.3); border-radius: 3px; }
+
+  /* ── mobile ── */
+  @media (max-width: 600px) {
+    .legal-page { padding: 30px 14px 40px; }
+    .legal-header { margin-bottom: 26px; padding-bottom: 22px; }
+    .legal-title { font-size: 1.6rem; }
+    .rev-card { padding: 15px 16px; gap: 13px; }
+    .rev-go { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="blobs">
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+</div>
+
+<div class="legal-page">
+  <a href="{% url 'beatzlock_app:'|add:page_url_name %}" class="back-link">
+    <i class="fas fa-arrow-left"></i> Back to the current {{ document_label }}
+  </a>
+
+  <div class="legal-header">
+    <div class="legal-badge"><i class="fas fa-clock-rotate-left"></i> Document archive</div>
+    <h1 class="legal-title">{{ document_label }} versions</h1>
+    <p class="legal-intro">
+      Every published version of the BeatzLock {{ document_label }} is kept here. If you agreed to
+      an earlier version, you can still read exactly what it said.
+    </p>
+  </div>
+
+  {% if current_page %}
+    <p class="rev-section-label">Currently in effect</p>
+    <div class="rev-list">
+      <a class="rev-card is-current" href="{% url 'beatzlock_app:'|add:page_url_name %}">
+        <span class="rev-icon"><i class="fas fa-circle-check"></i></span>
+        <span class="rev-body">
+          <span class="rev-line">
+            <span class="rev-version">Current version</span>
+            <span class="rev-tag current">In effect</span>
+          </span>
+          {% if current_page.effective_at %}
+            <span class="rev-meta">Published {{ current_page.effective_at|date:"F j, Y, H:i T" }}</span>
+          {% endif %}
+        </span>
+        <span class="rev-go"><i class="fas fa-arrow-right"></i></span>
+      </a>
+    </div>
+  {% endif %}
+
+  <p class="rev-section-label">Previous versions</p>
+
+  {% if revisions %}
+    <div class="rev-list">
+      {% for entry in revisions %}
+        <a class="rev-card"
+           href="{% if page_type == 'terms' %}{% url 'beatzlock_app:legal_terms_revision' entry.revision.pk %}{% else %}{% url 'beatzlock_app:legal_privacy_revision' entry.revision.pk %}{% endif %}">
+          <span class="rev-icon"><i class="fas fa-file-lines"></i></span>
+          <span class="rev-body">
+            <span class="rev-line">
+              <span class="rev-version">
+                {% if entry.revision.effective_at %}Version of {{ entry.revision.effective_at|date:"F j, Y, H:i T" }}{% else %}Earlier version{% endif %}
+              </span>
+              <span class="rev-tag past">Superseded</span>
+            </span>
+            {% if entry.superseded_at %}
+              <span class="rev-meta">In effect until {{ entry.superseded_at|date:"F j, Y, H:i T" }}</span>
+            {% endif %}
+          </span>
+          <span class="rev-go"><i class="fas fa-arrow-right"></i></span>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="archive-empty">
+      <i class="fas fa-box-archive"></i>
+      <h2>No previous versions yet</h2>
+      <p>
+        The {{ document_label }} has not been revised since it was first published.
+        When it is, the version it replaces will appear here.
+      </p>
+    </div>
+  {% endif %}
+
+  <p class="archive-note">
+    Questions about a specific version? Email
+    <a href="mailto:support@felixmokayabeatz.online" style="color:var(--blue);">support@felixmokayabeatz.online</a>
+    and mention the publication date shown above.
+  </p>
+</div>
+{% endblock %}
