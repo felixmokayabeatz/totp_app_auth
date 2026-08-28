@@ -10,6 +10,7 @@ What's New
 
 Fixes and Performance
 - Pop-ups with a text box no longer push their buttons off screen in landscape, so Confirm and Cancel stay reachable on tablets and sideways phones.
+- On Windows and Linux the window can no longer be dragged smaller than it can actually draw, which used to leave striped bars across the header and the code cards. On a genuinely narrow screen the six-digit code now moves below the account name instead of being squeezed.
 - The home screen no longer rebuilds and re-sorts your whole vault every second just to move the countdown. Large vaults scroll smoothly and use less battery.
 - Faster start-up: storage and background services now start together instead of one after another.
 - Fixed several pop-ups that held on to memory each time they were opened, a code timer that could run twice after retrying a vault load, and a progress window that could not be dismissed if the network stalled.

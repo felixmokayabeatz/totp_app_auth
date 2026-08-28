@@ -39,3 +39,16 @@ The pop must apper on all devices fro alredy logged in user without the recovery
   one -- there is no PIN recovery flow, so a forgotten PIN was a lockout.
 - Creating a PIN under duress used to ask the user to immediately type it back,
   which proved nothing.
+- Shrinking the desktop window painted overflow stripes across the header and
+  the code cards. There was no minimum window size: `WindowUtils` looked like it
+  set one but called `MethodChannel('flutter/window').invokeMethod`, a channel
+  Flutter does not have, so every call threw and was swallowed. The floor is now
+  enforced natively -- `WM_GETMINMAXINFO` in `windows/runner/win32_window.cpp`
+  and `gtk_window_set_geometry_hints` in `linux/runner/my_application.cc`, both
+  at 480x560 logical pixels. `lib/utils/window_utils.dart` and
+  `lib/services/window_service.dart` were both entirely unreferenced and are
+  gone.
+- The OTP card's top row put the code column in the flex with no flex factor, so
+  it always took its natural width and pushed the row past its constraints. It
+  now stacks the code under the account name below 260px, which also covers
+  Android split-screen and small phones.

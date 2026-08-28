@@ -292,10 +292,20 @@ class ThemeProvider extends ChangeNotifier {
         prefixIconColor: colorScheme.primary,
         suffixIconColor: colorScheme.onSurfaceVariant,
       ),
+      // Almost every snackbar in the app passes its own saturated background --
+      // red, green, orange -- and expects white text on it, so the text style
+      // here is white. That means this theme MUST name a dark background too:
+      // without one the ~57 snackbars that pass no colour of their own fall
+      // back to Material's inverseSurface, which is *light* in dark mode, and
+      // the white text vanishes against it.
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         insetPadding: const EdgeInsets.fromLTRB(16, 5, 16, 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor:
+            isDark ? const Color(0xFF2A2E3C) : const Color(0xFF1F2430),
+        actionTextColor: Color.lerp(exactPrimary, Colors.white, 0.55),
+        closeIconColor: Colors.white70,
         contentTextStyle: const TextStyle(
           color: Colors.white,
           fontSize: 13.5,

@@ -1904,69 +1904,77 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          Row(
-                            children: [
-                              AccountLogoBadge(
+                          LayoutBuilder(
+                            builder: (context, cardConstraints) {
+                              // The six-digit code is the whole point of the
+                              // card, so once the card is too narrow to sit it
+                              // beside the name it drops underneath at full
+                              // size. Squeezing it into the leftovers of a
+                              // shared row is what produced the overflow
+                              // stripes on a shrunk desktop window.
+                              final stacked = cardConstraints.maxWidth < 260;
+
+                              final logo = AccountLogoBadge(
                                 service: account.service,
                                 issuer: account.issuer,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
+                              );
+
+                              final details = Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    account.service,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white
+                                          : const Color(0xFF1A1A2E),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (accountSubtitle != null)
                                     Text(
-                                      account.service,
+                                      accountSubtitle,
                                       style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
                                         color: isDark
-                                            ? Colors.white
-                                            : const Color(0xFF1A1A2E),
+                                            ? Colors.white38
+                                            : Colors.grey[500],
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                    if (accountSubtitle != null)
-                                      Text(
-                                        accountSubtitle,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark
-                                              ? Colors.white38
-                                              : Colors.grey[500],
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                  // Added date
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_today,
+                                        size: 10,
+                                        color: isDark
+                                            ? Colors.white38
+                                            : Colors.grey[400],
                                       ),
-                                    // Added date
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.calendar_today,
-                                          size: 10,
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Added $addedDate',
+                                        style: TextStyle(
+                                          fontSize: 9,
                                           color: isDark
                                               ? Colors.white38
                                               : Colors.grey[400],
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Added $addedDate',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            color: isDark
-                                                ? Colors.white38
-                                                : Colors.grey[400],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              );
+
+                              final code = Column(
+                                crossAxisAlignment: stacked
+                                    ? CrossAxisAlignment.start
+                                    : CrossAxisAlignment.end,
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -2018,8 +2026,35 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                 ],
-                              ),
-                            ],
+                              );
+
+                              if (stacked) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        logo,
+                                        const SizedBox(width: 12),
+                                        Expanded(child: details),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    code,
+                                  ],
+                                );
+                              }
+
+                              return Row(
+                                children: [
+                                  logo,
+                                  const SizedBox(width: 12),
+                                  Expanded(child: details),
+                                  const SizedBox(width: 8),
+                                  code,
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 12),
                           ClipRRect(

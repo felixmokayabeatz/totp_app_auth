@@ -65,6 +65,14 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
+  // Below this the header actions and the six-digit code cards have nowhere to
+  // go, and Flutter paints overflow stripes instead of a usable window. Matches
+  // the floor the Windows runner enforces in WM_GETMINMAXINFO.
+  GdkGeometry minimum_size;
+  minimum_size.min_width = 480;
+  minimum_size.min_height = 560;
+  gtk_window_set_geometry_hints(window, nullptr, &minimum_size, GDK_HINT_MIN_SIZE);
+
   g_autofree gchar* icon_path = get_icon_path();
   if (icon_path != nullptr && g_file_test(icon_path, G_FILE_TEST_EXISTS)) {
     gtk_window_set_icon_from_file(window, icon_path, nullptr);

@@ -26,6 +26,12 @@ constexpr const wchar_t kGetPreferredBrightnessRegKey[] =
   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
 constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme";
 
+// The smallest window BeatzLock still lays out properly, in logical pixels.
+// Below this the header actions and the six-digit codes have nowhere to go.
+constexpr int kMinWindowWidth = 480;
+constexpr int kMinWindowHeight = 560;
+constexpr double kBaseDpi = 96.0;
+
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
 
@@ -186,6 +192,22 @@ Win32Window::MessageHandler(HWND hwnd,
         PostQuitMessage(0);
       }
       return 0;
+
+    // Without this the window can be dragged down to a few dozen pixels, at
+    // which point the header and the code cards genuinely cannot fit and
+    // Flutter paints its overflow stripes. The floor is in logical pixels, so
+    // it is scaled to the monitor DPI to mean the same thing on every display.
+    case WM_GETMINMAXINFO: {
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      // Same DPI source the window creation path uses, so the floor means the
+      // same physical size on every monitor.
+      HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+      const double scale_factor =
+          FlutterDesktopGetDpiForMonitor(monitor) / kBaseDpi;
+      info->ptMinTrackSize.x = Scale(kMinWindowWidth, scale_factor);
+      info->ptMinTrackSize.y = Scale(kMinWindowHeight, scale_factor);
+      return 0;
+    }
 
     case WM_DPICHANGED: {
       auto newRectSize = reinterpret_cast<RECT*>(lparam);
