@@ -16,6 +16,7 @@ import 'otp_service.dart';
 import 'server_lockdown_service.dart';
 import 'secure_storage_service.dart';
 import '../config/app_config.dart';
+import '../utils/network_error_messages.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -160,57 +161,31 @@ class SyncService {
       return _normalizeAuthError(serverError, statusCode: statusCode);
     }
 
-    final rawError = error.error?.toString() ?? '';
-
-    switch (error.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-        return 'Connection timed out. Check your internet connection, firewall, or proxy on this device.';
-      case DioExceptionType.connectionError:
-        if (rawError.contains('Failed host lookup')) {
-          return 'Could not reach the server. This device may have a DNS or internet issue.';
-        }
-        if (rawError.contains('HandshakeException') ||
-            rawError.toLowerCase().contains('certificate')) {
-          return 'Secure connection failed. Check this device date/time, antivirus HTTPS filtering, or certificate trust.';
-        }
-        return 'Could not reach the server. Check your internet connection, firewall, or proxy on this device.';
-      case DioExceptionType.badCertificate:
-        return 'Secure connection failed. This device may not trust the server certificate.';
-      case DioExceptionType.badResponse:
-        final status = statusCode;
-        if (status == 401) {
-          return 'Invalid email or password.';
-        }
-        if (status == 403) {
-          return 'You are not authorized to perform this action.';
-        }
-        if (status == 404) {
-          return 'Auth endpoint not found. Make sure the OTP backend is running, not just the update server.';
-        }
-        if (status == 500) {
-          return 'Server error while processing the request. Please try again.';
-        }
-        return fallback;
-      case DioExceptionType.cancel:
-        return 'Request was cancelled.';
-      case DioExceptionType.unknown:
-        if (rawError.contains('HandshakeException') ||
-            rawError.toLowerCase().contains('certificate')) {
-          return 'Secure connection failed. Check this device date/time, antivirus HTTPS filtering, or certificate trust.';
-        }
-        if (rawError.contains('Failed host lookup')) {
-          return 'Could not reach the server. This device may have a DNS or internet issue.';
-        }
-        return fallback;
-      // dio adds values to DioExceptionType between releases -- transformTimeout
-      // arrived in one of them and broke this switch's exhaustiveness. A default
-      // keeps a future addition from failing the build; the cost is that the
-      // analyzer no longer flags a newly added type here.
-      default:
-        return fallback;
+    // Transport failures get their wording from one shared place, so "no
+    // internet" reads the same everywhere in the app and never mentions DNS,
+    // proxies or certificate trust -- none of which a user can act on.
+    final transportMessage = NetworkErrorMessages.forTransport(error);
+    if (transportMessage != null) {
+      return transportMessage;
     }
+
+    if (error.type == DioExceptionType.badResponse) {
+      if (statusCode == 401) {
+        return 'Invalid email or password.';
+      }
+      if (statusCode == 403) {
+        return 'You are not authorized to perform this action.';
+      }
+      if (statusCode == 404) {
+        return 'BeatzLock could not find that on the server. It may be '
+            'temporarily unavailable -- try again shortly.';
+      }
+      if (statusCode != null && statusCode >= 500) {
+        return NetworkErrorMessages.serverError;
+      }
+    }
+
+    return fallback;
   }
 
   // ─── Sync-enabled preference key ─────────────────────────────────────────
@@ -1480,7 +1455,8 @@ class SyncService {
         return true;
       } else {
         debugPrint('Sync upload failed: ${uploadResponse.statusCode}');
-        _lastErrorMessage = 'Sync upload failed. Please try again.';
+        _lastErrorMessage =
+            'The server did not accept the upload. Please try again.';
         return false;
       }
     } on DioException catch (e) {
@@ -1491,7 +1467,10 @@ class SyncService {
       debugPrint('syncAccounts error: $e');
       return false;
     } catch (e) {
-      _lastErrorMessage = 'Sync failed. Please try again.';
+      _lastErrorMessage = NetworkErrorMessages.forUnexpected(
+        e,
+        'Sync failed. Please try again.',
+      );
       debugPrint('syncAccounts error: $e');
       return false;
     }

@@ -38,7 +38,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
@@ -95,9 +95,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          scrollable: true,
           backgroundColor: _cardColor,
           title: Text(title, style: TextStyle(color: _textPrimary)),
           content: Column(
@@ -310,6 +308,14 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                 ),
                 onTap: () => Navigator.pop(sheetContext, true),
               ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: const Text('Cancel'),
+                ),
+              ),
             ],
           ),
         ),
@@ -427,7 +433,6 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         backgroundColor: _cardColor,
         title: Text('Confirm import', style: TextStyle(color: _textPrimary)),
         content: Column(
@@ -735,9 +740,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
           final canDelete = acknowledged && (!requiresPhrase || validPhrase);
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
-            ),
+            scrollable: true,
             backgroundColor: _cardColor,
             title: Text(
               deleteAll ? 'Delete all secure items' : 'Delete selected items',
@@ -908,171 +911,185 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
       noteController.text = existing.getNote(userId) ?? '';
     }
 
-    if (!mounted) return;
+    // Every controller here is dialog-scoped; each open used to allocate five
+    // and free none.
+    void disposeControllers() {
+      titleController.dispose();
+      usernameController.dispose();
+      passwordController.dispose();
+      noteController.dispose();
+      serverController.dispose();
+    }
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: _cardColor,
-          title: Text(
-            existing == null ? 'Save secure item' : 'Edit secure item',
-            style: TextStyle(color: _textPrimary),
-          ),
-          content: SizedBox(
-            width: 420,
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Save a password, private note, or both. It stays in your BeatzLock account vault and syncs only through your encrypted account data.',
-                      style: TextStyle(
-                        color: _textSecondary,
-                        fontSize: 13,
-                        height: 1.4,
+    if (!mounted) {
+      disposeControllers();
+      return;
+    }
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: _cardColor,
+            title: Text(
+              existing == null ? 'Save secure item' : 'Edit secure item',
+              style: TextStyle(color: _textPrimary),
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Save a password, private note, or both. It stays in your BeatzLock account vault and syncs only through your encrypted account data.',
+                        style: TextStyle(
+                          color: _textSecondary,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: titleController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Title',
-                        hintText:
-                            'Example: Server root password or private note',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: titleController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Title',
+                          hintText:
+                              'Example: Server root password or private note',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if ((value ?? '').trim().isEmpty) {
+                            return 'Enter a title';
+                          }
+                          return null;
+                        },
                       ),
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return 'Enter a title';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: usernameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Username or email',
-                        hintText: 'Optional',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: usernameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Username or email',
+                          hintText: 'Optional',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: passwordController,
-                      minLines: 3,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        labelText: 'Password or secret text',
-                        hintText:
-                            'Optional if you only want to save a secure note',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: passwordController,
+                        minLines: 3,
+                        maxLines: 5,
+                        decoration: const InputDecoration(
+                          labelText: 'Password or secret text',
+                          hintText:
+                              'Optional if you only want to save a secure note',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: noteController,
-                      minLines: 4,
-                      maxLines: 8,
-                      decoration: const InputDecoration(
-                        labelText: 'Private note',
-                        hintText: 'Text yourself anything sensitive here',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: noteController,
+                        minLines: 4,
+                        maxLines: 8,
+                        decoration: const InputDecoration(
+                          labelText: 'Private note',
+                          hintText: 'Text yourself anything sensitive here',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          final hasPassword =
+                              passwordController.text.trim().isNotEmpty;
+                          final hasNote = (value ?? '').trim().isNotEmpty;
+                          if (!hasPassword && !hasNote) {
+                            return 'Enter a password, a note, or both';
+                          }
+                          return null;
+                        },
                       ),
-                      validator: (value) {
-                        final hasPassword =
-                            passwordController.text.trim().isNotEmpty;
-                        final hasNote = (value ?? '').trim().isNotEmpty;
-                        if (!hasPassword && !hasNote) {
-                          return 'Enter a password, a note, or both';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: serverController,
-                      decoration: const InputDecoration(
-                        labelText: 'Website or context',
-                        hintText: 'Optional app, site, or reminder',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: serverController,
+                        decoration: const InputDecoration(
+                          labelText: 'Website or context',
+                          hintText: 'Optional app, site, or reminder',
+                          border: OutlineInputBorder(),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                      if (!formKey.currentState!.validate()) {
-                        return;
-                      }
-
-                      setDialogState(() => isSaving = true);
-                      final box =
-                          _passwordBox ?? await _syncService.getPasswordBox();
-                      final entry = PasswordEntry(
-                        id: existing?.id ??
-                            DateTime.now().millisecondsSinceEpoch.toString(),
-                        title: titleController.text.trim(),
-                        username: usernameController.text.trim(),
-                        password: passwordController.text.trim(),
-                        note: noteController.text.trim(),
-                        serverIP: serverController.text.trim().isEmpty
-                            ? null
-                            : serverController.text.trim(),
-                        createdAt: existing?.createdAt ?? DateTime.now(),
-                        updatedAt: DateTime.now(),
-                        userId: userId,
-                      );
-                      await box.put(entry.id, entry);
-
-                      if (await _syncService.isLoggedIn() &&
-                          await _syncService.isSyncEnabled()) {
-                        await _syncService.syncPasswordEntries();
-                      }
-
-                      if (dialogContext.mounted) {
-                        Navigator.pop(dialogContext);
-                      }
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            existing == null
-                                ? 'Secure item saved.'
-                                : 'Secure item updated.',
-                          ),
-                          backgroundColor: const Color(0xFF10B981),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.white,
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
               ),
-              child: Text(isSaving ? 'Saving...' : 'Save'),
-            ),
-          ],
+              ElevatedButton(
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        if (!formKey.currentState!.validate()) {
+                          return;
+                        }
+
+                        setDialogState(() => isSaving = true);
+                        final box =
+                            _passwordBox ?? await _syncService.getPasswordBox();
+                        final entry = PasswordEntry(
+                          id: existing?.id ??
+                              DateTime.now().millisecondsSinceEpoch.toString(),
+                          title: titleController.text.trim(),
+                          username: usernameController.text.trim(),
+                          password: passwordController.text.trim(),
+                          note: noteController.text.trim(),
+                          serverIP: serverController.text.trim().isEmpty
+                              ? null
+                              : serverController.text.trim(),
+                          createdAt: existing?.createdAt ?? DateTime.now(),
+                          updatedAt: DateTime.now(),
+                          userId: userId,
+                        );
+                        await box.put(entry.id, entry);
+
+                        if (await _syncService.isLoggedIn() &&
+                            await _syncService.isSyncEnabled()) {
+                          await _syncService.syncPasswordEntries();
+                        }
+
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              existing == null
+                                  ? 'Secure item saved.'
+                                  : 'Secure item updated.',
+                            ),
+                            backgroundColor: const Color(0xFF10B981),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text(isSaving ? 'Saving...' : 'Save'),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      disposeControllers();
+    }
   }
 
   Future<void> _copyPassword(PasswordEntry entry) async {
@@ -1124,7 +1141,6 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text(
           'Delete secure item',
@@ -1228,13 +1244,26 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            entry.title,
-                            style: TextStyle(
-                              color: _textPrimary,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  entry.title,
+                                  style: TextStyle(
+                                    color: _textPrimary,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Close',
+                                icon: const Icon(Icons.close_rounded),
+                                color: _textSecondary,
+                                onPressed: () => Navigator.pop(sheetContext),
+                              ),
+                            ],
                           ),
                           if (entry.username.trim().isNotEmpty) ...[
                             const SizedBox(height: 8),

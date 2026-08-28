@@ -1569,6 +1569,7 @@ class _LoginScreenState extends State<LoginScreen> {
     var isSubmitting = false;
     String? errorText;
     var didUnlock = false;
+    var obscurePassword = true;
 
     await showDialog<void>(
       context: context,
@@ -1578,9 +1579,6 @@ class _LoginScreenState extends State<LoginScreen> {
           canPop: false,
           child: AlertDialog(
             scrollable: true,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
             title: const Text('Unlock Sync On This Device'),
             content: SingleChildScrollView(
               child: Column(
@@ -1597,12 +1595,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                   TextField(
                     controller: passwordController,
-                    obscureText: true,
+                    obscureText: obscurePassword,
                     enabled: !isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'Account password',
                       border: const OutlineInputBorder(),
                       errorText: errorText,
+                      suffixIcon: IconButton(
+                        tooltip:
+                            obscurePassword ? 'Show password' : 'Hide password',
+                        icon: Icon(
+                          obscurePassword
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded,
+                        ),
+                        onPressed: () => setDialogState(
+                          () => obscurePassword = !obscurePassword,
+                        ),
+                      ),
                     ),
                   ),
                 ],

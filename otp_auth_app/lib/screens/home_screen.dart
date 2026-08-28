@@ -11,6 +11,7 @@ import '../models/otp_account.dart';
 import '../providers/auth_provider.dart';
 import '../services/otp_service.dart';
 import '../services/sync_service.dart';
+import '../utils/network_error_messages.dart';
 import '../services/profile_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/encryption_service.dart';
@@ -39,8 +40,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> {
   static const _offlineBackupReminderKey = 'offline_backup_reminder_last_shown';
   static const Duration _approvalPollInterval = Duration(seconds: 8);
   static const Duration _approvalDialogRefreshInterval = Duration(seconds: 2);
@@ -55,9 +55,16 @@ class _HomeScreenState extends State<HomeScreen>
       OtpVaultSnapshotService();
 
   Map<String, String> currentOTPs = {};
-  Map<String, int> timers = {};
   Map<String, bool> blurredCodes = {};
-  late AnimationController _animationController;
+
+  /// Seconds left in the current 30-second window.
+  ///
+  /// Every account shares the same window, so this is one notifier rather than
+  /// a map. Only the visible cards listen to it, which keeps the countdown off
+  /// the screen-wide setState that used to re-sort and re-filter the whole
+  /// vault once a second just to move a progress bar.
+  final ValueNotifier<int> _secondsRemaining = ValueNotifier<int>(30);
+  Timer? _otpTicker;
   String _searchQuery = '';
   bool _isSyncing = false;
   bool _allBlurred = false;
@@ -76,6 +83,10 @@ class _HomeScreenState extends State<HomeScreen>
   bool _openingPasswordlessRequestsFromNotification = false;
   Timer? _passwordlessPollTimer;
   Color get _accent => Theme.of(context).colorScheme.primary;
+
+  /// The themed card surface. Screens used to paint a frozen navy here, which
+  /// no longer matches the accent-tinted surface the theme builds.
+  Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
 
   // Track sync status for warning messages
@@ -90,11 +101,6 @@ class _HomeScreenState extends State<HomeScreen>
     _approvalNotificationService.passwordlessRequestSignal.addListener(
       _handleForegroundPasswordlessRequestSignal,
     );
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _animationController.forward();
     _loadData();
     _loadSyncStatus();
     _initializePasswordlessApprovals();
@@ -563,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen>
           );
           final theme = Theme.of(dialogContext);
           final isDark = theme.brightness == Brightness.dark;
-          final surfaceColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
+          final surfaceColor = _surface;
           final softAccent = _accent.withValues(alpha: isDark ? 0.18 : 0.08);
           final textPrimary =
               isDark ? Colors.white : theme.colorScheme.onSurface;
@@ -618,9 +624,6 @@ class _HomeScreenState extends State<HomeScreen>
           return AlertDialog(
             scrollable: true,
             backgroundColor: surfaceColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
             title: const Text('Passwordless sign-in request'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -648,6 +651,15 @@ class _HomeScreenState extends State<HomeScreen>
               ],
             ),
             actions: [
+              // Deny is a decision; Close is not. Without this, dismissing the
+              // dialog meant denying someone else's sign-in by accident.
+              TextButton(
+                onPressed: () {
+                  dialogClosed = true;
+                  Navigator.pop(dialogContext);
+                },
+                child: const Text('Close'),
+              ),
               TextButton(
                 onPressed: () async {
                   final success = await _syncService.denyPasswordlessRequest(
@@ -723,10 +735,6 @@ class _HomeScreenState extends State<HomeScreen>
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Theme.of(dialogContext).brightness == Brightness.dark
-            ? const Color(0xFF1E1E32)
-            : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('OTP delete approval request'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -764,6 +772,11 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
         actions: [
+          // Closing leaves the request pending; Deny actively rejects it.
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Deny'),
@@ -832,10 +845,6 @@ class _HomeScreenState extends State<HomeScreen>
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: Theme.of(dialogContext).brightness == Brightness.dark
-            ? const Color(0xFF1E1E32)
-            : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Recovery Codes PDF Approval'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -861,6 +870,11 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
         actions: [
+          // Closing leaves the request pending; Deny actively rejects it.
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Deny'),
@@ -920,7 +934,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
+    final cardColor = _surface;
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final textSecondary =
         isDark ? Colors.white70 : theme.colorScheme.onSurfaceVariant;
@@ -928,7 +942,6 @@ class _HomeScreenState extends State<HomeScreen>
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: cardColor,
         title: Row(
           children: [
@@ -1018,9 +1031,7 @@ class _HomeScreenState extends State<HomeScreen>
           barrierDismissible: false,
           builder: (dialogContext) {
             final theme = Theme.of(dialogContext);
-            final isDark = theme.brightness == Brightness.dark;
-            final surfaceColor =
-                isDark ? const Color(0xFF1E1E32) : Colors.white;
+            final surfaceColor = _surface;
             final textColor = theme.colorScheme.onSurface;
             final mutedColor = theme.colorScheme.onSurfaceVariant;
 
@@ -1028,9 +1039,6 @@ class _HomeScreenState extends State<HomeScreen>
               canPop: false,
               child: AlertDialog(
                 backgroundColor: surfaceColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(22),
-                ),
                 title: const Text('Recovery Codes PDF Required'),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1056,6 +1064,13 @@ class _HomeScreenState extends State<HomeScreen>
                   ],
                 ),
                 actions: [
+                  // The reminder comes back on the next launch, so a way out
+                  // costs nothing -- and both action buttons are conditional,
+                  // so without this the dialog can render with no buttons.
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Later'),
+                  ),
                   if (!isPrimary && !hasPendingRequest)
                     FilledButton(
                       onPressed: () => Navigator.pop(dialogContext, 'request'),
@@ -1177,12 +1192,11 @@ class _HomeScreenState extends State<HomeScreen>
   int _lastOtpSecondsRemaining = -1;
 
   void _startTimer() {
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
-        _updateAllOTPs();
-        _startTimer();
-      }
-    });
+    _otpTicker?.cancel();
+    _otpTicker = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _updateAllOTPs(),
+    );
   }
 
   void _updateAllOTPs() async {
@@ -1191,11 +1205,9 @@ class _HomeScreenState extends State<HomeScreen>
     // One window for every account, so this is read once rather than per row.
     final remaining = _otpService.secondsRemaining();
     final accountIds = <String>{};
-    final newTimers = <String, int>{};
 
     for (var account in _userBox!.values) {
       accountIds.add(account.id);
-      newTimers[account.id] = remaining;
       blurredCodes.putIfAbsent(account.id, () => false);
     }
 
@@ -1217,11 +1229,14 @@ class _HomeScreenState extends State<HomeScreen>
       }
     }
 
-    if (mounted) {
-      setState(() {
-        if (newOTPs != null) currentOTPs = newOTPs;
-        timers = newTimers;
-      });
+    if (!mounted) return;
+
+    // The countdown goes out on its own channel; only a genuinely new set of
+    // codes is worth rebuilding the screen for.
+    _secondsRemaining.value = remaining;
+    final rebuiltOtps = newOTPs;
+    if (rebuiltOtps != null) {
+      setState(() => currentOTPs = rebuiltOtps);
     }
   }
 
@@ -1564,7 +1579,7 @@ class _HomeScreenState extends State<HomeScreen>
             child: Container(
               height: 48,
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                color: _surface,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: _accent.withValues(alpha: 0.16)),
                 boxShadow: [
@@ -1612,7 +1627,7 @@ class _HomeScreenState extends State<HomeScreen>
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                    color: _surface,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: _accent.withValues(alpha: 0.22)),
                     boxShadow: [
@@ -1799,7 +1814,7 @@ class _HomeScreenState extends State<HomeScreen>
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+                color: _surface,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
@@ -1843,231 +1858,233 @@ class _HomeScreenState extends State<HomeScreen>
             itemBuilder: (context, index) {
               final account = accounts[index];
               final otp = currentOTPs[account.id] ?? '------';
-              final timer = timers[account.id] ?? 30;
               final isBlurred = blurredCodes[account.id] ?? false;
-              final isExpiring = timer <= 5;
               final accountSubtitle = _accountSubtitle(account);
 
               // Format creation date
               final addedDate = _formatDate(account.createdAt);
 
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: isDark
-                        ? [
-                            const Color(0xFF1E1E32),
-                            Color.lerp(const Color(0xFF1E1E32), _accent, 0.06)!,
-                          ]
-                        : [
-                            Colors.white,
-                            Color.lerp(Colors.white, _accent, 0.035)!,
-                          ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isExpiring
-                        ? Colors.red.withValues(alpha: 0.4)
-                        : _accent.withValues(alpha: isDark ? 0.18 : 0.10),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (isDark ? Colors.black : _accent).withValues(
-                        alpha: isDark ? 0.22 : 0.07,
+              // Only the cards actually on screen follow the countdown. The
+              // header, the search field and the sorted list above them stay
+              // put between window rollovers.
+              return ValueListenableBuilder<int>(
+                valueListenable: _secondsRemaining,
+                builder: (context, timer, _) {
+                  final isExpiring = timer <= 5;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          _surface,
+                          Color.lerp(_surface, _accent, isDark ? 0.06 : 0.035)!,
+                        ],
                       ),
-                      blurRadius: 16,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          AccountLogoBadge(
-                            service: account.service,
-                            issuer: account.issuer,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isExpiring
+                            ? Colors.red.withValues(alpha: 0.4)
+                            : _accent.withValues(alpha: isDark ? 0.18 : 0.10),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (isDark ? Colors.black : _accent).withValues(
+                            alpha: isDark ? 0.22 : 0.07,
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  account.service,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF1A1A2E),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (accountSubtitle != null)
-                                  Text(
-                                    accountSubtitle,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isDark
-                                          ? Colors.white38
-                                          : Colors.grey[500],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                // Added date
-                                Row(
+                          blurRadius: 16,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              AccountLogoBadge(
+                                service: account.service,
+                                issuer: account.issuer,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(
-                                      Icons.calendar_today,
-                                      size: 10,
-                                      color: isDark
-                                          ? Colors.white38
-                                          : Colors.grey[400],
-                                    ),
-                                    const SizedBox(width: 4),
                                     Text(
-                                      'Added $addedDate',
+                                      account.service,
                                       style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
                                         color: isDark
-                                            ? Colors.white38
-                                            : Colors.grey[400],
+                                            ? Colors.white
+                                            : const Color(0xFF1A1A2E),
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (accountSubtitle != null)
+                                      Text(
+                                        accountSubtitle,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark
+                                              ? Colors.white38
+                                              : Colors.grey[500],
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    // Added date
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.calendar_today,
+                                          size: 10,
+                                          color: isDark
+                                              ? Colors.white38
+                                              : Colors.grey[400],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Added $addedDate',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: isDark
+                                                ? Colors.white38
+                                                : Colors.grey[400],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isExpiring
-                                      ? Colors.red.withValues(alpha: 0.1)
-                                      : _accent.withValues(
-                                          alpha: isDark ? 0.18 : 0.10,
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isExpiring
+                                          ? Colors.red.withValues(alpha: 0.1)
+                                          : _accent.withValues(
+                                              alpha: isDark ? 0.18 : 0.10,
+                                            ),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: isExpiring
+                                            ? Colors.red.withValues(alpha: 0.16)
+                                            : _accent.withValues(alpha: 0.14),
+                                      ),
+                                    ),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        isBlurred ? '*** ***' : _formatOtp(otp),
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w700,
+                                          color: isExpiring
+                                              ? Colors.red
+                                              : (isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF1A1A2E)),
+                                          letterSpacing: 3,
+                                          fontFamily: 'monospace',
                                         ),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: isExpiring
-                                        ? Colors.red.withValues(alpha: 0.16)
-                                        : _accent.withValues(alpha: 0.14),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    isBlurred ? '*** ***' : _formatOtp(otp),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${timer}s',
                                     style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
                                       color: isExpiring
                                           ? Colors.red
                                           : (isDark
-                                              ? Colors.white
-                                              : const Color(0xFF1A1A2E)),
-                                      letterSpacing: 3,
-                                      fontFamily: 'monospace',
+                                              ? Colors.white38
+                                              : Colors.grey[500]),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${timer}s',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: isExpiring
-                                      ? Colors.red
-                                      : (isDark
-                                          ? Colors.white38
-                                          : Colors.grey[500]),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: timer / 30,
+                              backgroundColor: _accent.withValues(
+                                alpha: isDark ? 0.14 : 0.10,
+                              ),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isExpiring ? Colors.red : _accent,
+                              ),
+                              minHeight: 4,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _accountAction(
+                                Icons.copy_rounded,
+                                'Copy',
+                                () => _copyToClipboard(otp),
+                                isDark,
+                              ),
+                              _accountAction(
+                                isBlurred
+                                    ? Icons.visibility_rounded
+                                    : Icons.visibility_off_rounded,
+                                isBlurred ? 'Show' : 'Hide',
+                                () => setState(
+                                  () => blurredCodes[account.id] = !isBlurred,
                                 ),
+                                isDark,
+                              ),
+                              _accountAction(
+                                Icons.edit_rounded,
+                                'Edit',
+                                () => _showEditTitleDialog(account),
+                                isDark,
+                              ),
+                              _accountAction(
+                                Icons.qr_code_rounded,
+                                'QR',
+                                () => _openQrForAccount(account),
+                                isDark,
+                              ),
+                              _accountAction(
+                                Icons.delete_outline_rounded,
+                                'Delete',
+                                () => _showDeleteAccountDialog(
+                                  account.id,
+                                  account.service,
+                                ),
+                                isDark,
+                                destructive: true,
                               ),
                             ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: timer / 30,
-                          backgroundColor: _accent.withValues(
-                            alpha: isDark ? 0.14 : 0.10,
-                          ),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            isExpiring ? Colors.red : _accent,
-                          ),
-                          minHeight: 4,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _accountAction(
-                            Icons.copy_rounded,
-                            'Copy',
-                            () => _copyToClipboard(otp),
-                            isDark,
-                          ),
-                          _accountAction(
-                            isBlurred
-                                ? Icons.visibility_rounded
-                                : Icons.visibility_off_rounded,
-                            isBlurred ? 'Show' : 'Hide',
-                            () => setState(
-                              () => blurredCodes[account.id] = !isBlurred,
-                            ),
-                            isDark,
-                          ),
-                          _accountAction(
-                            Icons.edit_rounded,
-                            'Edit',
-                            () => _showEditTitleDialog(account),
-                            isDark,
-                          ),
-                          _accountAction(
-                            Icons.qr_code_rounded,
-                            'QR',
-                            () => _openQrForAccount(account),
-                            isDark,
-                          ),
-                          _accountAction(
-                            Icons.delete_outline_rounded,
-                            'Delete',
-                            () => _showDeleteAccountDialog(
-                              account.id,
-                              account.service,
-                            ),
-                            isDark,
-                            destructive: true,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -2221,12 +2238,7 @@ class _HomeScreenState extends State<HomeScreen>
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: Theme.of(dialogContext).brightness == Brightness.dark
-              ? const Color(0xFF1E1E32)
-              : Colors.white,
+          scrollable: true,
           title: const Text('Confirm OTP deletion'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2352,12 +2364,6 @@ class _HomeScreenState extends State<HomeScreen>
               validRange ? _accountsInDateRange(start, end).length : 0;
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
-            ),
-            backgroundColor: Theme.of(context).brightness == Brightness.dark
-                ? const Color(0xFF1E1E32)
-                : Colors.white,
             title: const Text('Delete OTP Accounts By Date'),
             content: SingleChildScrollView(
               child: Column(
@@ -2559,7 +2565,6 @@ class _HomeScreenState extends State<HomeScreen>
         if (ok) {
           deletedCount++;
           currentOTPs.remove(account.id);
-          timers.remove(account.id);
           blurredCodes.remove(account.id);
         } else {
           failedCount++;
@@ -2570,7 +2575,6 @@ class _HomeScreenState extends State<HomeScreen>
         await _syncService.deleteAccountLocalOnly(account.id);
         deletedCount++;
         currentOTPs.remove(account.id);
-        timers.remove(account.id);
         blurredCodes.remove(account.id);
       }
     }
@@ -2611,12 +2615,7 @@ class _HomeScreenState extends State<HomeScreen>
               final canDelete =
                   confirmationText.trim().toUpperCase() == 'DELETE';
               return AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                backgroundColor: Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF1E1E32)
-                    : Colors.white,
+                scrollable: true,
                 title: Row(
                   children: [
                     Icon(
@@ -2703,7 +2702,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1E1E32) : Colors.white;
+    final cardColor = _surface;
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final textSecondary = isDark ? Colors.white38 : Colors.grey.shade500;
 
@@ -2711,7 +2710,6 @@ class _HomeScreenState extends State<HomeScreen>
     final choice = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: cardColor,
         title: Row(
           children: [
@@ -2792,9 +2790,6 @@ class _HomeScreenState extends State<HomeScreen>
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
             backgroundColor: cardColor,
             title: Row(
               children: [
@@ -2844,7 +2839,6 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
       setState(() {
         currentOTPs.remove(accountId);
-        timers.remove(accountId);
         blurredCodes.remove(accountId);
       });
       _showSnackBar('Account removed from this device only', Colors.orange);
@@ -2897,7 +2891,6 @@ class _HomeScreenState extends State<HomeScreen>
         if (!mounted) return;
         setState(() {
           currentOTPs.remove(accountId);
-          timers.remove(accountId);
           blurredCodes.remove(accountId);
         });
         _showSnackBar('Account deleted from all devices', Colors.red);
@@ -2926,9 +2919,7 @@ class _HomeScreenState extends State<HomeScreen>
           barrierDismissible: false,
           builder: (_) => StatefulBuilder(
             builder: (context, setState) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+              scrollable: true,
               backgroundColor: cardColor,
               title: Row(
                 children: [
@@ -3173,14 +3164,13 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _showEditTitleDialog(OTPAccount account) async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final controller = TextEditingController(text: account.service);
 
     final updatedTitle = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: isDark ? const Color(0xFF1E1E32) : Colors.white,
+        scrollable: true,
+        backgroundColor: _surface,
         title: const Text('Edit Account Title'),
         content: TextField(
           controller: controller,
@@ -3307,7 +3297,8 @@ class _HomeScreenState extends State<HomeScreen>
         _showSnackBar('Sync completed!', Colors.green);
       } else {
         _showSnackBar(
-          _syncService.lastErrorMessage ?? 'No internet or server unavailable',
+          _syncService.lastErrorMessage ??
+              NetworkErrorMessages.serverUnreachable,
           Colors.orange,
         );
       }
@@ -3316,7 +3307,10 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() => _isSyncing = false);
       _showSnackBar(
         _syncService.lastErrorMessage ??
-            'Sync failed. Check your internet connection.',
+            NetworkErrorMessages.forUnexpected(
+              e,
+              'Sync failed. Please try again.',
+            ),
         Colors.red,
       );
     }
@@ -3327,6 +3321,11 @@ class _HomeScreenState extends State<HomeScreen>
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
+        // Explanations of why something failed run long. Three seconds was not
+        // enough to read one, so the toast stays up in proportion to it.
+        duration: Duration(
+          milliseconds: (2200 + message.length * 55).clamp(3000, 9000),
+        ),
         content: Row(
           children: [
             Icon(
@@ -3341,9 +3340,7 @@ class _HomeScreenState extends State<HomeScreen>
           ],
         ),
         backgroundColor: color,
-        duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -3352,44 +3349,52 @@ class _HomeScreenState extends State<HomeScreen>
     required String message,
     required Future<T> Function() action,
   }) async {
-    var progressShown = false;
+    // Held so the dialog is dismissed by its own context. The old code popped
+    // whatever route happened to be on top of the root navigator, which would
+    // have closed the screen underneath had the dialog ever gone first.
+    BuildContext? progressContext;
+
     if (mounted) {
-      progressShown = true;
       unawaited(
         showDialog<void>(
           context: context,
           barrierDismissible: false,
-          builder: (dialogContext) => PopScope(
-            canPop: false,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              backgroundColor:
-                  Theme.of(dialogContext).brightness == Brightness.dark
-                      ? const Color(0xFF1E1E32)
-                      : Colors.white,
-              content: Row(
-                children: [
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2.8),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: TextStyle(
-                        color: Theme.of(dialogContext).colorScheme.onSurface,
-                        fontWeight: FontWeight.w600,
+          useRootNavigator: true,
+          builder: (dialogContext) {
+            progressContext = dialogContext;
+            return PopScope(
+              // The back gesture must not dismiss this, but the Hide button
+              // below can: a stalled network call should never trap the app.
+              canPop: false,
+              child: AlertDialog(
+                content: Row(
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.8),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        message,
+                        style: TextStyle(
+                          color: Theme.of(dialogContext).colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Hide'),
                   ),
                 ],
               ),
-            ),
-          ),
+            );
+          },
         ),
       );
       await Future<void>.delayed(const Duration(milliseconds: 40));
@@ -3398,15 +3403,17 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       return await action();
     } finally {
-      if (mounted && progressShown) {
-        Navigator.of(context, rootNavigator: true).pop();
+      final dialogContext = progressContext;
+      if (dialogContext != null && dialogContext.mounted) {
+        Navigator.of(dialogContext).pop();
       }
     }
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _otpTicker?.cancel();
+    _secondsRemaining.dispose();
     _passwordlessPollTimer?.cancel();
     _approvalNotificationService.passwordlessOpenSignal.removeListener(
       _handlePasswordlessNotificationSignal,

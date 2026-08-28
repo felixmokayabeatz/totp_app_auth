@@ -22,9 +22,8 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
-  Color get _bgColor =>
-      _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
   DeviceSessionInfo? get _currentSession {
@@ -86,7 +85,6 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Sign Out Device', style: TextStyle(color: _textPrimary)),
         content: Text(
           'Sign out ${session.deviceLabel} from your BeatzLock account?',
@@ -150,7 +148,6 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Sign Out Other Devices',
           style: TextStyle(color: _textPrimary),
@@ -212,10 +209,8 @@ class _DeviceSessionsScreenState extends State<DeviceSessionsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
+          scrollable: true,
           backgroundColor: _cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
           title: Text(
             'Confirm Primary Device',
             style: TextStyle(color: _textPrimary),

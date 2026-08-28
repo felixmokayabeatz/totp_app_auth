@@ -24,6 +24,7 @@ import '../services/push_messaging_service.dart';
 import '../services/profile_service.dart';
 import '../services/server_lockdown_service.dart';
 import '../services/secure_storage_service.dart';
+import '../utils/network_error_messages.dart';
 import 'add_account_screen.dart';
 import 'device_sessions_screen.dart';
 import 'legal_document_screen.dart';
@@ -71,9 +72,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AppUpdateInfo? _updateInfo;
   Map<String, dynamic>? _backupCodeStatus;
 
+  // Which single unlock method this device uses. A device the OS can unlock
+  // never shows the BeatzLock PIN tile -- there is no second unlock method.
+  AppUnlockMethod _unlockMethod = AppUnlockMethod.systemLock;
+
   @override
   void initState() {
     super.initState();
+    _loadUnlockMethod();
+    AppLockService.methodChanges.addListener(_handleUnlockMethodChange);
     _loadSyncPreference();
     _loadServerLockdownPreference();
     _loadAppVersion();
@@ -99,9 +106,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    AppLockService.methodChanges.removeListener(_handleUnlockMethodChange);
     _syncPrefTimer?.cancel();
     _updateProgressNotifier.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUnlockMethod() async {
+    final method = await _appLockService.unlockMethod();
+    if (mounted && method != _unlockMethod) {
+      setState(() => _unlockMethod = method);
+    }
+  }
+
+  /// Follows a switch that happened while this screen was already open -- the
+  /// user can add or remove a screen lock with Settings sitting in the
+  /// background, and the App PIN tile has to appear or vanish with it.
+  void _handleUnlockMethodChange() {
+    final method = AppLockService.methodChanges.value;
+    if (method == null || !mounted || method == _unlockMethod) return;
+    setState(() => _unlockMethod = method);
   }
 
   Future<void> _loadSyncPreference() async {
@@ -467,7 +491,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text(
           enabled ? 'Turn on Server Lockdown?' : 'Turn off Server Lockdown?',
@@ -683,9 +706,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
             backgroundColor: _cardColor,
             title: Text(
               'Vault Restore Points',
@@ -885,9 +905,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogContext) => PopScope(
         canPop: false,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
           backgroundColor: _cardColor,
           content: Row(
             children: [
@@ -1005,7 +1022,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text(
           'Restore Vault Snapshot',
@@ -1100,7 +1116,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text(
           'Delete Restore Point',
@@ -1151,7 +1166,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Color get _accent => Theme.of(context).colorScheme.primary;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
   Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white38 : Colors.grey.shade500;
   Color get _dividerColor =>
@@ -1193,7 +1208,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tappableTile(
               icon: Icons.palette_rounded,
               label: 'Accent Color',
-              sub: 'Customise theme colour',
+              sub: themeProvider.accentColorName,
               trailing: _colorDot(themeProvider.accentColor),
               onTap: () => _showColorPicker(themeProvider),
             ),
@@ -1336,10 +1351,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _dividerLine(),
 
             _tappableTile(
-              icon: Icons.lock_outline_rounded,
+              icon: _usesSystemUnlock
+                  ? Icons.fingerprint_rounded
+                  : Icons.pin_rounded,
               label: 'App Lock',
-              sub:
-                  'Always on. BeatzLock now requires device security or an app PIN every time you reopen it.',
+              sub: _usesSystemUnlock
+                  ? 'Always on. This device unlocks BeatzLock the same way you '
+                      'unlock the device itself, and that is the only way in.'
+                  : 'Always on. This device has no screen lock BeatzLock can '
+                      'use, so your BeatzLock PIN is the only way in.',
               trailing: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -1360,14 +1380,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
-            _dividerLine(),
-            _tappableTile(
-              icon: Icons.pin,
-              label: 'Change App PIN',
-              sub: 'Set or replace your BeatzLock unlock PIN',
-              onTap: _changeAppPin,
-            ),
+            // The BeatzLock PIN exists only on devices with no usable screen
+            // lock. Offering it alongside device unlock would be a second, and
+            // weaker, door into the same vault.
+            if (!_usesSystemUnlock) ...[
+              _dividerLine(),
+              _tappableTile(
+                icon: Icons.pin,
+                label: 'Change App PIN',
+                sub: 'Set or replace your BeatzLock unlock PIN',
+                onTap: _changeAppPin,
+              ),
+            ],
 
+            _dividerLine(),
             _tappableTile(
               icon: Icons.sync_rounded,
               label: 'Sync Now',
@@ -1553,7 +1579,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.workspace_premium_rounded,
               label: 'Make This Device Primary',
               sub:
-                  'Use app PIN plus password, email code, and recovery code to move primary protection here',
+                  'Unlock this device, then confirm your password, email code, and recovery code to move primary protection here',
               onTap: () async {
                 if (!await _requireSignedIn(
                   'Primary-device recovery is available after you sign in.',
@@ -1770,6 +1796,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  bool get _usesSystemUnlock => _unlockMethod == AppUnlockMethod.systemLock;
+
   Future<void> _changeAppPin() async {
     final messenger = ScaffoldMessenger.of(context);
     final success = await _appLockService.setupAppPinFromSettings(context);
@@ -1836,6 +1864,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final passwordController = TextEditingController();
     var isSubmitting = false;
     var attemptedUnlock = false;
+    var obscurePassword = true;
     String? errorText;
 
     await showDialog<void>(
@@ -1843,9 +1872,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          scrollable: true,
           backgroundColor: _cardColor,
           title: Text(
             'Unlock Sync On This Device',
@@ -1866,12 +1893,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: passwordController,
-                obscureText: true,
+                obscureText: obscurePassword,
                 enabled: !isSubmitting,
                 decoration: InputDecoration(
                   labelText: 'Account password',
                   border: const OutlineInputBorder(),
                   errorText: errorText,
+                  suffixIcon: IconButton(
+                    tooltip:
+                        obscurePassword ? 'Show password' : 'Hide password',
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                    ),
+                    onPressed: () => setDialogState(
+                      () => obscurePassword = !obscurePassword,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1969,7 +2008,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final signIn = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text('Sign in required', style: TextStyle(color: _textPrimary)),
         content: Text(
@@ -2052,356 +2090,363 @@ class _SettingsScreenState extends State<SettingsScreen> {
     var isEditing = existingRating == null;
     String? errorText;
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: _cardColor,
-          title: Text('Rate BeatzLock', style: TextStyle(color: _textPrimary)),
-          content: SizedBox(
-            width: 430,
-            child: SingleChildScrollView(
-              child: existingRating != null && !isEditing
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (platformSummary != null) ...[
-                          _buildPlatformSummaryCard(
-                            platformLabel: existingRating.platformDisplay,
-                            summary: platformSummary,
-                          ),
-                          const SizedBox(height: 16),
+    // Dialog-scoped controllers: freed once the dialog is gone.
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: _cardColor,
+            title:
+                Text('Rate BeatzLock', style: TextStyle(color: _textPrimary)),
+            content: SizedBox(
+              width: 430,
+              child: SingleChildScrollView(
+                child: existingRating != null && !isEditing
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (platformSummary != null) ...[
+                            _buildPlatformSummaryCard(
+                              platformLabel: existingRating.platformDisplay,
+                              summary: platformSummary,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          _buildExistingRatingPreview(existingRating),
                         ],
-                        _buildExistingRatingPreview(existingRating),
-                      ],
-                    )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          existingRating == null
-                              ? 'Rate this platform build and leave a comment or suggestion for the public BeatzLock ratings page.'
-                              : 'Edit or delete your rating for this platform only. Your other platform reviews stay on the same account record.',
-                          style: TextStyle(color: _textSecondary, fontSize: 13),
-                        ),
-                        if (platformSummary != null) ...[
-                          const SizedBox(height: 14),
-                          _buildPlatformSummaryCard(
-                            platformLabel: existingRating?.platformDisplay ??
-                                _platformLabelFromSlug(currentPlatform),
-                            summary: platformSummary,
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: displayNameController,
-                          enabled: !isSubmitting,
-                          maxLength: 80,
-                          decoration: const InputDecoration(
-                            labelText: 'Display name',
-                            hintText: 'Name to show on the public ratings page',
-                            helperText:
-                                'Leave this blank and we will show Anonymous user.',
-                            border: OutlineInputBorder(),
-                            counterText: '',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(5, (index) {
-                            final star = index + 1;
-                            final selected = star <= selectedStars;
-                            return IconButton(
-                              tooltip: '$star star${star == 1 ? '' : 's'}',
-                              onPressed: isSubmitting
-                                  ? null
-                                  : () => setDialogState(() {
-                                        selectedStars = star;
-                                        errorText = null;
-                                      }),
-                              icon: Icon(
-                                selected
-                                    ? Icons.star_rounded
-                                    : Icons.star_outline_rounded,
-                                color: Colors.amber,
-                                size: 34,
-                              ),
-                            );
-                          }),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: commentController,
-                          enabled: !isSubmitting,
-                          minLines: 3,
-                          maxLines: 5,
-                          decoration: const InputDecoration(
-                            labelText: 'Comment',
-                            hintText: 'What do you like or dislike?',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: suggestionController,
-                          enabled: !isSubmitting,
-                          minLines: 2,
-                          maxLines: 4,
-                          decoration: const InputDecoration(
-                            labelText: 'Suggestion',
-                            hintText: 'What should improve next?',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        if (errorText != null) ...[
-                          const SizedBox(height: 10),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            errorText!,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 12,
+                            existingRating == null
+                                ? 'Rate this platform build and leave a comment or suggestion for the public BeatzLock ratings page.'
+                                : 'Edit or delete your rating for this platform only. Your other platform reviews stay on the same account record.',
+                            style:
+                                TextStyle(color: _textSecondary, fontSize: 13),
+                          ),
+                          if (platformSummary != null) ...[
+                            const SizedBox(height: 14),
+                            _buildPlatformSummaryCard(
+                              platformLabel: existingRating?.platformDisplay ??
+                                  _platformLabelFromSlug(currentPlatform),
+                              summary: platformSummary,
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: displayNameController,
+                            enabled: !isSubmitting,
+                            maxLength: 80,
+                            decoration: const InputDecoration(
+                              labelText: 'Display name',
+                              hintText:
+                                  'Name to show on the public ratings page',
+                              helperText:
+                                  'Leave this blank and we will show Anonymous user.',
+                              border: OutlineInputBorder(),
+                              counterText: '',
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(5, (index) {
+                              final star = index + 1;
+                              final selected = star <= selectedStars;
+                              return IconButton(
+                                tooltip: '$star star${star == 1 ? '' : 's'}',
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () => setDialogState(() {
+                                          selectedStars = star;
+                                          errorText = null;
+                                        }),
+                                icon: Icon(
+                                  selected
+                                      ? Icons.star_rounded
+                                      : Icons.star_outline_rounded,
+                                  color: Colors.amber,
+                                  size: 34,
+                                ),
+                              );
+                            }),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: commentController,
+                            enabled: !isSubmitting,
+                            minLines: 3,
+                            maxLines: 5,
+                            decoration: const InputDecoration(
+                              labelText: 'Comment',
+                              hintText: 'What do you like or dislike?',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: suggestionController,
+                            enabled: !isSubmitting,
+                            minLines: 2,
+                            maxLines: 4,
+                            decoration: const InputDecoration(
+                              labelText: 'Suggestion',
+                              hintText: 'What should improve next?',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          if (errorText != null) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              errorText!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
+                      ),
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSubmitting || isDeleting
-                  ? null
-                  : () async {
-                      final uri = Uri.parse(AppConfig.rateAppUrl);
-                      final opened = await launchUrl(
-                        uri,
-                        mode: LaunchMode.externalApplication,
-                      );
-                      if (!opened && dialogContext.mounted) {
-                        setDialogState(() {
-                          errorText = 'Could not open the ratings page.';
-                        });
-                      }
-                    },
-              child: const Text('View Ratings'),
-            ),
-            TextButton(
-              onPressed: (isSubmitting || isDeleting)
-                  ? null
-                  : () => Navigator.pop(dialogContext),
-              child: Text('Cancel', style: TextStyle(color: _textSecondary)),
-            ),
-            if (existingRating != null)
+            actions: [
+              TextButton(
+                onPressed: isSubmitting || isDeleting
+                    ? null
+                    : () async {
+                        final uri = Uri.parse(AppConfig.rateAppUrl);
+                        final opened = await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                        if (!opened && dialogContext.mounted) {
+                          setDialogState(() {
+                            errorText = 'Could not open the ratings page.';
+                          });
+                        }
+                      },
+                child: const Text('View Ratings'),
+              ),
               TextButton(
                 onPressed: (isSubmitting || isDeleting)
                     ? null
-                    : () async {
-                        final confirmed = await showDialog<bool>(
-                          context: dialogContext,
-                          builder: (confirmContext) => AlertDialog(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            backgroundColor: _cardColor,
-                            title: Text(
-                              'Delete review?',
-                              style: TextStyle(color: _textPrimary),
-                            ),
-                            content: Text(
-                              'This removes only your ${existingRating!.platformDisplay} review. Reviews from your other platforms stay intact.',
-                              style: TextStyle(
-                                color: _textSecondary,
-                                fontSize: 13,
+                    : () => Navigator.pop(dialogContext),
+                child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+              ),
+              if (existingRating != null)
+                TextButton(
+                  onPressed: (isSubmitting || isDeleting)
+                      ? null
+                      : () async {
+                          final confirmed = await showDialog<bool>(
+                            context: dialogContext,
+                            builder: (confirmContext) => AlertDialog(
+                              backgroundColor: _cardColor,
+                              title: Text(
+                                'Delete review?',
+                                style: TextStyle(color: _textPrimary),
                               ),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.pop(confirmContext, false),
-                                child: const Text('Cancel'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () =>
-                                    Navigator.pop(confirmContext, true),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
+                              content: Text(
+                                'This removes only your ${existingRating!.platformDisplay} review. Reviews from your other platforms stay intact.',
+                                style: TextStyle(
+                                  color: _textSecondary,
+                                  fontSize: 13,
                                 ),
-                                child: const Text('Delete'),
                               ),
-                            ],
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, true),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirmed != true) {
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isDeleting = true;
+                            errorText = null;
+                          });
+
+                          try {
+                            final deleted =
+                                await _appRatingService.deleteRating(
+                              reviewerKey: reviewerKey,
+                              platform: currentPlatform,
+                            );
+                            if (!dialogContext.mounted) return;
+                            Navigator.pop(dialogContext);
+                            if (!mounted) return;
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  deleted
+                                      ? 'Your review for this platform was deleted.'
+                                      : 'No review was found for this platform.',
+                                ),
+                                backgroundColor:
+                                    deleted ? Colors.orange : _accent,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            );
+                          } catch (_) {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              isDeleting = false;
+                              errorText =
+                                  'Could not delete right now. Please try again.';
+                            });
+                          }
+                        },
+                  child: isDeleting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.red,
                           ),
-                        );
-
-                        if (confirmed != true) {
-                          return;
-                        }
-
-                        setDialogState(() {
-                          isDeleting = true;
-                          errorText = null;
-                        });
-
-                        try {
-                          final deleted = await _appRatingService.deleteRating(
-                            reviewerKey: reviewerKey,
-                            platform: currentPlatform,
-                          );
-                          if (!dialogContext.mounted) return;
-                          Navigator.pop(dialogContext);
-                          if (!mounted) return;
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                deleted
-                                    ? 'Your review for this platform was deleted.'
-                                    : 'No review was found for this platform.',
-                              ),
-                              backgroundColor:
-                                  deleted ? Colors.orange : _accent,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          );
-                        } catch (_) {
-                          if (!dialogContext.mounted) return;
-                          setDialogState(() {
-                            isDeleting = false;
-                            errorText =
-                                'Could not delete right now. Please try again.';
-                          });
-                        }
-                      },
-                child: isDeleting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.red,
-                        ),
-                      )
-                    : const Text('Delete', style: TextStyle(color: Colors.red)),
-              ),
-            if (existingRating != null && !isEditing)
-              ElevatedButton(
-                onPressed: (isSubmitting || isDeleting)
-                    ? null
-                    : () => setDialogState(() {
-                          isEditing = true;
-                          errorText = null;
-                        }),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
+                        )
+                      : const Text('Delete',
+                          style: TextStyle(color: Colors.red)),
                 ),
-                child: const Text('Edit'),
-              )
-            else
-              ElevatedButton(
-                onPressed: (isSubmitting || isDeleting)
-                    ? null
-                    : () async {
-                        final comment = commentController.text.trim();
-                        final suggestion = suggestionController.text.trim();
-                        final displayName = displayNameController.text.trim();
-                        if (comment.isEmpty && suggestion.isEmpty) {
+              if (existingRating != null && !isEditing)
+                ElevatedButton(
+                  onPressed: (isSubmitting || isDeleting)
+                      ? null
+                      : () => setDialogState(() {
+                            isEditing = true;
+                            errorText = null;
+                          }),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accent,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Edit'),
+                )
+              else
+                ElevatedButton(
+                  onPressed: (isSubmitting || isDeleting)
+                      ? null
+                      : () async {
+                          final comment = commentController.text.trim();
+                          final suggestion = suggestionController.text.trim();
+                          final displayName = displayNameController.text.trim();
+                          if (comment.isEmpty && suggestion.isEmpty) {
+                            setDialogState(() {
+                              errorText =
+                                  'Add a comment or suggestion before submitting.';
+                            });
+                            return;
+                          }
+
                           setDialogState(() {
-                            errorText =
-                                'Add a comment or suggestion before submitting.';
+                            isSubmitting = true;
+                            errorText = null;
                           });
-                          return;
-                        }
 
-                        setDialogState(() {
-                          isSubmitting = true;
-                          errorText = null;
-                        });
+                          try {
+                            final packageInfo =
+                                await PackageInfo.fromPlatform();
+                            final deviceLabel =
+                                await _syncService.getCurrentDeviceLabel();
+                            final storage = SecureStorageService();
+                            await _appRatingService.submitRating(
+                              reviewerKey: reviewerKey,
+                              platform: currentPlatform,
+                              displayName: displayName,
+                              stars: selectedStars,
+                              comment: comment,
+                              suggestion: suggestion,
+                              appVersion: packageInfo.version,
+                              buildNumber: packageInfo.buildNumber,
+                              deviceLabel: deviceLabel,
+                              accountUserId: await storage.read(
+                                    SecureStorageService.userIdKey,
+                                  ) ??
+                                  '',
+                              accountEmail: await storage.read(
+                                    SecureStorageService.userEmailKey,
+                                  ) ??
+                                  '',
+                              accountUsername: await storage.read(
+                                    SecureStorageService.currentUserKey,
+                                  ) ??
+                                  '',
+                            );
 
-                        try {
-                          final packageInfo = await PackageInfo.fromPlatform();
-                          final deviceLabel =
-                              await _syncService.getCurrentDeviceLabel();
-                          final storage = SecureStorageService();
-                          await _appRatingService.submitRating(
-                            reviewerKey: reviewerKey,
-                            platform: currentPlatform,
-                            displayName: displayName,
-                            stars: selectedStars,
-                            comment: comment,
-                            suggestion: suggestion,
-                            appVersion: packageInfo.version,
-                            buildNumber: packageInfo.buildNumber,
-                            deviceLabel: deviceLabel,
-                            accountUserId: await storage.read(
-                                  SecureStorageService.userIdKey,
-                                ) ??
-                                '',
-                            accountEmail: await storage.read(
-                                  SecureStorageService.userEmailKey,
-                                ) ??
-                                '',
-                            accountUsername: await storage.read(
-                                  SecureStorageService.currentUserKey,
-                                ) ??
-                                '',
-                          );
+                            if (!dialogContext.mounted) return;
+                            Navigator.pop(dialogContext);
+                            if (!mounted) return;
 
-                          if (!dialogContext.mounted) return;
-                          Navigator.pop(dialogContext);
-                          if (!mounted) return;
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                existingRating == null
-                                    ? 'Thanks for the review!'
-                                    : 'Your review was updated.',
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  existingRating == null
+                                      ? 'Thanks for the review!'
+                                      : 'Your review was updated.',
+                                ),
+                                backgroundColor: const Color(0xFF10B981),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
-                              backgroundColor: const Color(0xFF10B981),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          );
-                        } catch (_) {
-                          if (!dialogContext.mounted) return;
-                          setDialogState(() {
-                            isSubmitting = false;
-                            errorText =
-                                'Could not submit right now. Please try again.';
-                          });
-                        }
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
+                            );
+                          } catch (_) {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              isSubmitting = false;
+                              errorText =
+                                  'Could not submit right now. Please try again.';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _accent,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(existingRating == null ? 'Submit' : 'Save Edit'),
                 ),
-                child: isSubmitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(existingRating == null ? 'Submit' : 'Save Edit'),
-              ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      commentController.dispose();
+      suggestionController.dispose();
+      displayNameController.dispose();
+    }
   }
 
   Future<void> _openManualDownloadPage() async {
@@ -2497,7 +2542,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         backgroundColor: _cardColor,
         title: Text(title, style: TextStyle(color: _textPrimary)),
         content: Text(
@@ -2763,9 +2807,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
           backgroundColor: _cardColor,
           title: Text(
             'Import OTP Accounts',
@@ -3070,7 +3111,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text(
-            'Unlock with device security or your app PIN first.',
+            'Unlock BeatzLock first to continue.',
           ),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
@@ -3112,7 +3153,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Row(
           children: [
@@ -3158,7 +3198,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final choice = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Row(
           children: [
@@ -3213,9 +3252,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
           backgroundColor: _cardColor,
           title: Text(
             'Delete local copy?',
@@ -3275,9 +3311,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
           backgroundColor: _cardColor,
           title: Text(
             'Sign in required',
@@ -3335,9 +3368,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          scrollable: true,
           backgroundColor: _cardColor,
           title: Text(
             'Confirm Deletion',
@@ -3587,14 +3618,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return chars.join();
     }
 
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          scrollable: true,
           title: Text(show2FA ? 'Verify 2FA Code' : 'Change Password'),
           content: SizedBox(
             width: 350,
@@ -3884,7 +3913,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      // Dialog-scoped controllers; without this every open leaked four.
+      currentPasswordController.dispose();
+      newPasswordController.dispose();
+      confirmPasswordController.dispose();
+      otpCodeController.dispose();
+    });
   }
 
   Widget _pwField(
@@ -4376,7 +4411,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Row(
           children: [
@@ -4448,7 +4482,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Row(
           children: [
@@ -4575,7 +4608,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Row(
           children: [
@@ -4675,7 +4707,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Row(
           children: [
@@ -4708,90 +4739,165 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showColorPicker(ThemeProvider themeProvider) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
+      backgroundColor: _cardColor,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        final mediaQuery = MediaQuery.of(sheetContext);
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: mediaQuery.size.height * 0.72,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Accent Color',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                                color: _textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Changes buttons, highlights and the app icon '
+                              'tint everywhere.',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.35,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close_rounded),
+                        color: _textSecondary,
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 14,
+                        runSpacing: 18,
+                        children: [
+                          for (var index = 0;
+                              index < ThemeProvider.accentOptions.length;
+                              index++)
+                            _accentSwatch(
+                              option: ThemeProvider.accentOptions[index],
+                              selected: themeProvider.accentColorIndex == index,
+                              onTap: () {
+                                themeProvider.setAccentColor(index);
+                                Navigator.pop(sheetContext);
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// One labelled colour chip in the accent picker.
+  Widget _accentSwatch({
+    required AccentOption option,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: 74,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            selected: selected,
+            button: true,
+            label: option.name,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(999),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                width: 56,
+                height: 56,
+                padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: _isDark ? Colors.white24 : Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? option.color : Colors.transparent,
+                    width: 2.5,
+                  ),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: option.color.withValues(alpha: 0.38),
+                            blurRadius: 16,
+                            offset: const Offset(0, 5),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: option.color,
+                    shape: BoxShape.circle,
+                  ),
+                  child: selected
+                      ? Icon(
+                          Icons.check_rounded,
+                          color: option.color.computeLuminance() > 0.45
+                              ? Colors.black
+                              : Colors.white,
+                          size: 22,
+                        )
+                      : null,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Accent Color',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: _textPrimary,
-              ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            option.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? _textPrimary : _textSecondary,
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 14,
-              runSpacing: 14,
-              children: themeProvider.accentColors.asMap().entries.map((entry) {
-                final selected = themeProvider.accentColorIndex == entry.key;
-                return GestureDetector(
-                  onTap: () {
-                    themeProvider.setAccentColor(entry.key);
-                    Navigator.pop(context);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 54,
-                    height: 54,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: selected
-                          ? Border.all(color: entry.value, width: 2)
-                          : Border.all(color: Colors.transparent, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: selected
-                              ? entry.value.withValues(alpha: 0.32)
-                              : Colors.transparent,
-                          blurRadius: 14,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: entry.value,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: selected
-                          ? const Icon(
-                              Icons.check_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            )
-                          : null,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -4823,17 +4929,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() => _isSyncing = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+
+    if (success) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Sync complete'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    // A failed sync is worth explaining properly: the reason is usually the
+    // connection, and a two-second red toast is not long enough to read it.
+    messenger.showSnackBar(
       SnackBar(
         content: Text(
-          success
-              ? 'Sync complete'
-              : (_syncService.lastErrorMessage ??
-                  'Sync failed. Check your internet connection.'),
+          _syncService.lastErrorMessage ?? NetworkErrorMessages.offline,
         ),
-        backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
+        backgroundColor: Colors.red.shade700,
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: Colors.white,
+          onPressed: _syncNow,
+        ),
       ),
     );
   }
@@ -4842,7 +4969,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: _cardColor,
         title: Text('Logout', style: TextStyle(color: _textPrimary)),
         content: Text(

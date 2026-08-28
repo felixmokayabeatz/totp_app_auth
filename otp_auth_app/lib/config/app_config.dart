@@ -22,8 +22,7 @@ class AppConfig {
 
   // Production environment (your VPS)
   static const String prodApiUrl = 'https://api.example.com/api/';
-  static const String prodMediaUrl =
-      'https://api.example.com/media/';
+  static const String prodMediaUrl = 'https://api.example.com/media/';
   // The downloads site has its own subdomain now and is mounted at the root of
   // it -- it used to be example.com/beatzlock-apps/. Every URL
   // below is built from this one string so the two cannot drift apart again.
@@ -31,8 +30,8 @@ class AppConfig {
       'https://apps.example.com/';
   static const String prodUpdateApiUrl =
       '${prodBeatzLockAppsBaseUrl}api/update-check/';
-  static const String creatorWebsiteUrl = 'http://example.com/';
-  static const String creatorGithubUrl = 'http://github.com/felixmokayabeatz/';
+  static const String creatorWebsiteUrl = 'https://example.com/';
+  static const String creatorGithubUrl = 'https://github.com/felixmokayabeatz/';
 
   // ==================================================================
   // Uncommentany of the two to what you are running

@@ -11,6 +11,7 @@ import '../config/app_config.dart';
 import '../config/app_build_info.dart';
 import '../models/app_update_info.dart';
 import 'server_lockdown_service.dart';
+import '../utils/network_error_messages.dart';
 
 class AppUpdateService {
   static final AppUpdateService _instance = AppUpdateService._internal();
@@ -852,33 +853,26 @@ fi
       }
     }
 
-    switch (error.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-      case DioExceptionType.connectionError:
-      case DioExceptionType.unknown:
-        return 'No internet connection. Connect to the internet and try again.';
-      case DioExceptionType.badCertificate:
-        return 'Secure update connection failed. Check this device date and certificate trust.';
-      case DioExceptionType.badResponse:
-        final statusCode = error.response?.statusCode;
-        if (statusCode == 404) {
-          return 'The update file was not found on the server.';
-        }
-        if (statusCode != null && statusCode >= 500) {
-          return 'The update server is unavailable right now.';
-        }
-        return 'Could not check for updates right now.';
-      case DioExceptionType.cancel:
-        return 'Update check was cancelled.';
-      // dio adds values to DioExceptionType between releases -- transformTimeout
-      // arrived in one of them and broke this switch's exhaustiveness. A default
-      // keeps a future addition from failing the build; the cost is that the
-      // analyzer no longer flags a newly added type here.
-      default:
-        return 'Could not check for updates right now.';
+    // Shared plain-language wording for anything that failed before a
+    // response came back, so an offline device is told it is offline rather
+    // than being handed a certificate or DNS explanation.
+    final transportMessage = NetworkErrorMessages.forTransport(error);
+    if (transportMessage != null) {
+      return transportMessage;
     }
+
+    if (error.type == DioExceptionType.badResponse) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 404) {
+        return 'The update file was not found on the server.';
+      }
+      if (statusCode != null && statusCode >= 500) {
+        return 'The update server is unavailable right now. Try again in a '
+            'moment.';
+      }
+    }
+
+    return 'Could not check for updates right now.';
   }
 }
 

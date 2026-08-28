@@ -32,9 +32,8 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
-  Color get _bgColor =>
-      _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white60 : Colors.grey.shade600;
 

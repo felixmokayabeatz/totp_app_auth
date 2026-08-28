@@ -22,9 +22,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
-  Color get _bgColor =>
-      _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
   int get _unreadCount => _notifications.where((item) => !item.isRead).length;
@@ -198,9 +197,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: _cardColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
               title: Text(
                 'Clear notifications',
                 style: TextStyle(
@@ -622,9 +618,8 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
-  Color get _bgColor =>
-      _isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF);
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _bgColor => Theme.of(context).scaffoldBackgroundColor;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
 

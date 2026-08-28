@@ -63,6 +63,16 @@
 
 [x] Also Upgrade the packages to the latest version man
 
+[x] - On a device that supports a system PIN/biometric, cancelling the prompt must NOT fall back to the in-app PIN. It is one or the other: the phone/computer lock, or the app PIN -- never both.
+
+[x] - Show-password eye on every field where something is hidden.
+
+[x] - Say plainly when a sync fails because there is no internet. Users do not know what DNS is.
+
+[x] - Every pop-up/modal needs a close or cancel button.
+
+[x] - More modern accent colours and an overall Apple-style polish.
+
 ## Code Notes
 
 - Reviews: `lib/services/app_rating_service.dart`, `lib/screens/login_screen.dart`, and rating endpoints in `lib/config/app_config.dart`.

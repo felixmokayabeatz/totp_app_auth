@@ -186,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        scrollable: true,
         title: Text('Edit Bio'),
         content: TextField(
           controller: _bioController,
@@ -244,7 +244,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF),
       appBar: AppBar(
         title: Text(
           'Profile',
@@ -280,7 +279,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(
-                                  colors: [_accent, Color(0xFF7C3AED)],
+                                  // Follows the chosen accent instead of a
+                                  // fixed purple, which stayed purple no
+                                  // matter which colour was picked.
+                                  colors: [
+                                    _accent,
+                                    Theme.of(context).colorScheme.secondary,
+                                  ],
                                 ),
                                 boxShadow: [
                                   BoxShadow(
@@ -375,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     padding: EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: isDark ? Color(0xFF1E1E32) : Colors.white,
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -431,7 +436,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     padding: EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: isDark ? Color(0xFF1E1E32) : Colors.white,
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(

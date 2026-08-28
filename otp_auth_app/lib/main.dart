@@ -37,7 +37,11 @@ void main(List<String> launchArgs) async {
     debugPrint = (String? message, {int? wrapWidth}) {};
   }
 
-  await AppUpdateService().cleanupStaleUpdateArtifacts();
+  // Best-effort housekeeping that nothing below depends on. Started here and
+  // awaited just before runApp so it overlaps storage and service setup
+  // instead of adding its own file-system round trip to the launch path.
+  final updateArtifactCleanup =
+      AppUpdateService().cleanupStaleUpdateArtifacts();
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     final appSupportDir = await getApplicationSupportDirectory();
@@ -56,15 +60,23 @@ void main(List<String> launchArgs) async {
     Hive.registerAdapter(SecureMessageAdapter());
   }
 
-  await Hive.openBox<OTPAccount>('otp_accounts');
-  await Hive.openBox<PasswordEntry>('passwords');
-  await Hive.openBox<SecureMessage>('secure_messages');
-  await Hive.openBox('settings');
+  // Four independent boxes; opening them in sequence made launch wait on four
+  // separate disk reads for no reason.
+  await Future.wait<void>([
+    Hive.openBox<OTPAccount>('otp_accounts'),
+    Hive.openBox<PasswordEntry>('passwords'),
+    Hive.openBox<SecureMessage>('secure_messages'),
+    Hive.openBox('settings'),
+  ]);
 
   final serverLockdownService = ServerLockdownService();
-  await serverLockdownService.initialize();
-  await SecureStorageService().init();
-  await BiometricService().init();
+  // Lockdown state, the stored-key migration and the unlock-capability probe
+  // touch different things and none reads another's result.
+  await Future.wait<void>([
+    serverLockdownService.initialize(),
+    SecureStorageService().init(),
+    BiometricService().init(),
+  ]);
   await BackgroundPasswordlessPollService().initialize();
   await ApprovalNotificationService().initialize();
   await ApprovalNotificationService().refreshPendingActionFromPlatform();
@@ -74,6 +86,7 @@ void main(List<String> launchArgs) async {
   );
   final themeProvider = ThemeProvider();
   await themeProvider.loadPreferences();
+  await updateArtifactCleanup;
 
   runApp(
     MultiProvider(
@@ -112,6 +125,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _initialized = false;
   bool _isLocked = true;
   bool _unlockInProgress = false;
+  // Which of the two unlock methods this device uses. Resolved once at startup
+  // so the lock screen never offers both.
+  AppUnlockMethod _unlockMethod = AppUnlockMethod.systemLock;
+  bool _systemUnlockDismissed = false;
+  bool _reconcilingUnlockMethod = false;
   bool _updateCheckInProgress = false;
   bool _sessionHeartbeatInProgress = false;
   bool _openingRequiredUpdate = false;
@@ -252,7 +270,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (dialogContext != null &&
           dialogContext.mounted &&
           _firstRunFlowCompleted) {
-        await _appLockService.ensureMandatoryLock(dialogContext);
+        // Reconciles, explains any switch, and enforces a PIN where one is
+        // needed. It must own the first reconcile of the launch, since a
+        // silent one before it would leave nothing for it to report.
+        final method = await _appLockService.ensureMandatoryLock(dialogContext);
+        if (mounted) {
+          setState(() => _unlockMethod = method);
+        }
+      } else {
+        await _refreshUnlockMethod();
       }
       await _restoreSession();
     } catch (e) {
@@ -681,6 +707,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final authenticated = await _appLockService.authenticateToUnlock(context);
       await WidgetsBinding.instance.endOfFrame;
+      // The OS prompt can report that this device lost its screen lock, which
+      // moves it onto the BeatzLock PIN. Re-read the method either way.
+      await _refreshUnlockMethod();
       if (!mounted) return;
 
       if (authenticated) {
@@ -688,7 +717,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         if (!mounted) return;
         setState(() {
           _isLocked = false;
+          _systemUnlockDismissed = false;
           _backgroundedAt = null;
+        });
+      } else {
+        setState(() {
+          _systemUnlockDismissed = _unlockMethod == AppUnlockMethod.systemLock;
         });
       }
     } finally {
@@ -698,6 +732,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
       }
     }
+  }
+
+  /// Re-reads which single unlock method this device uses.
+  /// Re-checks the method and records it, without any user-facing notice.
+  ///
+  /// Used after an unlock attempt, where the OS may have just reported that it
+  /// can no longer authenticate: the force-PIN dialog the user was walked
+  /// through already explained the switch, so a second announcement later would
+  /// only repeat it.
+  Future<void> _refreshUnlockMethod() async {
+    final resolution = await _appLockService.reconcileUnlockMethod();
+    if (!mounted || resolution.method == _unlockMethod) return;
+    setState(() {
+      _unlockMethod = resolution.method;
+      _systemUnlockDismissed = false;
+    });
   }
 
   Future<void> _unlockWithPin(BuildContext context) async {
@@ -712,6 +762,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         context,
       );
       await WidgetsBinding.instance.endOfFrame;
+      // A device that has since gained a screen lock switches back to it here
+      // rather than staying on the PIN until the next restart.
+      await _refreshUnlockMethod();
       if (!mounted) return;
 
       if (authenticated) {
@@ -755,17 +808,51 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         });
       }
 
+      unawaited(_reconcileUnlockMethodOnResume());
       unawaited(
         ApprovalNotificationService().refreshPendingActionFromPlatform(),
       );
       unawaited(_refreshUpdateStatus());
       unawaited(_runSessionHeartbeat());
     } else if (state == AppLifecycleState.resumed) {
+      unawaited(_reconcileUnlockMethodOnResume());
       unawaited(
         ApprovalNotificationService().refreshPendingActionFromPlatform(),
       );
       unawaited(_refreshUpdateStatus());
       unawaited(_runSessionHeartbeat());
+    }
+  }
+
+  /// Re-checks the device unlock method every time the app comes forward.
+  ///
+  /// Adding or removing a screen lock happens in the system settings, so a
+  /// resume is exactly the moment the answer can have changed. The capability
+  /// answer is cached for the rest of the foreground session, so this costs one
+  /// platform call per resume.
+  Future<void> _reconcileUnlockMethodOnResume() async {
+    if (_reconcilingUnlockMethod) return;
+    _reconcilingUnlockMethod = true;
+    try {
+      _appLockService.invalidateUnlockMethodCache();
+
+      final dialogContext = _navigatorKey.currentContext;
+      if (dialogContext == null ||
+          !dialogContext.mounted ||
+          !_firstRunFlowCompleted) {
+        // No surface to explain a switch on yet -- just keep the method fresh.
+        await _refreshUnlockMethod();
+        return;
+      }
+
+      final method = await _appLockService.ensureMandatoryLock(dialogContext);
+      if (!mounted || method == _unlockMethod) return;
+      setState(() {
+        _unlockMethod = method;
+        _systemUnlockDismissed = false;
+      });
+    } finally {
+      _reconcilingUnlockMethod = false;
     }
   }
 
@@ -826,6 +913,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                               ? (_isLocked
                                   ? _AppLockScreen(
                                       isBusy: _unlockInProgress,
+                                      unlockMethod: _unlockMethod,
+                                      wasDismissed: _systemUnlockDismissed,
                                       onUnlock: _unlockApp,
                                       onUsePin: _unlockWithPin,
                                     )
@@ -1337,20 +1426,39 @@ class _LaunchLoadingScreenState extends State<_LaunchLoadingScreen>
 class _AppLockScreen extends StatelessWidget {
   const _AppLockScreen({
     required this.isBusy,
+    required this.unlockMethod,
+    required this.wasDismissed,
     required this.onUnlock,
     required this.onUsePin,
   });
 
   final bool isBusy;
+  final AppUnlockMethod unlockMethod;
+
+  /// True when the user just backed out of the system prompt. BeatzLock does
+  /// not fall back to a PIN in that case, so the screen says why and offers the
+  /// same prompt again.
+  final bool wasDismissed;
   final Future<void> Function(BuildContext context) onUnlock;
   final Future<void> Function(BuildContext context) onUsePin;
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = Theme.of(context).platform == TargetPlatform.android ||
-        Theme.of(context).platform == TargetPlatform.iOS;
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final isMobile = theme.platform == TargetPlatform.android ||
+        theme.platform == TargetPlatform.iOS;
+    final usesSystemLock = unlockMethod == AppUnlockMethod.systemLock;
+
+    final blurb = usesSystemLock
+        ? (isMobile
+            ? 'Unlock with the same PIN, pattern, fingerprint or face you use '
+                'to unlock this phone.'
+            : 'Unlock with Windows Hello -- the same PIN, fingerprint or face '
+                'you use to sign in to this computer.')
+        : 'This device has no screen lock BeatzLock can use, so enter your '
+            'BeatzLock PIN to continue.';
 
     return Scaffold(
       body: Container(
@@ -1367,69 +1475,113 @@ class _AppLockScreen extends StatelessWidget {
         ),
         child: SafeArea(
           child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Card(
-                margin: const EdgeInsets.all(24),
-                child: Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: colorScheme.primary.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Card(
+                  margin: const EdgeInsets.all(24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            usesSystemLock
+                                ? Icons.fingerprint_rounded
+                                : Icons.pin_rounded,
+                            size: 36,
+                            color: colorScheme.primary,
+                          ),
                         ),
-                        child: Icon(
-                          Icons.lock_outline_rounded,
-                          size: 36,
-                          color: colorScheme.primary,
+                        const SizedBox(height: 20),
+                        Text(
+                          'BeatzLock is protected',
+                          style: textTheme.headlineSmall,
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'BeatzLock is protected',
-                        style: textTheme.headlineSmall,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        isMobile
-                            ? 'Unlock the app with your device security or your BeatzLock PIN.'
-                            : 'Unlock the app with your computer security or your BeatzLock PIN.',
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        const SizedBox(height: 8),
+                        Text(
+                          blurb,
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: isBusy ? null : () => onUnlock(context),
-                          icon: isBusy
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                        if (wasDismissed) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 18,
+                                  color: colorScheme.onSecondaryContainer,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    isMobile
+                                        ? 'You cancelled the unlock. Your device '
+                                            'lock is the only way into '
+                                            'BeatzLock on this phone.'
+                                        : 'You cancelled the unlock. Windows '
+                                            'Hello is the only way into '
+                                            'BeatzLock on this computer.',
+                                    style: textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSecondaryContainer,
+                                      height: 1.35,
+                                    ),
                                   ),
-                                )
-                              : const Icon(Icons.lock_open_rounded),
-                          label: Text(isBusy ? 'Checking...' : 'Unlock'),
-                        ),
-                      ),
-                      if (!isMobile) ...[
-                        const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: isBusy ? null : () => onUsePin(context),
-                          child: const Text('Use BeatzLock PIN instead'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: isBusy
+                                ? null
+                                : () => usesSystemLock
+                                    ? onUnlock(context)
+                                    : onUsePin(context),
+                            icon: isBusy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.lock_open_rounded),
+                            label: Text(
+                              isBusy
+                                  ? 'Checking...'
+                                  : wasDismissed
+                                      ? 'Try again'
+                                      : 'Unlock',
+                            ),
+                          ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),

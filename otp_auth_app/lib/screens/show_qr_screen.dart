@@ -95,8 +95,6 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     final otpUrl = 'otpauth://totp/${Uri.encodeComponent(label)}?$query';
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2FF),
       appBar: AppBar(
         title: const Text(
           'QR Code',
@@ -181,7 +179,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Use your device security or your BeatzLock PIN to show the QR code, then scan it with another authenticator if you want the same account in more than one app or device.',
+                    'Unlock BeatzLock to show the QR code, then scan it with another authenticator if you want the same account in more than one app or device.',
                     style: TextStyle(fontSize: 13, color: mutedText),
                   ),
                   const SizedBox(height: 18),
@@ -616,7 +614,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E32) : Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: isDark
@@ -797,7 +795,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Unlock with device security or your BeatzLock PIN to show the QR code and secret key.',
+          'Unlock BeatzLock to show the QR code and secret key.',
         ),
         duration: Duration(seconds: 2),
       ),
@@ -845,8 +843,7 @@ class _ShowQRScreenState extends State<ShowQRScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: isDark ? const Color(0xFF1E1E32) : Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Row(
           children: [
             Icon(

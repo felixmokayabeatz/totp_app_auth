@@ -52,7 +52,7 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
 
@@ -189,24 +189,26 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 46,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: _textSecondary.withValues(alpha: 0.42),
-                        borderRadius: BorderRadius.circular(999),
+                  // The bottomSheetTheme draws the grab handle now.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Choose delete timer',
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Choose delete timer',
-                    style: TextStyle(
-                      color: _textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
+                      IconButton(
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close_rounded),
+                        color: _textSecondary,
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -412,7 +414,6 @@ class _SecureSelfTextScreenState extends State<SecureSelfTextScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Delete message', style: TextStyle(color: _textPrimary)),
         content: Text(
           'Delete this secure self text?',

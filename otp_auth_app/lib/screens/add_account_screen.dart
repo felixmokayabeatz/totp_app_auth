@@ -42,7 +42,6 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _isDark ? Color(0xFF0F0F1A) : Color(0xFFF0F2FF),
       appBar: AppBar(
         title: Text(
           _isScanning ? 'Scan QR Code' : 'Add Account',
@@ -632,7 +631,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: _isDark ? Color(0xFF1E1E32) : Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(

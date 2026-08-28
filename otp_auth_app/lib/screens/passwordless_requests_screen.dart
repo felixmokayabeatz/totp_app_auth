@@ -38,7 +38,7 @@ class _PasswordlessRequestsScreenState
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
-  Color get _cardColor => _isDark ? const Color(0xFF1E1E32) : Colors.white;
+  Color get _cardColor => Theme.of(context).colorScheme.surface;
   Color get _textPrimary => _isDark ? Colors.white : const Color(0xFF1A1A2E);
   Color get _textSecondary => _isDark ? Colors.white54 : Colors.grey.shade600;
   int get _removableLogCount =>
@@ -190,6 +190,7 @@ class _PasswordlessRequestsScreenState
 
     final passwordController = TextEditingController();
     var isSubmitting = false;
+    var obscurePassword = true;
     String? errorText;
     var result = _PasswordlessApprovalMode.cancel;
 
@@ -201,9 +202,6 @@ class _PasswordlessRequestsScreenState
           canPop: false,
           child: AlertDialog(
             backgroundColor: _cardColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
             title: Text(
               'Unlock Sync For Approval',
               style: TextStyle(color: _textPrimary),
@@ -240,12 +238,24 @@ class _PasswordlessRequestsScreenState
                   const SizedBox(height: 16),
                   TextField(
                     controller: passwordController,
-                    obscureText: true,
+                    obscureText: obscurePassword,
                     enabled: !isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'Account password',
                       border: const OutlineInputBorder(),
                       errorText: errorText,
+                      suffixIcon: IconButton(
+                        tooltip:
+                            obscurePassword ? 'Show password' : 'Hide password',
+                        icon: Icon(
+                          obscurePassword
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded,
+                        ),
+                        onPressed: () => setDialogState(
+                          () => obscurePassword = !obscurePassword,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -399,7 +409,6 @@ class _PasswordlessRequestsScreenState
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Delete Sign-in Log',
           style: TextStyle(color: _textPrimary),
@@ -459,7 +468,6 @@ class _PasswordlessRequestsScreenState
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Clear Sign-in Logs',
           style: TextStyle(color: _textPrimary),

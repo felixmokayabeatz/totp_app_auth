@@ -34,9 +34,9 @@ class SecureStorageService {
   static const _prefix = 'bls1:';
 
   Future<void> init() async {
-    for (final key in _knownKeys) {
-      await _migrateLegacyPreference(key);
-    }
+    // Each key migrates independently, so they run together rather than as
+    // eight sequential preference round trips on the launch path.
+    await Future.wait(_knownKeys.map(_migrateLegacyPreference));
   }
 
   Future<void> write(String key, String value) async {
