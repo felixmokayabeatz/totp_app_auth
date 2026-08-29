@@ -530,5 +530,19 @@
     "build_number": "45",
     "artifact_version": "1.8.0_45",
     "host_platform": "Windows"
+  },
+  {
+    "sequence": 39,
+    "platform": "android",
+    "artifact_type": "apk",
+    "file": "beatzlock_1.8.1_46.apk",
+    "path": "C:\\Programming\\totp_app\\otp_auth_app\\final_builds\\android\\1.8.1_46\\beatzlock_1.8.1_46.apk",
+    "relative_path": "final_builds/android/1.8.1_46/beatzlock_1.8.1_46.apk",
+    "is_directory": false,
+    "timestamp": "2026-08-29T11:38:00",
+    "version": "1.8.1+46",
+    "build_number": "46",
+    "artifact_version": "1.8.1_46",
+    "host_platform": "Windows"
   }
 ]
