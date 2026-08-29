@@ -20,6 +20,7 @@ from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 from django.urls import reverse
 from django.db.models import Q
 import os
+import threading
 import json
 import hashlib
 import re
@@ -136,19 +137,60 @@ def _build_update_payload(current_version, current_build_number, latest_app, req
     }
 
 
+_geoip_reader = None
+_geoip_reader_lock = threading.Lock()
+_geoip_reader_failed = False
+
+
+def _get_geoip_reader():
+    """Open the GeoLite2 database once and keep it open.
+
+    Every download used to construct a Reader, memory-map the file, parse its
+    metadata and tear the whole thing down again -- a stat, an open and an mmap
+    per download, for a file that never changes while the process runs.
+    maxminddb Readers are documented as thread-safe for lookups in mmap mode,
+    which is what gunicorn's worker threads need.
+    """
+    global _geoip_reader, _geoip_reader_failed
+
+    if _geoip_reader is not None or _geoip_reader_failed:
+        return _geoip_reader
+
+    with _geoip_reader_lock:
+        # Another thread may have opened it while this one waited.
+        if _geoip_reader is not None or _geoip_reader_failed:
+            return _geoip_reader
+        try:
+            import geoip2.database
+
+            if not os.path.exists(GEOIP_PATH):
+                print(f"GeoIP database not found at: {GEOIP_PATH}")
+                _geoip_reader_failed = True
+                return None
+            _geoip_reader = geoip2.database.Reader(GEOIP_PATH)
+        except Exception as e:
+            print(f"Error opening the GeoIP database: {e}")
+            # Remember the failure so a missing database does not mean a failed
+            # open attempt on every single download.
+            _geoip_reader_failed = True
+            return None
+
+    return _geoip_reader
+
+
 def get_country_from_ip(ip_address):
-    try:
-        import geoip2.database
-        if os.path.exists(GEOIP_PATH):
-            with geoip2.database.Reader(GEOIP_PATH) as reader:
-                response = reader.country(ip_address)
-                if settings.DEBUG:
-                    print(f"DEBUG: GeoIP {ip_address} -> {response.country.iso_code} ({response.country.name})")
+    reader = _get_geoip_reader()
+    if reader is not None:
+        try:
+            response = reader.country(ip_address)
+            if settings.DEBUG:
+                print(f"DEBUG: GeoIP {ip_address} -> {response.country.iso_code} ({response.country.name})")
+            if response.country.iso_code:
                 return response.country.iso_code, response.country.name
-        else:
-            print(f"GeoIP database not found at: {GEOIP_PATH}")
-    except Exception as e:
-        print(f"Error getting country from IP: {e}")
+        except Exception as e:
+            # AddressNotFoundError for private and unrouted addresses is normal
+            # and falls through to the defaults below.
+            print(f"Error getting country from IP: {e}")
 
     if ip_address in ['127.0.0.1', 'localhost', '0.0.0.0']:
         return 'KE', 'Kenya'
@@ -183,6 +225,46 @@ def _target_display(platform, linux_distribution=''):
     return _platform_display(platform)
 
 
+def _all_active_released_apps():
+    """Every downloadable build, newest first, in one query.
+
+    The download and archive pages ask "what is the latest build for this
+    target?" once per platform and once per Linux distribution, and the archive
+    page asks two or three more questions per target on top of that. Each of
+    those used to be its own SELECT -- fourteen on the downloads page and
+    twenty-six on the archive page, against a table holding a couple of dozen
+    rows. Reading the table once and grouping in Python answers all of them.
+    """
+    apps = list(
+        DownloadableApp.objects.filter(
+            is_active=True,
+            release__isnull=False,
+        ).select_related('release')
+    )
+    apps.sort(key=_release_sort_key, reverse=True)
+    return apps
+
+
+def _matches_target(app, platform, linux_distribution=''):
+    """The in-memory twin of DownloadableApp.build_target_filter."""
+    if app.platform != platform:
+        return False
+    if platform != 'linux':
+        return True
+
+    wanted = DownloadableApp.normalized_linux_distribution_value(linux_distribution)
+    stored = str(app.linux_distribution or '').strip().lower()
+    if wanted == DownloadableApp.DEFAULT_LINUX_DISTRIBUTION:
+        # A build saved before distributions existed has a blank column and
+        # belongs to the default one, exactly as the SQL filter has it.
+        return stored == wanted or stored == ''
+    return stored == wanted
+
+
+def _apps_for_target(apps, platform, linux_distribution=''):
+    return [app for app in apps if _matches_target(app, platform, linux_distribution)]
+
+
 def _active_released_apps_for_target(platform, linux_distribution=''):
     return DownloadableApp.objects.filter(
         DownloadableApp.build_target_filter(platform, linux_distribution),
@@ -191,18 +273,24 @@ def _active_released_apps_for_target(platform, linux_distribution=''):
     ).select_related('release')
 
 
-def _latest_app_for_platform(platform, linux_distribution=''):
-    apps = [
-        app for app in _active_released_apps_for_target(platform, linux_distribution)
-    ]
-    apps.sort(key=_release_sort_key, reverse=True)
-    return apps[0] if apps else None
+def _latest_app_for_platform(platform, linux_distribution='', apps=None):
+    candidates = (
+        _apps_for_target(apps, platform, linux_distribution)
+        if apps is not None
+        else sorted(
+            _active_released_apps_for_target(platform, linux_distribution),
+            key=_release_sort_key,
+            reverse=True,
+        )
+    )
+    return candidates[0] if candidates else None
 
 
-def _latest_linux_apps_by_distribution():
+def _latest_linux_apps_by_distribution(apps=None):
+    apps = _all_active_released_apps() if apps is None else apps
     linux_apps = {}
     for distribution, _ in DownloadableApp.LINUX_DISTRIBUTION_CHOICES:
-        app = _latest_app_for_platform('linux', distribution)
+        app = _latest_app_for_platform('linux', distribution, apps=apps)
         if app:
             linux_apps[distribution] = app
     return linux_apps
@@ -225,9 +313,10 @@ def _linux_distribution_options(linux_apps=None):
     return options
 
 
-def _build_download_cards():
+def _build_download_cards(apps=None):
+    apps = _all_active_released_apps() if apps is None else apps
     cards = []
-    linux_apps = _latest_linux_apps_by_distribution()
+    linux_apps = _latest_linux_apps_by_distribution(apps)
 
     for platform in PLATFORM_ORDER:
         if platform == 'linux':
@@ -244,7 +333,7 @@ def _build_download_cards():
             })
             continue
 
-        app = _latest_app_for_platform(platform)
+        app = _latest_app_for_platform(platform, apps=apps)
         if app:
             cards.append({
                 'platform': platform,
@@ -258,29 +347,25 @@ def _build_download_cards():
     return cards, _linux_distribution_options(linux_apps)
 
 
-def _archived_apps_for_target(platform, linux_distribution=''):
-    apps = [
-        app for app in _active_released_apps_for_target(platform, linux_distribution)
-        .filter(
-            Q(release__keep_in_archive=True) |
-            Q(release__is_major_release=True)
-        )
-    ]
-    apps.sort(key=_release_sort_key, reverse=True)
+def _archived_apps_for_target(platform, linux_distribution='', all_apps=None):
+    all_apps = _all_active_released_apps() if all_apps is None else all_apps
+    # Already newest-first from _all_active_released_apps.
+    for_target = _apps_for_target(all_apps, platform, linux_distribution)
 
-    current_app = _latest_app_for_platform(platform, linux_distribution)
+    apps = [
+        app for app in for_target
+        if app.release.keep_in_archive or app.release.is_major_release
+    ]
+
+    current_app = for_target[0] if for_target else None
     if current_app:
         apps = [app for app in apps if app.id != current_app.id]
 
     if len(apps) < DownloadableApp.KEEP_ARCHIVE_FALLBACK_PER_PLATFORM:
         fallback_apps = [
-            app for app in _active_released_apps_for_target(platform, linux_distribution)
-            .filter(
-                release__keep_in_archive=False,
-                release__is_major_release=False,
-            )
+            app for app in for_target
+            if not app.release.keep_in_archive and not app.release.is_major_release
         ]
-        fallback_apps.sort(key=_release_sort_key, reverse=True)
         for app in fallback_apps:
             if current_app and app.id == current_app.id:
                 continue
@@ -293,13 +378,14 @@ def _archived_apps_for_target(platform, linux_distribution=''):
     return apps[:DownloadableApp.KEEP_ARCHIVE_FALLBACK_PER_PLATFORM]
 
 
-def _build_archive_groups():
+def _build_archive_groups(all_apps=None):
+    all_apps = _all_active_released_apps() if all_apps is None else all_apps
     groups = []
 
     for platform in PLATFORM_ORDER:
         if platform == 'linux':
             for distribution, _ in DownloadableApp.LINUX_DISTRIBUTION_CHOICES:
-                apps = _archived_apps_for_target(platform, distribution)
+                apps = _archived_apps_for_target(platform, distribution, all_apps=all_apps)
                 if apps:
                     groups.append({
                         'platform': platform,
@@ -310,7 +396,7 @@ def _build_archive_groups():
                     })
             continue
 
-        apps = _archived_apps_for_target(platform)
+        apps = _archived_apps_for_target(platform, all_apps=all_apps)
         if apps:
             groups.append({
                 'platform': platform,

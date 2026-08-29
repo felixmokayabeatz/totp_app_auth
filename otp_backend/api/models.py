@@ -3,6 +3,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from datetime import timedelta
 import hashlib
 import uuid
@@ -60,16 +61,43 @@ class AccountTombstone(models.Model):
 
 # One-time OTP codes for dangerous operations (e.g. delete-all-everywhere)
 class DeleteOTPCode(models.Model):
+    """The code that authorises wiping every account in someone's vault.
+
+    Six digits behind a valid access token. That token is meant to be the real
+    barrier, but a stolen one plus unlimited guesses used to be enough to empty
+    a vault, so the code carries the same attempt budget as an emailed
+    verification code.
+    """
+
+    LIFETIME = timedelta(minutes=10)
+    MAX_ATTEMPTS = 5
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='delete_otps')
     code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     used = models.BooleanField(default=False)
+    attempts = models.PositiveSmallIntegerField(default=0)
 
     def is_valid(self):
-        from django.utils import timezone
-        from datetime import timedelta
-        # Code expires after 10 minutes
-        return not self.used and (timezone.now() - self.created_at) < timedelta(minutes=10)
+        return (
+            not self.used
+            and self.attempts < self.MAX_ATTEMPTS
+            and (timezone.now() - self.created_at) < self.LIFETIME
+        )
+
+    def matches(self, raw_code: str) -> bool:
+        return bool(raw_code) and constant_time_compare(self.code, raw_code)
+
+    def register_failed_attempt(self):
+        self.attempts += 1
+        fields = ['attempts']
+        if self.attempts >= self.MAX_ATTEMPTS:
+            self.used = True
+            fields.append('used')
+        self.save(update_fields=fields)
+
+    def attempts_remaining(self) -> int:
+        return max(0, self.MAX_ATTEMPTS - self.attempts)
 
 
 class BackupCodeSet(models.Model):
@@ -283,16 +311,23 @@ class PasswordlessLoginRequest(models.Model):
         if not stored_value:
             return False
         if self._looks_like_plain_numeric_code(stored_value):
-            return stored_value == raw_code
+            return constant_time_compare(stored_value, raw_code)
         if self._looks_like_seed(stored_value):
             current_slot = self._timeslot_for()
-            valid_codes = {self._derive_seeded_code(current_slot, seed=stored_value)}
+            valid_codes = [self._derive_seeded_code(current_slot, seed=stored_value)]
             if current_slot > 0:
-                valid_codes.add(
+                # The previous window stays valid so a code entered as it rolls
+                # over is not rejected for arriving a second late.
+                valid_codes.append(
                     self._derive_seeded_code(current_slot - 1, seed=stored_value)
                 )
-            return raw_code in valid_codes
-        return stored_value == raw_code
+            # Compared without short-circuiting: `raw_code in valid_codes` bails
+            # out at the first differing byte.
+            matched = False
+            for candidate in valid_codes:
+                matched |= constant_time_compare(candidate, raw_code)
+            return matched
+        return constant_time_compare(stored_value, raw_code)
 
 
 class BulkAccountDeleteRequest(models.Model):

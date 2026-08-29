@@ -77,15 +77,26 @@ void main(List<String> launchArgs) async {
     SecureStorageService().init(),
     BiometricService().init(),
   ]);
-  await BackgroundPasswordlessPollService().initialize();
-  await ApprovalNotificationService().initialize();
-  await ApprovalNotificationService().refreshPendingActionFromPlatform();
-  await PushMessagingService().initialize();
-  await PushMessagingService().applyServerLockdownState(
-    enabled: await serverLockdownService.isEnabled(),
-  );
   final themeProvider = ThemeProvider();
-  await themeProvider.loadPreferences();
+  final lockdownEnabled = await serverLockdownService.isEnabled();
+
+  // Four independent chains, each a run of platform-channel calls: the work
+  // queue, the notification channel, Firebase, and the stored theme. Only the
+  // steps inside a chain depend on each other, and every initialize() here
+  // caches its own in-flight future, so overlapping them cannot double-run any
+  // of the setup.
+  await Future.wait<void>([
+    BackgroundPasswordlessPollService().initialize(),
+    ApprovalNotificationService().initialize().then(
+          (_) => ApprovalNotificationService().refreshPendingActionFromPlatform(),
+        ),
+    PushMessagingService().initialize().then(
+          (_) => PushMessagingService().applyServerLockdownState(
+            enabled: lockdownEnabled,
+          ),
+        ),
+    themeProvider.loadPreferences(),
+  ]);
   await updateArtifactCleanup;
 
   runApp(

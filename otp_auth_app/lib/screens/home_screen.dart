@@ -40,7 +40,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _offlineBackupReminderKey = 'offline_backup_reminder_last_shown';
   static const Duration _approvalPollInterval = Duration(seconds: 8);
   static const Duration _approvalDialogRefreshInterval = Duration(seconds: 2);
@@ -95,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _approvalNotificationService.passwordlessOpenSignal.addListener(
       _handlePasswordlessNotificationSignal,
     );
@@ -1199,7 +1200,37 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _updateAllOTPs() async {
+  void _stopTimer() {
+    _otpTicker?.cancel();
+    _otpTicker = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // Nothing here is worth doing while the codes are off screen: the ticker
+    // walked the vault every second, decrypted every secret every thirty, and
+    // called setState on a widget tree nobody was looking at. Mobile throttles
+    // background timers for us; the desktop builds do not.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _stopTimer();
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed && _otpTicker == null) {
+      // The window almost certainly rolled over while the app was away, so
+      // refresh before the first tick rather than showing a stale code for up
+      // to a second.
+      _lastOtpSecondsRemaining = -1;
+      unawaited(_updateAllOTPs());
+      _startTimer();
+    }
+  }
+
+  Future<void> _updateAllOTPs() async {
     if (_userBox == null) return;
 
     // One window for every account, so this is read once rather than per row.
@@ -3447,6 +3478,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _otpTicker?.cancel();
     _secondsRemaining.dispose();
     _passwordlessPollTimer?.cancel();

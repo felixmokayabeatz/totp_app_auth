@@ -1,3 +1,4 @@
+import collections
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -162,9 +163,6 @@ def log_viewer(request, log_file=None):
 
     log_path = _safe_log_path(log_file)
 
-    with open(log_path, "r", encoding="utf-8", errors="replace") as file_handle:
-        all_lines = file_handle.readlines()
-
     lines_param = request.GET.get("lines", "500").strip()
     search_text = request.GET.get("search_text", "").strip()
     level_filter = request.GET.get("level", "").strip().upper()
@@ -174,40 +172,62 @@ def log_viewer(request, log_file=None):
     except ValueError:
         lines = 500
 
-    filtered_lines = all_lines
+    # Logs rotate daily with no size ceiling, and this API writes a line per
+    # sync, login and notification, so a single day's file can be very large.
+    # Reading it with readlines() held every line of it in memory at once just
+    # to show the last few hundred. One streaming pass counts the whole file
+    # while a bounded deque keeps only the lines that will actually be
+    # rendered.
+    total_line_count = 0
+    filtered_count = 0
+    error_count = 0
+    warning_count = 0
+    info_count = 0
+    tail = collections.deque(maxlen=lines if lines > 0 else None)
 
-    if search_text:
-        search_text_lower = search_text.lower()
-        filtered_lines = [
-            line for line in filtered_lines if search_text_lower in line.lower()
-        ]
+    search_text_lower = search_text.lower()
+    with open(log_path, "r", encoding="utf-8", errors="replace") as file_handle:
+        for line in file_handle:
+            total_line_count += 1
 
-    if level_filter:
-        filtered_lines = [
-            line for line in filtered_lines if _extract_log_level(line) == level_filter
-        ]
+            if search_text and search_text_lower not in line.lower():
+                continue
+            if level_filter and _extract_log_level(line) != level_filter:
+                continue
 
-    displayed_lines = filtered_lines[-lines:] if lines > 0 else filtered_lines
+            filtered_count += 1
+            if "ERROR" in line:
+                error_count += 1
+            if "WARNING" in line:
+                warning_count += 1
+            if "INFO" in line:
+                info_count += 1
+            tail.append(line)
+
+    displayed_lines = list(tail)
     log_entries = _build_log_entries(displayed_lines)
+
+    # One stat() rather than the four this context used to take.
+    log_stat = log_path.stat()
 
     detail_context = {
         "log_file": log_file,
         "log_name": log_path.name,
         "log_lines": displayed_lines,
         "log_entries": log_entries,
-        "total_lines": len(all_lines),
-        "filtered_lines": len(filtered_lines),
+        "total_lines": total_line_count,
+        "filtered_lines": filtered_count,
         "displayed_lines": len(displayed_lines),
         "displayed_entries": len(log_entries),
         "search_text": search_text,
         "level_filter": level_filter,
         "lines": lines,
-        "file_size": log_path.stat().st_size,
-        "file_size_display": _format_size(log_path.stat().st_size),
-        "modified": datetime.fromtimestamp(log_path.stat().st_mtime),
-        "error_count": sum(1 for line in filtered_lines if "ERROR" in line),
-        "warning_count": sum(1 for line in filtered_lines if "WARNING" in line),
-        "info_count": sum(1 for line in filtered_lines if "INFO" in line),
+        "file_size": log_stat.st_size,
+        "file_size_display": _format_size(log_stat.st_size),
+        "modified": datetime.fromtimestamp(log_stat.st_mtime),
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "info_count": info_count,
         "title": f"Error Log - {log_path.name}",
     }
 

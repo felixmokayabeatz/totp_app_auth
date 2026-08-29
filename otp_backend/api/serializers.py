@@ -79,14 +79,25 @@ class AppNotificationSerializer(serializers.ModelSerializer):
         ]
 
     def _payload(self, obj):
+        # Five SerializerMethodFields need this payload, and decrypting it five
+        # times over a hundred-row list was most of the time that list spent on
+        # the server. The result is cached on the instance being serialized,
+        # which is discarded with the response.
+        cached = getattr(obj, '_decrypted_payload', None)
+        if cached is not None:
+            return cached
+
         try:
-            return decrypt_notification_payload(obj.encrypted_payload)
+            payload = decrypt_notification_payload(obj.encrypted_payload)
         except Exception:
-            return {
+            payload = {
                 'title': 'Notification unavailable',
                 'message': 'This notification could not be decrypted.',
                 'details': 'This notification could not be decrypted.',
             }
+
+        obj._decrypted_payload = payload
+        return payload
 
     def get_title(self, obj):
         return self._payload(obj).get('title', 'Notification')

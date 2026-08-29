@@ -51,6 +51,18 @@ def debug_print(*args, **kwargs):
     if django_settings.DEBUG:
         print(*args, **kwargs)
 
+def _server_error_detail(exc: Exception) -> str:
+    """What a 500 tells the caller.
+
+    The traceback is logged at every call site already. Echoing the exception
+    text back over the wire only hands an unauthenticated caller a way to probe
+    what broke, so it stays behind DEBUG.
+    """
+    if django_settings.DEBUG:
+        return str(exc)
+    return 'Something went wrong on our side. Please try again.'
+
+
 
 def _consume_recovery_code(user: User, raw_code: str):
     code_set = BackupCodeSet.objects.filter(user=user).first()
@@ -176,7 +188,7 @@ def send_2fa_code(request):
         debug_print(f"{'='*60}\n")
         
         logger.error("2FA code sending failed.\n%s", error_details)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
     
 
 @api_view(['POST'])
@@ -221,28 +233,47 @@ def verify_2fa_code(request):
         
         debug_print(f"[2FA] Found code - ID: {verification.id}, Code: {verification.code}, Created: {verification.created_at}")
         
-        if verification.code != code:
-            debug_print(f"[2FA] Code mismatch - Expected: {verification.code}, Got: {code}")
-            logger.warning(f"Invalid code attempt for user: {user.email}")
-            return Response({'success': False, 'error': 'Invalid code'}, status=400)
-        
-        debug_print(f"[2FA] Code matches, checking validity...")
-        
-        if verification.is_valid():
-            debug_print(f"[2FA] Code is valid, marking as used")
-            verification.is_used = True
-            verification.save()
-            
-            elapsed_time = __import__('time').time() - start_time
-            debug_print(f"[2FA] Code verified successfully in {elapsed_time:.2f} seconds")
-            
-            logger.info(f'2FA code verified successfully for user: {user.email}')
-            return Response({'success': True, 'message': 'Code verified'})
-        else:
-            debug_print(f"[2FA] Code expired - Created: {verification.created_at}, Now: {__import__('django.utils.timezone').now()}")
-            logger.warning(f'Code expired for user: {user.email}')
-            return Response({'success': False, 'error': 'Code expired (10 minute limit)'}, status=400)
-            
+        # Expiry and the attempt budget are checked before the code itself, so
+        # a burnt-out code cannot be probed any further.
+        if not verification.is_valid():
+            debug_print(f"[2FA] Code no longer usable - Created: {verification.created_at}")
+            logger.warning(f'Code expired or exhausted for user: {user.email}')
+            return Response(
+                {'success': False, 'error': 'Code expired (10 minute limit)'},
+                status=400,
+            )
+
+        if not verification.matches(code):
+            verification.register_failed_attempt()
+            remaining = verification.attempts_remaining()
+            debug_print(f"[2FA] Code mismatch - {remaining} attempt(s) left")
+            logger.warning(
+                "Invalid code attempt for user: %s (%s attempts left)",
+                user.email,
+                remaining,
+            )
+            return Response(
+                {
+                    'success': False,
+                    'error': (
+                        'Invalid code'
+                        if remaining
+                        else 'Too many incorrect attempts. Request a new code.'
+                    ),
+                    'attempts_remaining': remaining,
+                },
+                status=400,
+            )
+
+        debug_print(f"[2FA] Code matches, marking as used")
+        verification.consume()
+
+        elapsed_time = __import__('time').time() - start_time
+        debug_print(f"[2FA] Code verified successfully in {elapsed_time:.2f} seconds")
+
+        logger.info(f'2FA code verified successfully for user: {user.email}')
+        return Response({'success': True, 'message': 'Code verified'})
+
     except User.DoesNotExist:
         debug_print(f"[2FA] User not found: {email}")
         logger.warning(f"User not found for verification: {email}")
@@ -256,7 +287,7 @@ def verify_2fa_code(request):
         debug_print(f"{'='*60}\n")
         
         logger.error("2FA verification failed.\n%s", error_details)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
     
 
 @api_view(['POST'])
@@ -331,7 +362,7 @@ def send_password_reset_code(request):
         debug_print(f"{'='*60}\n")
         
         logger.error("Password reset code sending failed.\n%s", error_details)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -383,17 +414,41 @@ def reset_password(request):
         
         debug_print(f"[PASSWORD RESET] Found code - ID: {verification.id}, Code: {verification.code}, Created: {verification.created_at}")
         
-        if verification.code != code:
-            debug_print(f"[PASSWORD RESET] Code mismatch - Expected: {verification.code}, Got: {code}")
-            logger.warning(f"Password reset - Invalid code for user: {user.email}")
-            return Response({'success': False, 'error': 'Invalid code'}, status=400)
-        
-        debug_print(f"[PASSWORD RESET] Code matches, checking validity...")
-        
+        # This endpoint hands out a new password on a correct code, so the
+        # attempt budget matters more here than anywhere else: check that the
+        # code is still live before comparing, and spend an attempt when it is
+        # wrong.
         if not verification.is_valid():
-            debug_print(f"[PASSWORD RESET] Code expired")
-            logger.warning(f"Password reset - Expired code for user: {user.email}")
-            return Response({'success': False, 'error': 'Code expired (10 minute limit)'}, status=400)
+            debug_print(f"[PASSWORD RESET] Code no longer usable")
+            logger.warning(f"Password reset - Expired or exhausted code for user: {user.email}")
+            return Response(
+                {'success': False, 'error': 'Code expired (10 minute limit)'},
+                status=400,
+            )
+
+        if not verification.matches(code):
+            verification.register_failed_attempt()
+            remaining = verification.attempts_remaining()
+            debug_print(f"[PASSWORD RESET] Code mismatch - {remaining} attempt(s) left")
+            logger.warning(
+                "Password reset - Invalid code for user: %s (%s attempts left)",
+                user.email,
+                remaining,
+            )
+            return Response(
+                {
+                    'success': False,
+                    'error': (
+                        'Invalid code'
+                        if remaining
+                        else 'Too many incorrect attempts. Request a new code.'
+                    ),
+                    'attempts_remaining': remaining,
+                },
+                status=400,
+            )
+
+        debug_print(f"[PASSWORD RESET] Code matches")
         
         # Reset password
         debug_print(f"[PASSWORD RESET] Resetting password for user: {user.email}")
@@ -406,8 +461,7 @@ def reset_password(request):
         )
         
         # Mark code as used
-        verification.is_used = True
-        verification.save()
+        verification.consume()
         debug_print(f"[PASSWORD RESET] Code marked as used")
         
         # Delete any other unused codes
@@ -419,11 +473,15 @@ def reset_password(request):
         html_content = get_password_changed_email_template()
         text_content = get_password_changed_email_text()
 
+        # The password is already changed by this point. If the mail host is
+        # down, that is worth logging, not worth telling the caller their reset
+        # failed when it did not.
         send_transactional_email(
             subject='Password Changed Successfully - BeatzLock Authenticator',
             recipient=user.email,
             text_content=text_content,
             html_content=html_content,
+            fail_silently=True,
         )
         
         elapsed_time = __import__('time').time() - start_time
@@ -446,7 +504,7 @@ def reset_password(request):
         debug_print(f"{'='*60}\n")
         
         logger.error("Password reset execution failed.\n%s", error_details)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -494,7 +552,7 @@ def verify_recovery_code_login(request):
     except Exception as e:
         error_details = traceback.format_exc()
         logger.error("Recovery code login verification failed.\n%s", error_details)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -583,4 +641,4 @@ def reset_password_with_recovery_code(request):
     except Exception as e:
         error_details = traceback.format_exc()
         logger.error("Password reset with recovery code failed.\n%s", error_details)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)

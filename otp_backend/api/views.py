@@ -119,6 +119,18 @@ def debug_print(*args, **kwargs):
     if django_settings.DEBUG:
         print(*args, **kwargs)
 
+def _server_error_detail(exc: Exception) -> str:
+    """What a 500 tells the caller.
+
+    The traceback is logged at every call site already. Echoing the exception
+    text back over the wire only hands an unauthenticated caller a way to probe
+    what broke, so it stays behind DEBUG.
+    """
+    if django_settings.DEBUG:
+        return str(exc)
+    return 'Something went wrong on our side. Please try again.'
+
+
 
 def _coerce_item_count(value) -> int | None:
     if value in (None, ''):
@@ -256,13 +268,18 @@ def _format_passwordless_code(raw_code: str) -> str:
 
 def _generate_passwordless_code() -> str:
     return _format_passwordless_code(
-        ''.join(random.choices(string.digits, k=PasswordlessLoginRequest.CODE_LENGTH))
+        ''.join(
+            secrets.choice(string.digits)
+            for _ in range(PasswordlessLoginRequest.CODE_LENGTH)
+        )
     )
 
 
 def _generate_passwordless_seed() -> str:
     alphabet = string.ascii_uppercase + string.digits
-    return ''.join(random.choices(alphabet, k=6))
+    # secrets, not random: this seed derives every code the approving phone
+    # will ever show for this request.
+    return ''.join(secrets.choice(alphabet) for _ in range(6))
 
 
 def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[str]:
@@ -294,6 +311,8 @@ def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[s
         hashlib.sha256(f'shuffle|{request_obj.id}'.encode('utf-8')).hexdigest()[:8],
         16,
     )
+    # Seeded deliberately: the approving phone must see the same three
+    # choices in the same order every time it re-reads this request.
     random.Random(shuffle_seed).shuffle(choices)
     return choices
 
@@ -803,11 +822,22 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         verification = EmailVerification.objects.filter(
             user=user,
-            code=email_code,
             is_used=False,
         ).order_by('-created_at').first()
         if verification is None or not verification.is_valid():
-            return Response({'error': 'The email verification code is invalid or expired.'}, status=400)
+            return Response(
+                {'error': 'The email verification code is invalid or expired.'},
+                status=400,
+            )
+        if not verification.matches(email_code):
+            verification.register_failed_attempt()
+            return Response(
+                {
+                    'error': 'The email verification code is invalid or expired.',
+                    'attempts_remaining': verification.attempts_remaining(),
+                },
+                status=400,
+            )
 
         session = ensure_device_session(
             user,
@@ -2468,8 +2498,9 @@ def send_delete_otp(request):
         return Response({'success': False, 'error': 'No email associated with account'}, status=400)
     
     try:
-        # Generate 6-digit code
-        code = ''.join(random.choices(string.digits, k=6))
+        # Generate 6-digit code. secrets, not random: this authorises deleting
+        # every account in the vault.
+        code = ''.join(secrets.choice(string.digits) for _ in range(6))
         debug_print(f"[DELETE OTP] Generated code: {code}")
         
         # Delete old unused codes for this user
@@ -2508,7 +2539,7 @@ def send_delete_otp(request):
         logger.error("Delete OTP sending failed.\n%s", error_details)
         debug_print(f"Send delete OTP error: {e}")
         
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
 
 
 @api_view(['POST'])
@@ -2532,35 +2563,54 @@ def verify_delete_otp(request):
         return Response({'success': False, 'error': 'Code is required'}, status=400)
     
     try:
-        # Find the latest unused OTP for this user
+        # Fetch the live code rather than looking one up by the value supplied:
+        # a lookup by value has no way to count how many wrong values came in.
         otp_obj = DeleteOTPCode.objects.filter(
-            user=user, 
-            code=code, 
-            used=False
+            user=user,
+            used=False,
         ).order_by('-created_at').first()
-        
-        if not otp_obj:
-            debug_print(f"[DELETE OTP] No valid OTP found for code: {code}")
+
+        if not otp_obj or not otp_obj.is_valid():
+            debug_print(f"[DELETE OTP] No usable OTP on file")
             logger.warning(f"Invalid delete OTP attempt - User: {user.email}")
-            return Response({'success': False, 'error': 'Invalid or expired code'}, status=400)
-        
+            return Response(
+                {'success': False, 'error': 'Invalid or expired code'},
+                status=400,
+            )
+
         debug_print(f"[DELETE OTP] Found OTP - ID: {otp_obj.id}, Created: {otp_obj.created_at}")
-        
-        # Check if OTP is valid
-        if otp_obj.is_valid():
-            debug_print(f"[DELETE OTP] OTP is valid, marking as used")
-            otp_obj.used = True
-            otp_obj.save()
-            
-            elapsed_time = __import__('time').time() - start_time
-            debug_print(f"[DELETE OTP] OTP verified successfully in {elapsed_time:.2f} seconds")
-            
-            logger.info(f"Delete OTP verified successfully - User: {user.email}")
-            return Response({'success': True, 'message': 'Code verified successfully'})
-        else:
-            debug_print(f"[DELETE OTP] OTP has expired - Created: {otp_obj.created_at}")
-            logger.warning(f"Delete OTP expired - User: {user.email}, Created: {otp_obj.created_at}")
-            return Response({'success': False, 'error': 'Code has expired (10 minute limit)'}, status=400)
+
+        if not otp_obj.matches(code):
+            otp_obj.register_failed_attempt()
+            remaining = otp_obj.attempts_remaining()
+            debug_print(f"[DELETE OTP] Code mismatch - {remaining} attempt(s) left")
+            logger.warning(
+                "Invalid delete OTP attempt - User: %s (%s attempts left)",
+                user.email,
+                remaining,
+            )
+            return Response(
+                {
+                    'success': False,
+                    'error': (
+                        'Invalid or expired code'
+                        if remaining
+                        else 'Too many incorrect attempts. Request a new code.'
+                    ),
+                    'attempts_remaining': remaining,
+                },
+                status=400,
+            )
+
+        debug_print(f"[DELETE OTP] OTP is valid, marking as used")
+        otp_obj.used = True
+        otp_obj.save(update_fields=['used'])
+
+        elapsed_time = __import__('time').time() - start_time
+        debug_print(f"[DELETE OTP] OTP verified successfully in {elapsed_time:.2f} seconds")
+
+        logger.info(f"Delete OTP verified successfully - User: {user.email}")
+        return Response({'success': True, 'message': 'Code verified successfully'})
         
     except Exception as e:
         error_details = traceback.format_exc()
@@ -2568,7 +2618,7 @@ def verify_delete_otp(request):
         debug_print(f"[DELETE OTP] Traceback:\n{error_details}")
         
         logger.error("Delete OTP verification failed.\n%s", error_details)
-        return Response({'success': False, 'error': str(e)}, status=500)
+        return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
 
 
 # ===================
@@ -2630,7 +2680,7 @@ def set_sync_preference(request):
         debug_print(f"[SYNC PREF] Traceback:\n{error_details}")
         
         logger.error("Saving sync preference failed.\n%s", error_details)
-        return Response({'error': str(e)}, status=500)
+        return Response({'error': _server_error_detail(e)}, status=500)
 
 
 @api_view(['GET'])

@@ -1726,3 +1726,131 @@ class SitemapTests(TestCase):
             r = self.client.get(path, HTTP_HOST=self.HOST, secure=True)
             self.assertIn(r.status_code, (200, 301, 302),
                           f'{path} returned {r.status_code}')
+
+
+class DownloadTargetGroupingTests(TestCase):
+    """The download pages group builds in memory instead of per-target SQL.
+
+    The pages used to ask the database once per platform and once per Linux
+    distribution -- fourteen queries on the downloads page, twenty-six on the
+    archive. They now read the table once and group in Python, so the Python
+    filter has to agree with the SQL filter it replaced on every target.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from beatzlock_app.models import AppRelease, DownloadableApp
+
+        cls.targets = [
+            ('windows', ''),
+            ('android', ''),
+            ('macos', ''),
+            ('ios', ''),
+            ('linux', 'ubuntu'),
+            ('linux', 'fedora'),
+            ('linux', 'arch'),
+            ('linux', ''),  # a build saved before distributions existed
+        ]
+        for index in range(3):
+            release = AppRelease.objects.create(
+                version=f'7.{index}.0',
+                released_at=timezone.now() - timedelta(days=index),
+                is_major_release=(index == 0),
+                keep_in_archive=(index % 2 == 0),
+            )
+            for platform, distribution in cls.targets:
+                DownloadableApp.objects.create(
+                    name='BeatzLock',
+                    platform=platform,
+                    linux_distribution=distribution,
+                    is_active=True,
+                    release=release,
+                )
+
+    def test_the_python_filter_selects_what_the_sql_filter_selects(self):
+        from beatzlock_app.models import DownloadableApp
+        from beatzlock_app.views import _active_released_apps_for_target, _apps_for_target, _all_active_released_apps
+
+        loaded = _all_active_released_apps()
+
+        checked = 0
+        for platform, _ in DownloadableApp.PLATFORM_CHOICES:
+            distributions = (
+                [value for value, _ in DownloadableApp.LINUX_DISTRIBUTION_CHOICES]
+                if platform == 'linux'
+                else ['']
+            )
+            for distribution in distributions:
+                from_sql = {
+                    app.id
+                    for app in _active_released_apps_for_target(platform, distribution)
+                }
+                from_python = {
+                    app.id for app in _apps_for_target(loaded, platform, distribution)
+                }
+                self.assertEqual(
+                    from_sql,
+                    from_python,
+                    msg=f'{platform}/{distribution or "-"} disagreed',
+                )
+                checked += 1
+
+        self.assertEqual(checked, 11)
+
+    def test_a_build_saved_without_a_distribution_lands_in_the_default_group(self):
+        from beatzlock_app.models import DownloadableApp
+        from beatzlock_app.views import _all_active_released_apps, _apps_for_target
+
+        # save() infers the default distribution for a Linux build that was
+        # given none, so the grouping has to find those builds under it.
+        blank_saved = DownloadableApp.objects.filter(
+            platform='linux',
+            linux_distribution=DownloadableApp.DEFAULT_LINUX_DISTRIBUTION,
+        )
+        self.assertTrue(blank_saved.exists())
+
+        grouped = _apps_for_target(
+            _all_active_released_apps(),
+            'linux',
+            DownloadableApp.DEFAULT_LINUX_DISTRIBUTION,
+        )
+
+        self.assertEqual(
+            {app.id for app in grouped},
+            set(blank_saved.values_list('id', flat=True)),
+        )
+
+    def test_the_downloads_page_reads_the_build_table_once(self):
+        with self.assertNumQueries(4):
+            response = self.client.get(reverse('beatzlock_app:download_list'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_the_archive_page_reads_the_build_table_once(self):
+        with self.assertNumQueries(1):
+            response = self.client.get(reverse('beatzlock_app:archived_downloads'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_the_latest_build_matches_what_a_per_target_query_would_pick(self):
+        from beatzlock_app.views import (
+            _active_released_apps_for_target,
+            _all_active_released_apps,
+            _latest_app_for_platform,
+            _release_sort_key,
+        )
+
+        loaded = _all_active_released_apps()
+
+        for platform, distribution in self.targets:
+            with self.subTest(platform=platform, distribution=distribution):
+                from_sql = sorted(
+                    _active_released_apps_for_target(platform, distribution),
+                    key=_release_sort_key,
+                    reverse=True,
+                )
+                expected = from_sql[0] if from_sql else None
+                actual = _latest_app_for_platform(platform, distribution, apps=loaded)
+
+                self.assertEqual(
+                    actual.id if actual else None,
+                    expected.id if expected else None,
+                )

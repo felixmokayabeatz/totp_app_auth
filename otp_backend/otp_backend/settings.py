@@ -61,6 +61,12 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+# .env has carried EMAIL_TIMEOUT for a while but nothing read it, so Django's
+# default of None applied: the SMTP socket had no timeout at all and a hung
+# mail host would hold a gunicorn worker open indefinitely. Every 2FA code,
+# reset code and security notice is sent from inside a request, so this is the
+# ceiling on how slow any of those endpoints can get.
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', 10))
 SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', '') or EMAIL_HOST_USER or ''
 DEFAULT_FROM_EMAIL = (
     os.getenv('DEFAULT_FROM_EMAIL')
@@ -225,6 +231,7 @@ if DEBUG:
     print(f"EMAIL_HOST: {EMAIL_HOST}")
     print(f"EMAIL_PORT: {EMAIL_PORT}")
     print(f"EMAIL_USE_TLS: {EMAIL_USE_TLS}")
+    print(f"EMAIL_TIMEOUT: {EMAIL_TIMEOUT}")
     print(f"EMAIL_HOST_USER: {EMAIL_HOST_USER}")
     print(f"EMAIL_HOST_PASSWORD: {'True' if EMAIL_HOST_PASSWORD else None}")
     print("==========The Db settings==========")

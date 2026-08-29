@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -124,18 +125,21 @@ class SecureStorageService {
     List<int> keyBytes,
     List<int> nonce,
   ) {
-    final output = <int>[];
+    // The key and nonce are the same for every block, so the prefix is built
+    // once and only the block counter is appended per round.
+    final prefix = <int>[...keyBytes, ...nonce];
+    final output = Uint8List(input.length);
+    var written = 0;
     var blockIndex = 0;
 
-    while (output.length < input.length) {
-      final keystreamBlock = sha256.convert([
-        ...keyBytes,
-        ...nonce,
-        ...utf8.encode(':$blockIndex'),
-      ]).bytes;
+    while (written < input.length) {
+      final keystreamBlock = sha256
+          .convert([...prefix, ...utf8.encode(':$blockIndex')])
+          .bytes;
       for (final byte in keystreamBlock) {
-        if (output.length >= input.length) break;
-        output.add(input[output.length] ^ byte);
+        if (written >= input.length) break;
+        output[written] = input[written] ^ byte;
+        written++;
       }
       blockIndex++;
     }
@@ -143,7 +147,16 @@ class SecureStorageService {
     return output;
   }
 
+  static String? _cachedStorageKey;
+
   String _deriveStorageKey() {
+    // Platform.localHostname is a real syscall -- eleven microseconds a go --
+    // and this was calling it on every single read and every single write, for
+    // a value that cannot change while the process is alive.
+    return _cachedStorageKey ??= _computeStorageKey();
+  }
+
+  String _computeStorageKey() {
     final username =
         Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
     final homeDir = Platform.environment['USERPROFILE'] ??

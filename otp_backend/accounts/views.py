@@ -18,6 +18,18 @@ def debug_print(*args, **kwargs):
     if django_settings.DEBUG:
         print(*args, **kwargs)
 
+def _server_error_detail(exc: Exception) -> str:
+    """What a 500 tells the caller.
+
+    The traceback is logged at every call site already. Echoing the exception
+    text back over the wire only hands an unauthenticated caller a way to probe
+    what broke, so it stays behind DEBUG.
+    """
+    if django_settings.DEBUG:
+        return str(exc)
+    return 'Something went wrong on our side. Please try again.'
+
+
 
 class ProfileViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
@@ -40,7 +52,7 @@ class ProfileViewSet(viewsets.GenericViewSet):
             error_details = traceback.format_exc()
             debug_print(f"[PROFILE] ERROR: {str(e)}")
             logger.error("Profile view failed.\n%s", error_details)
-            return Response({'error': str(e)}, status=500)
+            return Response({'error': _server_error_detail(e)}, status=500)
     
     @action(detail=False, methods=['post'])
     def update_profile(self, request):
@@ -78,7 +90,7 @@ class ProfileViewSet(viewsets.GenericViewSet):
             debug_print(f"[PROFILE] ERROR updating profile: {str(e)}")
             debug_print(f"[PROFILE] Traceback:\n{error_details}")
             logger.error("Profile update failed.\n%s", error_details)
-            return Response({'error': str(e)}, status=500)
+            return Response({'error': _server_error_detail(e)}, status=500)
         
     
 
