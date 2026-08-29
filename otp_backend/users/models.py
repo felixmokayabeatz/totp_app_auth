@@ -14,7 +14,6 @@ that never moved. See ``users/migrations/0001_initial.py``.
 """
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
-from django.contrib.auth.models import Group, Permission, PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
@@ -57,7 +56,7 @@ class UserManager(BaseUserManager):
         return self.get(**{f'{self.model.USERNAME_FIELD}__iexact': username})
 
 
-class User(AbstractBaseUser, PermissionsMixin):
+class User(AbstractBaseUser):
     email = models.EmailField('email address', max_length=254, unique=True)
     is_staff = models.BooleanField(
         'staff status',
@@ -73,29 +72,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         ),
     )
     date_joined = models.DateTimeField('date joined', default=timezone.now)
-
-    # Overridden purely to keep the join tables where they already are; the
-    # definitions otherwise match PermissionsMixin's.
-    groups = models.ManyToManyField(
-        Group,
-        verbose_name='groups',
-        blank=True,
-        related_name='user_set',
-        related_query_name='user',
-        db_table='auth_user_groups',
-        help_text=(
-            'The groups this user belongs to. A user will get all permissions '
-            'granted to each of their groups.'
-        ),
-    )
-    user_permissions = models.ManyToManyField(
-        Permission,
-        verbose_name='user permissions',
-        blank=True,
-        related_name='user_set',
-        related_query_name='user',
-        db_table='auth_user_user_permissions',
-        help_text='Specific permissions for this user.',
+    is_superuser = models.BooleanField(
+        'superuser status',
+        default=False,
+        help_text='Designates that this user has every permission in the admin.',
     )
 
     objects = UserManager()
@@ -115,3 +95,31 @@ class User(AbstractBaseUser, PermissionsMixin):
     def clean(self):
         super().clean()
         self.email = self.__class__.objects.normalize_email(self.email).strip().lower()
+
+    # -- Permissions ------------------------------------------------------
+    #
+    # This model used to inherit PermissionsMixin, which brought two
+    # many-to-many tables with it: auth_user_groups and
+    # auth_user_user_permissions. Both were empty, and so were auth_group and
+    # auth_group_permissions behind them -- nothing in this project has ever
+    # created a group or granted a per-user permission, and every staff account
+    # is a superuser. The mixin is gone and the join tables with it.
+    #
+    # What is left is the rule that was always in force: a superuser can do
+    # everything in the admin, and nobody else can do anything there. These
+    # three methods are the whole interface ModelAdmin and the admin templates
+    # use, so they are implemented directly rather than delegated to an auth
+    # backend that would only look in tables that no longer exist.
+
+    def has_perm(self, perm, obj=None):
+        return self.is_active and self.is_superuser
+
+    def has_perms(self, perm_list, obj=None):
+        return all(self.has_perm(perm, obj) for perm in perm_list)
+
+    def has_module_perms(self, app_label):
+        return self.is_active and self.is_superuser
+
+    def get_all_permissions(self, obj=None):
+        """Kept for callers that introspect rather than ask a yes/no question."""
+        return set()
