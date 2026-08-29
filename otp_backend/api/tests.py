@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.test import override_settings
 from rest_framework import status
@@ -19,11 +19,12 @@ from .notifications import (
     decrypt_notification_payload,
 )
 
+User = get_user_model()
+
 
 class DeviceSessionPrimaryChangeTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='felix',
             email='felix@example.com',
             password='testpass123',
         )
@@ -238,7 +239,6 @@ class DeviceSessionPrimaryChangeTests(APITestCase):
 class PasswordlessLoginFlowTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='pwless-user',
             email='pwless@example.com',
             password='testpass123',
         )
@@ -256,7 +256,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_passwordless_request_can_be_started_approved_and_completed(self):
         start_response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -347,7 +347,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_passwordless_approval_can_transfer_sync_unlock_payload(self):
         start_response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -403,7 +403,7 @@ class PasswordlessLoginFlowTests(APITestCase):
         response = self.request_client.post(
             reverse('auth-passwordless-start'),
             {
-                'username': self.user.username,
+                'username': self.user.email,
                 'password': 'wrong-password',
             },
             format='json',
@@ -419,10 +419,10 @@ class PasswordlessLoginFlowTests(APITestCase):
             PasswordlessLoginRequest.objects.filter(user=self.user).exists()
         )
 
-    def test_passwordless_start_returns_account_not_available_for_unknown_username(self):
+    def test_passwordless_start_returns_account_not_available_for_unknown_email(self):
         response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': 'missing-user'},
+            {'username': 'missing-user@example.com'},
             format='json',
             HTTP_X_DEVICE_ID='ghost-device',
             HTTP_X_DEVICE_LABEL='Ghost Device',
@@ -435,7 +435,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_passwordless_start_signs_in_immediately_on_current_primary_device(self):
         response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',
@@ -456,7 +456,7 @@ class PasswordlessLoginFlowTests(APITestCase):
         response = self.request_client.post(
             reverse('auth-passwordless-start'),
             {
-                'username': self.user.username,
+                'username': self.user.email,
                 'password': 'testpass123',
             },
             format='json',
@@ -481,7 +481,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',
@@ -501,7 +501,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -523,7 +523,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -537,7 +537,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_only_primary_phone_can_approve_passwordless_request(self):
         start_response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -572,7 +572,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_passwordless_request_list_keeps_completed_logs_without_code(self):
         start_response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -616,7 +616,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_passwordless_request_notification_hides_verification_code(self):
         start_response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -635,7 +635,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_only_primary_phone_can_delete_or_clear_passwordless_logs(self):
         start_response = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -692,7 +692,7 @@ class PasswordlessLoginFlowTests(APITestCase):
     def test_clear_logs_preserves_pending_requests(self):
         completed_start = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-01',
             HTTP_X_DEVICE_LABEL='Studio Laptop',
@@ -720,7 +720,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         pending_start = self.request_client.post(
             reverse('auth-passwordless-start'),
-            {'username': self.user.username},
+            {'username': self.user.email},
             format='json',
             HTTP_X_DEVICE_ID='laptop-02',
             HTTP_X_DEVICE_LABEL='Travel Laptop',
@@ -752,7 +752,6 @@ class PasswordlessLoginFlowTests(APITestCase):
 class PrimarySingleDeleteAccountTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='deleteuser',
             email='delete@example.com',
             password='testpass123',
         )
@@ -852,7 +851,6 @@ class PrimarySingleDeleteAccountTests(APITestCase):
 class PrimaryDeviceRecoveryTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='recover-user',
             email='recover@example.com',
             password='testpass123',
         )
@@ -881,7 +879,7 @@ class PrimaryDeviceRecoveryTests(APITestCase):
         response = self.client.post(
             reverse('auth-recover-primary-device'),
             {
-                'username': self.user.username,
+                'username': self.user.email,
                 'password': 'testpass123',
                 'email_code': '123456',
                 'recovery_code': self.recovery_code,
@@ -919,7 +917,7 @@ class PrimaryDeviceRecoveryTests(APITestCase):
         response = self.client.post(
             reverse('auth-recover-primary-device'),
             {
-                'username': self.user.username,
+                'username': self.user.email,
                 'password': 'testpass123',
                 'email_code': '123456',
                 'recovery_code': self.recovery_code,
@@ -940,7 +938,6 @@ class PrimaryDeviceRecoveryTests(APITestCase):
 class AppNotificationTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='notify-user',
             email='notify@example.com',
             password='testpass123',
         )
@@ -1119,7 +1116,6 @@ class AppNotificationTests(APITestCase):
 class ExternalReviewReplyNotificationTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='review-user',
             email='review@example.com',
             password='testpass123',
         )

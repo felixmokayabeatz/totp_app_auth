@@ -1,7 +1,7 @@
 # api/serializers.py
 
 from rest_framework import serializers
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from accounts.identity import normalize_email
 from .models import (
     AppNotification,
@@ -13,7 +13,17 @@ from .models import (
 )
 from .notifications import decrypt_notification_payload
 
+User = get_user_model()
+
+
 class UserSerializer(serializers.ModelSerializer):
+    # There is no username column any more, but the installed app still reads
+    # user["username"] out of every auth response and keeps it as the identity
+    # its local vault is encrypted under. The key stays on the wire, carrying
+    # the one identifier there is, so an app that has not been updated keeps
+    # working. Drop it only once no released build reads it.
+    username = serializers.EmailField(source='email', read_only=True)
+
     class Meta:
         model = User
         fields = ['id', 'username', 'email']
@@ -37,17 +47,11 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'An account already exists with this email.'
             )
-        if User.objects.filter(username__iexact=email).exists():
-            raise serializers.ValidationError(
-                'An account already exists with this email.'
-            )
         return email
-    
+
     def create(self, validated_data):
-        email = validated_data['email']
         return User.objects.create_user(
-            username=email,
-            email=email,
+            email=validated_data['email'],
             password=validated_data['password'],
         )
 

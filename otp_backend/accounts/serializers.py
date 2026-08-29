@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from accounts.models import UserProfile
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -12,5 +12,5 @@ class UserSerializer(serializers.ModelSerializer):
     joined_on = serializers.DateTimeField(source='date_joined', read_only=True)
     
     class Meta:
-        model = User
+        model = get_user_model()
         fields = ['id', 'email', 'profile', 'joined_on']

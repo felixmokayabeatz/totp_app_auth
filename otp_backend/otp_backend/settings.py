@@ -69,11 +69,16 @@ DEFAULT_FROM_EMAIL = (
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 BEATZLOCK_INTERNAL_SERVICE_SECRET = os.getenv('BEATZLOCK_INTERNAL_SERVICE_SECRET', '')
 
+AUTH_USER_MODEL = 'users.User'
+
 INSTALLED_APPS = [
     # accounts comes first only so that its management/commands/createsuperuser.py
     # wins over django.contrib.auth's: Django resolves a duplicated command name
     # to whichever app is listed earlier.
     'accounts',
+    # 'users' holds AUTH_USER_MODEL: an account is an email address and a
+    # password, with no username or name columns behind it.
+    'users',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

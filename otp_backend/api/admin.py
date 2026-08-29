@@ -23,7 +23,7 @@ class EncryptedDataAdmin(admin.ModelAdmin):
         "synced_at",
     )
     list_filter = ("data_type", "created_at", "updated_at")
-    search_fields = ("user__username", "data_type")
+    search_fields = ("user__email", "data_type")
     readonly_fields = ("id", "created_at", "updated_at", "synced_at", "user", "data_type", "version")
     
     # Disable actions
@@ -49,7 +49,7 @@ class SyncLogAdmin(admin.ModelAdmin):
         "timestamp",
     )
     list_filter = ("sync_type", "status", "timestamp")
-    search_fields = ("user__username", "device_id")
+    search_fields = ("user__email", "device_id")
     readonly_fields = ("timestamp", "user", "device_id", "sync_type", "status")
     
     def has_add_permission(self, request):
@@ -71,7 +71,7 @@ class AccountTombstoneAdmin(admin.ModelAdmin):
         "deleted_at",
     )
     list_filter = ("deleted_at",)
-    search_fields = ("user__username", "account_id")
+    search_fields = ("user__email", "account_id")
     readonly_fields = ("deleted_at", "user", "account_id")
     
     def has_add_permission(self, request):
@@ -95,7 +95,7 @@ class DeleteOTPCodeAdmin(admin.ModelAdmin):
         "is_valid",
     )
     list_filter = ("used", "created_at")
-    search_fields = ("user__username",)
+    search_fields = ("user__email",)
     readonly_fields = ("created_at", "user", "code", "used")
     
     @admin.display(boolean=True, description="Valid?")
@@ -123,7 +123,7 @@ class DeleteOTPCodeAdmin(admin.ModelAdmin):
 #         "updated_at",
 #         "last_used_at",
 #     )
-#     search_fields = ("user__username", "user__email")
+#     search_fields = ("user__email",)
 #     readonly_fields = ("user", "encrypted_codes", "created_at", "updated_at", "last_used_at")
 
 #     def has_add_permission(self, request):
@@ -146,10 +146,7 @@ class BackupCodeSetAdmin(admin.ModelAdmin):
         "last_used_at",
     )
 
-    search_fields = (
-        "user__username",
-        "user__email",
-    )
+    search_fields = ("user__email",)
 
     readonly_fields = (
         "created_at",
@@ -173,7 +170,7 @@ class AppNotificationAdmin(admin.ModelAdmin):
         "read_at",
     )
     list_filter = ("notification_type", "is_read", "created_at")
-    search_fields = ("user__username", "user__email", "notification_type")
+    search_fields = ("user__email", "notification_type")
     readonly_fields = (
         "user",
         "notification_type",
@@ -210,7 +207,7 @@ class DeviceSessionAdmin(admin.ModelAdmin):
         "revoked_at",
     )
     list_filter = ("is_primary", "is_active", "created_at", "last_seen_at", "revoked_at")
-    search_fields = ("user__username", "user__email", "device_label", "device_id", "ip_address")
+    search_fields = ("user__email", "device_label", "device_id", "ip_address")
     readonly_fields = (
         "id",
         "user",
@@ -283,7 +280,7 @@ class DeviceSessionAdmin(admin.ModelAdmin):
 
         self.message_user(
             request,
-            f"{session.device_label} is now the primary device for {session.user.username}.",
+            f"{session.device_label} is now the primary device for {session.user.email}.",
             level=messages.SUCCESS,
         )
 
@@ -298,7 +295,7 @@ class PasswordlessLoginRequestAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("status", "requester_device_kind", "created_at", "expires_at")
-    search_fields = ("user__username", "user__email", "requester_device_label", "requester_device_id")
+    search_fields = ("user__email", "requester_device_label", "requester_device_id")
     readonly_fields = (
         "id",
         "user",

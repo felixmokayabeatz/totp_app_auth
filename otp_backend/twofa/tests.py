@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
@@ -12,27 +12,35 @@ from .email_templates import (
     get_recovery_codes_generated_email_template,
 )
 
+User = get_user_model()
+
 
 class EmailTemplateRenderTests(SimpleTestCase):
     def test_two_factor_template_uses_beatzlock_branding(self):
-        html = get_2fa_email_template('Felix', '123456')
+        html = get_2fa_email_template('123456')
 
         self.assertIn('BeatzLock Authenticator', html)
         self.assertIn('Your verification code', html)
         self.assertIn('123456', html)
         self.assertNotIn('@import', html)
 
+    def test_templates_greet_the_account_without_naming_anyone(self):
+        html = get_2fa_email_template('123456')
+
+        self.assertIn('Hello,', html)
+        self.assertNotIn('Hello Felix', html)
+
     def test_delete_template_mentions_account_deletion(self):
-        html = get_delete_otp_email_template('Felix', '654321')
+        html = get_delete_otp_email_template('654321')
 
         self.assertIn('Confirm account deletion', html)
         self.assertIn('654321', html)
 
     def test_other_templates_render_without_inline_font_imports(self):
         templates = [
-            get_password_changed_email_template('Felix'),
-            get_password_reset_email_template('Felix', '112233'),
-            get_recovery_codes_generated_email_template('Felix'),
+            get_password_changed_email_template(),
+            get_password_reset_email_template('112233'),
+            get_recovery_codes_generated_email_template(),
         ]
 
         for html in templates:
@@ -49,7 +57,6 @@ class EmailTemplateRenderTests(SimpleTestCase):
 class TwoFactorEmailDeliveryTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='felix',
             email='felix@example.com',
             password='testpass123',
         )
@@ -59,7 +66,7 @@ class TwoFactorEmailDeliveryTests(APITestCase):
         response = self.client.post(
             reverse('send_2fa'),
             {
-                'username': 'felix',
+                'username': 'felix@example.com',
                 'password': 'testpass123',
             },
             format='json',
@@ -84,7 +91,6 @@ class TwoFactorEmailDeliveryTests(APITestCase):
 class DeleteOtpEmailDeliveryTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='adminfelix',
             email='adminfelix@example.com',
             password='testpass123',
         )

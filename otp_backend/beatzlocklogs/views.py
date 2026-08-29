@@ -155,7 +155,7 @@ def log_viewer(request, log_file=None):
     if not log_file:
         logger.info(
             "Log viewer accessed by %s with %s files visible",
-            request.user.username,
+            request.user.email,
             len(filtered_logs),
         )
         return render(request, "admin/log_viewer.html", context)

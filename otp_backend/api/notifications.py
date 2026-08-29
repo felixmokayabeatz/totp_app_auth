@@ -6,10 +6,13 @@ from typing import Any
 
 from cryptography.fernet import Fernet
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from .models import AppNotification
+
+# The project-wide account model; users.User, keyed by email.
+User = get_user_model()
 
 
 def _get_cipher() -> Fernet:

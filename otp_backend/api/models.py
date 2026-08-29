@@ -1,7 +1,6 @@
 #  api/models.py
 
 from django.db import models
-from django.contrib.auth.models import User
 from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
@@ -16,7 +15,7 @@ from .passwordless_crypto import (
 
 class EncryptedData(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='encrypted_data')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='encrypted_data')
     data_type = models.CharField(max_length=50)
     encrypted_content = models.TextField()
     version = models.IntegerField(default=1)
@@ -29,11 +28,11 @@ class EncryptedData(models.Model):
         unique_together = ['user', 'data_type']
 
     def __str__(self):
-        return f"{self.user.username} - {self.data_type}"
+        return f"{self.user.email} - {self.data_type}"
 
 
 class SyncLog(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name='sync_log')
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, primary_key=True, related_name='sync_log')
     device_id = models.CharField(max_length=255, blank=True, default='')
     sync_type = models.CharField(max_length=50, blank=True, default='')
     status = models.CharField(max_length=50, blank=True, default='')
@@ -43,12 +42,12 @@ class SyncLog(models.Model):
     total_syncs = models.IntegerField(default=0)  # Successful cloud write operations
 
     def __str__(self):
-        return f"{self.user.username} - Last sync: {self.timestamp}"
+        return f"{self.user.email} - Last sync: {self.timestamp}"
 
 
 # Tombstone table — once an account ID lands here, no device can re-add it.
 class AccountTombstone(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tombstones')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tombstones')
     account_id = models.CharField(max_length=255)
     deleted_at = models.DateTimeField(auto_now_add=True)
 
@@ -56,12 +55,12 @@ class AccountTombstone(models.Model):
         unique_together = ['user', 'account_id']
 
     def __str__(self):
-        return f"{self.user.username} – tombstone {self.account_id}"
+        return f"{self.user.email} – tombstone {self.account_id}"
 
 
 # One-time OTP codes for dangerous operations (e.g. delete-all-everywhere)
 class DeleteOTPCode(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='delete_otps')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='delete_otps')
     code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     used = models.BooleanField(default=False)
@@ -74,8 +73,7 @@ class DeleteOTPCode(models.Model):
 
 
 class BackupCodeSet(models.Model):
-    user = models.OneToOneField(
-        User,
+    user = models.OneToOneField(settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='backup_code_set',
     )
@@ -85,12 +83,11 @@ class BackupCodeSet(models.Model):
     last_used_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.user.username} - backup codes"
+        return f"{self.user.email} - backup codes"
 
 
 class AppNotification(models.Model):
-    user = models.ForeignKey(
-        User,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='app_notifications',
     )
@@ -105,7 +102,7 @@ class AppNotification(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.username} - {self.notification_type}"
+        return f"{self.user.email} - {self.notification_type}"
 
 
 class DeviceSession(models.Model):
@@ -121,8 +118,7 @@ class DeviceSession(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='device_sessions',
     )
@@ -155,7 +151,7 @@ class DeviceSession(models.Model):
         ordering = ['-last_seen_at', '-created_at']
 
     def __str__(self):
-        return f"{self.user.username} - {self.device_label}"
+        return f"{self.user.email} - {self.device_label}"
 
 
 class PasswordlessLoginRequest(models.Model):
@@ -175,8 +171,7 @@ class PasswordlessLoginRequest(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='passwordless_login_requests',
     )
@@ -213,7 +208,7 @@ class PasswordlessLoginRequest(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.username} - passwordless {self.status} - {self.requester_device_label}"
+        return f"{self.user.email} - passwordless {self.status} - {self.requester_device_label}"
 
     def _looks_like_plain_numeric_code(self, value: str) -> bool:
         return value.isdigit() and len(value) in {3, self.CODE_LENGTH}
@@ -315,8 +310,7 @@ class BulkAccountDeleteRequest(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='bulk_account_delete_requests',
     )
@@ -354,7 +348,7 @@ class BulkAccountDeleteRequest(models.Model):
 
     def __str__(self):
         return (
-            f"{self.user.username} - bulk delete {self.status} - "
+            f"{self.user.email} - bulk delete {self.status} - "
             f"{self.requester_device_label}"
         )
 
@@ -372,8 +366,7 @@ class BackupCodeGenerationRequest(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='backup_code_generation_requests',
     )
@@ -407,6 +400,6 @@ class BackupCodeGenerationRequest(models.Model):
 
     def __str__(self):
         return (
-            f"{self.user.username} - backup codes {self.status} - "
+            f"{self.user.email} - backup codes {self.status} - "
             f"{self.requester_device_label}"
         )

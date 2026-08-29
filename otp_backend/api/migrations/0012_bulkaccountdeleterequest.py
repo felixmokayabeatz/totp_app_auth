@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
 import uuid
@@ -6,6 +7,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('api', '0011_devicesession_device_kind_passwordlessloginrequest'),
     ]
 
@@ -28,7 +30,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('reviewed_by_session', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='reviewed_bulk_delete_requests', to='api.devicesession')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='bulk_account_delete_requests', to='auth.user')),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='bulk_account_delete_requests', to=settings.AUTH_USER_MODEL)),
             ],
             options={
                 'ordering': ['-created_at'],

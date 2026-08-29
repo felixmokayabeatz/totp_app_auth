@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
@@ -8,6 +8,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import DeviceSession
+
+# The project-wide account model; users.User, keyed by email.
+User = get_user_model()
 
 
 class DeviceSessionTokenRefreshSerializer(TokenRefreshSerializer):

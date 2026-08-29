@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.db import connection
 from django.utils.crypto import constant_time_compare
 from django.utils import timezone
@@ -27,8 +27,9 @@ import logging
 import traceback
 from django.conf import settings as django_settings
 from accounts.identity import (
-    authenticate_login_identifier,
-    find_user_by_login_identifier,
+    authenticate_email,
+    email_from_request,
+    find_user_by_email,
     normalize_email,
 )
 
@@ -103,6 +104,9 @@ from twofa.email_templates import (
 )
 from twofa.models import EmailVerification
 from twofa.views import _consume_recovery_code
+
+# The project-wide account model; users.User, keyed by email.
+User = get_user_model()
 
 # ===================
 # LOGGING SETUP
@@ -389,7 +393,7 @@ def _build_backup_code_pdf_payload(*, user: User, current_session: DeviceSession
 
     generated_at = timezone.localtime(timezone.now()).strftime('%B %d, %Y at %I:%M %p %Z')
     pdf_bytes = build_backup_codes_pdf(
-        email=user.email or user.username,
+        email=user.email,
         account_name='BeatzLock Authenticator',
         codes=codes,
         generated_at=generated_at,
@@ -397,10 +401,11 @@ def _build_backup_code_pdf_payload(*, user: User, current_session: DeviceSession
         theme=pdf_theme,
     )
 
-    safe_username = ''.join(
-        char for char in user.username if char.isalnum() or char in ('-', '_')
+    # The address, reduced to what is safe in a Content-Disposition filename.
+    safe_name = ''.join(
+        char for char in user.email if char.isalnum() or char in ('-', '_')
     ) or 'user'
-    filename = f"beatzlock_backup_codes_{safe_username}.pdf"
+    filename = f"beatzlock_backup_codes_{safe_name}.pdf"
     return {
         'pdf_bytes': pdf_bytes,
         'file_name': filename,
@@ -480,7 +485,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             
             try:
                 user = serializer.save()
-                debug_print(f"[AUTH] User created successfully - ID: {user.id}, Username: {user.username}, Email: {user.email}")
+                debug_print(f"[AUTH] User created successfully - ID: {user.id}, Email: {user.email}")
                 
                 refresh = RefreshToken.for_user(user)
                 attach_session_to_refresh_token(user, request, refresh)
@@ -488,7 +493,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 elapsed_time = __import__('time').time() - start_time
                 debug_print(f"[AUTH] Registration completed in {elapsed_time:.2f} seconds")
                 
-                logger.info(f"User registered successfully - Username: {user.username}, Email: {user.email}, ID: {user.id}")
+                logger.info(f"User registered successfully - Email: {user.email}, ID: {user.id}")
                 
                 return Response({
                     'user': UserSerializer(user).data,
@@ -510,9 +515,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'])
     def login(self, request):
         start_time = __import__('time').time()
-        login_identifier = (
-            request.data.get('email') or request.data.get('username') or ''
-        ).strip()
+        email = email_from_request(request.data)
         password = request.data.get('password')
         device_label = build_device_label(
             request.data.get('device_label'),
@@ -521,25 +524,25 @@ class AuthViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[AUTH] Login called")
-        debug_print(f"[AUTH] Email/Login: {login_identifier}")
+        debug_print(f"[AUTH] Email: {email}")
         debug_print(f"[AUTH] Password provided: {'Yes' if password else 'No'}")
         debug_print(f"[AUTH] Request IP: {request.META.get('REMOTE_ADDR')}")
         debug_print(f"[AUTH] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Login attempt - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
+        logger.info(f"Login attempt - Email: {email}, IP: {request.META.get('REMOTE_ADDR')}")
         
-        if not login_identifier or not password:
-            debug_print(f"[AUTH] ERROR: Missing email/login or password")
-            logger.warning(f"Login missing credentials - Email/Login: {login_identifier}")
+        if not email or not password:
+            debug_print(f"[AUTH] ERROR: Missing email or password")
+            logger.warning(f"Login missing credentials - Email: {email}")
             return Response({'error': 'Email and password required'}, status=400)
         
         try:
-            debug_print(f"[AUTH] Looking up user by email/login: {login_identifier}")
-            user = authenticate_login_identifier(login_identifier, password)
+            debug_print(f"[AUTH] Looking up user by email: {email}")
+            user = authenticate_email(email, password)
             
             if user:
-                debug_print(f"[AUTH] Authentication SUCCESS - User ID: {user.id}, Username: {user.username}")
+                debug_print(f"[AUTH] Authentication SUCCESS - User ID: {user.id}, Email: {user.email}")
                 
                 refresh = RefreshToken.for_user(user)
                 session = attach_session_to_refresh_token(user, request, refresh)
@@ -548,7 +551,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 elapsed_time = __import__('time').time() - start_time
                 debug_print(f"[AUTH] Login completed in {elapsed_time:.2f} seconds")
                 
-                logger.info(f"User logged in successfully - Username: {user.username}, ID: {user.id}, IP: {request.META.get('REMOTE_ADDR')}")
+                logger.info(f"User logged in successfully - Email: {user.email}, ID: {user.id}, IP: {request.META.get('REMOTE_ADDR')}")
                 
                 return Response({
                     'user': UserSerializer(user).data,
@@ -556,8 +559,8 @@ class AuthViewSet(viewsets.GenericViewSet):
                     'refresh': str(refresh),
                 })
             
-            debug_print(f"[AUTH] Authentication FAILED for login: {login_identifier}")
-            logger.warning(f"Failed login attempt - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
+            debug_print(f"[AUTH] Authentication FAILED for email: {email}")
+            logger.warning(f"Failed login attempt - Email: {email}, IP: {request.META.get('REMOTE_ADDR')}")
             return Response({'error': 'Invalid credentials'}, status=401)
             
         except Exception as e:
@@ -569,25 +572,23 @@ class AuthViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'], url_path='passwordless-start')
     def passwordless_start(self, request):
-        login_identifier = (
-            request.data.get('email') or request.data.get('username') or ''
-        ).strip()
+        email = email_from_request(request.data)
         password = request.data.get('password') or ''
         device_id = get_request_device_id(request)
         device_fingerprint = get_request_device_fingerprint(request)
         device_label = get_request_device_label(request)
         device_kind = get_request_device_kind(request)
 
-        if not login_identifier:
+        if not email:
             return Response({'error': 'Email is required.'}, status=400)
 
-        user = find_user_by_login_identifier(login_identifier)
+        user = find_user_by_email(email)
         if user is None:
             return Response({'error': 'Account not available.'}, status=404)
 
         if password:
-            authenticated_user = authenticate_login_identifier(
-                login_identifier,
+            authenticated_user = authenticate_email(
+                email,
                 password,
             )
             if not authenticated_user:
@@ -781,24 +782,22 @@ class AuthViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'], url_path='recover-primary-device')
     def recover_primary_device(self, request):
-        login_identifier = (
-            request.data.get('email') or request.data.get('username') or ''
-        ).strip()
+        email = email_from_request(request.data)
         password = request.data.get('password') or ''
         email_code = (request.data.get('email_code') or '').strip()
         recovery_code = (request.data.get('recovery_code') or '').strip()
 
-        if not login_identifier or not password or not email_code or not recovery_code:
+        if not email or not password or not email_code or not recovery_code:
             return Response(
                 {'error': 'Email, password, email code, and recovery code are required.'},
                 status=400,
             )
 
-        user_obj = find_user_by_login_identifier(login_identifier)
+        user_obj = find_user_by_email(email)
         if user_obj is None:
             return Response({'error': 'No account was found for that email.'}, status=404)
 
-        user = authenticate_login_identifier(login_identifier, password)
+        user = authenticate_email(email, password)
         if not user:
             return Response({'error': 'Account password is incorrect.'}, status=403)
 
@@ -880,26 +879,26 @@ class AuthViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[AUTH] change_password called")
-        debug_print(f"[AUTH] User: {user.username} (ID: {user.id})")
+        debug_print(f"[AUTH] User: {user.email} (ID: {user.id})")
         debug_print(f"[AUTH] Current password provided: {'Yes' if current_password else 'No'}")
         debug_print(f"[AUTH] New password length: {len(new_password) if new_password else 0}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Password change attempt - User: {user.username}, IP: {request.META.get('REMOTE_ADDR')}")
+        logger.info(f"Password change attempt - User: {user.email}, IP: {request.META.get('REMOTE_ADDR')}")
         
         if not current_password or not new_password:
             debug_print(f"[AUTH] ERROR: Missing current or new password")
-            logger.warning(f"Password change missing fields - User: {user.username}")
+            logger.warning(f"Password change missing fields - User: {user.email}")
             return Response({'error': 'Current password and new password are required'}, status=400)
         
         if not user.check_password(current_password):
             debug_print(f"[AUTH] ERROR: Current password is incorrect")
-            logger.warning(f"Password change - Incorrect current password for user: {user.username}")
+            logger.warning(f"Password change - Incorrect current password for user: {user.email}")
             return Response({'error': 'Current password is incorrect'}, status=400)
         
         if len(new_password) < 8:
             debug_print(f"[AUTH] ERROR: New password too short (length: {len(new_password)})")
-            logger.warning(f"Password change - New password too short for user: {user.username}")
+            logger.warning(f"Password change - New password too short for user: {user.email}")
             return Response({'error': 'Password must be at least 8 characters'}, status=400)
         
         try:
@@ -914,7 +913,7 @@ class AuthViewSet(viewsets.GenericViewSet):
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[AUTH] Password changed successfully in {elapsed_time:.2f} seconds")
             
-            logger.info(f"Password changed successfully - User: {user.username}")
+            logger.info(f"Password changed successfully - User: {user.email}")
             
             return Response({'success': 'Password changed successfully'})
             
@@ -959,7 +958,7 @@ class SyncViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[SYNC] Upload sync called")
-        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] User: {user.email} (ID: {user.id})")
         debug_print(f"[SYNC] Data type: {data_type}")
         debug_print(f"[SYNC] Version: {version}")
         debug_print(f"[SYNC] Device ID: {device_id}")
@@ -969,11 +968,11 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] Item count: {item_count}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Sync upload request - User: {user.username}, Type: {data_type}, Device: {device_id}, Version: {version}")
+        logger.info(f"Sync upload request - User: {user.email}, Type: {data_type}, Device: {device_id}, Version: {version}")
         
         if not data_type:
             debug_print(f"[SYNC] ERROR: Missing data_type")
-            logger.warning(f"Sync upload missing data_type - User: {user.username}")
+            logger.warning(f"Sync upload missing data_type - User: {user.email}")
             return Response({'error': 'data_type is required'}, status=400)
         
         try:
@@ -1009,7 +1008,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             debug_print(f"[SYNC] Upload sync completed in {elapsed_time:.2f} seconds")
             
             logger.info(
-                f"Sync upload successful - User: {user.username}, Type: {data_type}, "
+                f"Sync upload successful - User: {user.email}, Type: {data_type}, "
                 f"Created: {created}, Total syncs: {sync_log.total_syncs}"
             )
             
@@ -1048,16 +1047,16 @@ class SyncViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[SYNC] Download data called")
-        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] User: {user.email} (ID: {user.id})")
         debug_print(f"[SYNC] Data type: {data_type}")
         debug_print(f"[SYNC] Device ID: {device_id}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Sync download request - User: {user.username}, Type: {data_type}, Device: {device_id}")
+        logger.info(f"Sync download request - User: {user.email}, Type: {data_type}, Device: {device_id}")
         
         if not data_type:
             debug_print(f"[SYNC] ERROR: Missing data_type")
-            logger.warning(f"Sync download missing data_type - User: {user.username}")
+            logger.warning(f"Sync download missing data_type - User: {user.email}")
             return Response({'error': 'data_type is required'}, status=400)
         
         try:
@@ -1070,7 +1069,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Download completed in {elapsed_time:.2f} seconds")
             
-            logger.info(f"Sync download successful - User: {user.username}, Type: {data_type}, Version: {data.version}")
+            logger.info(f"Sync download successful - User: {user.email}, Type: {data_type}, Version: {data.version}")
             
             return Response({
                 'encrypted_content': data.encrypted_content,
@@ -1082,7 +1081,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             
         except EncryptedData.DoesNotExist:
             debug_print(f"[SYNC] No data found for type: {data_type}")
-            logger.info(f"No data found for user {user.username}, type: {data_type}")
+            logger.info(f"No data found for user {user.email}, type: {data_type}")
             return Response({'status': 'no_data'}, status=404)
             
         except Exception as e:
@@ -1100,10 +1099,10 @@ class SyncViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[SYNC] Get tombstones called")
-        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] User: {user.email} (ID: {user.id})")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Get tombstones request - User: {user.username}")
+        logger.info(f"Get tombstones request - User: {user.email}")
         
         try:
             ids = list(
@@ -1119,7 +1118,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Tombstones retrieved in {elapsed_time:.2f} seconds")
             
-            logger.info(f"Tombstones retrieved - User: {user.username}, Count: {len(ids)}")
+            logger.info(f"Tombstones retrieved - User: {user.email}, Count: {len(ids)}")
             
             return Response({'tombstoned_ids': ids})
             
@@ -1140,16 +1139,16 @@ class SyncViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[SYNC] Delete account called")
-        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] User: {user.email} (ID: {user.id})")
         debug_print(f"[SYNC] Account ID: {account_id}")
         debug_print(f"[SYNC] Device ID: {device_id}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Delete account request - User: {user.username}, Account ID: {account_id}, Device: {device_id}")
+        logger.info(f"Delete account request - User: {user.email}, Account ID: {account_id}, Device: {device_id}")
         
         if not account_id:
             debug_print(f"[SYNC] ERROR: Missing account_id")
-            logger.warning(f"Delete account missing account_id - User: {user.username}")
+            logger.warning(f"Delete account missing account_id - User: {user.email}")
             return Response({'error': 'Account ID required'}, status=400)
         
         try:
@@ -1165,7 +1164,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Account deletion completed in {elapsed_time:.2f} seconds")
             
-            logger.info(f"Account deleted successfully - User: {user.username}, Account ID: {account_id}")
+            logger.info(f"Account deleted successfully - User: {user.email}, Account ID: {account_id}")
             
             return Response({'success': True, 'account_id': account_id})
             
@@ -1223,7 +1222,7 @@ class SyncViewSet(viewsets.GenericViewSet):
         except Exception:
             logger.exception(
                 "Primary delete-account-everywhere failed.\nUser=%s Account=%s",
-                request.user.username,
+                request.user.email,
                 account_id,
             )
             return Response({'error': 'Failed to delete account'}, status=500)
@@ -1236,11 +1235,11 @@ class SyncViewSet(viewsets.GenericViewSet):
         
         debug_print(f"\n{'='*60}")
         debug_print(f"[SYNC] Delete all accounts called")
-        debug_print(f"[SYNC] User: {user.username} (ID: {user.id})")
+        debug_print(f"[SYNC] User: {user.email} (ID: {user.id})")
         debug_print(f"[SYNC] Device ID: {device_id}")
         debug_print(f"{'='*60}\n")
         
-        logger.warning(f"Delete all accounts request - User: {user.username}, Device: {device_id}")
+        logger.warning(f"Delete all accounts request - User: {user.email}, Device: {device_id}")
         
         try:
             # Delete all OTP accounts
@@ -1268,7 +1267,7 @@ class SyncViewSet(viewsets.GenericViewSet):
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[SYNC] Delete all accounts completed in {elapsed_time:.2f} seconds")
             
-            logger.warning(f"All accounts deleted - User: {user.username}, Deleted count: {deleted_count}")
+            logger.warning(f"All accounts deleted - User: {user.email}, Deleted count: {deleted_count}")
             
             return Response({'success': True, 'deleted_count': deleted_count})
             
@@ -2004,7 +2003,6 @@ class BackupCodeGenerationRequestViewSet(viewsets.ReadOnlyModelViewSet):
 
         if request.user.email:
             html_content = get_recovery_codes_generated_email_template(
-                request.user.username,
                 generated_at=generated_at,
                 device_label=current_session.device_label or '',
             )
@@ -2012,7 +2010,6 @@ class BackupCodeGenerationRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 subject='New recovery codes generated - BeatzLock Authenticator',
                 recipient=request.user.email,
                 text_content=get_recovery_codes_generated_email_text(
-                    request.user.username,
                     generated_at=generated_at,
                     device_label=current_session.device_label or '',
                 ),
@@ -2458,12 +2455,12 @@ def send_delete_otp(request):
     
     debug_print(f"\n{'='*60}")
     debug_print(f"[DELETE OTP] Send OTP called")
-    debug_print(f"[DELETE OTP] User: {user.username} (ID: {user.id})")
+    debug_print(f"[DELETE OTP] User: {user.email} (ID: {user.id})")
     debug_print(f"[DELETE OTP] Email: {user.email}")
     debug_print(f"[DELETE OTP] Request IP: {request.META.get('REMOTE_ADDR')}")
     debug_print(f"{'='*60}\n")
     
-    logger.info(f"Delete OTP request - User: {user.username}, IP: {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"Delete OTP request - User: {user.email}, IP: {request.META.get('REMOTE_ADDR')}")
     
     if not user.email:
         debug_print(f"[DELETE OTP] ERROR: User has no email")
@@ -2484,14 +2481,14 @@ def send_delete_otp(request):
         debug_print(f"[DELETE OTP] Created OTP record - ID: {otp_obj.id}")
         
         # Get email template
-        html_message = get_delete_otp_email_template(user.username, code)
+        html_message = get_delete_otp_email_template(code)
         
         debug_print(f"[DELETE OTP] Sending email to: {user.email}")
         
         send_transactional_email(
             subject='BeatzLock Confirm Delete All Accounts',
             recipient=user.email,
-            text_content=get_delete_otp_email_text(user.username, code),
+            text_content=get_delete_otp_email_text(code),
             html_content=html_message,
             fail_silently=False,
         )
@@ -2499,7 +2496,7 @@ def send_delete_otp(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[DELETE OTP] Email sent successfully in {elapsed_time:.2f} seconds")
         
-        logger.info(f"Delete OTP sent successfully - User: {user.username}")
+        logger.info(f"Delete OTP sent successfully - User: {user.email}")
         
         return Response({'success': True, 'message': f'Verification code sent to {user.email}'})
         
@@ -2523,15 +2520,15 @@ def verify_delete_otp(request):
     
     debug_print(f"\n{'='*60}")
     debug_print(f"[DELETE OTP] Verify OTP called")
-    debug_print(f"[DELETE OTP] User: {user.username} (ID: {user.id})")
+    debug_print(f"[DELETE OTP] User: {user.email} (ID: {user.id})")
     debug_print(f"[DELETE OTP] Code: {code}")
     debug_print(f"{'='*60}\n")
     
-    logger.info(f"Delete OTP verification - User: {user.username}, Code provided: {bool(code)}")
+    logger.info(f"Delete OTP verification - User: {user.email}, Code provided: {bool(code)}")
     
     if not code:
         debug_print(f"[DELETE OTP] ERROR: No code provided")
-        logger.warning(f"Delete OTP verification - No code provided for user: {user.username}")
+        logger.warning(f"Delete OTP verification - No code provided for user: {user.email}")
         return Response({'success': False, 'error': 'Code is required'}, status=400)
     
     try:
@@ -2544,7 +2541,7 @@ def verify_delete_otp(request):
         
         if not otp_obj:
             debug_print(f"[DELETE OTP] No valid OTP found for code: {code}")
-            logger.warning(f"Invalid delete OTP attempt - User: {user.username}")
+            logger.warning(f"Invalid delete OTP attempt - User: {user.email}")
             return Response({'success': False, 'error': 'Invalid or expired code'}, status=400)
         
         debug_print(f"[DELETE OTP] Found OTP - ID: {otp_obj.id}, Created: {otp_obj.created_at}")
@@ -2558,11 +2555,11 @@ def verify_delete_otp(request):
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[DELETE OTP] OTP verified successfully in {elapsed_time:.2f} seconds")
             
-            logger.info(f"Delete OTP verified successfully - User: {user.username}")
+            logger.info(f"Delete OTP verified successfully - User: {user.email}")
             return Response({'success': True, 'message': 'Code verified successfully'})
         else:
             debug_print(f"[DELETE OTP] OTP has expired - Created: {otp_obj.created_at}")
-            logger.warning(f"Delete OTP expired - User: {user.username}, Created: {otp_obj.created_at}")
+            logger.warning(f"Delete OTP expired - User: {user.email}, Created: {otp_obj.created_at}")
             return Response({'success': False, 'error': 'Code has expired (10 minute limit)'}, status=400)
         
     except Exception as e:
@@ -2586,11 +2583,11 @@ def set_sync_preference(request):
     
     debug_print(f"\n{'='*60}")
     debug_print(f"[SYNC PREF] Set preference called")
-    debug_print(f"[SYNC PREF] User: {user.username} (ID: {user.id})")
+    debug_print(f"[SYNC PREF] User: {user.email} (ID: {user.id})")
     debug_print(f"[SYNC PREF] Sync enabled: {enabled}")
     debug_print(f"{'='*60}\n")
     
-    logger.info(f"Set sync preference - User: {user.username}, Enabled: {enabled}")
+    logger.info(f"Set sync preference - User: {user.email}, Enabled: {enabled}")
     
     try:
         obj, created = EncryptedData.objects.get_or_create(
@@ -2618,7 +2615,7 @@ def set_sync_preference(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[SYNC PREF] Preference saved in {elapsed_time:.2f} seconds")
         
-        logger.info(f"Sync preference saved - User: {user.username}, Enabled: {enabled}, Version: {obj.version}")
+        logger.info(f"Sync preference saved - User: {user.email}, Enabled: {enabled}, Version: {obj.version}")
         
         return Response({
             'success': True,
@@ -2644,10 +2641,10 @@ def get_sync_preference(request):
     
     debug_print(f"\n{'='*60}")
     debug_print(f"[SYNC PREF] Get preference called")
-    debug_print(f"[SYNC PREF] User: {user.username} (ID: {user.id})")
+    debug_print(f"[SYNC PREF] User: {user.email} (ID: {user.id})")
     debug_print(f"{'='*60}\n")
     
-    logger.info(f"Get sync preference - User: {user.username}")
+    logger.info(f"Get sync preference - User: {user.email}")
     
     try:
         data = EncryptedData.objects.get(user=request.user, data_type='sync_preference')
@@ -2662,7 +2659,7 @@ def get_sync_preference(request):
         
     except EncryptedData.DoesNotExist:
         debug_print(f"[SYNC PREF] No preference found, returning default (True)")
-        logger.info(f"No sync preference for user {user.username}, using default True")
+        logger.info(f"No sync preference for user {user.email}, using default True")
         return Response({'sync_enabled': True})
         
     except Exception as e:
@@ -2682,10 +2679,10 @@ def download_backup_codes(request):
 
     debug_print(f"\n{'='*60}")
     debug_print("[BACKUP CODES] Download requested")
-    debug_print(f"[BACKUP CODES] User: {user.username} (ID: {user.id})")
+    debug_print(f"[BACKUP CODES] User: {user.email} (ID: {user.id})")
     debug_print(f"{'='*60}\n")
 
-    logger.info("Backup code PDF download - User: %s", user.username)
+    logger.info("Backup code PDF download - User: %s", user.email)
 
     try:
         primary_session = ensure_primary_session(user)
@@ -2732,7 +2729,6 @@ def download_backup_codes(request):
 
         if user.email:
             html_content = get_recovery_codes_generated_email_template(
-                user.username,
                 generated_at=generated_at,
                 device_label=current_session.device_label or '',
             )
@@ -2740,7 +2736,6 @@ def download_backup_codes(request):
                 subject='New recovery codes generated - BeatzLock Authenticator',
                 recipient=user.email,
                 text_content=get_recovery_codes_generated_email_text(
-                    user.username,
                     generated_at=generated_at,
                     device_label=current_session.device_label or '',
                 ),
@@ -2756,7 +2751,7 @@ def download_backup_codes(request):
 
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[BACKUP CODES] PDF ready in {elapsed_time:.2f} seconds")
-        logger.info("Backup code PDF ready - User: %s", user.username)
+        logger.info("Backup code PDF ready - User: %s", user.email)
         return response
 
     except Exception as e:

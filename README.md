@@ -77,22 +77,50 @@ moved or copied without hunting for its assets:
 
 Both projects sign people in by **email address**. Neither asks for a username
 anywhere: not on the sign-in page, not in the admin, not when the deploy script
-creates the first superuser. `createsuperuser` is overridden in both to take an
-email and nothing else, and it writes that address into Django's `username`
-column too, so the two can never drift apart. Changing the address in the admin
-moves the username with it.
+creates the first superuser. They arrive there differently, though.
 
-Django's `username` column is NOT NULL and unique, so it cannot simply be
-dropped — that would mean a custom user model and an `AUTH_USER_MODEL` swap
-that a restore of an older dump would then fight with. Keeping it equal to the
-email costs nothing and leaves every old dump restorable.
+**`otp_backend` has no username, first name or last name at all.** Its
+`AUTH_USER_MODEL` is `users.User` — an email address, a password, and the
+staff/superuser flags — and the three columns are gone from the database. The
+model keeps `auth_user` as its table so that the switch was three
+`DROP COLUMN`s rather than a table rebuild, leaving every foreign key pointing
+at rows that never moved. `email` carries the unique constraint `username` used
+to, and is stored lowercased so it cannot disagree with the case-insensitive
+lookups. `accounts/identity.py` resolves an account one way only: by address.
 
-The API has accounts older than this rule whose username is not their email.
-Nothing here rewrites them: `find_user_by_login_identifier` — in
-`otp_backend/accounts/identity.py`, mirrored in
-`beatzlock_app/beatzlock_app/identity.py` — resolves the email first and falls
-back to the username, so those accounts keep signing in while everything
-created from now on is email-only.
+Transactional email from the API is addressed to the account, not to a person —
+"Hello," and never "Hello Felix," — because an address is now the only thing an
+account has.
+
+The API still *accepts* a `username` key in request bodies and still returns one
+in auth responses, both carrying the email. That is wire compatibility for
+released app builds, which read `user["username"]` and anchor their local vault
+to it; it is not a second identifier. See `api/serializers.py`.
+
+**`beatzlock_app` still uses Django's stock `auth.User`.** It keeps
+`username` equal to the email — `createsuperuser` is overridden to write the
+address into both columns — and `beatzlock_app/beatzlock_app/identity.py`
+resolves an email first with a username fallback for older rows. The two
+projects share a server and a Postgres role but not a database, so neither has
+to follow the other.
+
+### Migrating an existing API database
+
+The `AUTH_USER_MODEL` swap means every applied migration with an account
+foreign key now depends on `users.0001_initial`, which such a database has
+never applied — Django refuses to run `migrate` at all until that is recorded:
+
+```bash
+python manage.py adopt_user_table   # records users.0001_initial; no-op if done
+python manage.py migrate            # 0002 drops the three columns
+```
+
+`deploy/deploy.sh` runs both, in that order, so a normal deploy needs nothing
+extra. `migrate` prints any account whose username was not its email address
+before dropping the column: those accounts' next *fresh* sign-in derives a
+different vault key than the one their synced data was encrypted with, because
+the app derives that key from whatever the API returns as `user["username"]`.
+Installs that are already signed in keep the key they stored.
 
 ## Deploy
 

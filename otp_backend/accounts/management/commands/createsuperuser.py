@@ -1,13 +1,11 @@
 """``manage.py createsuperuser``, asking for an email address and nothing else.
 
-Django's own command asks for a username first and an email second. Nobody
-signs in to this API with a username -- ``accounts/identity.py`` resolves every
-login by email, and ``RegisterSerializer`` has always written the address into
-both columns -- so this override asks only for the address and does the same.
-
-Accounts that predate this keep whatever username they were given; they are
-found by the username fallback in ``find_user_by_login_identifier`` and are
-never touched here.
+``users.User`` already makes ``email`` the USERNAME_FIELD, so Django's own
+command asks the right question -- but it asks it as "Email address" only after
+deciding the address is free by a lookup that is case-sensitive. This override
+normalises the address the way the rest of the app does before anything is
+written, so ``Felix@Example.com`` cannot become a second account alongside
+``felix@example.com``.
 
 For this override to win over django.contrib.auth's, ``accounts`` has to come
 before ``django.contrib.auth`` in INSTALLED_APPS; see the note there.
@@ -18,7 +16,7 @@ import sys
 from django.contrib.auth.management.commands import createsuperuser
 from django.core.management.base import CommandError
 
-from accounts.identity import find_user_by_login_identifier, normalize_email
+from accounts.identity import find_user_by_email, normalize_email
 
 
 class Command(createsuperuser.Command):
@@ -42,13 +40,12 @@ class Command(createsuperuser.Command):
                 "Pass --email, or set DJANGO_SUPERUSER_EMAIL, to create a "
                 "superuser with --noinput."
             )
-        if find_user_by_login_identifier(email) is not None:
+        if find_user_by_email(email) is not None:
             raise CommandError("An account already exists for {}.".format(email))
 
-        # Django only prompts for the fields it was not handed, so filling in
-        # both of them leaves the password as the one thing left to ask.
+        # USERNAME_FIELD is "email" too, so this fills the one field Django
+        # would otherwise prompt for and leaves the password as the only ask.
         options["email"] = email
-        options[self.UserModel.USERNAME_FIELD] = email
         return super().handle(*args, **options)
 
     def _ask_for_email(self):
@@ -58,7 +55,7 @@ class Command(createsuperuser.Command):
             value = normalize_email(self.get_input_data(field, "Email address: "))
             if not value:
                 continue
-            if find_user_by_login_identifier(value) is not None:
+            if find_user_by_email(value) is not None:
                 self.stderr.write("Error: an account already exists for that address.")
                 continue
             return value

@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from api.backup_codes import (
@@ -19,9 +19,9 @@ from api.notifications import (
 from api.device_sessions import attach_session_to_refresh_token
 from api.models import BackupCodeSet
 from accounts.identity import (
-    authenticate_login_identifier,
+    authenticate_email,
+    email_from_request,
     find_user_by_email,
-    find_user_by_login_identifier,
 )
 from .models import EmailVerification
 from .email_templates import (
@@ -39,6 +39,9 @@ import logging
 import traceback
 import sys
 from django.conf import settings as django_settings
+
+# The project-wide account model; users.User, keyed by email.
+User = get_user_model()
 
 logger = logging.getLogger(__name__)
 
@@ -90,60 +93,58 @@ def _consume_recovery_code(user: User, raw_code: str):
 @permission_classes([AllowAny])
 def send_2fa_code(request):
     start_time = __import__('time').time()
-    login_identifier = (
-        request.data.get('email') or request.data.get('username') or ''
-    ).strip()
+    email = email_from_request(request.data)
     password = request.data.get('password')
     
     # Debug print
     debug_print(f"\n{'='*60}")
     debug_print(f"[2FA] send_2fa_code called")
-    debug_print(f"[2FA] Email/Login: {login_identifier}")
+    debug_print(f"[2FA] Email: {email}")
     debug_print(f"[2FA] Password provided: {'Yes' if password else 'No'}")
     debug_print(f"[2FA] Request IP: {request.META.get('REMOTE_ADDR')}")
     debug_print(f"[2FA] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
     debug_print(f"{'='*60}\n")
     
     # Log to file
-    logger.info(f"2FA code request - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"2FA code request - Email: {email}, IP: {request.META.get('REMOTE_ADDR')}")
     
-    if not login_identifier or not password:
-        debug_print(f"[2FA] ERROR: Missing email/login or password")
-        logger.warning(f"2FA request missing email/login or password - Email/Login: {login_identifier}")
+    if not email or not password:
+        debug_print(f"[2FA] ERROR: Missing email or password")
+        logger.warning(f"2FA request missing email or password - Email: {email}")
         return Response({'success': False, 'error': 'Email and password required'}, status=400)
     
     try:
-        debug_print(f"[2FA] Looking up user by email/login: {login_identifier}")
-        user = authenticate_login_identifier(login_identifier, password)
+        debug_print(f"[2FA] Looking up user by email: {email}")
+        user = authenticate_email(email, password)
         
         if not user:
-            debug_print(f"[2FA] Authentication FAILED for login: {login_identifier}")
-            logger.warning(f"2FA authentication failed - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
+            debug_print(f"[2FA] Authentication FAILED for email: {email}")
+            logger.warning(f"2FA authentication failed - Email: {email}, IP: {request.META.get('REMOTE_ADDR')}")
             return Response({'success': False, 'error': 'Invalid email or password'}, status=401)
         
-        debug_print(f"[2FA] Authentication SUCCESS for user: {user.username} (ID: {user.id})")
+        debug_print(f"[2FA] Authentication SUCCESS for user: {user.email} (ID: {user.id})")
         
         if not user.email:
-            debug_print(f"[2FA] ERROR: User {user.username} has no email address")
+            debug_print(f"[2FA] ERROR: account has no email address")
             logger.error("2FA code cannot be sent because the account has no email address.")
             return Response({'success': False, 'error': 'No email associated with account'}, status=400)
         
         debug_print(f"[2FA] User email: {user.email}")
         
         # Delete old codes
-        debug_print(f"[2FA] Deleting old unused codes for user: {user.username}")
+        debug_print(f"[2FA] Deleting old unused codes for user: {user.email}")
         deleted_count = EmailVerification.objects.filter(user=user, is_used=False).delete()[0]
         debug_print(f"[2FA] Deleted {deleted_count} old codes")
         
         # Create new verification code
         debug_print(f"[2FA] Creating new verification code")
         verification = EmailVerification.objects.create(user=user)
-        debug_print(f"[2FA] Created code: {verification.code} for user: {user.username}")
+        debug_print(f"[2FA] Created code: {verification.code} for user: {user.email}")
         
         # Prepare email
         debug_print(f"[2FA] Preparing email to: {user.email}")
-        html_content = get_2fa_email_template(user.username, verification.code)
-        text_content = get_2fa_email_text(user.username, verification.code)
+        html_content = get_2fa_email_template(verification.code)
+        text_content = get_2fa_email_text(verification.code)
 
         # Send email
         debug_print(f"[2FA] Sending email...")
@@ -157,7 +158,7 @@ def send_2fa_code(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[2FA] Email sent successfully in {elapsed_time:.2f} seconds")
         
-        logger.info(f'2FA code sent successfully - User: {user.username}, Email: {user.email}')
+        logger.info(f'2FA code sent successfully - Email: {user.email}')
         
         return Response({
             'success': True,
@@ -182,31 +183,29 @@ def send_2fa_code(request):
 @permission_classes([AllowAny])
 def verify_2fa_code(request):
     start_time = __import__('time').time()
-    login_identifier = (
-        request.data.get('email') or request.data.get('username') or ''
-    ).strip()
+    email = email_from_request(request.data)
     code = (request.data.get('code') or '').strip()
     
     debug_print(f"\n{'='*60}")
     debug_print(f"[2FA] verify_2fa_code called")
-    debug_print(f"[2FA] Email/Login: {login_identifier}")
+    debug_print(f"[2FA] Email: {email}")
     debug_print(f"[2FA] Code: {code}")
     debug_print(f"[2FA] Request IP: {request.META.get('REMOTE_ADDR')}")
     debug_print(f"{'='*60}\n")
     
-    logger.info(f"2FA verification attempt - Email/Login: {login_identifier}, IP: {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"2FA verification attempt - Email: {email}, IP: {request.META.get('REMOTE_ADDR')}")
     
-    if not login_identifier or not code:
-        debug_print(f"[2FA] ERROR: Missing email/login or code")
-        logger.warning(f"2FA verification missing username or code")
+    if not email or not code:
+        debug_print(f"[2FA] ERROR: Missing email or code")
+        logger.warning(f"2FA verification missing email or code")
         return Response({'success': False, 'error': 'Email and code required'}, status=400)
     
     try:
-        debug_print(f"[2FA] Looking up user by email/login: {login_identifier}")
-        user = find_user_by_login_identifier(login_identifier)
+        debug_print(f"[2FA] Looking up user by email: {email}")
+        user = find_user_by_email(email)
         if user is None:
             raise User.DoesNotExist
-        debug_print(f"[2FA] User found: {user.username} (ID: {user.id})")
+        debug_print(f"[2FA] User found: {user.email} (ID: {user.id})")
         
         # Get the LATEST unused code
         debug_print(f"[2FA] Fetching latest unused code for user")
@@ -216,15 +215,15 @@ def verify_2fa_code(request):
         ).order_by('-created_at').first()
         
         if not verification:
-            debug_print(f"[2FA] No valid unused code found for user: {user.username}")
-            logger.warning(f"No valid code found for user: {user.username}")
+            debug_print(f"[2FA] No valid unused code found for user: {user.email}")
+            logger.warning(f"No valid code found for user: {user.email}")
             return Response({'success': False, 'error': 'No valid code found. Request a new one.'}, status=400)
         
         debug_print(f"[2FA] Found code - ID: {verification.id}, Code: {verification.code}, Created: {verification.created_at}")
         
         if verification.code != code:
             debug_print(f"[2FA] Code mismatch - Expected: {verification.code}, Got: {code}")
-            logger.warning(f"Invalid code attempt for user: {user.username}")
+            logger.warning(f"Invalid code attempt for user: {user.email}")
             return Response({'success': False, 'error': 'Invalid code'}, status=400)
         
         debug_print(f"[2FA] Code matches, checking validity...")
@@ -237,16 +236,16 @@ def verify_2fa_code(request):
             elapsed_time = __import__('time').time() - start_time
             debug_print(f"[2FA] Code verified successfully in {elapsed_time:.2f} seconds")
             
-            logger.info(f'2FA code verified successfully for user: {user.username}')
+            logger.info(f'2FA code verified successfully for user: {user.email}')
             return Response({'success': True, 'message': 'Code verified'})
         else:
             debug_print(f"[2FA] Code expired - Created: {verification.created_at}, Now: {__import__('django.utils.timezone').now()}")
-            logger.warning(f'Code expired for user: {user.username}')
+            logger.warning(f'Code expired for user: {user.email}')
             return Response({'success': False, 'error': 'Code expired (10 minute limit)'}, status=400)
             
     except User.DoesNotExist:
-        debug_print(f"[2FA] User not found: {login_identifier}")
-        logger.warning(f"User not found for verification: {login_identifier}")
+        debug_print(f"[2FA] User not found: {email}")
+        logger.warning(f"User not found for verification: {email}")
         return Response({'success': False, 'error': 'User not found'}, status=400)
     except Exception as e:
         error_details = traceback.format_exc()
@@ -284,7 +283,7 @@ def send_password_reset_code(request):
         user = find_user_by_email(email)
         if user is None:
             raise User.DoesNotExist
-        debug_print(f"[PASSWORD RESET] User found: {user.username} (ID: {user.id})")
+        debug_print(f"[PASSWORD RESET] User found: {user.email} (ID: {user.id})")
 
         # Delete old codes
         debug_print(f"[PASSWORD RESET] Deleting old unused reset codes")
@@ -298,8 +297,8 @@ def send_password_reset_code(request):
         
         # Prepare and send email
         debug_print(f"[PASSWORD RESET] Preparing reset email")
-        html_content = get_password_reset_email_template(user.username, verification.code)
-        text_content = get_password_reset_email_text(user.username, verification.code)
+        html_content = get_password_reset_email_template(verification.code)
+        text_content = get_password_reset_email_text(verification.code)
 
         debug_print(f"[PASSWORD RESET] Sending email to: {user.email}")
         send_transactional_email(
@@ -312,7 +311,7 @@ def send_password_reset_code(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[PASSWORD RESET] Email sent successfully in {elapsed_time:.2f} seconds")
         
-        logger.info(f'Password reset code sent - User: {user.username}, Email: {user.email}')
+        logger.info(f'Password reset code sent - Email: {user.email}')
         
         return Response({
             'success': True,
@@ -368,7 +367,7 @@ def reset_password(request):
         user = find_user_by_email(email)
         if user is None:
             raise User.DoesNotExist
-        debug_print(f"[PASSWORD RESET] User found: {user.username} (ID: {user.id})")
+        debug_print(f"[PASSWORD RESET] User found: {user.email} (ID: {user.id})")
 
         # Get the LATEST unused reset code
         debug_print(f"[PASSWORD RESET] Fetching latest unused reset code")
@@ -379,25 +378,25 @@ def reset_password(request):
         
         if not verification:
             debug_print(f"[PASSWORD RESET] No valid unused code found")
-            logger.warning(f"Password reset - No valid code for user: {user.username}")
+            logger.warning(f"Password reset - No valid code for user: {user.email}")
             return Response({'success': False, 'error': 'No valid code found. Request a new one.'}, status=400)
         
         debug_print(f"[PASSWORD RESET] Found code - ID: {verification.id}, Code: {verification.code}, Created: {verification.created_at}")
         
         if verification.code != code:
             debug_print(f"[PASSWORD RESET] Code mismatch - Expected: {verification.code}, Got: {code}")
-            logger.warning(f"Password reset - Invalid code for user: {user.username}")
+            logger.warning(f"Password reset - Invalid code for user: {user.email}")
             return Response({'success': False, 'error': 'Invalid code'}, status=400)
         
         debug_print(f"[PASSWORD RESET] Code matches, checking validity...")
         
         if not verification.is_valid():
             debug_print(f"[PASSWORD RESET] Code expired")
-            logger.warning(f"Password reset - Expired code for user: {user.username}")
+            logger.warning(f"Password reset - Expired code for user: {user.email}")
             return Response({'success': False, 'error': 'Code expired (10 minute limit)'}, status=400)
         
         # Reset password
-        debug_print(f"[PASSWORD RESET] Resetting password for user: {user.username}")
+        debug_print(f"[PASSWORD RESET] Resetting password for user: {user.email}")
         user.set_password(new_password)
         user.save()
         debug_print(f"[PASSWORD RESET] Password changed successfully")
@@ -417,8 +416,8 @@ def reset_password(request):
         
         # Send password changed notification
         debug_print(f"[PASSWORD RESET] Sending password changed notification to: {user.email}")
-        html_content = get_password_changed_email_template(user.username)
-        text_content = get_password_changed_email_text(user.username)
+        html_content = get_password_changed_email_template()
+        text_content = get_password_changed_email_text()
 
         send_transactional_email(
             subject='Password Changed Successfully - BeatzLock Authenticator',
@@ -430,7 +429,7 @@ def reset_password(request):
         elapsed_time = __import__('time').time() - start_time
         debug_print(f"[PASSWORD RESET] Password reset completed successfully in {elapsed_time:.2f} seconds")
         
-        logger.info(f'Password reset successful for user: {user.username}, Email: {user.email}')
+        logger.info(f'Password reset successful for user: {user.email}, Email: {user.email}')
         
         return Response({'success': True, 'message': 'Password reset successfully'})
         
@@ -453,9 +452,7 @@ def reset_password(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_recovery_code_login(request):
-    login_identifier = (
-        request.data.get('email') or request.data.get('username') or ''
-    ).strip()
+    email = email_from_request(request.data)
     password = request.data.get('password')
     recovery_code = (request.data.get('recovery_code') or '').strip()
     device_label = build_device_label(
@@ -463,17 +460,17 @@ def verify_recovery_code_login(request):
         request.META.get('HTTP_USER_AGENT'),
     )
 
-    if not login_identifier or not password or not recovery_code:
+    if not email or not password or not recovery_code:
         return Response(
             {'success': False, 'error': 'Email, password, and recovery code required'},
             status=400,
         )
 
     try:
-        user_obj = find_user_by_login_identifier(login_identifier)
+        user_obj = find_user_by_email(email)
         if user_obj is None:
             raise User.DoesNotExist
-        user = authenticate_login_identifier(login_identifier, password)
+        user = authenticate_email(email, password)
         if not user:
             return Response({'success': False, 'error': 'Invalid email or password'}, status=401)
 
@@ -558,8 +555,8 @@ def reset_password_with_recovery_code(request):
         )
 
         if user.email:
-            html_content = get_recovery_code_password_changed_email_template(user.username)
-            text_content = get_recovery_code_password_changed_email_text(user.username)
+            html_content = get_recovery_code_password_changed_email_template()
+            text_content = get_recovery_code_password_changed_email_text()
             send_transactional_email(
                 subject='Recovery code used to change your password - BeatzLock Authenticator',
                 recipient=user.email,
@@ -573,7 +570,9 @@ def reset_password_with_recovery_code(request):
             'remaining_codes': result['remaining_codes'],
             'user': {
                 'id': user.id,
-                'username': user.username,
+                # Kept for the same reason as UserSerializer.username: the
+                # installed app reads this key and anchors its local vault to it.
+                'username': user.email,
                 'email': user.email,
             },
             'access': str(refresh.access_token),

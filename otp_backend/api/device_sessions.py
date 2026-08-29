@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from .models import DeviceSession
 from .notifications import build_device_label
+
+# The project-wide account model; users.User, keyed by email.
+User = get_user_model()
 
 
 def extract_request_ip(request) -> str:

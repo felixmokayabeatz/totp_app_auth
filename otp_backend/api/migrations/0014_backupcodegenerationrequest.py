@@ -1,3 +1,4 @@
+from django.conf import settings
 import uuid
 from django.db import migrations, models
 import django.db.models.deletion
@@ -6,6 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('api', '0013_devicesession_device_fingerprint'),
     ]
 
@@ -24,7 +26,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('reviewed_by_session', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='reviewed_backup_code_generation_requests', to='api.devicesession')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='backup_code_generation_requests', to='auth.user')),
+                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='backup_code_generation_requests', to=settings.AUTH_USER_MODEL)),
             ],
             options={
                 'ordering': ['-created_at'],

@@ -1,5 +1,12 @@
-from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
+"""Resolving an account from what someone typed into a sign-in field.
+
+There is one identifier: the email address. ``users.User`` stores it lowercased
+and unique, so a lookup can only ever match one account -- the older helpers
+here had to pick the oldest of several matches, and to fall back to a username
+column, and neither situation exists any more.
+"""
+
+from django.contrib.auth import authenticate, get_user_model
 
 
 def normalize_email(value: str) -> str:
@@ -7,34 +14,32 @@ def normalize_email(value: str) -> str:
 
 
 def find_user_by_email(email: str):
-    """Find a user by email address.
+    """Return the account with this address, or None."""
+    cleaned = normalize_email(email)
+    if not cleaned:
+        return None
 
-    Django's User.email carries no unique constraint, so a plain .get() raises
-    MultipleObjectsReturned once two accounts share an address. Pick the oldest,
-    matching how find_user_by_login_identifier resolves the same collision.
+    # Addresses are written lowercased, but iexact keeps a row that predates
+    # that -- or one edited by hand -- reachable.
+    return get_user_model().objects.filter(email__iexact=cleaned).first()
+
+
+def authenticate_email(email: str, password: str):
+    """Authenticate an address and password, or return None."""
+    cleaned = normalize_email(email)
+    if not cleaned:
+        return None
+
+    # ModelBackend passes this to User.objects.get_by_natural_key, which looks
+    # up USERNAME_FIELD -- the email column.
+    return authenticate(username=cleaned, password=password)
+
+
+def email_from_request(data) -> str:
+    """The address a request identifies its account by.
+
+    Released app builds send the same value under both "email" and "username";
+    the second is a leftover name from when there was a username column, and it
+    is still read so that an app nobody has updated keeps signing in.
     """
-    cleaned = (email or '').strip()
-    if not cleaned:
-        return None
-
-    return User.objects.filter(email__iexact=cleaned).order_by('id').first()
-
-
-def find_user_by_login_identifier(identifier: str):
-    """Find a user by email first, with username fallback for legacy accounts."""
-    cleaned = (identifier or '').strip()
-    if not cleaned:
-        return None
-
-    user = User.objects.filter(email__iexact=cleaned).order_by('id').first()
-    if user is not None:
-        return user
-
-    return User.objects.filter(username__iexact=cleaned).order_by('id').first()
-
-
-def authenticate_login_identifier(identifier: str, password: str):
-    user = find_user_by_login_identifier(identifier)
-    if user is None:
-        return None
-    return authenticate(username=user.username, password=password)
+    return normalize_email(data.get('email') or data.get('username') or '')

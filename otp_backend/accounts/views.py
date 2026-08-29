@@ -25,12 +25,12 @@ class ProfileViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['get'])
     def my_profile(self, request):
         debug_print(f"\n{'='*60}")
-        debug_print(f"[PROFILE] my_profile called for user: {request.user.username}")
+        debug_print(f"[PROFILE] my_profile called for user: {request.user.email}")
         debug_print(f"[PROFILE] User ID: {request.user.id}")
         debug_print(f"[PROFILE] Request IP: {request.META.get('REMOTE_ADDR')}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Profile view - User: {request.user.username}, IP: {request.META.get('REMOTE_ADDR')}")
+        logger.info(f"Profile view - User: {request.user.email}, IP: {request.META.get('REMOTE_ADDR')}")
         
         try:
             serializer = UserSerializer(request.user)
@@ -45,12 +45,12 @@ class ProfileViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'])
     def update_profile(self, request):
         debug_print(f"\n{'='*60}")
-        debug_print(f"[PROFILE] update_profile called for user: {request.user.username}")
+        debug_print(f"[PROFILE] update_profile called for user: {request.user.email}")
         debug_print(f"[PROFILE] Request data keys: {list(request.data.keys())}")
         debug_print(f"[PROFILE] Files: {list(request.FILES.keys())}")
         debug_print(f"{'='*60}\n")
         
-        logger.info(f"Profile update - User: {request.user.username}, IP: {request.META.get('REMOTE_ADDR')}")
+        logger.info(f"Profile update - User: {request.user.email}, IP: {request.META.get('REMOTE_ADDR')}")
         
         try:
             profile, created = UserProfile.objects.get_or_create(user=request.user)
@@ -69,7 +69,7 @@ class ProfileViewSet(viewsets.GenericViewSet):
             debug_print(f"[PROFILE] Profile updated successfully")
             
             serializer = UserProfileSerializer(profile)
-            logger.info(f"Profile updated for user: {request.user.username}")
+            logger.info(f"Profile updated for user: {request.user.email}")
             
             return Response(serializer.data)
             

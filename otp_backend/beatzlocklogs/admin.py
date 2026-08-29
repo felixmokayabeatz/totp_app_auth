@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.conf import settings as django_settings
-from django.contrib.auth.models import Group, User
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.urls import path
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -41,5 +42,5 @@ def _safe_unregister(model):
 
 
 if not django_settings.DEBUG:
-    _safe_unregister(User)
+    _safe_unregister(get_user_model())
     _safe_unregister(Group)

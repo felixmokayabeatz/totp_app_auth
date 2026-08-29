@@ -13,7 +13,6 @@ def _from_email():
 
 
 def _base_context(
-    username,
     *,
     preheader,
     title,
@@ -29,7 +28,9 @@ def _base_context(
         'eyebrow': 'BeatzLock Authenticator',
         'title': title,
         'subtitle': subtitle,
-        'greeting': f'Hello {username},',
+        # Deliberately impersonal: these emails address an account, and the
+        # only thing the account has is the address they are being sent to.
+        'greeting': 'Hello,',
         'intro': intro,
         'code': code,
         'sections': sections or [],
@@ -99,9 +100,8 @@ def send_transactional_email(*, subject, recipient, text_content, html_content, 
     email.send(fail_silently=fail_silently)
 
 
-def _two_factor_context(username, code):
+def _two_factor_context(code):
     return _base_context(
-        username,
         preheader='Use this BeatzLock verification code to complete your sign-in.',
         title='Your verification code',
         subtitle='A secure code was requested for your account.',
@@ -119,17 +119,16 @@ def _two_factor_context(username, code):
     )
 
 
-def get_2fa_email_template(username, code):
-    return _render_html(_two_factor_context(username, code))
+def get_2fa_email_template(code):
+    return _render_html(_two_factor_context(code))
 
 
-def get_2fa_email_text(username, code):
-    return _render_text(_two_factor_context(username, code))
+def get_2fa_email_text(code):
+    return _render_text(_two_factor_context(code))
 
 
-def _password_reset_context(username, code):
+def _password_reset_context(code):
     return _base_context(
-        username,
         preheader='Use this BeatzLock password reset code before it expires.',
         title='Reset your password',
         subtitle='A password reset was requested for your account.',
@@ -147,17 +146,16 @@ def _password_reset_context(username, code):
     )
 
 
-def get_password_reset_email_template(username, code):
-    return _render_html(_password_reset_context(username, code))
+def get_password_reset_email_template(code):
+    return _render_html(_password_reset_context(code))
 
 
-def get_password_reset_email_text(username, code):
-    return _render_text(_password_reset_context(username, code))
+def get_password_reset_email_text(code):
+    return _render_text(_password_reset_context(code))
 
 
-def _password_changed_context(username):
+def _password_changed_context():
     return _base_context(
-        username,
         preheader='Your BeatzLock password was changed successfully.',
         title='Password changed',
         subtitle='Your account password was updated.',
@@ -176,17 +174,16 @@ def _password_changed_context(username):
     )
 
 
-def get_password_changed_email_template(username):
-    return _render_html(_password_changed_context(username))
+def get_password_changed_email_template():
+    return _render_html(_password_changed_context())
 
 
-def get_password_changed_email_text(username):
-    return _render_text(_password_changed_context(username))
+def get_password_changed_email_text():
+    return _render_text(_password_changed_context())
 
 
-def _recovery_password_changed_context(username):
+def _recovery_password_changed_context():
     return _base_context(
-        username,
         preheader='A BeatzLock recovery code was used to change your password.',
         title='Recovery code used',
         subtitle='Your password was changed with a recovery code.',
@@ -205,17 +202,16 @@ def _recovery_password_changed_context(username):
     )
 
 
-def get_recovery_code_password_changed_email_template(username):
-    return _render_html(_recovery_password_changed_context(username))
+def get_recovery_code_password_changed_email_template():
+    return _render_html(_recovery_password_changed_context())
 
 
-def get_recovery_code_password_changed_email_text(username):
-    return _render_text(_recovery_password_changed_context(username))
+def get_recovery_code_password_changed_email_text():
+    return _render_text(_recovery_password_changed_context())
 
 
-def _delete_otp_context(username, code):
+def _delete_otp_context(code):
     return _base_context(
-        username,
         preheader='Use this BeatzLock code only if you want to delete all stored accounts.',
         title='Confirm account deletion',
         subtitle='This action permanently removes your saved accounts.',
@@ -238,16 +234,15 @@ def _delete_otp_context(username, code):
     )
 
 
-def get_delete_otp_email_template(username, code):
-    return _render_html(_delete_otp_context(username, code))
+def get_delete_otp_email_template(code):
+    return _render_html(_delete_otp_context(code))
 
 
-def get_delete_otp_email_text(username, code):
-    return _render_text(_delete_otp_context(username, code))
+def get_delete_otp_email_text(code):
+    return _render_text(_delete_otp_context(code))
 
 
 def _recovery_codes_generated_context(
-    username,
     *,
     generated_at: str = '',
     device_label: str = '',
@@ -260,7 +255,6 @@ def _recovery_codes_generated_context(
     if generated_at:
         location_phrase = f'{location_phrase} on {generated_at}'
     return _base_context(
-        username,
         preheader='A fresh set of BeatzLock recovery codes was generated for your account.',
         title='Recovery codes updated',
         subtitle='Your account recovery kit was refreshed.',
@@ -284,14 +278,12 @@ def _recovery_codes_generated_context(
 
 
 def get_recovery_codes_generated_email_template(
-    username,
     *,
     generated_at: str = '',
     device_label: str = '',
 ):
     return _render_html(
         _recovery_codes_generated_context(
-            username,
             generated_at=generated_at,
             device_label=device_label,
         )
@@ -299,14 +291,12 @@ def get_recovery_codes_generated_email_template(
 
 
 def get_recovery_codes_generated_email_text(
-    username,
     *,
     generated_at: str = '',
     device_label: str = '',
 ):
     return _render_text(
         _recovery_codes_generated_context(
-            username,
             generated_at=generated_at,
             device_label=device_label,
         )

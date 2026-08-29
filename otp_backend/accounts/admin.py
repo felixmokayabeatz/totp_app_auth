@@ -1,21 +1,24 @@
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.forms import AdminAuthenticationForm
-from .identity import find_user_by_login_identifier
 from .models import UserProfile
 from django.db import models
 from django.conf import settings as django_settings
 
 
 class EmailAdminAuthenticationForm(AdminAuthenticationForm):
-    """Sign in to the admin with an email address, like the rest of the app."""
+    """Sign in to the admin with an email address, like the rest of the app.
 
-    # Deliberately a text input, not an email input: the browser's type="email"
-    # validation would block the legacy username fallback below.
-    username = forms.CharField(
+    Only the presentation is custom. The field is still called "username"
+    because that is the name AuthenticationForm hands to authenticate(), and
+    the auth backend resolves it against USERNAME_FIELD -- the email column.
+    """
+
+    username = forms.EmailField(
         label="Email",
-        widget=forms.TextInput(
-            attrs={"autofocus": True, "autocomplete": "email", "inputmode": "email"}
+        max_length=254,
+        widget=forms.EmailInput(
+            attrs={"autofocus": True, "autocomplete": "email", "maxlength": 254}
         ),
     )
 
@@ -23,22 +26,9 @@ class EmailAdminAuthenticationForm(AdminAuthenticationForm):
         **AdminAuthenticationForm.error_messages,
         "invalid_login": (
             "Please enter the correct email and password for a staff account. "
-            "Note that both fields may be case-sensitive."
+            "Note that the password may be case-sensitive."
         ),
     }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # AuthenticationForm clamps this to the username field's max_length.
-        self.fields["username"].max_length = 254
-        self.fields["username"].widget.attrs["maxlength"] = 254
-
-    def clean_username(self):
-        # Resolve the email to the username that the auth backend expects, with
-        # the same username fallback the app login uses for legacy accounts.
-        identifier = self.cleaned_data.get("username", "")
-        user = find_user_by_login_identifier(identifier)
-        return user.username if user is not None else identifier
 
 
 admin.site.login_form = EmailAdminAuthenticationForm
@@ -49,7 +39,7 @@ class UserProfileAdmin(admin.ModelAdmin):
         "user",
         "updated_at",
     )
-    search_fields = ("user__username", "bio")
+    search_fields = ("user__email", "bio")
     readonly_fields = ("updated_at", "bio")  # Make bio read-only
     
     # Set rows for bio field (3 rows at default)
