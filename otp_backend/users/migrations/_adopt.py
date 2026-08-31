@@ -89,13 +89,21 @@ def report_diverging_usernames(connection):
     Installs that are already signed in keep the key they stored and are
     unaffected.
 
+    The comparison is exact, not case-insensitive. Key derivation hashes the
+    identifier byte for byte, so an account whose username was ``A@b.com``
+    against an address this migration is about to lowercase to ``a@b.com``
+    breaks in precisely the same way as one whose username was a real name --
+    and that is the far more common case, since the app wrote the address the
+    person typed into both columns. Comparing case-insensitively here hid
+    exactly the accounts most likely to be affected.
+
     This prints the list rather than refusing: it is information the operator
     needs at the moment of the switch, and the column is about to be gone.
     """
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT id, username, email FROM auth_user "
-            "WHERE lower(username) <> lower(btrim(email)) ORDER BY id"
+            "WHERE username <> lower(btrim(email)) ORDER BY id"
         )
         rows = cursor.fetchall()
 

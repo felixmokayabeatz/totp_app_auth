@@ -59,8 +59,17 @@ class SyncService {
 
   String? get lastErrorMessage => _lastErrorMessage;
 
+  /// Set when the cloud vault exists but no key this device can derive opens
+  /// it, so the UI can offer key transfer instead of showing an empty list.
+  bool _vaultKeyMismatch = false;
+  bool get vaultKeyMismatch => _vaultKeyMismatch;
+
   String _syncUnlockRequiredMessage() {
     return 'Cloud sync is locked on this device. Open Settings and use "Unlock Sync On This Device" once to restore your encrypted vault.';
+  }
+
+  String _vaultKeyMismatchMessage() {
+    return 'Your synced accounts are encrypted with a key this device cannot derive from your email and password. Approve a passwordless sign-in from a device that still shows your accounts to hand this device the vault key.';
   }
 
   Future<bool> hasAvailableEncryptionKey() async {
@@ -70,6 +79,13 @@ class SyncService {
   Future<bool> isSyncLockedOnCurrentDevice() async {
     if (!await isLoggedIn()) {
       return false;
+    }
+    // A key that is present but does not open the cloud vault leaves sync just
+    // as unusable as no key at all, and wants the same tile: entering the
+    // password re-derives the key against the vault instead of assuming one
+    // spelling of the account identity.
+    if (_vaultKeyMismatch) {
+      return true;
     }
     return !await _ensureEncryptionKeyAvailable();
   }
@@ -219,6 +235,111 @@ class SyncService {
     _encryptionKey = encryptionKey;
     await setSyncEnabled(enableSyncByDefault);
     await _restoreSyncedVaultDataAfterUnlock();
+  }
+
+  // ─── Vault key negotiation ───────────────────────────────────────────────
+  // The vault key is derived from the identity the API returns as
+  // user["username"] plus the password, and that derivation is
+  // case-sensitive. The identity used to be a stored username column and is
+  // now the email address, lowercased in the database. An account whose
+  // address had any capital in it therefore derives a different key today
+  // than it did when its cloud blob was written: installs already signed in
+  // keep working from the key in secure storage, while a fresh sign-in on a
+  // new device derives the new spelling and cannot open the blob. Rather than
+  // trust one derivation, try every spelling this device can construct
+  // against the actual cloud payload and keep the one that opens it.
+
+  static const _vaultKeySalt = 'beatzLockKenya2099';
+
+  String _deriveVaultKey(String identity, String password) {
+    return EncryptionService.generateKey(identity + password, _vaultKeySalt);
+  }
+
+  /// Decode an `otp_accounts` payload, or null if [key] does not open it.
+  @visibleForTesting
+  List<dynamic>? tryDecodeAccountsPayload(String encryptedContent, String key) {
+    try {
+      final decrypted = EncryptionService.simpleDecrypt(encryptedContent, key);
+      if (decrypted.trim().isEmpty) return null;
+      final decoded = jsonDecode(decrypted);
+      return decoded is List ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Every distinct key the spellings of [identities] can produce, with the
+  /// canonical derivation first so a healthy account never changes behaviour.
+  @visibleForTesting
+  List<String> candidateVaultKeys(
+    Iterable<String> identities,
+    String password,
+  ) {
+    final seenKeys = <String>{};
+    final keys = <String>[];
+    for (final identity in identities) {
+      final trimmed = identity.trim();
+      if (trimmed.isEmpty) continue;
+      for (final spelling in <String>[trimmed, trimmed.toLowerCase()]) {
+        final key = _deriveVaultKey(spelling, password);
+        if (seenKeys.add(key)) keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  /// The raw encrypted `otp_accounts` blob, or null when the account has none.
+  Future<String?> _fetchRawAccountsPayload() async {
+    try {
+      final deviceId = await getOrCreateDeviceId();
+      final response = await _dio.get(
+        'sync/get-data/',
+        queryParameters: {'data_type': 'otp_accounts', 'device_id': deviceId},
+      );
+      if (response.statusCode != 200) return null;
+      final content = response.data['encrypted_content']?.toString() ?? '';
+      return content.isEmpty ? null : content;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The key that actually opens this account's cloud vault.
+  ///
+  /// Falls back to the canonical derivation when there is nothing in the cloud
+  /// to test against (a new account), and sets [vaultKeyMismatch] when a vault
+  /// exists that no derivable key opens -- that account's key only exists on a
+  /// device that is already signed in, and has to be transferred from there.
+  Future<String> _resolveVaultEncryptionKey({
+    required String canonicalUsername,
+    required String password,
+    String? typedIdentifier,
+  }) async {
+    _vaultKeyMismatch = false;
+    final candidates = candidateVaultKeys(
+      <String>[canonicalUsername, if (typedIdentifier != null) typedIdentifier],
+      password,
+    );
+    final fallback = candidates.isEmpty
+        ? _deriveVaultKey(canonicalUsername, password)
+        : candidates.first;
+
+    final payload = await _fetchRawAccountsPayload();
+    if (payload == null) return fallback;
+
+    for (final key in candidates) {
+      if (tryDecodeAccountsPayload(payload, key) != null) {
+        if (key != fallback) {
+          debugPrint('Vault opened with a non-canonical identity spelling');
+        }
+        return key;
+      }
+    }
+
+    _vaultKeyMismatch = true;
+    _lastErrorMessage = _vaultKeyMismatchMessage();
+    debugPrint('No derivable key opens the cloud vault on this device');
+    return fallback;
   }
 
   // ─── Sync preference ──────────────────────────────────────────────────────
@@ -1015,9 +1136,10 @@ class SyncService {
         await _updateAuthHeader();
 
         // Treat successful token issuance as a successful login.
-        final encryptionKey = EncryptionService.generateKey(
-          canonicalUsername + password,
-          'beatzLockKenya2099',
+        final encryptionKey = await _resolveVaultEncryptionKey(
+          canonicalUsername: canonicalUsername,
+          password: password,
+          typedIdentifier: loginIdentifier,
         );
         await _activateSyncEncryptionKey(encryptionKey);
 
@@ -1180,73 +1302,73 @@ class SyncService {
           return;
         }
 
-        final decrypted = EncryptionService.simpleDecrypt(
-          encryptedContent,
+        final cloudAccounts = tryDecodeAccountsPayload(
+          encryptedContent.toString(),
           _encryptionKey!,
         );
 
-        if (decrypted.isEmpty || decrypted.trim().isEmpty) {
-          debugPrint('Decrypted content is empty');
+        if (cloudAccounts == null) {
+          // The blob is there but this device's key does not open it. Say so
+          // rather than leaving the account list silently empty.
+          _vaultKeyMismatch = true;
+          _lastErrorMessage = _vaultKeyMismatchMessage();
+          debugPrint('Cloud vault could not be decrypted with this key');
           return;
         }
+        _vaultKeyMismatch = false;
 
-        try {
-          final List<dynamic> cloudAccounts = jsonDecode(decrypted);
-          final userBox = await _getUserBox();
-          final tombstones = await _fetchTombstones();
-          final userId = await _getCurrentUserId();
+        final userBox = await _getUserBox();
+        final tombstones = await _fetchTombstones();
+        final userId = await _getCurrentUserId();
 
-          int added = 0;
-          int updatedTitles = 0;
-          for (var ca in cloudAccounts) {
-            final id = ca['id'] as String;
-            if (tombstones.contains(id)) continue;
-            if (!userBox.containsKey(id)) {
-              final newAccount = OTPAccount(
-                id: id,
-                service: ca['service'],
-                secret: ca['secret'],
-                issuer: ca['issuer'],
-                accountLabel: ca['account_label'],
-                createdAt: DateTime.parse(ca['createdAt']),
-                userId: userId,
-              );
-              await userBox.put(newAccount.id, newAccount);
-              added++;
-              continue;
-            }
-
-            final existingAccount = userBox.get(id);
-            final cloudService = ca['service'] as String?;
-            final cloudIssuer = ca['issuer'] as String?;
-            final cloudAccountLabel = ca['account_label'] as String?;
-            if (existingAccount != null) {
-              var changed = false;
-              if (cloudService != null &&
-                  existingAccount.service != cloudService) {
-                existingAccount.service = cloudService;
-                changed = true;
-              }
-              if (existingAccount.issuer != cloudIssuer) {
-                existingAccount.issuer = cloudIssuer;
-                changed = true;
-              }
-              if (existingAccount.accountLabel != cloudAccountLabel) {
-                existingAccount.accountLabel = cloudAccountLabel;
-                changed = true;
-              }
-              if (!changed) continue;
-              await userBox.put(id, existingAccount);
-              updatedTitles++;
-            }
+        int added = 0;
+        int updatedTitles = 0;
+        for (var ca in cloudAccounts) {
+          final id = ca['id'] as String;
+          if (tombstones.contains(id)) continue;
+          if (!userBox.containsKey(id)) {
+            final newAccount = OTPAccount(
+              id: id,
+              service: ca['service'],
+              secret: ca['secret'],
+              issuer: ca['issuer'],
+              accountLabel: ca['account_label'],
+              createdAt: DateTime.parse(ca['createdAt']),
+              userId: userId,
+            );
+            await userBox.put(newAccount.id, newAccount);
+            added++;
+            continue;
           }
-          debugPrint(
-            'Merged $added accounts from cloud and updated $updatedTitles titles',
-          );
-          await syncAccounts();
-        } catch (jsonError) {
-          debugPrint('Failed to parse cloud JSON: $jsonError');
+
+          final existingAccount = userBox.get(id);
+          final cloudService = ca['service'] as String?;
+          final cloudIssuer = ca['issuer'] as String?;
+          final cloudAccountLabel = ca['account_label'] as String?;
+          if (existingAccount != null) {
+            var changed = false;
+            if (cloudService != null &&
+                existingAccount.service != cloudService) {
+              existingAccount.service = cloudService;
+              changed = true;
+            }
+            if (existingAccount.issuer != cloudIssuer) {
+              existingAccount.issuer = cloudIssuer;
+              changed = true;
+            }
+            if (existingAccount.accountLabel != cloudAccountLabel) {
+              existingAccount.accountLabel = cloudAccountLabel;
+              changed = true;
+            }
+            if (!changed) continue;
+            await userBox.put(id, existingAccount);
+            updatedTitles++;
+          }
         }
+        debugPrint(
+          'Merged $added accounts from cloud and updated $updatedTitles titles',
+        );
+        await syncAccounts();
       }
     } catch (e) {
       debugPrint('downloadAndMergeAccounts error: $e');
@@ -1301,6 +1423,11 @@ class SyncService {
       Map<String, dynamic> cloudAccountsMap = {};
       int cloudVersion = 0;
       List<String> cloudDeletedAccounts = [];
+      // True when the cloud holds a vault this device's key cannot open. The
+      // upload below replaces the stored blob outright and the server keeps no
+      // older version, so uploading in that state would destroy the only copy
+      // of accounts this device has never been able to read.
+      var cloudVaultUnreadable = false;
 
       try {
         final downloadResponse = await _requestWithRetry(
@@ -1320,26 +1447,24 @@ class SyncService {
           if (encryptedContent.toString().isEmpty) {
             debugPrint('Cloud has empty data');
           } else {
-            final decrypted = EncryptionService.simpleDecrypt(
-              encryptedContent,
+            final cloudAccounts = tryDecodeAccountsPayload(
+              encryptedContent.toString(),
               _encryptionKey!,
             );
-            if (decrypted.isNotEmpty && decrypted.trim().isNotEmpty) {
-              try {
-                final List<dynamic> cloudAccounts = jsonDecode(decrypted);
-                cloudVersion = downloadResponse.data['version'] ?? 0;
-                for (var a in cloudAccounts) {
-                  cloudAccountsMap[a['id']] = a;
-                }
-                if (downloadResponse.data['deleted_accounts'] != null) {
-                  cloudDeletedAccounts = List<String>.from(
-                    jsonDecode(downloadResponse.data['deleted_accounts']),
-                  );
-                }
-                debugPrint('Cloud has ${cloudAccounts.length} accounts');
-              } catch (jsonError) {
-                debugPrint('Failed to parse cloud JSON: $jsonError');
+            if (cloudAccounts == null) {
+              cloudVaultUnreadable = true;
+              debugPrint('Cloud vault could not be decrypted with this key');
+            } else {
+              cloudVersion = downloadResponse.data['version'] ?? 0;
+              for (var a in cloudAccounts) {
+                cloudAccountsMap[a['id']] = a;
               }
+              if (downloadResponse.data['deleted_accounts'] != null) {
+                cloudDeletedAccounts = List<String>.from(
+                  jsonDecode(downloadResponse.data['deleted_accounts']),
+                );
+              }
+              debugPrint('Cloud has ${cloudAccounts.length} accounts');
             }
           }
         }
@@ -1350,6 +1475,17 @@ class SyncService {
           debugPrint('Download error: ${e.message}');
         }
       }
+
+      if (cloudVaultUnreadable) {
+        // Stop before the upload. Merging cannot see the accounts that are up
+        // there, so an upload now would write a vault missing every one of
+        // them over the only copy that exists.
+        _vaultKeyMismatch = true;
+        _lastErrorMessage = _vaultKeyMismatchMessage();
+        debugPrint('Sync aborted - refusing to overwrite an unreadable vault');
+        return false;
+      }
+      _vaultKeyMismatch = false;
 
       final tombstones = await _fetchTombstones();
       debugPrint('Tombstones: $tombstones');
@@ -1636,9 +1772,10 @@ class SyncService {
     }
 
     if (password != null && password.isNotEmpty) {
-      final encryptionKey = EncryptionService.generateKey(
-        canonicalUsername + password,
-        'beatzLockKenya2099',
+      final encryptionKey = await _resolveVaultEncryptionKey(
+        canonicalUsername: canonicalUsername,
+        password: password,
+        typedIdentifier: user?['email']?.toString(),
       );
       await _activateSyncEncryptionKey(
         encryptionKey,
@@ -1893,11 +2030,18 @@ class SyncService {
         ),
       );
       if (response.statusCode == 200) {
-        final encryptionKey = EncryptionService.generateKey(
-          canonicalUsername + password,
-          'beatzLockKenya2099',
+        final storedEmail =
+            await _secureStorage.read(SecureStorageService.userEmailKey);
+        final encryptionKey = await _resolveVaultEncryptionKey(
+          canonicalUsername: canonicalUsername,
+          password: password,
+          typedIdentifier: storedEmail,
         );
         await _activateSyncEncryptionKey(encryptionKey);
+        if (_vaultKeyMismatch) {
+          _lastErrorMessage = _vaultKeyMismatchMessage();
+          return false;
+        }
         return true;
       }
 

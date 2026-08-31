@@ -15,6 +15,51 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.9.0 (Build 48)
+
+App (`otp_auth_app`), sync:
+
+- A fresh sign-in could not open the cloud vault, so a new device arrived signed
+  in, receiving notifications, showing no accounts. The vault key is
+  `sha256(identity + password)` where the identity is whatever the API returns as
+  `user["username"]`. That was a stored username column until 1.8.2 made it the
+  email address, and `users/migrations/0002_email_only_accounts.py` lowercased
+  every address in place. Hashing is case-sensitive, so an address with any
+  capital in it derives one key on an install that signed in before the migration
+  -- which keeps working from the key in secure storage -- and a different key on
+  one that signs in after. `login`, `_applyAuthenticatedResponse` and
+  `unlockSyncOnCurrentDevice` now build every spelling of the identity they can,
+  probe them against the real cloud payload, and keep the key that opens it,
+  canonical derivation first. See `_resolveVaultEncryptionKey` in
+  `lib/services/sync_service.dart` and `test/vault_key_negotiation_test.dart`.
+- Data loss: `syncAccounts` uploaded after a failed decrypt. A wrong key left
+  `cloudAccountsMap` empty, and the merge-then-upload wrote that empty vault over
+  the cloud copy -- `SyncViewSet.sync` is an `update_or_create` that takes the
+  client's version number without comparing it, and keeps no previous copy. Only
+  the other device still re-uploading its own accounts hid it. The upload is now
+  refused when the download produced content that would not decrypt.
+- Both failures were silent. `simpleDecrypt` is unauthenticated, so a wrong key
+  produced garbage, `jsonDecode` threw, and the handler wrote a `debugPrint` and
+  returned. A mismatch now sets `lastErrorMessage` and makes
+  `isSyncLockedOnCurrentDevice` true, which surfaces the existing "Unlock Sync On
+  This Device" tile instead of an empty account list. The passwordless approval
+  path already transfers the key rather than deriving it, and is the recovery
+  route for an account whose old username was not its address at all -- the
+  dropped column means nothing can reconstruct that identity.
+
+Backend (`otp_backend`):
+
+- `report_diverging_usernames` was meant to name the accounts this would break
+  and missed the ones most likely to be affected. It compared
+  `lower(username) <> lower(btrim(email))`, hiding case-only divergence -- the
+  exact class that breaks key derivation, and the common one, since the app wrote
+  the address the user typed into both columns. The comparison is exact now.
+
+Dependencies:
+
+- dio 5.9.2 to 5.11.0, path_provider 2.1.5 to 2.1.6, file_selector_windows and
+  34 transitive packages, all within their existing constraints.
+
 ## Fixed in 1.8.2 (Build 47)
 
 Backend (`otp_backend`), security:
