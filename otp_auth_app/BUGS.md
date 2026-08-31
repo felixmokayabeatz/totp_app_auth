@@ -17,6 +17,12 @@ The pop must apper on all devices fro alredy logged in user without the recovery
 
 ## Fixed in 1.9.1 (Build 49)
 
+The stored vault is authoritative. Nothing writes to it without having read it
+first, so every write carries the stored content forward instead of replacing
+it. Where nothing can read it, the write does not happen: that ciphertext is
+the only copy of whatever it holds, and one device having lost the key is not
+evidence that no device has it.
+
 Security -- passwordless approval:
 
 - The approving phone was handed the correct code among three, in
@@ -34,43 +40,44 @@ Security -- passwordless approval:
   the correct code cannot revive it. Migration `0018`.
 - Approving needs the updated app on the primary phone. An older build has no
   choices to render and no field to type into, so its Accept stays disabled.
-- Bulk-delete and backup-code approvals were left alone. They carry no code at
-  all -- the primary phone simply approves -- so the guessing weakness did not
-  apply to them.
+- Bulk-delete and backup-code approvals carry no code at all -- the primary
+  phone simply approves -- so the guessing weakness never applied to them.
 
-App -- vault recovery deadlock:
+App -- `changePassword` destroyed synced data (pre-existing):
 
-- 1.9.0's key negotiation recovers a vault whose key the device can still
-  construct from some spelling of the address. It cannot help an account whose
-  identity genuinely changed -- an old username that was never the email -- and
-  the documented escape hatch for that case did not exist in practice. Transfer
-  rides on passwordless approval, `_ensure_primary_mobile_session` restricts
-  approval to the primary phone, and `passwordless_start` refuses outright
-  unless the primary is mobile. When the primary phone is itself the device
-  missing the key there is nobody left to approve, and a device cannot send
-  itself a request.
-- `repairCloudVaultKey` in `lib/services/sync_service.dart` breaks the deadlock
-  by republishing rather than transferring: a device rewrites the cloud vault
-  from its own local storage under the key the current canonical identity and
-  password derive. Every other device then works from its own password.
-  Surfaced as "Repair Cloud Sync Key" in Settings.
-- It reads the **local** vault, not the cloud one. The first cut of this read
-  the cloud, which meant it could never run anywhere it was needed: a device
-  needs repairing precisely when its key will not open the cloud blob, so every
-  device offered "Repair" and every one of them bailed out with "could not read
-  your synced accounts". Local secrets go through
-  `EncryptionService.encryptSecret`, keyed on the user id and its own salt and
-  never on the password, so they stay readable however broken sync is -- if a
-  device can display an account, it can republish it. Covered by
-  `test/vault_key_negotiation_test.dart`.
-- Cloud data is merged in first wherever any derivable key still opens it, so
-  cloud-only items survive. Where none does, no device can read those items
-  either; the caller has to pass `replaceUnreadableCloudData`, which the dialog
-  gates behind an explicit checkbox. A device with an empty local vault and an
-  unreadable cloud one is refused outright rather than publishing nothing over
-  the only copy that exists.
-- The Settings tile is shown on sync-locked devices too. Reading local storage
-  does not need the sync key, so the locked device can be the one that fixes it.
+- It read only this device's accounts, then uploaded them over the stored vault
+  with `deleted_accounts` reset to `'[]'`. Anything in the cloud and not on that
+  device was gone, and every tombstone with it, so deleted accounts could
+  return.
+- Worse, it re-encrypted `otp_accounts` alone. `password_entries` and
+  `secure_messages` stayed under the previous password's key while the device
+  moved to the new one, which made them permanently unreadable -- a silent,
+  total loss of synced passwords and secure texts on every password change.
+- It now delegates to `repairCloudVaultKey`, which reads the stored vault under
+  a key that opens it, merges, and rewrites all three data types. When the
+  rewrite cannot happen the password change still stands, the stored vault is
+  left untouched rather than overwritten, and the device is told to repair from
+  somewhere that can read it.
+
+App -- vault re-key:
+
+- `repairCloudVaultKey` in `lib/services/sync_service.dart` rewrites the vault
+  under the key the current canonical identity and password derive, for the case
+  where this device holds a working key and other devices derive a different
+  one. Surfaced as "Repair Cloud Sync Key" in Settings.
+- It runs only after some derivable key has opened the stored vault, and it
+  merges that content in first, so the rewrite is a superset and never a
+  substitution. Versions and deletion lists are carried forward rather than
+  reset. A failed run restores the key the device started with.
+- Where no key opens the vault, it refuses and explains, leaving the stored
+  bytes alone.
+- Two earlier cuts of this were wrong and are worth not repeating. The first
+  read the cloud to decide whether it could run, which meant it could never run
+  where it was needed -- a device needs repairing precisely when its key will
+  not open the cloud, so every device offered "Repair" and every one bailed out.
+  The second overreacted by publishing local data over the stored vault, which
+  turned a recovery tool into a way to lose the only copy of anything the
+  device did not happen to have.
 
 ## Fixed in 1.9.0 (Build 48)
 

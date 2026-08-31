@@ -20,30 +20,24 @@ import '../utils/network_error_messages.dart';
 import 'dart:convert';
 import 'dart:io';
 
-/// What a "Repair Cloud Sync Key" run from this device would publish.
+/// What a "Repair Cloud Sync Key" run from this device would do.
 class VaultRepairPreview {
   const VaultRepairPreview({
     required this.localAccounts,
-    required this.localPasswords,
-    required this.localSecureTexts,
     required this.cloudHasData,
     required this.cloudReadable,
   });
 
   final int localAccounts;
-  final int localPasswords;
-  final int localSecureTexts;
   final bool cloudHasData;
+
+  /// Whether some key this device can construct opens the cloud vault.
+  /// Repair runs only when this is true (or when there is no cloud vault at
+  /// all); the cloud is never overwritten with something that did not come
+  /// from reading it first.
   final bool cloudReadable;
 
-  bool get hasLocalData =>
-      localAccounts > 0 || localPasswords > 0 || localSecureTexts > 0;
-
-  /// True when repairing would discard cloud items nothing can decrypt.
-  bool get replacesUnreadableCloudData => cloudHasData && !cloudReadable;
-
-  /// Repairing from here would publish an empty vault over an unreadable one.
-  bool get wouldPublishNothing => !hasLocalData && replacesUnreadableCloudData;
+  bool get canRepair => cloudReadable || !cloudHasData;
 }
 
 class SyncService {
@@ -370,28 +364,28 @@ class SyncService {
 
   // --- Vault re-key ---------------------------------------------------------
   // Key negotiation above recovers a vault whose key this device can still
-  // construct. It cannot help an account whose identity genuinely changed --
-  // an old username that was never the email address -- because no spelling of
-  // the address reproduces that key.
+  // construct from some spelling of the account identity. Where it succeeds but
+  // other devices derive a different key, the vault can be rewritten under the
+  // key everyone derives today, and this is what does that.
   //
-  // The repair does not read the cloud. It cannot: on every device that needs
-  // repairing, the cloud blob is exactly the thing that will not open. What it
-  // reads is the local vault, which is encrypted under a completely separate
-  // key -- EncryptionService.encryptSecret derives from the user id and its own
-  // salt, never from the password -- and is therefore readable on any device
-  // that shows you your accounts. So the rule is simple: whatever this device
-  // can display, it can republish under the key every device derives today.
-  //
-  // That is also the way out of the deadlock where approval is restricted to
-  // the primary phone and the primary phone is itself the device that lost the
-  // key: there is nobody to approve, and it cannot ask itself. It does not need
-  // to. It republishes what is on its own screen.
+  // The cloud copy is authoritative and is never replaced by local data. A
+  // rewrite only ever happens after this device has successfully read what is
+  // up there, so the content it writes is the cloud's own content merged with
+  // this device's -- a superset, never a substitution. When nothing can open
+  // the cloud vault, the repair refuses. That ciphertext is the only copy of
+  // whatever it holds, and a device having lost the key is not a reason to
+  // destroy it: a key may still exist on a device that has not been opened in
+  // a while, and overwriting would end that permanently.
 
   static const _passwordEntriesSyncContext = 'password-entries-sync';
   static const _secureMessagesSyncContext = 'secure-messages-sync';
 
   String _rekeyFailureMessage() {
     return 'Could not rewrite your cloud vault. Nothing was changed. Check your connection and try again.';
+  }
+
+  String _vaultUnreadableAnywhereMessage() {
+    return 'Nothing on this device can open your cloud vault, so BeatzLock will not touch it -- overwriting it would destroy the only copy of what is in there. Try this on another device that still syncs. If no device can, your synced copy cannot be recovered, but it is left exactly as it is.';
   }
 
   String _encryptSyncBlob(String plainText, String key, String dataType) {
@@ -407,50 +401,60 @@ class SyncService {
     );
   }
 
-  /// What a repair run from this device would publish, and what it would cost.
+  /// Every key this device could use to open the cloud vault, best first.
+  Future<List<String>> _vaultRescueKeys(String password) async {
+    final canonicalUsername =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    final storedEmail =
+        await _secureStorage.read(SecureStorageService.userEmailKey);
+    final keys = <String>[];
+    final storedKey = await getAvailableEncryptionKey();
+    if (storedKey != null && storedKey.isNotEmpty) keys.add(storedKey);
+    keys.addAll(
+      candidateVaultKeys(
+        <String>[canonicalUsername, if (storedEmail != null) storedEmail],
+        password,
+      ),
+    );
+    return keys;
+  }
+
+  /// Whether a repair from this device could run, without changing anything.
   Future<VaultRepairPreview> previewCloudVaultRepair() async {
     var accounts = 0;
-    var passwords = 0;
-    var secureTexts = 0;
     try {
       accounts = (await _getUserBox()).length;
-      passwords = (await _getPasswordBox()).length;
-      secureTexts = (await _getSecureMessageBox()).length;
     } catch (e) {
       debugPrint('Vault repair preview could not read local storage: $e');
     }
 
-    var cloudHasData = false;
-    var cloudReadable = false;
     final cloudPayload = await _fetchRawAccountsPayload();
-    if (cloudPayload != null && cloudPayload.isNotEmpty) {
-      cloudHasData = true;
-      final storedKey = await getAvailableEncryptionKey();
-      cloudReadable = storedKey != null &&
-          storedKey.isNotEmpty &&
-          tryDecodeAccountsPayload(cloudPayload, storedKey) != null;
+    if (cloudPayload == null || cloudPayload.isEmpty) {
+      return VaultRepairPreview(
+        localAccounts: accounts,
+        cloudHasData: false,
+        cloudReadable: false,
+      );
     }
+
+    final storedKey = await getAvailableEncryptionKey();
+    final readable = storedKey != null &&
+        storedKey.isNotEmpty &&
+        tryDecodeAccountsPayload(cloudPayload, storedKey) != null;
 
     return VaultRepairPreview(
       localAccounts: accounts,
-      localPasswords: passwords,
-      localSecureTexts: secureTexts,
-      cloudHasData: cloudHasData,
-      cloudReadable: cloudReadable,
+      cloudHasData: true,
+      cloudReadable: readable,
     );
   }
 
-  /// Republish this device's vault under the key the account password derives
-  /// today, so every other device can open it again.
+  /// Rewrite the cloud vault under the key the account password derives today.
   ///
-  /// Where the cloud is still readable here, it is merged in first, so items
-  /// that only exist in the cloud survive. Where it is not, they cannot be
-  /// merged by anyone -- no key opens them -- and the caller has to have said
-  /// so through [replaceUnreadableCloudData].
-  Future<bool> repairCloudVaultKey(
-    String password, {
-    bool replaceUnreadableCloudData = false,
-  }) async {
+  /// Runs only when this device can read what is already in the cloud, so the
+  /// rewrite carries that content forward rather than replacing it. Refuses
+  /// otherwise, leaving the stored vault untouched.
+  Future<bool> repairCloudVaultKey(String password) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
 
@@ -488,63 +492,42 @@ class SyncService {
     }
 
     final newKey = _deriveVaultKey(canonicalUsername, password);
-    final storedEmail =
-        await _secureStorage.read(SecureStorageService.userEmailKey);
+    final originalKey = await getAvailableEncryptionKey();
 
     try {
-      // Pull in anything the cloud still holds that this device can open --
-      // with the stored key, or with any spelling of the identity. Losing a
-      // cloud-only account to a repair would be its own bug.
-      final rescueKeys = <String>[
-        newKey,
-        ...candidateVaultKeys(
-          <String>[canonicalUsername, if (storedEmail != null) storedEmail],
-          password,
-        ),
-      ];
-      final storedKey = await getAvailableEncryptionKey();
-      if (storedKey != null && storedKey.isNotEmpty) {
-        rescueKeys.insert(0, storedKey);
-      }
-
+      // Find a key that opens what is up there. Nothing is written unless one
+      // does -- an unreadable vault is left alone, not replaced.
       final cloudPayload = await _fetchRawAccountsPayload();
-      var cloudWasReadable = cloudPayload == null || cloudPayload.isEmpty;
-      if (cloudPayload != null && cloudPayload.isNotEmpty) {
-        for (final key in rescueKeys) {
-          if (tryDecodeAccountsPayload(cloudPayload, key) == null) continue;
-          _encryptionKey = key;
-          await _storeEncryptionKey(key);
-          await downloadAndMergeAccounts();
-          await downloadAndMergePasswordEntries();
-          await downloadAndMergeSecureMessages();
-          cloudWasReadable = true;
-          break;
+      final cloudIsEmpty = cloudPayload == null || cloudPayload.isEmpty;
+
+      if (!cloudIsEmpty) {
+        String? readableKey;
+        for (final key in await _vaultRescueKeys(password)) {
+          if (tryDecodeAccountsPayload(cloudPayload, key) != null) {
+            readableKey = key;
+            break;
+          }
         }
-      }
 
-      if (!cloudWasReadable && !replaceUnreadableCloudData) {
-        _lastErrorMessage =
-            'Your cloud vault cannot be opened by this device, so repairing it would replace it with what this device holds. Confirm that before continuing.';
-        return false;
-      }
+        if (readableKey == null) {
+          _lastErrorMessage = _vaultUnreadableAnywhereMessage();
+          return false;
+        }
 
-      final userBox = await _getUserBox();
-      final passwordBox = await _getPasswordBox();
-      final messageBox = await _getSecureMessageBox();
-
-      if (!cloudWasReadable &&
-          userBox.isEmpty &&
-          passwordBox.isEmpty &&
-          messageBox.isEmpty) {
-        // Publishing nothing over a vault nobody can read destroys the only
-        // copy there is, on the slim chance another device can still open it.
-        _lastErrorMessage =
-            'This device has no accounts of its own and cannot open your cloud vault, so there is nothing to repair from. Try a device that still shows your accounts.';
-        return false;
+        // Merge the cloud in under the key that opens it, so the rewrite
+        // carries every item it holds -- including any this device lacks.
+        _encryptionKey = readableKey;
+        await _storeEncryptionKey(readableKey);
+        await downloadAndMergeAccounts();
+        await downloadAndMergePasswordEntries();
+        await downloadAndMergeSecureMessages();
       }
 
       final userId = await _getCurrentUserId();
       final deviceId = await getOrCreateDeviceId();
+      final userBox = await _getUserBox();
+      final passwordBox = await _getPasswordBox();
+      final messageBox = await _getSecureMessageBox();
 
       final accounts = await Future.wait(
         userBox.values.map((a) async {
@@ -593,6 +576,30 @@ class SyncService {
       };
 
       for (final entry in payloads.entries) {
+        // Carry the stored version and deletion list forward rather than
+        // resetting them: this is a re-encryption, not a fresh vault.
+        var version = 0;
+        var deletedAccounts = '[]';
+        try {
+          final current = await _requestWithRetry(
+            (_) => _dio.get(
+              'sync/get-data/',
+              queryParameters: {
+                'data_type': entry.key,
+                'device_id': deviceId,
+              },
+            ),
+          );
+          if (current.statusCode == 200) {
+            version = int.tryParse('${current.data['version'] ?? 0}') ?? 0;
+            final storedDeleted =
+                current.data['deleted_accounts']?.toString() ?? '';
+            if (storedDeleted.isNotEmpty) deletedAccounts = storedDeleted;
+          }
+        } on DioException catch (e) {
+          if (e.response?.statusCode != 404) rethrow;
+        }
+
         final uploaded = await _requestWithRetry(
           (_) => _dio.post(
             'sync/sync/',
@@ -603,12 +610,10 @@ class SyncService {
                 newKey,
                 entry.key,
               ),
-              // The server takes the client's number as given, and this write
-              // is meant to win over whatever is up there.
-              'version': DateTime.now().millisecondsSinceEpoch,
+              'version': version + 1,
               'device_id': deviceId,
               if (entry.key == 'otp_accounts') 'item_count': entry.value.length,
-              'deleted_accounts': '[]',
+              'deleted_accounts': deletedAccounts,
             },
           ),
         );
@@ -623,21 +628,31 @@ class SyncService {
       await setSyncEnabled(true);
       _vaultKeyMismatch = false;
       debugPrint(
-        'Cloud vault republished under the canonical identity: '
+        'Cloud vault re-encrypted under the canonical identity: '
         '${accounts.length} accounts, ${passwords.length} passwords, '
         '${secureTexts.length} secure texts',
       );
       return true;
     } on DioException catch (e) {
+      await _restoreKeyAfterFailedRepair(originalKey);
       _lastErrorMessage = _friendlyRequestError(e, _rekeyFailureMessage());
       return false;
     } catch (e) {
+      await _restoreKeyAfterFailedRepair(originalKey);
       _lastErrorMessage = NetworkErrorMessages.forUnexpected(
         e,
         _rekeyFailureMessage(),
       );
       return false;
     }
+  }
+
+  /// Put back the key this device started with, so a failed repair does not
+  /// leave it holding one it never had.
+  Future<void> _restoreKeyAfterFailedRepair(String? originalKey) async {
+    if (originalKey == null || originalKey.isEmpty) return;
+    _encryptionKey = originalKey;
+    await _storeEncryptionKey(originalKey);
   }
 
   // ─── Sync preference ──────────────────────────────────────────────────────
@@ -3244,7 +3259,7 @@ class SyncService {
     String newPassword,
   ) async {
     await _updateAuthHeader();
-    final prefs = await SharedPreferences.getInstance();
+    _lastErrorMessage = null;
     final token = await _secureStorage.read(
       SecureStorageService.accessTokenKey,
     );
@@ -3254,23 +3269,6 @@ class SyncService {
     final deviceLabel = await _buildDeviceLabel();
 
     try {
-      final userBox = await _getUserBox();
-      final tombstones = await _fetchTombstones();
-
-      final plainAccounts = await Future.wait(
-        userBox.values.where((a) => !tombstones.contains(a.id)).map((a) async {
-          final plainSecret = await _decryptSecretForUpload(a.secret);
-          return {
-            'id': a.id,
-            'service': a.service,
-            'secret': plainSecret,
-            'issuer': a.issuer,
-            'account_label': a.accountLabel,
-            'createdAt': a.createdAt.toIso8601String(),
-          };
-        }).toList(),
-      );
-
       final r = await _dio.post(
         'auth/change_password/',
         data: {
@@ -3282,39 +3280,29 @@ class SyncService {
 
       if (r.statusCode != 200) return false;
 
-      _encryptionKey = null;
-      _initEncryption(username, newPassword);
-
-      for (var account in plainAccounts) {
-        final id = account['id'] as String;
-        if (userBox.containsKey(id)) {
-          final existing = userBox.get(id)!;
-          existing.setSecret(account['secret'] as String, username);
-          await userBox.put(id, existing);
-        }
+      // The vault key is derived from the password, so it has to be rewritten.
+      // This used to upload only this device's accounts, straight over the
+      // stored copy, with the deletion list reset -- losing anything that was
+      // in the cloud and not here -- and it re-encrypted otp_accounts alone,
+      // leaving synced passwords and secure texts under the previous key and
+      // therefore unreadable for good. Re-keying does all three, and reads
+      // what is stored before writing it, so nothing is replaced.
+      final rekeyed = await repairCloudVaultKey(newPassword);
+      if (!rekeyed) {
+        // The password did change; only the rewrite did not. The stored vault
+        // is left exactly as it was rather than being overwritten. Move this
+        // device onto the new key so it is consistent with the account, and
+        // let the sync-locked path offer the rest.
+        final canonical = _deriveVaultKey(username, newPassword);
+        await _storeEncryptionKey(canonical);
+        _encryptionKey = canonical;
+        _lastErrorMessage =
+            'Your password was changed, but your synced vault could not be re-encrypted here, so it was left untouched. Open Settings and use "Repair Cloud Sync Key" on a device that still syncs.';
+        debugPrint('Password changed; vault re-key deferred');
+        return true;
       }
 
-      final encrypted = EncryptionService.simpleEncrypt(
-        jsonEncode(plainAccounts),
-        _encryptionKey!,
-      );
-
-      await _dio.post(
-        'sync/sync/',
-        data: {
-          'data_type': 'otp_accounts',
-          'encrypted_content': encrypted,
-          'version': DateTime.now().millisecondsSinceEpoch,
-          'device_id': prefs.getString('device_id') ?? 'unknown',
-          'item_count': plainAccounts.length,
-          'deleted_accounts': '[]',
-        },
-      );
-
-      // Update stored encryption key
-      await _storeEncryptionKey(_encryptionKey!);
-
-      debugPrint('Password changed and data re-encrypted successfully');
+      debugPrint('Password changed and vault re-encrypted successfully');
       return true;
     } catch (e) {
       debugPrint('changePassword error: $e');

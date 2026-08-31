@@ -91,7 +91,7 @@ void main() {
   });
 
   _rekeyTests();
-  _localVaultIsIndependentOfSyncKey();
+  _repairIsNonDestructive();
 
   test('garbage that decodes to a non-list is rejected', () {
     final key = _legacyKey('felix@gmail.com');
@@ -181,62 +181,83 @@ void _rekeyTests() {
   });
 }
 
-// Why the repair reads the local vault and not the cloud one.
+// The repair contract: the stored vault is authoritative and is never replaced.
 //
-// Every device that needs repairing is a device whose sync key will not open
-// the cloud blob -- that is the definition of needing it. A repair that read
-// the cloud could therefore never run anywhere it was needed, which is exactly
-// how the first attempt failed: every device offered "Repair" and none could
-// complete it. Local secrets are encrypted under a key derived from the user id
-// and its own salt, never from the password, so they stay readable no matter
-// what the sync key does.
-void _localVaultIsIndependentOfSyncKey() {
-  const userId = 'felix@gmail.com';
-  const secret = 'JBSWY3DPEHPK3PXP';
+// A rewrite only happens after some key this device can construct has opened
+// what is in the cloud, so the content written is that content carried forward,
+// never a substitution for it. Where nothing opens it, the repair refuses --
+// that ciphertext is the only copy of whatever it holds, and a device having
+// lost the key is not a reason to destroy it.
+void _repairIsNonDestructive() {
+  const password = _password;
 
-  test('local secrets do not depend on the password or the sync key', () {
-    final stored = EncryptionService.encryptSecret(secret, userId);
+  test('a key that opens the cloud is found before anything is written', () {
+    // The recoverable case: this device still holds the key the vault was
+    // written under, while other devices derive the canonical one.
+    final workingKey = _legacyKey('Felix@Gmail.com');
+    final canonical = _legacyKey('felix@gmail.com');
+    final stored = _vaultBlob(workingKey, [
+      {'id': 'a1', 'service': 'GitHub', 'secret': 'JBSWY3DPEHPK3PXP'},
+    ]);
 
-    // Whatever the password is, and therefore whatever the sync key is, the
-    // local vault opens.
-    expect(EncryptionService.decryptSecret(stored, userId), secret);
+    final rescueKeys = <String>[
+      workingKey,
+      ...sync.candidateVaultKeys(
+        ['felix@gmail.com', 'Felix@Gmail.com'],
+        password,
+      ),
+    ];
+    final opened = rescueKeys
+        .map((key) => sync.tryDecodeAccountsPayload(stored, key))
+        .firstWhere((decoded) => decoded != null, orElse: () => null);
 
-    for (final password in ['old-password', 'new-password', '']) {
-      final syncKey = EncryptionService.generateKey(
-        userId + password,
-        'beatzLockKenya2099',
-      );
-      expect(EncryptionService.decryptSecret(stored, userId), secret);
-      expect(
-          stored,
-          isNot(equals(EncryptionService.simpleEncrypt(
-            secret,
-            syncKey,
-          ))));
-    }
+    expect(opened, isNotNull, reason: 'repair must read before it writes');
+
+    // What gets written is what was read, re-locked under the canonical key.
+    final rewritten = _vaultBlob(canonical, [
+      for (final account in opened!) Map<String, String>.from(account as Map),
+    ]);
+    final reread = sync.tryDecodeAccountsPayload(rewritten, canonical);
+    expect(reread, isNotNull);
+    expect(reread!.single['secret'], 'JBSWY3DPEHPK3PXP');
   });
 
-  test('a device locked out of the cloud can still republish its own vault',
-      () {
-    // The cloud is sealed under a key nothing can derive any more.
-    final lostKey = _legacyKey('some-old-username');
-    final sealed = _vaultBlob(lostKey, [
-      {'id': 'a1', 'service': 'GitHub', 'secret': secret},
+  test('no derivable key opens a vault sealed under a lost identity', () {
+    // The unrecoverable case. Nothing here may write: the refusal is the
+    // feature. Overwriting would end any chance another device still holds it.
+    final sealed = _vaultBlob(_legacyKey('some-old-username'), [
+      {'id': 'a1', 'service': 'GitHub', 'secret': 'JBSWY3DPEHPK3PXP'},
     ]);
-    final canonical = _legacyKey(userId);
-    expect(sync.tryDecodeAccountsPayload(sealed, canonical), isNull);
 
-    // The same account, held locally, is untouched by that.
-    final localAccount = EncryptionService.encryptSecret(secret, userId);
-    final recovered = EncryptionService.decryptSecret(localAccount, userId);
-    expect(recovered, secret);
+    final rescueKeys = sync.candidateVaultKeys(
+      ['felix@gmail.com', 'Felix@Gmail.com'],
+      password,
+    );
+    for (final key in rescueKeys) {
+      expect(sync.tryDecodeAccountsPayload(sealed, key), isNull);
+    }
 
-    // So the device can rebuild the cloud vault from what it can see.
-    final republished = _vaultBlob(canonical, [
-      {'id': 'a1', 'service': 'GitHub', 'secret': recovered},
-    ]);
-    final opened = sync.tryDecodeAccountsPayload(republished, canonical);
-    expect(opened, isNotNull);
-    expect(opened!.single['secret'], secret);
+    // The stored bytes are the only copy of that vault, and stay as they are.
+    expect(
+      sync.tryDecodeAccountsPayload(sealed, _legacyKey('some-old-username')),
+      isNotNull,
+      reason: 'the sealed vault is still intact for whoever holds its key',
+    );
+  });
+
+  test('local storage is unaffected by any of this', () {
+    // Local secrets are keyed on the user id and its own salt, never on the
+    // password, so a device keeps showing its accounts however broken sync is.
+    const userId = 'felix@gmail.com';
+    const secret = 'JBSWY3DPEHPK3PXP';
+    final stored = EncryptionService.encryptSecret(secret, userId);
+
+    for (final candidate in ['old-password', 'new-password', '']) {
+      expect(
+        EncryptionService.decryptSecret(stored, userId),
+        secret,
+        reason: 'password $candidate must not affect local storage',
+      );
+    }
   });
 }

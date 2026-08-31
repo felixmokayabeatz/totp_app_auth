@@ -1866,12 +1866,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _loadProfilePhoto();
   }
 
-  /// Republish this device's vault under the key the account password derives
-  /// today, so every other device can open it again.
+  /// Re-encrypt the cloud vault under the key the account password derives
+  /// today, so every device can open it again.
   ///
-  /// Reads the local vault, not the cloud one. On every device that needs
-  /// repairing the cloud blob is precisely what will not open, so a repair that
-  /// depended on reading it could never run where it was needed.
+  /// Only ever runs where this device can already read what is in the cloud.
+  /// The stored copy is authoritative; it is re-encrypted, never replaced.
   Future<void> _repairCloudVaultKey() async {
     if (!await _requireSignedIn('repair cloud sync')) {
       return;
@@ -1881,41 +1880,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final preview = await _syncService.previewCloudVaultRepair();
     if (!mounted) return;
 
-    if (preview.wouldPublishNothing) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'This device has no accounts of its own and cannot open your cloud '
-            'vault, so there is nothing to repair from. Try a device that still '
-            'shows your accounts.',
+    if (!preview.canRepair) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: _cardColor,
+          title: Text(
+            'Cannot repair from this device',
+            style: TextStyle(color: _textPrimary),
           ),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
+          content: Text(
+            'This device cannot open your synced vault, so it cannot repair it. '
+            'BeatzLock will not overwrite what is stored -- that copy is the '
+            'only one there is.\n\n'
+            'Try this on another device that still syncs normally. Your '
+            'accounts on this device are unaffected either way.',
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       );
       return;
     }
 
-    final replacesCloud = preview.replacesUnreadableCloudData;
     final passwordController = TextEditingController();
     var isSubmitting = false;
     var obscurePassword = true;
-    var acknowledged = !replacesCloud;
     String? errorText;
-    String? resultMessage;
     var repaired = false;
-
-    String itemLine() {
-      final parts = <String>[
-        '${preview.localAccounts} '
-            '${preview.localAccounts == 1 ? "account" : "accounts"}',
-        '${preview.localPasswords} '
-            '${preview.localPasswords == 1 ? "password" : "passwords"}',
-        '${preview.localSecureTexts} '
-            '${preview.localSecureTexts == 1 ? "secure text" : "secure texts"}',
-      ];
-      return '${parts.join(", ")} on this device';
-    }
 
     await showDialog<void>(
       context: context,
@@ -1933,57 +1934,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'This publishes ${itemLine()} to the cloud, locked with the key '
-                'your email and password produce now. Your other devices can '
-                'open it again after entering their password once under '
-                '"Unlock Sync On This Device".',
+                'This device can read your synced vault, so it can re-lock it '
+                'with the key your email and password produce now. Your other '
+                'devices can then open it again after entering their password '
+                'once under "Unlock Sync On This Device".',
                 style: TextStyle(
                   color: _textSecondary,
                   fontSize: 13,
                   height: 1.45,
                 ),
               ),
-              if (replacesCloud) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.orange.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: Text(
-                    'This device cannot open what is in the cloud right now, so '
-                    'it cannot merge it. Anything up there that is not also on '
-                    'this device will be replaced. If another device still '
-                    'shows accounts this one does not, repair from that device '
-                    'instead.',
-                    style: TextStyle(
-                      color: _textPrimary,
-                      fontSize: 13,
-                      height: 1.45,
-                    ),
-                  ),
+              const SizedBox(height: 10),
+              Text(
+                'Nothing is deleted. What is stored is read first and carried '
+                'forward, so anything in the cloud that is not on this device '
+                'is kept.',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
                 ),
-                const SizedBox(height: 4),
-                CheckboxListTile(
-                  value: acknowledged,
-                  onChanged: isSubmitting
-                      ? null
-                      : (value) => setDialogState(
-                            () => acknowledged = value ?? false,
-                          ),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(
-                    'Replace the cloud vault with what is on this device',
-                    style: TextStyle(color: _textPrimary, fontSize: 13),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: passwordController,
                 obscureText: obscurePassword,
@@ -2015,7 +1987,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Not now'),
             ),
             ElevatedButton(
-              onPressed: isSubmitting || !acknowledged
+              onPressed: isSubmitting
                   ? null
                   : () async {
                       final password = passwordController.text;
@@ -2031,17 +2003,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         errorText = null;
                       });
 
-                      final success = await _syncService.repairCloudVaultKey(
-                        password,
-                        replaceUnreadableCloudData: true,
-                      );
+                      final success =
+                          await _syncService.repairCloudVaultKey(password);
                       if (!dialogContext.mounted) return;
 
                       if (success) {
                         repaired = true;
-                        resultMessage =
-                            'Cloud sync repaired. Your other devices can open '
-                            'your vault after entering their password once.';
                         Navigator.pop(dialogContext);
                         return;
                       }
@@ -2076,7 +2043,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(resultMessage ?? 'Cloud sync repaired.'),
+        content: const Text(
+          'Cloud sync repaired. Your other devices can open your vault after '
+          'entering their password once.',
+        ),
         backgroundColor: const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
       ),
