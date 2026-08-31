@@ -185,6 +185,12 @@ class DeviceSession(models.Model):
 class PasswordlessLoginRequest(models.Model):
     CODE_LENGTH = 4
     CODE_WINDOW_SECONDS = 60
+    # The approving phone used to be handed three codes to pick between, the
+    # correct one among them, so a request could be approved by tapping until
+    # one stuck: one in three per try, with nothing counting the tries. The
+    # code is typed now, and typing gets the same budget every other code in
+    # this codebase has.
+    MAX_ATTEMPTS = 5
     STATUS_PENDING = 'pending'
     STATUS_APPROVED = 'approved'
     STATUS_DENIED = 'denied'
@@ -211,6 +217,7 @@ class PasswordlessLoginRequest(models.Model):
         default=DeviceSession.DEVICE_KIND_UNKNOWN,
     )
     verification_code = models.TextField()
+    attempts = models.PositiveSmallIntegerField(default=0)
     unlock_transfer_key = models.TextField(blank=True, default='')
     sync_unlock_payload = models.TextField(blank=True, default='')
     sync_unlock_transferred_at = models.DateTimeField(null=True, blank=True)
@@ -303,6 +310,23 @@ class PasswordlessLoginRequest(models.Model):
         if self._looks_like_seed(raw_value):
             return self._derive_seeded_code(self._timeslot_for(), seed=raw_value)
         return raw_value
+
+    def has_attempts_left(self) -> bool:
+        return self.attempts < self.MAX_ATTEMPTS
+
+    def attempts_remaining(self) -> int:
+        return max(0, self.MAX_ATTEMPTS - self.attempts)
+
+    def register_failed_attempt(self):
+        self.attempts += 1
+        fields = ['attempts', 'updated_at']
+        if self.attempts >= self.MAX_ATTEMPTS:
+            # A spent budget retires the request outright. The requesting
+            # device asks again and gets a fresh code, which is cheap for the
+            # owner and starts the guessing over for anyone else.
+            self.status = self.STATUS_EXPIRED
+            fields.append('status')
+        self.save(update_fields=fields)
 
     def matches_verification_code(self, raw_code: str) -> bool:
         if not raw_code:

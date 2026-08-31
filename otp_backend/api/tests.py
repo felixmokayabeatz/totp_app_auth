@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.test import override_settings
@@ -252,6 +254,119 @@ class PasswordlessLoginFlowTests(APITestCase):
         self.primary_client = APIClient()
         self.primary_client.force_authenticate(user=self.user)
         self.request_client = APIClient()
+
+    def _start_request(self):
+        response = self.request_client.post(
+            reverse('auth-passwordless-start'),
+            {'username': self.user.email},
+            format='json',
+            HTTP_X_DEVICE_ID='laptop-01',
+            HTTP_X_DEVICE_LABEL='Studio Laptop',
+            HTTP_X_DEVICE_KIND='desktop',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        return PasswordlessLoginRequest.objects.get(
+            id=response.data['request_id'],
+        )
+
+    def _approve(self, request_obj, code):
+        return self.primary_client.post(
+            reverse('passwordless-requests-approve', args=[request_obj.id]),
+            {'code': code},
+            format='json',
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+    def _wrong_code_for(self, request_obj):
+        correct = request_obj.get_verification_code()
+        wrong = '0000' if correct != '0000' else '1111'
+        self.assertNotEqual(wrong, correct)
+        return wrong
+
+    def test_approval_accepts_a_typed_code(self):
+        request_obj = self._start_request()
+
+        response = self._approve(request_obj, request_obj.get_verification_code())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        request_obj.refresh_from_db()
+        self.assertEqual(
+            request_obj.status,
+            PasswordlessLoginRequest.STATUS_APPROVED,
+        )
+
+    def test_request_payload_never_carries_the_code_or_a_choice_list(self):
+        """The approving phone must read the code off the requesting device.
+
+        A list of candidates containing the correct code would let anyone
+        holding the primary phone approve without ever seeing the other screen,
+        which is what tapping one of three used to allow.
+        """
+        request_obj = self._start_request()
+
+        response = self.primary_client.get(
+            reverse('passwordless-requests-list'),
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = response.data[0]
+        self.assertNotIn('verification_choices', payload)
+        code = request_obj.get_verification_code()
+        self.assertNotIn(code, json.dumps(response.data, default=str))
+
+    def test_wrong_code_spends_one_attempt_and_reports_the_remainder(self):
+        request_obj = self._start_request()
+
+        response = self._approve(request_obj, self._wrong_code_for(request_obj))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['attempts_remaining'], 4)
+        request_obj.refresh_from_db()
+        self.assertEqual(request_obj.attempts, 1)
+        self.assertEqual(
+            request_obj.status,
+            PasswordlessLoginRequest.STATUS_PENDING,
+        )
+
+    def test_guessing_is_capped_and_retires_the_request(self):
+        request_obj = self._start_request()
+        wrong = self._wrong_code_for(request_obj)
+
+        for _ in range(PasswordlessLoginRequest.MAX_ATTEMPTS):
+            self._approve(request_obj, wrong)
+
+        request_obj.refresh_from_db()
+        self.assertEqual(
+            request_obj.status,
+            PasswordlessLoginRequest.STATUS_EXPIRED,
+        )
+
+        # Even the correct code cannot revive a request whose budget is spent.
+        response = self._approve(request_obj, request_obj.get_verification_code())
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        request_obj.refresh_from_db()
+        self.assertNotEqual(
+            request_obj.status,
+            PasswordlessLoginRequest.STATUS_APPROVED,
+        )
+
+    def test_a_correct_code_still_works_after_a_wrong_one(self):
+        request_obj = self._start_request()
+
+        self._approve(request_obj, self._wrong_code_for(request_obj))
+        response = self._approve(request_obj, request_obj.get_verification_code())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        request_obj.refresh_from_db()
+        self.assertEqual(
+            request_obj.status,
+            PasswordlessLoginRequest.STATUS_APPROVED,
+        )
 
     def test_passwordless_request_can_be_started_approved_and_completed(self):
         start_response = self.request_client.post(

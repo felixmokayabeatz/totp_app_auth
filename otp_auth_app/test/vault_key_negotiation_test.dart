@@ -89,9 +89,93 @@ void main() {
     }
   });
 
+  _rekeyTests();
+
   test('garbage that decodes to a non-list is rejected', () {
     final key = _legacyKey('felix@gmail.com');
     final notAList = EncryptionService.simpleEncrypt('{"id":"a1"}', key);
     expect(sync.tryDecodeAccountsPayload(notAList, key), isNull);
+  });
+}
+
+// The re-key repair. Negotiation above recovers a vault whose key this device
+// can still construct; it cannot help an account whose old identity was never
+// the email address. The key then lives only on devices already signed in --
+// and when the device that lost it is the primary phone, the approval flow
+// cannot rescue it either, because only the primary phone may approve and it
+// cannot send itself a request. Re-keying from a device that can still read
+// the vault is the way out.
+void _rekeyTests() {
+  final sync = SyncService();
+  final accounts = [
+    {'id': 'a1', 'service': 'GitHub', 'secret': 'JBSWY3DPEHPK3PXP'},
+  ];
+
+  test('a vault written under a legacy username re-keys to the address', () {
+    // The unrecoverable class: no spelling of the address produces this key.
+    final legacy = _legacyKey('felix');
+    final canonical = _legacyKey('felix@gmail.com');
+    final blob = _vaultBlob(legacy, accounts);
+
+    expect(sync.tryDecodeAccountsPayload(blob, canonical), isNull);
+    for (final key in sync.candidateVaultKeys(
+      ['felix@gmail.com', 'Felix@Gmail.com'],
+      _password,
+    )) {
+      expect(sync.tryDecodeAccountsPayload(blob, key), isNull);
+    }
+
+    // What repairCloudVaultKey does: read under the working key, write under
+    // the one every device derives.
+    final plain = EncryptionService.simpleDecrypt(blob, legacy);
+    final rewritten = EncryptionService.simpleEncrypt(plain, canonical);
+
+    final opened = sync.tryDecodeAccountsPayload(rewritten, canonical);
+    expect(opened, isNotNull);
+    expect(opened!.single['secret'], 'JBSWY3DPEHPK3PXP');
+  });
+
+  test('re-keying preserves the authenticated formats byte for byte', () {
+    const context = 'password-entries-sync';
+    final oldKey = _legacyKey('felix');
+    final newKey = _legacyKey('felix@gmail.com');
+    final entries = jsonEncode([
+      {'id': 'p1', 'title': 'Router', 'password': 'hunter2'},
+    ]);
+
+    final stored = EncryptionService.encryptSensitiveSyncPayload(
+      entries,
+      oldKey,
+      context: context,
+    );
+    final plain = EncryptionService.decryptSensitiveSyncPayload(
+      stored,
+      oldKey,
+      context: context,
+    );
+    final rewritten = EncryptionService.encryptSensitiveSyncPayload(
+      plain,
+      newKey,
+      context: context,
+    );
+
+    expect(
+      EncryptionService.decryptSensitiveSyncPayload(
+        rewritten,
+        newKey,
+        context: context,
+      ),
+      entries,
+    );
+    // The old key must no longer open it -- an authenticated payload rejects a
+    // wrong key outright rather than returning garbage.
+    expect(
+      () => EncryptionService.decryptSensitiveSyncPayload(
+        rewritten,
+        oldKey,
+        context: context,
+      ),
+      throwsA(isA<FormatException>()),
+    );
   });
 }

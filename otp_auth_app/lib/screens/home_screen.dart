@@ -493,12 +493,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Map<String, dynamic> currentItem = Map<String, dynamic>.from(item);
     String label =
         currentItem['requester_device_label']?.toString() ?? 'Unknown device';
-    List<String> choices =
-        ((currentItem['verification_choices'] as List?) ?? const [])
-            .map((choice) => choice.toString())
-            .where((choice) => choice.trim().isNotEmpty)
-            .toList();
-    String? selectedCode;
+    // Typed, not picked from a list: nothing in the request payload can
+    // stand in for reading the code off the requesting device.
+    final codeController = TextEditingController();
     Timer? dialogRefreshTimer;
     BuildContext? activeDialogContext;
     StateSetter? dialogSetState;
@@ -547,13 +544,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       currentItem = refreshedItem;
       label = currentItem['requester_device_label']?.toString() ?? label;
-      choices = ((currentItem['verification_choices'] as List?) ?? const [])
-          .map((choice) => choice.toString())
-          .where((choice) => choice.trim().isNotEmpty)
-          .toList();
-      if (selectedCode != null && !choices.contains(selectedCode)) {
-        selectedCode = null;
-      }
       dialogSetState?.call(() {});
     }
 
@@ -575,50 +565,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           final textPrimary =
               isDark ? Colors.white : theme.colorScheme.onSurface;
 
-          Widget buildChoiceButton(String choice) {
-            final isSelected = selectedCode == choice;
-            return ElevatedButton(
-              onPressed: () {
-                setDialogState(() => selectedCode = choice);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isSelected ? _accent : softAccent,
-                foregroundColor: isSelected ? Colors.white : textPrimary,
-                elevation: isSelected ? 1 : 0,
-                side: BorderSide(
-                  color: isSelected ? _accent : _accent.withValues(alpha: 0.28),
-                  width: isSelected ? 2 : 1.4,
-                ),
-                minimumSize: const Size.fromHeight(72),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 14,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-              child: Text(
-                choice,
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.6,
-                  color: isSelected ? Colors.white : textPrimary,
-                ),
-              ),
-            );
-          }
-
-          Widget buildChoiceRow() {
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              alignment: WrapAlignment.center,
-              children: [
-                for (final choice in choices)
-                  SizedBox(width: 150, child: buildChoiceButton(choice)),
+          Widget buildCodeField() {
+            return TextField(
+              controller: codeController,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              autocorrect: false,
+              enableSuggestions: false,
+              maxLength: 4,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(4),
               ],
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 12,
+                color: textPrimary,
+              ),
+              decoration: InputDecoration(
+                counterText: '',
+                hintText: '0000',
+                hintStyle: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 12,
+                  color: textPrimary.withValues(alpha: 0.28),
+                ),
+                filled: true,
+                fillColor: softAccent,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(
+                    color: _accent.withValues(alpha: 0.28),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(
+                    color: _accent.withValues(alpha: 0.28),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: _accent, width: 2),
+                ),
+              ),
+              // Redraws so Accept enables the moment four digits are in.
+              onChanged: (_) => setDialogState(() {}),
             );
           }
 
@@ -639,16 +635,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Choose the exact 4-digit code shown on $label, then tap Accept.',
+                  'Type the 4-digit code shown on $label, then tap Accept.',
                   style: TextStyle(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                     height: 1.35,
                   ),
                 ),
-                if (choices.isNotEmpty) ...[
-                  const SizedBox(height: 18),
-                  buildChoiceRow(),
-                ],
+                const SizedBox(height: 18),
+                buildCodeField(),
               ],
             ),
             actions: [
@@ -680,7 +674,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: const Text('Deny'),
               ),
               FilledButton(
-                onPressed: selectedCode == null
+                onPressed: codeController.text.trim().length != 4
                     ? null
                     : () async {
                         final unlocked = await _appLockService
@@ -689,7 +683,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         final success =
                             await _syncService.approvePasswordlessRequest(
                           requestId,
-                          selectedCode: selectedCode!,
+                          enteredCode: codeController.text.trim(),
                         );
                         if (!dialogContext.mounted) return;
                         dialogClosed = true;
@@ -715,6 +709,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     dialogClosed = true;
     dialogRefreshTimer?.cancel();
+    codeController.dispose();
   }
 
   Future<void> _showBulkDeleteApprovalPrompt(Map<String, dynamic> item) async {

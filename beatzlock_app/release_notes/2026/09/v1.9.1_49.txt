@@ -1,0 +1,10 @@
+v1.9.1 (Build 49)
+
+Security
+- Approving a passwordless sign-in now means typing the 4-digit code shown on the other device, not picking it out of three. Tapping until one stuck was a one-in-three guess for anyone holding your primary phone, and nothing counted the tries. Wrong codes are now limited to five, after which the request retires itself and the other device has to ask again.
+- BeatzLock no longer sends the code, or any list containing it, to the approving phone. The only place it appears is the screen of the device asking to sign in.
+
+Fixes and Performance
+- Settings has a new "Repair Cloud Sync Key". If another device says it cannot open your vault, run this on a device that still shows your accounts: it rewrites your synced OTPs, passwords and secure text under the key your email and password produce now, and your other devices can open them again after entering their password once.
+- This fixes the case where nothing else could. Approving a sign-in only ever worked from your primary phone, so if the primary phone was the device that had lost the key, there was nobody left to approve and it could not send a request to itself. Repairing works from the other end, from whichever device still reads your vault.
+- Nothing is deleted, and nothing is rewritten unless every item was read successfully first.

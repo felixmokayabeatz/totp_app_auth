@@ -15,6 +15,48 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.9.1 (Build 49)
+
+Security -- passwordless approval:
+
+- The approving phone was handed the correct code among three, in
+  `verification_choices` on every request payload, and tapped one. That is a
+  one-in-three guess for anyone holding an unlocked primary phone without ever
+  seeing the requesting device, and `approve` counted nothing, so the guess
+  could simply be repeated inside the request's three-minute window. The code is
+  typed now; the field, `_build_passwordless_choices` and its seeded shuffle are
+  gone, so no response carries the code or anything derived from it. `hashlib`
+  and `random` left `api/views.py` with them.
+- `PasswordlessLoginRequest` carries the same attempt budget as every other code
+  in this codebase (`MAX_ATTEMPTS = 5`, mirroring `DeleteOTPCode`). A wrong code
+  spends one and reports what is left; a spent budget retires the request, and
+  the correct code cannot revive it. Migration `0018`.
+- `approve` reads `code`, falling back to `selected_code`, so a build that has
+  not been updated keeps working -- though it cannot approve any more, having no
+  choices to show. Approving needs the updated app on the primary phone.
+
+App -- vault recovery deadlock:
+
+- 1.9.0's key negotiation recovers a vault whose key the device can still
+  construct from some spelling of the address. It cannot help an account whose
+  identity genuinely changed -- an old username that was never the email -- and
+  the documented escape hatch for that case did not exist in practice. Transfer
+  rides on passwordless approval, `_ensure_primary_mobile_session` restricts
+  approval to the primary phone, and `passwordless_start` refuses outright
+  unless the primary is mobile. When the primary phone is itself the device
+  missing the key there is nobody left to approve, and a device cannot send
+  itself a request. The laptop that held the key could not give it away.
+- `repairCloudVaultKey` in `lib/services/sync_service.dart` breaks the deadlock
+  from the other end: a device that still reads the vault rewrites
+  `otp_accounts`, `password_entries` and `secure_messages` under the key the
+  current canonical identity and password derive. Every other device then works
+  from its own password, primary phone included. Two-phase -- every blob is read
+  and shape-checked before any is written, since a vault half in one key and
+  half in another is worse than the state being repaired. Password verified
+  server-side through the existing `auth/unlock-sync/`; no new endpoint.
+- Surfaced as "Repair Cloud Sync Key" in Settings, shown only where it can
+  actually run: a device that is not itself sync-locked.
+
 ## Fixed in 1.9.0 (Build 48)
 
 App (`otp_auth_app`), sync:

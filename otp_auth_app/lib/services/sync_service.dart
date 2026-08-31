@@ -342,6 +342,215 @@ class SyncService {
     return fallback;
   }
 
+  // --- Vault re-key ---------------------------------------------------------
+  // Key negotiation above recovers a vault whose key this device can still
+  // construct. It cannot help an account whose identity has genuinely changed
+  // -- an old username that was never the email address -- because no spelling
+  // of the address reproduces that key. The key then exists only on devices
+  // that were already signed in when it was stored.
+  //
+  // Handing it to another device is not enough on its own: approving a
+  // passwordless sign-in is restricted to the primary phone, so when the
+  // primary phone is itself the device that lost the key there is nobody left
+  // to approve, and it cannot send itself a request. Re-keying breaks that
+  // deadlock from the other end. A device that can still read the vault
+  // rewrites it under the key every device derives today, and every other
+  // device -- primary phone included -- then works from its own password.
+
+  static const _passwordEntriesSyncContext = 'password-entries-sync';
+  static const _secureMessagesSyncContext = 'secure-messages-sync';
+
+  static const _rekeyDataTypes = <String>[
+    'otp_accounts',
+    'password_entries',
+    'secure_messages',
+  ];
+
+  String _rekeyFailureMessage() {
+    return 'Could not rewrite your cloud vault. Nothing was changed. Check your connection and try again.';
+  }
+
+  String _rekeyUnreadableMessage(String dataType) {
+    final label = dataType == 'otp_accounts'
+        ? 'accounts'
+        : dataType == 'password_entries'
+            ? 'passwords'
+            : 'secure texts';
+    return 'This device could not read your synced $label, so nothing was rewritten. Run this on a device that still shows your accounts.';
+  }
+
+  /// Decrypt a synced blob. `otp_accounts` predates the authenticated format
+  /// and is still stored under the raw stream cipher.
+  String _decryptSyncBlob(String cipherText, String key, String dataType) {
+    if (dataType == 'otp_accounts') {
+      return EncryptionService.simpleDecrypt(cipherText, key);
+    }
+    return EncryptionService.decryptSensitiveSyncPayload(
+      cipherText,
+      key,
+      context: dataType == 'password_entries'
+          ? _passwordEntriesSyncContext
+          : _secureMessagesSyncContext,
+    );
+  }
+
+  String _encryptSyncBlob(String plainText, String key, String dataType) {
+    if (dataType == 'otp_accounts') {
+      return EncryptionService.simpleEncrypt(plainText, key);
+    }
+    return EncryptionService.encryptSensitiveSyncPayload(
+      plainText,
+      key,
+      context: dataType == 'password_entries'
+          ? _passwordEntriesSyncContext
+          : _secureMessagesSyncContext,
+    );
+  }
+
+  /// Whether this device holds a key that differs from the one the account's
+  /// password derives today -- the state that leaves other devices locked out.
+  Future<bool> cloudVaultNeedsRepair(String password) async {
+    final oldKey = await getAvailableEncryptionKey();
+    if (oldKey == null || oldKey.isEmpty) return false;
+    final canonicalUsername =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    if (canonicalUsername.isEmpty) return false;
+    return _deriveVaultKey(canonicalUsername, password) != oldKey;
+  }
+
+  /// Rewrite every synced blob under the key this account's password derives
+  /// today, so devices that cannot reproduce the original key can read it.
+  ///
+  /// Every blob is read and verified before any of them is written: a vault
+  /// half in one key and half in another would be worse than what this repairs.
+  Future<bool> repairCloudVaultKey(String password) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final token = await _secureStorage.read(
+      SecureStorageService.accessTokenKey,
+    );
+    if (token == null || token.isEmpty) {
+      _lastErrorMessage = 'Sign in before repairing cloud sync.';
+      return false;
+    }
+
+    final canonicalUsername =
+        await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
+    if (canonicalUsername.isEmpty) {
+      _lastErrorMessage = 'Sign in again before repairing cloud sync.';
+      return false;
+    }
+
+    final oldKey = await getAvailableEncryptionKey();
+    if (oldKey == null || oldKey.isEmpty) {
+      _lastErrorMessage =
+          'This device cannot read your vault, so it cannot repair it. Run this on a device that still shows your accounts.';
+      return false;
+    }
+
+    try {
+      final verified = await _requestWithRetry(
+        (accessToken) => _dio.post(
+          'auth/unlock-sync/',
+          data: {'password': password},
+          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+        ),
+      );
+      if (verified.statusCode != 200) {
+        _lastErrorMessage = 'Password is incorrect.';
+        return false;
+      }
+    } on DioException catch (e) {
+      _lastErrorMessage =
+          _extractServerError(e.response?.data) ?? 'Password is incorrect.';
+      return false;
+    }
+
+    final newKey = _deriveVaultKey(canonicalUsername, password);
+    if (newKey == oldKey) {
+      // Already canonical. Saying so is more use than a success message about
+      // work that did not happen.
+      _vaultKeyMismatch = false;
+      _lastErrorMessage =
+          'Your cloud vault already uses the current key, so nothing needed rewriting.';
+      return true;
+    }
+
+    final deviceId = await getOrCreateDeviceId();
+
+    try {
+      // Phase one: read everything under the key that works today.
+      final rewrites = <Map<String, dynamic>>[];
+      for (final dataType in _rekeyDataTypes) {
+        Response<dynamic> response;
+        try {
+          response = await _requestWithRetry(
+            (_) => _dio.get(
+              'sync/get-data/',
+              queryParameters: {'data_type': dataType, 'device_id': deviceId},
+            ),
+          );
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 404) continue;
+          rethrow;
+        }
+
+        if (response.statusCode != 200) continue;
+        final cipherText = response.data['encrypted_content']?.toString() ?? '';
+        if (cipherText.isEmpty) continue;
+
+        String plainText;
+        try {
+          plainText = _decryptSyncBlob(cipherText, oldKey, dataType);
+          if (plainText.trim().isNotEmpty && jsonDecode(plainText) is! List) {
+            throw const FormatException('Synced blob is not a list');
+          }
+        } catch (_) {
+          _lastErrorMessage = _rekeyUnreadableMessage(dataType);
+          return false;
+        }
+
+        if (plainText.trim().isEmpty) continue;
+
+        rewrites.add(<String, dynamic>{
+          'data_type': dataType,
+          'encrypted_content': _encryptSyncBlob(plainText, newKey, dataType),
+          'version':
+              (int.tryParse('${response.data['version'] ?? 0}') ?? 0) + 1,
+          'device_id': deviceId,
+          'deleted_accounts':
+              response.data['deleted_accounts']?.toString() ?? '[]',
+        });
+      }
+
+      // Phase two: write them all back under the key every device derives.
+      for (final rewrite in rewrites) {
+        final uploaded = await _requestWithRetry(
+          (_) => _dio.post('sync/sync/', data: rewrite),
+        );
+        if (uploaded.statusCode != 200) {
+          _lastErrorMessage = _rekeyFailureMessage();
+          return false;
+        }
+      }
+
+      await _activateSyncEncryptionKey(newKey);
+      _vaultKeyMismatch = false;
+      debugPrint('Cloud vault re-keyed under the canonical identity');
+      return true;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(e, _rekeyFailureMessage());
+      return false;
+    } catch (e) {
+      _lastErrorMessage = NetworkErrorMessages.forUnexpected(
+        e,
+        _rekeyFailureMessage(),
+      );
+      return false;
+    }
+  }
+
   // ─── Sync preference ──────────────────────────────────────────────────────
   Future<bool> isSyncEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -4019,7 +4228,7 @@ class SyncService {
 
   Future<bool> approvePasswordlessRequest(
     String requestId, {
-    required String selectedCode,
+    required String enteredCode,
     String? unlockTransferKey,
     bool attemptSyncUnlockTransfer = true,
   }) async {
@@ -4073,7 +4282,7 @@ class SyncService {
         (accessToken) => _dio.post(
           'passwordless-requests/$requestId/approve/',
           data: {
-            'selected_code': selectedCode,
+            'code': enteredCode,
             if (syncUnlockPayload != null && syncUnlockPayload.isNotEmpty)
               'sync_unlock_payload': syncUnlockPayload,
           },

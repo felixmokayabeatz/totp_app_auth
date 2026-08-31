@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/device_session_info.dart';
 import '../services/app_lock_service.dart';
@@ -34,7 +35,10 @@ class _PasswordlessRequestsScreenState
   bool _isRefreshing = false;
   bool _canManageLogs = false;
   List<Map<String, dynamic>> _requests = const [];
-  final Map<String, String> _selectedCodes = {};
+  // One controller per pending request. The code is typed, not picked
+  // from a list, so nothing the server sends can stand in for seeing
+  // the requesting device's screen.
+  final Map<String, TextEditingController> _codeControllers = {};
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _accent => Theme.of(context).colorScheme.primary;
@@ -57,7 +61,17 @@ class _PasswordlessRequestsScreenState
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    for (final controller in _codeControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  TextEditingController _codeControllerFor(String requestId) {
+    return _codeControllers.putIfAbsent(
+      requestId,
+      TextEditingController.new,
+    );
   }
 
   Future<void> _refreshPage({bool includeAccessState = false}) async {
@@ -100,21 +114,14 @@ class _PasswordlessRequestsScreenState
             .map((item) => item['id']?.toString() ?? '')
             .where((id) => id.isNotEmpty)
             .toSet();
-        _selectedCodes.removeWhere(
-          (requestId, _) => !requestIds.contains(requestId),
-        );
-        for (final item in requests) {
-          final requestId = item['id']?.toString() ?? '';
-          if (requestId.isEmpty) continue;
-
-          final choices = ((item['verification_choices'] as List?) ?? const [])
-              .map((choice) => choice.toString())
-              .where((choice) => choice.trim().isNotEmpty)
-              .toSet();
-          final selectedCode = _selectedCodes[requestId];
-          if (selectedCode != null && !choices.contains(selectedCode)) {
-            _selectedCodes.remove(requestId);
-          }
+        // This list re-reads itself every few seconds. Keep the controller of
+        // every request still on screen, so a half-typed code survives a
+        // refresh, and dispose the rest.
+        final goneIds = _codeControllers.keys
+            .where((requestId) => !requestIds.contains(requestId))
+            .toList();
+        for (final requestId in goneIds) {
+          _codeControllers.remove(requestId)?.dispose();
         }
         _isLoading = false;
       });
@@ -335,7 +342,7 @@ class _PasswordlessRequestsScreenState
   Future<void> _handleRequest(
     Map<String, dynamic> item, {
     required bool approve,
-    String? selectedCode,
+    String? enteredCode,
   }) async {
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
@@ -353,7 +360,7 @@ class _PasswordlessRequestsScreenState
     final success = approve
         ? await _syncService.approvePasswordlessRequest(
             requestId,
-            selectedCode: selectedCode ?? '',
+            enteredCode: enteredCode ?? '',
             unlockTransferKey: item['unlock_transfer_key']?.toString(),
             attemptSyncUnlockTransfer:
                 approvalMode == _PasswordlessApprovalMode.unlockAndTransfer,
@@ -394,7 +401,7 @@ class _PasswordlessRequestsScreenState
     );
 
     if (success) {
-      _selectedCodes.remove(requestId);
+      _codeControllers.remove(requestId)?.dispose();
       await _refreshPage();
     }
   }
@@ -523,61 +530,58 @@ class _PasswordlessRequestsScreenState
     }
   }
 
-  Widget _buildChoiceButton(
-    String choice, {
-    required bool selected,
-    required VoidCallback? onPressed,
-  }) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: selected
-            ? _accent
-            : _accent.withValues(alpha: _isDark ? 0.14 : 0.09),
-        foregroundColor: selected ? Colors.white : _textPrimary,
-        elevation: selected ? 1 : 0,
-        side: BorderSide(
-          color: selected ? _accent : _accent.withValues(alpha: 0.28),
-          width: selected ? 2 : 1.4,
-        ),
-        minimumSize: const Size.fromHeight(88),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      ),
-      child: Text(
-        choice,
-        style: TextStyle(
-          fontSize: 26,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.6,
-          color: selected ? Colors.white : _textPrimary,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChoiceRow(
-    List<String> choices, {
-    required String? selectedCode,
+  Widget _buildCodeField({
     required String requestId,
+    required String deviceLabel,
   }) {
-    return Row(
-      children: [
-        for (var index = 0; index < choices.length; index++) ...[
-          Expanded(
-            child: _buildChoiceButton(
-              choices[index],
-              selected: selectedCode == choices[index],
-              onPressed: _isActing
-                  ? null
-                  : () => setState(() {
-                        _selectedCodes[requestId] = choices[index];
-                      }),
-            ),
-          ),
-          if (index != choices.length - 1) const SizedBox(width: 10),
-        ],
+    final controller = _codeControllerFor(requestId);
+    return TextField(
+      controller: controller,
+      enabled: !_isActing,
+      keyboardType: TextInputType.number,
+      textAlign: TextAlign.center,
+      autocorrect: false,
+      enableSuggestions: false,
+      maxLength: 4,
+      inputFormatters: [
+        FilteringTextInputFormatter.digitsOnly,
+        LengthLimitingTextInputFormatter(4),
       ],
+      style: TextStyle(
+        fontSize: 34,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 14,
+        color: _textPrimary,
+      ),
+      decoration: InputDecoration(
+        counterText: '',
+        hintText: '0000',
+        hintStyle: TextStyle(
+          fontSize: 34,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 14,
+          color: _textSecondary.withValues(alpha: 0.4),
+        ),
+        labelText: 'Code shown on $deviceLabel',
+        floatingLabelAlignment: FloatingLabelAlignment.center,
+        filled: true,
+        fillColor: _accent.withValues(alpha: _isDark ? 0.12 : 0.07),
+        contentPadding: const EdgeInsets.symmetric(vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: _accent.withValues(alpha: 0.28)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: _accent.withValues(alpha: 0.28)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: _accent, width: 2),
+        ),
+      ),
+      // Redraws the card so Accept enables the moment four digits are in.
+      onChanged: (_) => setState(() {}),
     );
   }
 
@@ -591,11 +595,10 @@ class _PasswordlessRequestsScreenState
     final kindLabel = kind.isEmpty
         ? 'Unknown'
         : '${kind[0].toUpperCase()}${kind.substring(1)}';
-    final selectedCode = _selectedCodes[requestId];
-    final choices = ((item['verification_choices'] as List?) ?? const [])
-        .map((choice) => choice.toString())
-        .where((choice) => choice.trim().isNotEmpty)
-        .toList();
+    final typedCode = isPending && requestId.isNotEmpty
+        ? _codeControllerFor(requestId).text.trim()
+        : '';
+    final codeIsComplete = typedCode.length == 4;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -676,7 +679,7 @@ class _PasswordlessRequestsScreenState
                     Expanded(
                       child: Text(
                         isPending
-                            ? 'Choose the exact 4-digit code shown on $label.'
+                            ? 'Type the 4-digit code shown on $label.'
                             : 'Encrypted sign-in log',
                         style: TextStyle(
                           color: _textPrimary,
@@ -720,22 +723,18 @@ class _PasswordlessRequestsScreenState
           if (isPending)
             Column(
               children: [
-                if (choices.isNotEmpty)
-                  _buildChoiceRow(
-                    choices,
-                    selectedCode: selectedCode,
-                    requestId: requestId,
-                  ),
+                if (requestId.isNotEmpty)
+                  _buildCodeField(requestId: requestId, deviceLabel: label),
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: _isActing || selectedCode == null
+                    onPressed: _isActing || !codeIsComplete
                         ? null
                         : () => _handleRequest(
                               item,
                               approve: true,
-                              selectedCode: selectedCode,
+                              enteredCode: typedCode,
                             ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _accent,

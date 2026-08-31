@@ -18,9 +18,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.http import HttpResponse
 from datetime import timedelta
-import hashlib
 import json
-import random
 import secrets
 import string
 import logging
@@ -280,41 +278,6 @@ def _generate_passwordless_seed() -> str:
     # secrets, not random: this seed derives every code the approving phone
     # will ever show for this request.
     return ''.join(secrets.choice(alphabet) for _ in range(6))
-
-
-def _build_passwordless_choices(request_obj: PasswordlessLoginRequest) -> list[str]:
-    correct = request_obj.get_verification_code()
-    code_length = (
-        len(correct)
-        if correct.isdigit() and len(correct) > 0
-        else PasswordlessLoginRequest.CODE_LENGTH
-    )
-    seen = {correct}
-    decoys = []
-    counter = 0
-
-    while len(decoys) < 2:
-        digest = hashlib.sha256(
-            f'{request_obj.id}|{correct}|{counter}'.encode('utf-8')
-        ).hexdigest()
-        candidate = str(int(digest[:8], 16) % (10 ** code_length)).zfill(
-            code_length
-        )
-        counter += 1
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        decoys.append(candidate)
-
-    choices = [correct, *decoys]
-    shuffle_seed = int(
-        hashlib.sha256(f'shuffle|{request_obj.id}'.encode('utf-8')).hexdigest()[:8],
-        16,
-    )
-    # Seeded deliberately: the approving phone must see the same three
-    # choices in the same order every time it re-reads this request.
-    random.Random(shuffle_seed).shuffle(choices)
-    return choices
 
 
 def _expire_stale_passwordless_requests(user: User | None = None):
@@ -1590,14 +1553,7 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()[:50]
-        serializer = self.get_serializer(
-            queryset,
-            many=True,
-            context={
-                **self.get_serializer_context(),
-                'passwordless_choice_builder': _build_passwordless_choices,
-            },
-        )
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'], url_path='approve')
@@ -1614,16 +1570,51 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
             login_request.save(update_fields=['status', 'updated_at'])
             return Response({'error': 'This sign-in request already expired.'}, status=410)
 
-        selected_code = (request.data.get('selected_code') or '').strip()
-        if not selected_code:
+        # "code" is what the app sends now that the code is typed;
+        # "selected_code" is the name a build that still taps a choice uses.
+        entered_code = (
+            request.data.get('code') or request.data.get('selected_code') or ''
+        ).strip()
+        if not entered_code:
             return Response(
-                {'error': 'Select the 4-digit code shown on the requesting device.'},
+                {'error': 'Enter the 4-digit code shown on the requesting device.'},
                 status=400,
             )
 
-        if not login_request.matches_verification_code(selected_code):
+        if not login_request.has_attempts_left():
+            login_request.status = PasswordlessLoginRequest.STATUS_EXPIRED
+            login_request.save(update_fields=['status', 'updated_at'])
             return Response(
-                {'error': 'That code does not match the requesting device.'},
+                {
+                    'error': (
+                        'Too many incorrect codes. Start the sign-in again on the '
+                        'other device to get a fresh code.'
+                    )
+                },
+                status=429,
+            )
+
+        if not login_request.matches_verification_code(entered_code):
+            login_request.register_failed_attempt()
+            remaining = login_request.attempts_remaining()
+            if remaining <= 0:
+                return Response(
+                    {
+                        'error': (
+                            'Too many incorrect codes. Start the sign-in again on '
+                            'the other device to get a fresh code.'
+                        )
+                    },
+                    status=429,
+                )
+            return Response(
+                {
+                    'error': (
+                        'That code does not match the requesting device. '
+                        f'{remaining} attempt{"" if remaining == 1 else "s"} left.'
+                    ),
+                    'attempts_remaining': remaining,
+                },
                 status=400,
             )
 

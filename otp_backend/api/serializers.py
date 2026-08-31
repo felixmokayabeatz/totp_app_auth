@@ -169,8 +169,12 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
 
 
 class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
+    # There is deliberately no field carrying the verification code or any set
+    # of candidates containing it. The approving phone proves it can see the
+    # requesting device's screen by typing what is on it, which it cannot do
+    # from anything this response contains.
     code_expires_at = serializers.SerializerMethodField()
-    verification_choices = serializers.SerializerMethodField()
+    attempts_remaining = serializers.SerializerMethodField()
     unlock_transfer_key = serializers.SerializerMethodField()
 
     class Meta:
@@ -180,7 +184,7 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
             'requester_device_label',
             'requester_device_kind',
             'code_expires_at',
-            'verification_choices',
+            'attempts_remaining',
             'unlock_transfer_key',
             'status',
             'expires_at',
@@ -190,11 +194,8 @@ class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
             'completed_at',
         ]
 
-    def get_verification_choices(self, obj):
-        builder = self.context.get('passwordless_choice_builder')
-        if builder is None:
-            return []
-        return builder(obj)
+    def get_attempts_remaining(self, obj):
+        return obj.attempts_remaining()
 
     def get_unlock_transfer_key(self, obj):
         if obj.status != PasswordlessLoginRequest.STATUS_PENDING:

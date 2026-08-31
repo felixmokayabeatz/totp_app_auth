@@ -1449,6 +1449,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _unlockSyncOnThisDevice,
               ),
             ],
+            // Offered only where it can actually run: a device that still
+            // reads the vault. On a device that cannot, repairing is exactly
+            // the thing that is impossible.
+            if (authProvider.isAuthenticated && !_syncLockedOnThisDevice) ...[
+              _dividerLine(),
+              _tappableTile(
+                icon: Icons.key_rounded,
+                label: 'Repair Cloud Sync Key',
+                sub:
+                    'Run here if another device says it cannot open your vault',
+                onTap: _repairCloudVaultKey,
+              ),
+            ],
             _dividerLine(),
 
             // Sync toggle
@@ -1851,6 +1864,161 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _loadSyncPreference();
     await _loadBackupCodeStatus();
     await _loadProfilePhoto();
+  }
+
+  /// Rewrite the cloud vault under the key the account password derives today.
+  ///
+  /// This is the way out of the deadlock where the only device holding a
+  /// working key cannot hand it to anything: passwordless approval is
+  /// restricted to the primary phone, so a primary phone that has lost the key
+  /// has nobody to ask and cannot ask itself. Rewriting from a device that can
+  /// still read the vault fixes every other device at once.
+  Future<void> _repairCloudVaultKey() async {
+    if (!await _requireSignedIn('repair cloud sync')) {
+      return;
+    }
+    if (!mounted) return;
+
+    final passwordController = TextEditingController();
+    var isSubmitting = false;
+    var obscurePassword = true;
+    String? errorText;
+    String? resultMessage;
+    var repaired = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          scrollable: true,
+          backgroundColor: _cardColor,
+          title: Text(
+            'Repair Cloud Sync Key',
+            style: TextStyle(color: _textPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Run this on a device that still shows your accounts. It rewrites your '
+                'synced OTPs, passwords and secure text under the key your email and '
+                'password produce now, so your other devices can open them again.',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Nothing is deleted, and nothing is rewritten unless every item could '
+                'be read first. Afterwards, each of your other devices needs its '
+                'password entered once under "Unlock Sync On This Device".',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: obscurePassword,
+                enabled: !isSubmitting,
+                decoration: InputDecoration(
+                  labelText: 'Account password',
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                  suffixIcon: IconButton(
+                    tooltip:
+                        obscurePassword ? 'Show password' : 'Hide password',
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                    ),
+                    onPressed: () => setDialogState(
+                      () => obscurePassword = !obscurePassword,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final password = passwordController.text;
+                      if (password.isEmpty) {
+                        setDialogState(() {
+                          errorText = 'Enter your password to repair sync.';
+                        });
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                        errorText = null;
+                      });
+
+                      final success =
+                          await _syncService.repairCloudVaultKey(password);
+                      if (!dialogContext.mounted) return;
+
+                      if (success) {
+                        repaired = true;
+                        resultMessage = _syncService.lastErrorMessage ??
+                            'Cloud sync key repaired. Your other devices can '
+                                'open your vault again after entering their '
+                                'password once.';
+                        Navigator.pop(dialogContext);
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = false;
+                        errorText = _syncService.lastErrorMessage ??
+                            'Could not repair the cloud sync key.';
+                      });
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Repair sync'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    passwordController.dispose();
+    if (!mounted || !repaired) return;
+
+    await _loadSyncPreference();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(resultMessage ?? 'Cloud sync key repaired.'),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _unlockSyncOnThisDevice() async {
