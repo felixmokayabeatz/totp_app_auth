@@ -415,7 +415,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         approve_response = self.primary_client.post(
             reverse('passwordless-requests-approve', args=[request_id]),
-            {'selected_code': request_obj.get_verification_code()},
+            {'code': request_obj.get_verification_code()},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',
@@ -477,7 +477,7 @@ class PasswordlessLoginFlowTests(APITestCase):
         approve_response = self.primary_client.post(
             reverse('passwordless-requests-approve', args=[request_id]),
             {
-                'selected_code': request_obj.get_verification_code(),
+                'code': request_obj.get_verification_code(),
                 'sync_unlock_payload': sync_unlock_payload,
             },
             format='json',
@@ -698,7 +698,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         self.primary_client.post(
             reverse('passwordless-requests-approve', args=[request_id]),
-            {'selected_code': request_obj.get_verification_code()},
+            {'code': request_obj.get_verification_code()},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',
@@ -761,7 +761,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         self.primary_client.post(
             reverse('passwordless-requests-approve', args=[request_id]),
-            {'selected_code': request_obj.get_verification_code()},
+            {'code': request_obj.get_verification_code()},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',
@@ -818,7 +818,7 @@ class PasswordlessLoginFlowTests(APITestCase):
 
         self.primary_client.post(
             reverse('passwordless-requests-approve', args=[completed_id]),
-            {'selected_code': completed_request.get_verification_code()},
+            {'code': completed_request.get_verification_code()},
             format='json',
             HTTP_X_DEVICE_ID='primary-phone',
             HTTP_X_DEVICE_LABEL='Primary Phone',

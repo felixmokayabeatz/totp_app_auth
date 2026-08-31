@@ -24,16 +24,19 @@ Security -- passwordless approval:
   one-in-three guess for anyone holding an unlocked primary phone without ever
   seeing the requesting device, and `approve` counted nothing, so the guess
   could simply be repeated inside the request's three-minute window. The code is
-  typed now; the field, `_build_passwordless_choices` and its seeded shuffle are
-  gone, so no response carries the code or anything derived from it. `hashlib`
-  and `random` left `api/views.py` with them.
+  typed now; the field, `_build_passwordless_choices`, its seeded shuffle and
+  the `selected_code` request key are all gone, so nothing serves the code or a
+  candidate list and nothing accepts a tapped answer. `hashlib` and `random`
+  left `api/views.py` with them.
 - `PasswordlessLoginRequest` carries the same attempt budget as every other code
   in this codebase (`MAX_ATTEMPTS = 5`, mirroring `DeleteOTPCode`). A wrong code
   spends one and reports what is left; a spent budget retires the request, and
   the correct code cannot revive it. Migration `0018`.
-- `approve` reads `code`, falling back to `selected_code`, so a build that has
-  not been updated keeps working -- though it cannot approve any more, having no
-  choices to show. Approving needs the updated app on the primary phone.
+- Approving needs the updated app on the primary phone. An older build has no
+  choices to render and no field to type into, so its Accept stays disabled.
+- Bulk-delete and backup-code approvals were left alone. They carry no code at
+  all -- the primary phone simply approves -- so the guessing weakness did not
+  apply to them.
 
 App -- vault recovery deadlock:
 
@@ -45,17 +48,29 @@ App -- vault recovery deadlock:
   approval to the primary phone, and `passwordless_start` refuses outright
   unless the primary is mobile. When the primary phone is itself the device
   missing the key there is nobody left to approve, and a device cannot send
-  itself a request. The laptop that held the key could not give it away.
+  itself a request.
 - `repairCloudVaultKey` in `lib/services/sync_service.dart` breaks the deadlock
-  from the other end: a device that still reads the vault rewrites
-  `otp_accounts`, `password_entries` and `secure_messages` under the key the
-  current canonical identity and password derive. Every other device then works
-  from its own password, primary phone included. Two-phase -- every blob is read
-  and shape-checked before any is written, since a vault half in one key and
-  half in another is worse than the state being repaired. Password verified
-  server-side through the existing `auth/unlock-sync/`; no new endpoint.
-- Surfaced as "Repair Cloud Sync Key" in Settings, shown only where it can
-  actually run: a device that is not itself sync-locked.
+  by republishing rather than transferring: a device rewrites the cloud vault
+  from its own local storage under the key the current canonical identity and
+  password derive. Every other device then works from its own password.
+  Surfaced as "Repair Cloud Sync Key" in Settings.
+- It reads the **local** vault, not the cloud one. The first cut of this read
+  the cloud, which meant it could never run anywhere it was needed: a device
+  needs repairing precisely when its key will not open the cloud blob, so every
+  device offered "Repair" and every one of them bailed out with "could not read
+  your synced accounts". Local secrets go through
+  `EncryptionService.encryptSecret`, keyed on the user id and its own salt and
+  never on the password, so they stay readable however broken sync is -- if a
+  device can display an account, it can republish it. Covered by
+  `test/vault_key_negotiation_test.dart`.
+- Cloud data is merged in first wherever any derivable key still opens it, so
+  cloud-only items survive. Where none does, no device can read those items
+  either; the caller has to pass `replaceUnreadableCloudData`, which the dialog
+  gates behind an explicit checkbox. A device with an empty local vault and an
+  unreadable cloud one is refused outright rather than publishing nothing over
+  the only copy that exists.
+- The Settings tile is shown on sync-locked devices too. Reading local storage
+  does not need the sync key, so the locked device can be the one that fixes it.
 
 ## Fixed in 1.9.0 (Build 48)
 

@@ -1570,11 +1570,10 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
             login_request.save(update_fields=['status', 'updated_at'])
             return Response({'error': 'This sign-in request already expired.'}, status=410)
 
-        # "code" is what the app sends now that the code is typed;
-        # "selected_code" is the name a build that still taps a choice uses.
-        entered_code = (
-            request.data.get('code') or request.data.get('selected_code') or ''
-        ).strip()
+        # Typed on the approving phone, read off the requesting device's
+        # screen. There is no list of candidates to pick from any more, so
+        # there is no "selected" code either.
+        entered_code = (request.data.get('code') or '').strip()
         if not entered_code:
             return Response(
                 {'error': 'Enter the 4-digit code shown on the requesting device.'},

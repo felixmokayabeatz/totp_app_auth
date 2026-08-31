@@ -1,10 +1,11 @@
 v1.9.1 (Build 49)
 
 Security
-- Approving a passwordless sign-in now means typing the 4-digit code shown on the other device, not picking it out of three. Tapping until one stuck was a one-in-three guess for anyone holding your primary phone, and nothing counted the tries. Wrong codes are now limited to five, after which the request retires itself and the other device has to ask again.
+- Approving a passwordless sign-in now means typing the 4-digit code shown on the other device. The old way put three codes on screen and let you tap one, which is a one-in-three guess for anyone holding your primary phone, and nothing counted the tries. That way is gone.
 - BeatzLock no longer sends the code, or any list containing it, to the approving phone. The only place it appears is the screen of the device asking to sign in.
+- Wrong codes are limited to five. After that the request retires itself and the other device has to ask again.
 
 Fixes and Performance
-- Settings has a new "Repair Cloud Sync Key". If another device says it cannot open your vault, run this on a device that still shows your accounts: it rewrites your synced OTPs, passwords and secure text under the key your email and password produce now, and your other devices can open them again after entering their password once.
-- This fixes the case where nothing else could. Approving a sign-in only ever worked from your primary phone, so if the primary phone was the device that had lost the key, there was nobody left to approve and it could not send a request to itself. Repairing works from the other end, from whichever device still reads your vault.
-- Nothing is deleted, and nothing is rewritten unless every item was read successfully first.
+- Settings has a new "Repair Cloud Sync Key". If your devices cannot open your synced accounts, run this on any device that still shows them: it republishes what that device holds, locked with the key your email and password produce now. Your other devices can open it again after entering their password once under "Unlock Sync On This Device".
+- Repairing reads the vault on your own device, not the copy in the cloud. That matters, because on a device that needs repairing the cloud copy is exactly the thing that will not open. Your accounts on the device are stored under a separate key that your password never touches, so they stay readable whatever went wrong with sync.
+- Where the cloud copy can still be opened, it is merged in first so nothing that only exists there is lost. Where it cannot, BeatzLock says so plainly and asks you to confirm before replacing it, and refuses outright if the device has nothing of its own to publish.
