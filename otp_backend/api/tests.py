@@ -8,7 +8,13 @@ from rest_framework.test import APIClient, APITestCase
 
 from twofa.models import EmailVerification
 
-from .backup_codes import build_backup_code_entries, encrypt_backup_codes
+from .backup_codes import (
+    BACKUP_CODE_COUNT,
+    BACKUP_CODE_LENGTH,
+    build_backup_code_entries,
+    decrypt_backup_codes,
+    encrypt_backup_codes,
+)
 from .models import (
     AccountTombstone,
     BackupCodeSet,
@@ -1269,3 +1275,74 @@ class ExternalReviewReplyNotificationTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class BackupCodeEscrowHeaderTests(APITestCase):
+    """The PDF download hands the codes back so the app can escrow its key.
+
+    The vault key is derived from the password and never leaves the device, so
+    the escrow can only be built where both the key and the plaintext codes are
+    in hand -- which is the app, at the moment it downloads a freshly generated
+    PDF. The codes are the same ones already inside that PDF, going to the same
+    authenticated user.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='escrow@example.com',
+            password='testpass123',
+        )
+        self.session = DeviceSession.objects.create(
+            user=self.user,
+            device_id='primary-phone',
+            device_label='Primary Phone',
+            device_kind=DeviceSession.DEVICE_KIND_MOBILE,
+            is_primary=True,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _download(self):
+        return self.client.get(
+            reverse('download_backup_codes'),
+            HTTP_X_DEVICE_ID='primary-phone',
+            HTTP_X_DEVICE_LABEL='Primary Phone',
+            HTTP_X_DEVICE_KIND='mobile',
+        )
+
+    def test_download_returns_the_generated_codes_in_a_header(self):
+        response = self._download()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        codes = [c for c in response['X-Backup-Codes'].split(',') if c]
+        self.assertEqual(len(codes), BACKUP_CODE_COUNT)
+        for code in codes:
+            self.assertEqual(len(code), BACKUP_CODE_LENGTH)
+            self.assertTrue(code.isalnum())
+            self.assertEqual(code, code.upper())
+
+    def test_header_codes_are_the_ones_stored_for_the_account(self):
+        response = self._download()
+        codes = response['X-Backup-Codes'].split(',')
+
+        code_set = BackupCodeSet.objects.get(user=self.user)
+        stored = {
+            entry['code']
+            for entry in decrypt_backup_codes(code_set.encrypted_codes)
+        }
+        self.assertEqual(set(codes), stored)
+
+    def test_each_download_rotates_the_codes(self):
+        first = self._download()['X-Backup-Codes']
+        second = self._download()['X-Backup-Codes']
+        self.assertNotEqual(first, second)
+
+    def test_codes_are_not_exposed_to_an_unauthenticated_caller(self):
+        anonymous = APIClient()
+        response = anonymous.get(reverse('download_backup_codes'))
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+        self.assertNotIn('X-Backup-Codes', response)

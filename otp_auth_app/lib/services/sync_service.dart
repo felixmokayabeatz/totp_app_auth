@@ -362,6 +362,194 @@ class SyncService {
     return fallback;
   }
 
+  // --- Vault key escrow -----------------------------------------------------
+  // The vault key comes from the account password. A password reset happens
+  // precisely because the old password is gone, so before this the reset left
+  // the synced vault locked under a key nobody could ever derive again: dead
+  // ciphertext, silently, with no warning and no way back.
+  //
+  // The escrow wraps the vault key under each recovery code, so the PDF users
+  // are already required to save can unlock it. The server stores only the
+  // wrapped blob and never sees the key.
+  //
+  // Re-keys are handled without needing the codes again: each one appends the
+  // new key sealed under the previous one, so an escrow written before a
+  // password change still leads to the current key by walking the chain.
+
+  static const _vaultEscrowDataType = 'vault_key_escrow';
+
+  /// Wrap the active vault key under [recoveryCodes] and store it.
+  ///
+  /// Called when recovery codes are generated, which is the only moment the
+  /// app holds them in plaintext. They are not persisted anywhere.
+  Future<bool> publishVaultKeyEscrow(List<String> recoveryCodes) async {
+    final codes = recoveryCodes
+        .map(EncryptionService.normalizeRecoveryCode)
+        .where((code) => code.isNotEmpty)
+        .toList();
+    if (codes.isEmpty) return false;
+
+    final vaultKey = await getAvailableEncryptionKey();
+    if (vaultKey == null || vaultKey.isEmpty) {
+      debugPrint('No vault key to escrow yet');
+      return false;
+    }
+
+    try {
+      final payload = <String, dynamic>{
+        'version': 1,
+        'wrapped_keys': [
+          for (final code in codes)
+            EncryptionService.wrapVaultKey(vaultKey, code),
+        ],
+        // Re-keys append here rather than rewriting wrapped_keys, which cannot
+        // be rebuilt without the codes.
+        'chain': <String>[],
+      };
+
+      final stored = await getEncryptedSyncData(_vaultEscrowDataType);
+      final version = int.tryParse(stored?['version']?.toString() ?? '0') ?? 0;
+      final ok = await uploadEncryptedSyncData(
+        _vaultEscrowDataType,
+        encryptedContent: jsonEncode(payload),
+        version: version + 1,
+        deletedAccounts: 'N/A',
+      );
+      debugPrint(ok
+          ? 'Vault key escrowed under ${codes.length} recovery codes'
+          : 'Vault key escrow upload failed');
+      return ok;
+    } catch (e) {
+      debugPrint('publishVaultKeyEscrow error: $e');
+      return false;
+    }
+  }
+
+  /// Record that the vault key changed, so an existing escrow still reaches it.
+  Future<void> _appendVaultKeyEscrowLink(
+    String previousKey,
+    String newKey,
+  ) async {
+    if (previousKey.isEmpty || newKey.isEmpty || previousKey == newKey) return;
+    try {
+      final stored = await getEncryptedSyncData(_vaultEscrowDataType);
+      final raw = stored?['encrypted_content']?.toString() ?? '';
+      if (raw.isEmpty) return;
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final payload = Map<String, dynamic>.from(decoded);
+      final chain = <String>[
+        ...((payload['chain'] as List?) ?? const []).map((e) => e.toString()),
+        EncryptionService.chainVaultKey(newKey, previousKey),
+      ];
+      payload['chain'] = chain;
+
+      final version = int.tryParse(stored?['version']?.toString() ?? '0') ?? 0;
+      await uploadEncryptedSyncData(
+        _vaultEscrowDataType,
+        encryptedContent: jsonEncode(payload),
+        version: version + 1,
+        deletedAccounts: 'N/A',
+      );
+      debugPrint('Vault key escrow chain extended to ${chain.length} links');
+    } catch (e) {
+      debugPrint('Could not extend vault key escrow chain: $e');
+    }
+  }
+
+  /// Whether this account has an escrow that a recovery code could open.
+  Future<bool> hasVaultKeyEscrow() async {
+    try {
+      final stored = await getEncryptedSyncData(_vaultEscrowDataType);
+      final raw = stored?['encrypted_content']?.toString() ?? '';
+      if (raw.isEmpty) return false;
+      final decoded = jsonDecode(raw);
+      return decoded is Map &&
+          ((decoded['wrapped_keys'] as List?) ?? const []).isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Recover the vault key from [recoveryCode] and activate it on this device.
+  ///
+  /// This is the way back after a password reset. It only ever reads: the
+  /// stored vault is not touched, and the key is accepted only once it has
+  /// actually opened it.
+  Future<bool> restoreVaultKeyFromRecoveryCode(String recoveryCode) async {
+    await _updateAuthHeader();
+    _lastErrorMessage = null;
+
+    final code = EncryptionService.normalizeRecoveryCode(recoveryCode);
+    if (code.isEmpty) {
+      _lastErrorMessage = 'Enter one of your recovery codes.';
+      return false;
+    }
+
+    try {
+      final stored = await getEncryptedSyncData(_vaultEscrowDataType);
+      final raw = stored?['encrypted_content']?.toString() ?? '';
+      if (raw.isEmpty) {
+        _lastErrorMessage =
+            'This account has no recovery escrow, so a recovery code cannot unlock its synced vault. Escrow is created when you generate recovery codes.';
+        return false;
+      }
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        _lastErrorMessage = 'Your recovery escrow could not be read.';
+        return false;
+      }
+
+      String? vaultKey;
+      for (final wrapped in ((decoded['wrapped_keys'] as List?) ?? const [])) {
+        vaultKey = EncryptionService.unwrapVaultKey(wrapped.toString(), code);
+        if (vaultKey != null) break;
+      }
+
+      if (vaultKey == null) {
+        _lastErrorMessage =
+            'That recovery code does not match this account. Check the code and try again.';
+        return false;
+      }
+
+      // Follow any re-keys recorded since the escrow was written.
+      for (final link in ((decoded['chain'] as List?) ?? const [])) {
+        final next =
+            EncryptionService.unchainVaultKey(link.toString(), vaultKey!);
+        if (next != null) vaultKey = next;
+      }
+
+      // Accept it only if it actually opens the vault.
+      final cloudPayload = await _fetchRawAccountsPayload();
+      if (cloudPayload != null &&
+          cloudPayload.isNotEmpty &&
+          tryDecodeAccountsPayload(cloudPayload, vaultKey!) == null) {
+        _lastErrorMessage =
+            'That recovery code unlocked a key that no longer opens your synced vault. Nothing was changed.';
+        return false;
+      }
+
+      await _activateSyncEncryptionKey(vaultKey!);
+      _vaultKeyMismatch = false;
+      debugPrint('Vault key restored from a recovery code');
+      return true;
+    } on DioException catch (e) {
+      _lastErrorMessage = _friendlyRequestError(
+        e,
+        'Could not reach your recovery escrow.',
+      );
+      return false;
+    } catch (e) {
+      _lastErrorMessage = NetworkErrorMessages.forUnexpected(
+        e,
+        'Could not use that recovery code.',
+      );
+      return false;
+    }
+  }
+
   // --- Vault re-key ---------------------------------------------------------
   // Key negotiation above recovers a vault whose key this device can still
   // construct from some spelling of the account identity. Where it succeeds but
@@ -621,6 +809,12 @@ class SyncService {
           _lastErrorMessage = _rekeyFailureMessage();
           return false;
         }
+      }
+
+      // Keep any recovery escrow reaching the current key, without needing
+      // the codes -- the new key is sealed under the one it replaces.
+      if (originalKey != null && originalKey.isNotEmpty) {
+        await _appendVaultKeyEscrowLink(originalKey, newKey);
       }
 
       await _storeEncryptionKey(newKey);
@@ -3623,6 +3817,18 @@ class SyncService {
     return file.path;
   }
 
+  /// Escrow the vault key under codes handed back with a freshly generated
+  /// PDF. Silent on absence: an un-updated server simply sends no header.
+  Future<void> _escrowUnderHeaderCodes(String? headerValue) async {
+    final codes = (headerValue ?? '')
+        .split(',')
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty)
+        .toList();
+    if (codes.isEmpty) return;
+    await publishVaultKeyEscrow(codes);
+  }
+
   Future<String?> downloadBackupCodesPdf({bool preferDarkTheme = false}) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -3655,6 +3861,11 @@ class SyncService {
         _lastErrorMessage = 'Backup code PDF download failed.';
         return null;
       }
+
+      // The only moment this app holds the codes in plaintext. Wrap the vault
+      // key under them now so a later password reset can recover it, then let
+      // them go -- they are never written to storage.
+      await _escrowUnderHeaderCodes(response.headers.value('x-backup-codes'));
 
       final username =
           await _secureStorage.read(SecureStorageService.currentUserKey) ??
@@ -3710,6 +3921,13 @@ class SyncService {
         if (encoded.isEmpty || fileName.isEmpty) {
           _lastErrorMessage = 'Backup-code PDF payload was incomplete.';
           return null;
+        }
+
+        final codes = ((data['codes'] as List?) ?? const [])
+            .map((code) => code.toString())
+            .toList();
+        if (codes.isNotEmpty) {
+          await publishVaultKeyEscrow(codes);
         }
 
         final bytes = base64Decode(encoded);

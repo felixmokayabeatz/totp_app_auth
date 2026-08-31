@@ -392,6 +392,11 @@ def _build_backup_code_pdf_payload(*, user: User, current_session: DeviceSession
         'pdf_bytes': pdf_bytes,
         'file_name': filename,
         'generated_at': generated_at,
+        # Handed back so the caller can put them in a response header for the
+        # app to escrow the vault key under. These are the same codes already
+        # inside the PDF body going to the same authenticated user, so nothing
+        # new is disclosed -- but they must never be stored in plaintext.
+        'codes': codes,
     }
 
 
@@ -2048,6 +2053,10 @@ class BackupCodeGenerationRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 'success': True,
                 'file_name': file_name,
                 'pdf_base64': base64.b64encode(pdf_bytes).decode('ascii'),
+                # Same purpose as the X-Backup-Codes header on the direct
+                # download: the approving device escrows its vault key under
+                # these before discarding them.
+                'codes': payload['codes'],
                 'generated_at': generated_at,
             }
         )
@@ -2764,6 +2773,11 @@ def download_backup_codes(request):
         pdf_bytes = payload['pdf_bytes']
         filename = payload['file_name']
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        # Lets the app re-wrap its vault key under the new codes, so a future
+        # password reset can recover the vault instead of orphaning it. The
+        # server never sees the vault key itself.
+        response['X-Backup-Codes'] = ','.join(payload['codes'])
+        response['Access-Control-Expose-Headers'] = 'X-Backup-Codes'
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         response['Content-Length'] = str(len(pdf_bytes))
 

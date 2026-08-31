@@ -15,6 +15,61 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.10.0 (Build 50)
+
+App -- a password reset orphaned the synced vault, permanently and silently:
+
+- The vault key is `sha256(identity + password)`. `resetPassword` and
+  `resetPasswordWithRecoveryCode` post a code and a new password and nothing
+  else; the server changes the password and never touches `EncryptedData`, and
+  it cannot do better -- the vault is end-to-end encrypted and the device doing
+  the reset is signed out and does not know the old password. The vault stayed
+  locked under the pre-reset key, which nobody could derive again. No warning,
+  no recovery, and the account list simply came up empty afterwards.
+- Two things now stand between a user and that. The reset screen says what a
+  reset costs before they go through with it, including that accounts already on
+  a signed-in device are unaffected. And the vault key is escrowed under the
+  recovery codes, so the PDF they are already required to save is a genuine way
+  back rather than only a way into the account.
+
+App -- vault key escrow:
+
+- `EncryptionService.wrapVaultKey` seals the vault key under
+  `generateKey(normalizedCode, 'vault_key_escrow_salt')`, one entry per code,
+  stored as `vault_key_escrow` through the existing sync endpoints. No new
+  model, no migration, and the server only ever holds the wrapped blob.
+- Authenticated, deliberately: a wrong code has to fail rather than return a
+  plausible wrong key that would then be handed to the vault as if it were real.
+  It is also randomised per wrap, so the stored blob is not a fingerprint of the
+  key.
+- The escrow is written at the one moment the app holds the codes in plaintext:
+  when a recovery PDF is generated. `_build_backup_code_pdf_payload` already had
+  them, so the download returns them in `X-Backup-Codes` and the approve
+  endpoint in `codes`. Those are the same codes inside the PDF going to the same
+  authenticated user, so nothing new is disclosed; the app wraps the key and
+  drops them without storing them.
+- Re-keys would otherwise strand an escrow, because rebuilding `wrapped_keys`
+  needs codes the app no longer has. Instead each re-key appends the new key
+  sealed under the one it replaces, and recovery walks that chain. Codes saved
+  before a password change still reach the current key.
+- `restoreVaultKeyFromRecoveryCode` accepts a key only once it has actually
+  opened the stored vault, and writes nothing to the cloud. Surfaced as "Unlock
+  Sync With A Recovery Code" in Settings.
+
+Known limits, worth stating plainly:
+
+- Escrow protects vaults from this version forward. A vault already orphaned by
+  a reset before it has no escrow entry and cannot be recovered by this or any
+  other change -- there is nothing to unwrap.
+- Recovery codes generated before this version have no vault key attached.
+  Generating a fresh set is what creates the escrow.
+- The deeper fix is to stop deriving the vault key from the password at all: a
+  random vault key, wrapped under both a password-derived key and the recovery
+  codes, means a password change re-wraps one small blob instead of rewriting
+  the whole vault, and no reset can ever orphan anything. The escrow chain here
+  is the pragmatic version of that and carries a little complexity the redesign
+  would remove.
+
 ## Fixed in 1.9.1 (Build 49)
 
 The stored vault is authoritative. Nothing writes to it without having read it

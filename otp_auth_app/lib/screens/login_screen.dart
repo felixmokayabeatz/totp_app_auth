@@ -523,6 +523,66 @@ class _LoginScreenState extends State<LoginScreen> {
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
+                      SizedBox(height: 16),
+                      // Your synced vault is encrypted with a key derived from
+                      // your password. A reset happens without the old one, so
+                      // unless the key was escrowed under your recovery codes,
+                      // nothing afterwards can derive it again. Saying so here
+                      // is the difference between an informed choice and
+                      // silently losing a backup.
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange.shade700,
+                              size: 22,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Before you reset',
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: inputTextColor,
+                                    ),
+                                  ),
+                                  SizedBox(height: 5),
+                                  Text(
+                                    'Your synced accounts are locked with a key made from your '
+                                    'current password. Resetting it does not unlock them, so '
+                                    'unless you still have your recovery codes PDF, your synced '
+                                    'copy cannot be opened again.\n\n'
+                                    'Accounts already on a signed-in device are not affected and '
+                                    'stay on that device. If you can still open BeatzLock '
+                                    'anywhere, back those up before resetting.',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      height: 1.45,
+                                      color: inputTextColor.withValues(
+                                        alpha: 0.85,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       SizedBox(height: 20),
                       TextFormField(
                         controller: _resetOtpCodeController,

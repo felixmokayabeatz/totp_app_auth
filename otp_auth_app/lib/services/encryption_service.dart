@@ -97,6 +97,75 @@ class EncryptionService {
     );
   }
 
+  // --- Vault key escrow ----------------------------------------------------
+  // The vault key is derived from the account password, so a password reset --
+  // which by definition happens without the old password -- used to leave the
+  // synced vault locked under a key nobody could ever derive again. Wrapping
+  // the key under each recovery code gives the PDF the user is already made to
+  // save a way to unlock it, turning those codes into a real recovery path
+  // rather than only a way back into the account.
+  //
+  // Authenticated, so a wrong code fails loudly instead of yielding a
+  // plausible-looking wrong key that would then be used to "decrypt" the vault.
+  static const String vaultEscrowContext = 'vault-key-escrow';
+
+  static String normalizeRecoveryCode(String rawCode) {
+    return rawCode.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
+  static String _escrowKeyFor(String recoveryCode) {
+    return generateKey(
+      normalizeRecoveryCode(recoveryCode),
+      'vault_key_escrow_salt',
+    );
+  }
+
+  static String wrapVaultKey(String vaultKey, String recoveryCode) {
+    return authenticatedEncrypt(
+      vaultKey,
+      _escrowKeyFor(recoveryCode),
+      context: vaultEscrowContext,
+    );
+  }
+
+  /// The vault key sealed in [wrapped], or null if [recoveryCode] is not the
+  /// code it was wrapped under.
+  static String? unwrapVaultKey(String wrapped, String recoveryCode) {
+    try {
+      final key = authenticatedDecrypt(
+        wrapped,
+        _escrowKeyFor(recoveryCode),
+        context: vaultEscrowContext,
+      );
+      return key.isEmpty ? null : key;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Seal [newKey] under [previousKey], so a re-key stays reachable from an
+  /// escrow entry written before it without needing the codes again.
+  static String chainVaultKey(String newKey, String previousKey) {
+    return authenticatedEncrypt(
+      newKey,
+      previousKey,
+      context: 'vault-key-chain',
+    );
+  }
+
+  static String? unchainVaultKey(String wrapped, String previousKey) {
+    try {
+      final key = authenticatedDecrypt(
+        wrapped,
+        previousKey,
+        context: 'vault-key-chain',
+      );
+      return key.isEmpty ? null : key;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static String encryptSensitiveSyncPayload(
     String plainText,
     String key, {

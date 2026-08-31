@@ -1449,6 +1449,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _unlockSyncOnThisDevice,
               ),
             ],
+            if (authProvider.isAuthenticated) ...[
+              _dividerLine(),
+              _tappableTile(
+                icon: Icons.vpn_key_rounded,
+                label: 'Unlock Sync With A Recovery Code',
+                sub:
+                    'Use your recovery codes PDF when no device can open your synced vault',
+                onTap: _restoreVaultWithRecoveryCode,
+              ),
+            ],
             // Shown on locked devices too. Repair reads the local vault,
             // which does not need the sync key, so a device that cannot open
             // the cloud can still be the one that fixes it.
@@ -2046,6 +2056,181 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: const Text(
           'Cloud sync repaired. Your other devices can open your vault after '
           'entering their password once.',
+        ),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Recover the vault key from a recovery code.
+  ///
+  /// The way back after a password reset, which changes the password without
+  /// the old one and so cannot re-lock the vault itself. Reads only: the
+  /// stored vault is never written by this.
+  Future<void> _restoreVaultWithRecoveryCode() async {
+    if (!await _requireSignedIn('unlock sync with a recovery code')) {
+      return;
+    }
+    if (!mounted) return;
+
+    final hasEscrow = await _syncService.hasVaultKeyEscrow();
+    if (!mounted) return;
+
+    if (!hasEscrow) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: _cardColor,
+          title: Text(
+            'No recovery escrow yet',
+            style: TextStyle(color: _textPrimary),
+          ),
+          content: Text(
+            'This account has no recovery escrow, so a recovery code cannot '
+            'unlock its synced vault.\n\n'
+            'Escrow is created when you generate recovery codes. Generate a '
+            'fresh set from Settings and keep the PDF: from then on, a '
+            'password reset will not lock you out of your synced accounts.',
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final codeController = TextEditingController();
+    var isSubmitting = false;
+    String? errorText;
+    var restored = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          scrollable: true,
+          backgroundColor: _cardColor,
+          title: Text(
+            'Unlock Sync With A Recovery Code',
+            style: TextStyle(color: _textPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter one of the 10-character codes from your recovery codes '
+                'PDF. It unlocks the key your synced vault is encrypted with, '
+                'so this device can open it again.',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: codeController,
+                enabled: !isSubmitting,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                autocorrect: false,
+                enableSuggestions: false,
+                maxLength: 12,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 4,
+                  color: _textPrimary,
+                ),
+                decoration: InputDecoration(
+                  counterText: '',
+                  labelText: 'Recovery code',
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                ),
+                onChanged: (_) => setDialogState(() {}),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed:
+                  isSubmitting ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final code = codeController.text.trim();
+                      if (code.isEmpty) {
+                        setDialogState(() {
+                          errorText = 'Enter one of your recovery codes.';
+                        });
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = true;
+                        errorText = null;
+                      });
+
+                      final ok = await _syncService
+                          .restoreVaultKeyFromRecoveryCode(code);
+                      if (!dialogContext.mounted) return;
+
+                      if (ok) {
+                        restored = true;
+                        Navigator.pop(dialogContext);
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSubmitting = false;
+                        errorText = _syncService.lastErrorMessage ??
+                            'That recovery code did not work.';
+                      });
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Unlock sync'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    codeController.dispose();
+    if (!mounted || !restored) return;
+
+    await _loadSyncPreference();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Sync unlocked from your recovery code. Generate fresh recovery '
+          'codes soon so the used one is replaced.',
         ),
         backgroundColor: const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
