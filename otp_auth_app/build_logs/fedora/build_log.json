@@ -82,5 +82,19 @@
     "build_number": "47",
     "artifact_version": "1.8.2_47",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 7,
+    "platform": "fedora",
+    "artifact_type": "rpm",
+    "file": "beatzlock_1.15.3_58_x86_64.rpm",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/otp_auth_app/final_builds/fedora/1.15.3_58/beatzlock_1.15.3_58_x86_64.rpm",
+    "relative_path": "final_builds/fedora/1.15.3_58/beatzlock_1.15.3_58_x86_64.rpm",
+    "is_directory": false,
+    "timestamp": "2026-09-01T19:06:28",
+    "version": "1.15.3+58",
+    "build_number": "58",
+    "artifact_version": "1.15.3_58",
+    "host_platform": "Linux"
   }
 ]
