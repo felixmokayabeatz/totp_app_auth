@@ -600,5 +600,19 @@
     "build_number": "53",
     "artifact_version": "1.13.0_53",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 44,
+    "platform": "android",
+    "artifact_type": "apk",
+    "file": "beatzlock_1.15.0_55.apk",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/otp_auth_app/final_builds/android/1.15.0_55/beatzlock_1.15.0_55.apk",
+    "relative_path": "final_builds/android/1.15.0_55/beatzlock_1.15.0_55.apk",
+    "is_directory": false,
+    "timestamp": "2026-09-01T13:10:44",
+    "version": "1.15.0+55",
+    "build_number": "55",
+    "artifact_version": "1.15.0_55",
+    "host_platform": "Linux"
   }
 ]
