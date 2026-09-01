@@ -47,6 +47,10 @@ class OTPService {
     try {
       final userId = await getCurrentUserId();
       final secret = _safeDecrypt(encryptedSecret, userId);
+      if (secret == null) {
+        // Say so, rather than generate a confident wrong answer.
+        return 'Locked';
+      }
 
       final cleanSecret = secret.toUpperCase().replaceAll(
             RegExp(r'[^A-Z2-7]'),
@@ -81,20 +85,42 @@ class OTPService {
     }
   }
 
-  String _safeDecrypt(String storedSecret, String userId) {
+  /// The account's base32 seed, or null if this device cannot read it.
+  ///
+  /// Null matters. This used to fall back to returning the stored ciphertext,
+  /// which then had its non-base32 characters stripped and was fed to the HMAC
+  /// -- producing a stable, plausible, completely wrong six-digit code with no
+  /// indication anything was amiss. For an authenticator that is the worst
+  /// available behaviour: a visible error costs the user a support question,
+  /// silently wrong codes cost them access and they cannot tell why.
+  String? _safeDecrypt(String storedSecret, String userId) {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
-    final isRawBase32 = RegExp(r'^[A-Z2-7a-z]+$').hasMatch(strippedSpaces);
-
-    if (isRawBase32) {
+    if (_looksLikeBase32(strippedSpaces)) {
+      // Stored unencrypted by an older build. Genuinely the seed.
       return storedSecret;
     }
 
+    String decrypted;
     try {
-      return EncryptionService.decryptSecret(storedSecret, userId);
+      decrypted = EncryptionService.decryptSecret(storedSecret, userId);
     } catch (e) {
-      debugPrint('Decryption failed: $e, using raw');
-      return storedSecret;
+      debugPrint('OTP secret could not be decrypted: $e');
+      return null;
     }
+
+    // The unauthenticated legacy format cannot report a wrong key, so a bad
+    // key yields plausible-looking bytes rather than an error. Anything that is
+    // not a base32 seed is treated as a failure to read it.
+    if (!_looksLikeBase32(decrypted.replaceAll(RegExp(r'\s+'), ''))) {
+      debugPrint('OTP secret decrypted to something that is not base32');
+      return null;
+    }
+    return decrypted;
+  }
+
+  static bool _looksLikeBase32(String value) {
+    final cleaned = value.replaceAll('=', '');
+    return cleaned.isNotEmpty && RegExp(r'^[A-Z2-7a-z]+$').hasMatch(cleaned);
   }
 
   Uint8List _base32Decode(String input) {

@@ -15,6 +15,32 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.15.2 (Build 57)
+
+An unreadable secret produced a confident wrong code:
+
+- `OTPService._safeDecrypt` fell back to returning the stored ciphertext when
+  decryption threw. `generateOTP` then stripped every non-base32 character from
+  it and fed the remainder to the HMAC, producing a stable, plausible,
+  completely wrong six-digit code. Nothing was logged to the user and nothing
+  looked unusual.
+- For an authenticator that is the worst available behaviour. A visible error
+  costs a support question; silently wrong codes cost the user access to the
+  account and give them no way to work out why -- they blame the service they
+  are signing in to.
+- `_safeDecrypt` now returns null on failure and `generateOTP` returns
+  "Locked". It also rejects a decrypt that *succeeded* but did not yield base32:
+  the legacy unauthenticated format cannot report a wrong key, so a bad key
+  returns plausible bytes rather than throwing.
+- A genuinely unencrypted legacy seed is still read, so older stored accounts
+  keep working.
+- `test/otp_generation_test.dart` covers both directions, including the
+  cross-install case that reproduces the wrong-code path.
+
+Noted while testing: the keychain fallback added in 1.14.0 is exercised by the
+test run, which has no secure-storage plugin. It logs the MissingPluginException
+and falls back to encrypted preferences, which is what it was written to do.
+
 ## Fixed in 1.15.1 (Build 56)
 
 Sign-in with an emailed code failed as "Invalid email or password":
