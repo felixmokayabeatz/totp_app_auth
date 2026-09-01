@@ -58,8 +58,6 @@ void main(List<String> launchArgs) async {
   if (!Hive.isAdapterRegistered(0)) {
     Hive.registerAdapter(OTPAccountAdapter());
   }
-  if (!Hive.isAdapterRegistered(1)) {}
-  if (!Hive.isAdapterRegistered(2)) {}
 
   // Four independent boxes; opening them in sequence made launch wait on four
   // separate disk reads for no reason.

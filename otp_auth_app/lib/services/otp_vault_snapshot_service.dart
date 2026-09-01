@@ -11,27 +11,23 @@ class OtpVaultSnapshotInfo {
     required this.id,
     required this.createdAt,
     required this.otpAccountCount,
-    required this.passwordEntryCount,
     required this.reason,
   });
 
   final String id;
   final DateTime createdAt;
   final int otpAccountCount;
-  final int passwordEntryCount;
   final String reason;
 }
 
 class OtpVaultSnapshotRestoreResult {
   const OtpVaultSnapshotRestoreResult({
     required this.restoredOtpCount,
-    required this.restoredPasswordCount,
     required this.snapshotCreatedAt,
     required this.syncedToCloud,
   });
 
   final int restoredOtpCount;
-  final int restoredPasswordCount;
   final DateTime snapshotCreatedAt;
   final bool syncedToCloud;
 }
@@ -122,7 +118,6 @@ class OtpVaultSnapshotService {
             id: record.id,
             createdAt: record.createdAt,
             otpAccountCount: record.otpAccountCount,
-            passwordEntryCount: record.passwordEntryCount,
             reason: record.reason,
           ),
         )
@@ -201,7 +196,6 @@ class OtpVaultSnapshotService {
 
     return OtpVaultSnapshotRestoreResult(
       restoredOtpCount: record.accounts.length,
-      restoredPasswordCount: 0,
       snapshotCreatedAt: record.createdAt,
       syncedToCloud: syncedToCloud,
     );
@@ -401,7 +395,6 @@ class _SnapshotRecord {
     required this.boxName,
     required this.createdAt,
     required this.otpAccountCount,
-    required this.passwordEntryCount,
     required this.reason,
     required this.accounts,
     required this.passwordEntries,
@@ -411,7 +404,6 @@ class _SnapshotRecord {
   final String boxName;
   final DateTime createdAt;
   final int otpAccountCount;
-  final int passwordEntryCount;
   final String reason;
   final List<Map<String, dynamic>> accounts;
   final List<Map<String, dynamic>> passwordEntries;
@@ -422,7 +414,6 @@ class _SnapshotRecord {
       'box_name': boxName,
       'created_at': createdAt.toIso8601String(),
       'account_count': otpAccountCount,
-      'password_count': passwordEntryCount,
       'reason': reason,
       'accounts': accounts,
       'password_entries': passwordEntries,
@@ -457,9 +448,6 @@ class _SnapshotRecord {
       createdAt: createdAt.toUtc(),
       otpAccountCount: int.tryParse(raw['account_count']?.toString() ?? '') ??
           accounts.length,
-      passwordEntryCount:
-          int.tryParse(raw['password_count']?.toString() ?? '') ??
-              passwordEntries.length,
       reason: raw['reason']?.toString() ?? 'snapshot',
       accounts: accounts,
       passwordEntries: passwordEntries,

@@ -42,7 +42,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     'backup_code_request': 'Recovery Codes PDF requests',
     'app_review_reply': 'Review replies',
     'active_devices_daily': 'Active-device summaries',
-    'secure_self_text': 'Secure self texts',
   };
 
   static const Map<String, String> _ageFilterLabels = {
@@ -124,8 +123,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Icons.download_for_offline_rounded;
       case 'app_review_reply':
         return Icons.rate_review_rounded;
-      case 'secure_self_text':
-        return Icons.chat_bubble_rounded;
       default:
         return Icons.notifications_none_rounded;
     }

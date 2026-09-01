@@ -133,6 +133,32 @@ CSRF_TRUSTED_ORIGINS = _split_csv_env('CSRF_TRUSTED_ORIGINS') or [SITE_URL]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# Production hardening. All of it is off in DEBUG so local development over
+# plain HTTP still works -- with these on, a dev server would redirect to https
+# and then refuse to send back a cookie it just set.
+#
+# The API authenticates with bearer tokens rather than cookies, so these do not
+# protect sync. They protect the Django admin at /beatzlock_admin/, whose
+# session cookie is a full administrative credential and was previously allowed
+# to travel over plain HTTP.
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
+    # Six months, and opt-in for the subdomain/preload parts: those are hard to
+    # walk back, so they stay a deliberate choice rather than a default.
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '15552000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = (
+        os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False').lower() == 'true'
+    )
+    SECURE_HSTS_PRELOAD = (
+        os.getenv('SECURE_HSTS_PRELOAD', 'False').lower() == 'true'
+    )
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SAMESITE = 'Lax'
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'api.authentication.DeviceSessionJWTAuthentication',

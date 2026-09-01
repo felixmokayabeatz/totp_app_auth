@@ -560,11 +560,7 @@ class SyncService {
     required String to,
   }) async {
     final deviceId = await getOrCreateDeviceId();
-    for (final dataType in const [
-      'otp_accounts',
-      'password_entries',
-      'secure_messages',
-    ]) {
+    for (final dataType in const ['otp_accounts']) {
       Response<dynamic> current;
       try {
         current = await _requestWithRetry(
@@ -957,9 +953,6 @@ class SyncService {
   // destroy it: a key may still exist on a device that has not been opened in
   // a while, and overwriting would end that permanently.
 
-  static const _passwordEntriesSyncContext = 'password-entries-sync';
-  static const _secureMessagesSyncContext = 'secure-messages-sync';
-
   String _rekeyFailureMessage() {
     return 'Could not rewrite your cloud vault. Nothing was changed. Check your connection and try again.';
   }
@@ -969,14 +962,13 @@ class SyncService {
   }
 
   String _syncContextFor(String dataType) {
-    switch (dataType) {
-      case 'otp_accounts':
-        return EncryptionService.otpAccountsSyncContext;
-      case 'password_entries':
-        return _passwordEntriesSyncContext;
-      default:
-        return _secureMessagesSyncContext;
+    if (dataType == 'otp_accounts') {
+      return EncryptionService.otpAccountsSyncContext;
     }
+    // Deliberately loud. This used to fall through to the secure-messages
+    // context for anything unrecognised, so a typo would encrypt under a
+    // context nothing ever reads back and fail only much later.
+    throw ArgumentError.value(dataType, 'dataType', 'Unknown synced data type');
   }
 
   String _encryptSyncBlob(String plainText, String key, String dataType) {
@@ -3843,40 +3835,6 @@ class SyncService {
             'event_type': 'passwords_imported',
             'imported_count': importedCount,
             'source_label': sourceLabel,
-          },
-          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-        ),
-      );
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> logSecureSelfTextNotification({
-    required String messageId,
-    required String previewText,
-    required String authorDeviceLabel,
-  }) async {
-    await _updateAuthHeader();
-    _lastErrorMessage = null;
-
-    final token = await _secureStorage.read(
-      SecureStorageService.accessTokenKey,
-    );
-    if (token == null || token.isEmpty) {
-      return false;
-    }
-
-    try {
-      final response = await _requestWithRetry(
-        (accessToken) => _dio.post(
-          'notifications/log-event/',
-          data: {
-            'event_type': 'secure_self_text',
-            'message_id': messageId,
-            'preview_text': previewText,
-            'device_label': authorDeviceLabel,
           },
           options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
         ),

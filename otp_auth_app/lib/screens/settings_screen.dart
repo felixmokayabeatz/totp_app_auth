@@ -803,8 +803,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              '${snapshot.otpAccountCount} OTP account${snapshot.otpAccountCount == 1 ? '' : 's'}'
-                              ' • ${snapshot.passwordEntryCount} password${snapshot.passwordEntryCount == 1 ? '' : 's'}',
+                              '${snapshot.otpAccountCount} OTP account${snapshot.otpAccountCount == 1 ? '' : 's'}',
                               style: TextStyle(
                                 color: _textSecondary,
                                 fontSize: 12,
@@ -1098,9 +1097,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text(
           syncEnabled
               ? (result.syncedToCloud
-                  ? 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
-                  : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
-              : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} and ${result.restoredPasswordCount} password${result.restoredPasswordCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
+                  ? 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} and synced that restored state everywhere.'
+                  : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)} on this device, but the server copy could not be updated.')
+              : 'Restored ${result.restoredOtpCount} OTP account${result.restoredOtpCount == 1 ? '' : 's'} from ${_formatSnapshotDate(result.snapshotCreatedAt)}.',
         ),
         backgroundColor: (!syncEnabled || result.syncedToCloud)
             ? const Color(0xFF10B981)

@@ -42,11 +42,4 @@ class AppNotificationItem {
   }
 
   String? get targetScreen => metadata['target_screen']?.toString();
-
-  String? get secureMessageId => metadata['message_id']?.toString();
-
-  bool get opensSecureSelfText =>
-      targetScreen == 'secure_self_text' &&
-      secureMessageId != null &&
-      secureMessageId!.isNotEmpty;
 }

@@ -12,3 +12,6 @@ Changed
 
 Fixes and Performance
 - Signing out now also stops push notifications, which previously kept arriving for an account that had already signed out.
+- Restore points no longer mention passwords. They were still reporting "and 0 passwords" after the feature was removed.
+- The notifications screen no longer offers a filter for secure self texts, and old notifications for the removed features are cleared out rather than left sitting in your list with nothing to open.
+- Tightened security settings on our servers: admin sessions are now restricted to encrypted connections.

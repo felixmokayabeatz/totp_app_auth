@@ -163,6 +163,10 @@ def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
             "cmake",
             "gcc-c++",
             "gtk3-devel",
+            # flutter_secure_storage links libsecret on Linux. Without the
+            # headers the Linux build fails at CMake, and the app's runtime
+            # fallback cannot help with a build that never produced a binary.
+            "libsecret-devel",
             "libstdc++-devel",
             "libwebp-devel",
             "mesa-libGLU",
@@ -184,6 +188,9 @@ def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
             "clang",
             "cmake",
             "libgtk-3-dev",
+            # See the dnf list: libsecret is a build-time requirement of
+            # flutter_secure_storage, not just a runtime one.
+            "libsecret-1-dev",
             "libstdc++-12-dev",
             "libwebp-dev",
             "libglu1-mesa",

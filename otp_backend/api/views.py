@@ -66,9 +66,7 @@ from .notifications import (
     create_password_changed_notification,
     create_recovery_code_used_notification,
     create_recovery_codes_generated_notification,
-    create_secure_self_text_notification,
     create_sign_in_notification,
-    delete_secure_self_text_notifications,
 )
 from .push_notifications import send_passwordless_request_push
 from .device_sessions import (
@@ -1438,29 +1436,6 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
         if notification_type and notification_type != 'all':
             queryset = queryset.filter(notification_type=notification_type)
 
-        message_ids = request.data.get('message_ids')
-        if message_ids not in (None, ''):
-            if not isinstance(message_ids, list):
-                return Response(
-                    {'error': 'message_ids must be a list.'},
-                    status=400,
-                )
-            if notification_type not in ('', 'all', 'secure_self_text'):
-                return Response(
-                    {
-                        'error': (
-                            'message_ids can only be used with secure_self_text '
-                            'notifications.'
-                        )
-                    },
-                    status=400,
-                )
-            deleted_count = delete_secure_self_text_notifications(
-                request.user,
-                message_ids=message_ids,
-            )
-            return Response({'success': True, 'deleted_count': deleted_count})
-
         keep_unread = request.data.get('keep_unread') is True
         if keep_unread:
             queryset = queryset.filter(is_read=True)
@@ -1544,23 +1519,6 @@ class AppNotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 request.user,
                 imported_count=imported_count,
                 source_label=(request.data.get('source_label') or '').strip() or None,
-            )
-            return Response({'success': True}, status=201)
-
-        if event_type == 'secure_self_text':
-            message_id = (request.data.get('message_id') or '').strip()
-            if not message_id:
-                return Response({'error': 'message_id is required'}, status=400)
-
-            device_label = build_device_label(
-                request.data.get('device_label'),
-                request.META.get('HTTP_USER_AGENT'),
-            )
-            create_secure_self_text_notification(
-                request.user,
-                message_id=message_id,
-                author_device_label=device_label,
-                preview_text=(request.data.get('preview_text') or '').strip() or None,
             )
             return Response({'success': True}, status=201)
 
