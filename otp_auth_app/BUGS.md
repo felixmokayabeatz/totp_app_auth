@@ -15,6 +15,30 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.15.1 (Build 56)
+
+Sign-in with an emailed code failed as "Invalid email or password":
+
+- DRF runs `DEFAULT_AUTHENTICATION_CLASSES` on any request carrying an
+  `Authorization` header, before permission classes. So a stale or revoked token
+  makes `DeviceSessionJWTAuthentication` raise `AuthenticationFailed` -- a 401 --
+  even on an `AllowAny` view. `_friendlyRequestError` maps 401 to "Invalid email
+  or password", so a sign-in with perfectly good credentials reported bad
+  credentials, and the emailed code looked like the thing at fault.
+- The asymmetry that made it confusing: `send2FACode` and `verify2FACode` never
+  call `_updateAuthHeader`, so they ran with whatever the shared Dio instance
+  happened to be carrying. `login` calls it as its first statement, which is
+  what set the stale header. The code really was sent, and really was accepted;
+  the sign-in that followed is what 401'd.
+- Fixed with a Dio request interceptor that strips `Authorization` from the
+  endpoints that exist to create a session: login, register, passwordless
+  start/poll, the 2FA pair, password reset, and the three recovery-code paths.
+  Done centrally rather than per call site so a new auth endpoint cannot
+  reintroduce it by forgetting.
+- `test/auth_header_test.dart` pins both directions: the paths that must be
+  stripped, and the authenticated ones that must keep the header -- stripping
+  those would break them outright.
+
 ## Fixed in 1.15.0 (Build 55)
 
 Import could not run on Linux:

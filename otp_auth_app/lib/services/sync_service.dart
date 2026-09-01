@@ -120,11 +120,60 @@ class SyncService {
         headers: {'Content-Type': 'application/json'},
       ),
     );
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          // Endpoints that establish a session must never carry one.
+          //
+          // DRF runs DEFAULT_AUTHENTICATION_CLASSES on every request that has
+          // an Authorization header, before permission classes -- so a stale or
+          // revoked token makes DeviceSessionJWTAuthentication raise 401 on
+          // AllowAny views too. Sign-in then failed with "Invalid email or
+          // password" while the credentials were perfectly good, because the
+          // shared Dio instance was still carrying the previous session's
+          // token. Stripping it here rather than at each call site means a new
+          // auth endpoint cannot reintroduce the bug by forgetting to.
+          if (_isUnauthenticatedPath(options.path)) {
+            options.headers.remove('Authorization');
+          }
+          handler.next(options);
+        },
+      ),
+    );
     ServerLockdownService().attachDioInterceptor(
       _dio,
       featureSummary:
           'sign-in, sync, passwordless, notifications, device sessions, and other server features',
     );
+  }
+
+  /// Paths that are reached before a session exists, or in order to create
+  /// one. Anything here is sent without an Authorization header.
+  static const Set<String> _unauthenticatedPaths = {
+    'auth/login/',
+    'auth/register/',
+    'auth/passwordless-start/',
+    'auth/passwordless-poll/',
+    'send-2fa/',
+    'verify-2fa/',
+    'send-reset-code/',
+    'reset-password/',
+    'recovery-code/login/',
+    'recovery-code/check-email/',
+    'recovery-code/reset-password/',
+  };
+
+  @visibleForTesting
+  static bool debugIsUnauthenticatedPath(String path) =>
+      _isUnauthenticatedPath(path);
+
+  static bool _isUnauthenticatedPath(String path) {
+    // Dio hands the path as given at the call site, but a leading slash or a
+    // full URL should match just the same.
+    final normalised = path
+        .replaceFirst(RegExp(r'^.*?/api/'), '')
+        .replaceFirst(RegExp(r'^/+'), '');
+    return _unauthenticatedPaths.contains(normalised);
   }
 
   late Dio _dio;
