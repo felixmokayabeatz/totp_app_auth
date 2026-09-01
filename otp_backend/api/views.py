@@ -12,7 +12,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
-from django.db import connection
+from django.db import connection, transaction
 from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from django.conf import settings
@@ -974,17 +974,60 @@ class SyncViewSet(viewsets.GenericViewSet):
             return Response({'error': 'data_type is required'}, status=400)
         
         try:
-            # Create or update encrypted data
-            obj, created = EncryptedData.objects.update_or_create(
-                user=request.user,
-                data_type=data_type,
-                defaults={
-                    'encrypted_content': encrypted_content,
-                    'version': version,
-                    'synced_at': timezone.now(),
-                    'deleted_accounts': deleted_accounts,
-                }
-            )
+            incoming_version = _coerce_item_count(version)
+            if incoming_version is None:
+                return Response({'error': 'version must be a number'}, status=400)
+
+            # Optimistic concurrency. This used to be a bare update_or_create
+            # that took the client's version without looking at it and kept no
+            # previous copy, so any client -- including one that had just failed
+            # to decrypt what was here -- could overwrite a vault outright. The
+            # client refuses to do that now, but the rule only means something
+            # if it is enforced where the data actually lives.
+            #
+            # Clients read the stored version and send it incremented, so a
+            # number that is not ahead means someone else wrote in between and
+            # this upload was built on a copy that is now stale.
+            with transaction.atomic():
+                existing = (
+                    EncryptedData.objects
+                    .select_for_update()
+                    .filter(user=request.user, data_type=data_type)
+                    .first()
+                )
+
+                if existing is not None and incoming_version <= existing.version:
+                    debug_print(
+                        f"[SYNC] REJECTED stale upload - incoming: {incoming_version}, "
+                        f"stored: {existing.version}"
+                    )
+                    logger.info(
+                        "Sync upload rejected as stale - User: %s, Type: %s, "
+                        "incoming: %s, stored: %s",
+                        user.email, data_type, incoming_version, existing.version,
+                    )
+                    return Response(
+                        {
+                            'error': (
+                                'This device is working from an older copy of your '
+                                'synced data. Sync again to pick up the newer one.'
+                            ),
+                            'current_version': existing.version,
+                            'conflict': True,
+                        },
+                        status=409,
+                    )
+
+                obj, created = EncryptedData.objects.update_or_create(
+                    user=request.user,
+                    data_type=data_type,
+                    defaults={
+                        'encrypted_content': encrypted_content,
+                        'version': incoming_version,
+                        'synced_at': timezone.now(),
+                        'deleted_accounts': deleted_accounts,
+                    }
+                )
             
             debug_print(f"[SYNC] EncryptedData record {'created' if created else 'updated'} - ID: {obj.id}, Version: {obj.version}")
             

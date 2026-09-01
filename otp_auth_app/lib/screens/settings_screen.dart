@@ -15,6 +15,7 @@ import '../services/app_rating_service.dart';
 import '../models/otp_account.dart';
 import '../services/app_update_service.dart';
 import '../services/import_file_picker_service.dart';
+import '../services/otp_export_service.dart';
 import '../services/sync_service.dart';
 import '../widgets/blocking_progress_dialog.dart';
 import '../services/app_lock_service.dart';
@@ -46,6 +47,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
+  final OtpExportService _exportService = OtpExportService();
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
   final AppRatingService _appRatingService = AppRatingService();
@@ -1450,6 +1452,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _unlockSyncOnThisDevice,
               ),
             ],
+            _dividerLine(),
+            _tappableTile(
+              icon: Icons.ios_share_rounded,
+              label: 'Export All Accounts',
+              sub: 'Save every account on this device to one file you control',
+              onTap: _exportAllAccounts,
+            ),
             if (authProvider.isAuthenticated) ...[
               _dividerLine(),
               _tappableTile(
@@ -2246,6 +2255,362 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         backgroundColor: const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Save every account on this device to one file.
+  ///
+  /// Works from local storage, which does not depend on the sync key, so it
+  /// still works when cloud sync is broken -- which is when it matters most.
+  Future<void> _exportAllAccounts() async {
+    final unlocked = await _appLockService.authenticateToUnlock(context);
+    if (!mounted || !unlocked) return;
+
+    final count = await _exportService.accountCount();
+    if (!mounted) return;
+
+    if (count == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('There are no accounts on this device to export.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final format = await showDialog<OtpExportFormat>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        backgroundColor: _cardColor,
+        title: Text('Export $count accounts',
+            style: TextStyle(color: _textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Choose what the file is for.',
+              style:
+                  TextStyle(color: _textSecondary, fontSize: 13, height: 1.45),
+            ),
+            const SizedBox(height: 14),
+            _exportOptionTile(
+              icon: Icons.lock_rounded,
+              title: 'Encrypted backup',
+              body: 'Protected by a passphrase you choose. Safe to keep on a '
+                  'drive or in cloud storage. Only BeatzLock can read it.',
+              onTap: () =>
+                  Navigator.pop(dialogContext, OtpExportFormat.encrypted),
+            ),
+            const SizedBox(height: 10),
+            _exportOptionTile(
+              icon: Icons.warning_amber_rounded,
+              title: 'Plain otpauth links',
+              body:
+                  'Readable by any authenticator app, and by anyone who opens '
+                  'the file. Your secrets are in it as plain text. Import it '
+                  'where you need it, then delete it.',
+              danger: true,
+              onTap: () => Navigator.pop(
+                dialogContext,
+                OtpExportFormat.plainOtpAuthUris,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (format == null || !mounted) return;
+
+    String? passphrase;
+    if (format == OtpExportFormat.encrypted) {
+      passphrase = await _askForExportPassphrase();
+      if (passphrase == null || !mounted) return;
+    } else {
+      final confirmed = await _confirmPlaintextExport(count);
+      if (confirmed != true || !mounted) return;
+    }
+
+    final directory = await _syncService.resolveExportDirectory();
+    if (!mounted) return;
+
+    final result = await runWithProgress<OtpExportResult?>(
+      context,
+      message: 'Exporting $count accounts',
+      detail: format == OtpExportFormat.encrypted
+          ? 'Encrypting with your passphrase and writing the file.'
+          : 'Writing the file.',
+      task: () => _exportService.export(
+        directory: directory,
+        format: format,
+        passphrase: passphrase,
+      ),
+    );
+    if (!mounted) return;
+
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _exportService.lastErrorMessage ??
+                'Could not export your accounts.',
+          ),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, color: const Color(0xFF10B981)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Exported', style: TextStyle(color: _textPrimary)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${result.accountCount} accounts saved to:',
+              style: TextStyle(color: _textPrimary, fontSize: 13.5),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              result.filePath,
+              style: TextStyle(color: _textSecondary, fontSize: 12.5),
+            ),
+            if (result.isPlaintext) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: Colors.orange.withValues(alpha: 0.55)),
+                ),
+                child: Text(
+                  'This file holds your 2FA secrets in plain text. Move it '
+                  'where you need it and delete it afterwards.',
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _exportOptionTile({
+    required IconData icon,
+    required String title,
+    required String body,
+    required VoidCallback onTap,
+    bool danger = false,
+  }) {
+    final tint = danger ? Colors.orange : _accent;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: tint.withValues(alpha: 0.5)),
+          color: tint.withValues(alpha: 0.07),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: tint, size: 22),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    body,
+                    style: TextStyle(
+                      color: _textSecondary,
+                      fontSize: 12.5,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _askForExportPassphrase() async {
+    final controller = TextEditingController();
+    final confirmController = TextEditingController();
+    var obscure = true;
+    String? errorText;
+
+    final passphrase = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          scrollable: true,
+          backgroundColor: _cardColor,
+          title: Text('Choose a passphrase',
+              style: TextStyle(color: _textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You will need this to restore the file. It is not stored '
+                'anywhere and cannot be recovered, so keep it somewhere safe.',
+                style: TextStyle(
+                    color: _textSecondary, fontSize: 13, height: 1.45),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                obscureText: obscure,
+                decoration: InputDecoration(
+                  labelText: 'Passphrase',
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: confirmController,
+                obscureText: obscure,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm passphrase',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final value = controller.text;
+                if (value.trim().length < 8) {
+                  setDialogState(
+                      () => errorText = 'Use at least 8 characters.');
+                  return;
+                }
+                if (value != confirmController.text) {
+                  setDialogState(
+                      () => errorText = 'The two passphrases do not match.');
+                  return;
+                }
+                Navigator.pop(dialogContext, value);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Export'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    controller.dispose();
+    confirmController.dispose();
+    return passphrase;
+  }
+
+  Future<bool?> _confirmPlaintextExport(int count) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        backgroundColor: _cardColor,
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Plain text export',
+                  style: TextStyle(color: _textPrimary)),
+            ),
+          ],
+        ),
+        content: Text(
+          'This writes all $count of your 2FA secrets to a file in plain text. '
+          'Anyone who opens that file can generate your codes for every one of '
+          'those accounts.\n\n'
+          'Only do this if you are importing into another authenticator, and '
+          'delete the file as soon as you have.',
+          style: TextStyle(color: _textSecondary, fontSize: 13, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('I understand, export'),
+          ),
+        ],
       ),
     );
   }

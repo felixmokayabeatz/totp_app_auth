@@ -15,6 +15,80 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.13.0 (Build 53)
+
+Server accepted any version and blindly overwrote:
+
+- `SyncViewSet.sync` was a bare `update_or_create` that took the client's
+  version number without comparing it and kept no previous copy. Any client
+  could replace a vault outright, including one that had just failed to decrypt
+  what was there. The client-side refusal added in 1.9.0 was the only thing
+  standing in the way, and a rule about not destroying data only means something
+  where the data lives.
+- It now takes the row `select_for_update` inside a transaction and rejects an
+  upload whose version is not ahead of what is stored, returning 409 with
+  `conflict: true` and the current version. Equal versions are rejected too:
+  two devices that both read v5 and both send v6 means the second built its
+  upload without seeing the first.
+- `syncAccounts` treats that 409 as a signal rather than an error -- it restarts
+  the cycle once, which re-reads the newer copy, merges it, and only then
+  writes. A second conflict is left for the next scheduled sync.
+- Covered by `SyncVersionGuardTests`.
+
+Snapshot restore replaced the cloud:
+
+- `uploadCurrentAccountsAsAuthoritative` and its password counterpart uploaded
+  local data over the stored vault without reading it, and reset
+  `deleted_accounts` to `'[]'` -- so a restore silently discarded anything that
+  existed only on another device, and resurrected every account the user had
+  ever deleted.
+- Both now merge the stored copy first, carry the deletion list forward instead
+  of clearing it, and refuse outright if this device cannot read what is stored.
+  A restore means "make my accounts look like this snapshot", not "discard
+  whatever else is in the cloud".
+
+No bulk export:
+
+- The only way out was the per-account QR screen: 44 accounts meant 44 scans,
+  for an app where the user may hold the only copy of their seeds.
+- `OtpExportService` writes either an encrypted backup -- passphrase through the
+  same PBKDF2 cost as the vault key, sealed with the authenticated cipher -- or
+  plain `otpauth://` URIs for importing elsewhere, behind an explicit
+  confirmation that says what the file contains.
+- It reads local storage, not the cloud, so it works when sync is broken, which
+  is when it is most needed. URI components are percent-encoded: a label holding
+  a slash or an ampersand would otherwise produce a URI that imports as
+  something else.
+- `decodeEncryptedExport` honours the iteration count recorded in the file, so
+  raising the shipped cost later does not strand old exports.
+
+Django query performance:
+
+- Every one of `AppNotification`, `DeviceSession`, `PasswordlessLoginRequest`,
+  `BulkAccountDeleteRequest` and `BackupCodeGenerationRequest` is read as
+  `filter(user=...)` and then ordered by `created_at` or `last_seen_at`. Django
+  indexes the foreign key column alone, which finds the user's rows and then
+  leaves the database sorting them.
+- Composite indexes matching the queries as actually issued, in migration
+  `0019`. Also `(status, expires_at)` on the three request models: the
+  `_expire_stale_*` sweeps run on nearly every related request and scanned every
+  pending row in the table without one.
+- This is index work driven by reading the query patterns, not profiling. It is
+  the part that can be done without production data; anything further needs a
+  slow endpoint or real timings.
+
+Still open, deliberately:
+
+- `authenticatedEncrypt` is hand-rolled. Replacing it with AES-GCM is correct
+  and is *not* batched here: it is a third vault-format migration, and 1.12.0's
+  is not yet in the user's hands. Two unshipped format changes at once is how
+  the failures earlier in this file happened.
+- `SecureStorageService` still derives its key from hostname, username and home
+  directory. Platform keychain (DPAPI / Keychain / Keystore) is the fix, and is
+  its own migration with its own failure modes.
+- No GUI sweep. Defects found in passing have been fixed; the screens have not
+  been audited.
+
 ## Fixed in 1.12.0 (Build 52)
 
 The primitives, after 1.11.0 fixed the structure. The keyring was sound sitting

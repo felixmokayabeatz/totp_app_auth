@@ -19,6 +19,7 @@ from .models import (
     AccountTombstone,
     BackupCodeSet,
     DeviceSession,
+    EncryptedData,
     PasswordlessLoginRequest,
 )
 from .notifications import (
@@ -1346,3 +1347,98 @@ class BackupCodeEscrowHeaderTests(APITestCase):
             (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
         self.assertNotIn('X-Backup-Codes', response)
+
+
+class SyncVersionGuardTests(APITestCase):
+    """The server refuses an upload built on a copy that is no longer current.
+
+    This used to be a bare update_or_create that took the client's version
+    number without comparing it and kept no previous copy, so any client could
+    overwrite a vault outright -- including one that had just failed to decrypt
+    what was there. The client refuses to do that now, but the rule only means
+    something if it is enforced where the data lives.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='sync@example.com',
+            password='testpass123',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _upload(self, content, version):
+        return self.client.post(
+            reverse('sync-sync'),
+            {
+                'data_type': 'otp_accounts',
+                'encrypted_content': content,
+                'version': version,
+                'device_id': 'device-a',
+            },
+            format='json',
+        )
+
+    def _stored(self):
+        return EncryptedData.objects.get(
+            user=self.user, data_type='otp_accounts'
+        )
+
+    def test_a_first_upload_is_stored(self):
+        response = self._upload('bl2:first', 1)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._stored().encrypted_content, 'bl2:first')
+
+    def test_a_newer_version_replaces_the_stored_copy(self):
+        self._upload('bl2:first', 1)
+        response = self._upload('bl2:second', 2)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._stored().encrypted_content, 'bl2:second')
+
+    def test_a_stale_version_is_rejected_and_changes_nothing(self):
+        self._upload('bl2:current', 5)
+
+        response = self._upload('bl2:stale', 3)
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertTrue(response.data['conflict'])
+        self.assertEqual(response.data['current_version'], 5)
+        self.assertEqual(self._stored().encrypted_content, 'bl2:current')
+
+    def test_the_same_version_is_rejected_too(self):
+        # Two devices that both read version 5 and both send 6: the second one
+        # built its upload without seeing the first, so it cannot be trusted to
+        # replace it.
+        self._upload('bl2:current', 5)
+
+        response = self._upload('bl2:concurrent', 5)
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(self._stored().encrypted_content, 'bl2:current')
+
+    def test_a_non_numeric_version_is_refused(self):
+        response = self.client.post(
+            reverse('sync-sync'),
+            {
+                'data_type': 'otp_accounts',
+                'encrypted_content': 'bl2:whatever',
+                'version': 'not-a-number',
+                'device_id': 'device-a',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_each_data_type_versions_independently(self):
+        self._upload('bl2:accounts', 9)
+        response = self.client.post(
+            reverse('sync-sync'),
+            {
+                'data_type': 'password_entries',
+                'encrypted_content': 'bl2:passwords',
+                'version': 1,
+                'device_id': 'device-a',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)

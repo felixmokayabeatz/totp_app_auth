@@ -128,6 +128,18 @@ class AppNotification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            # The notifications list: this user's rows, newest first.
+            models.Index(
+                fields=['user', '-created_at'],
+                name='apinotif_user_created_idx',
+            ),
+            # Unread badge counts.
+            models.Index(
+                fields=['user', 'is_read'],
+                name='apinotif_user_unread_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.user.email} - {self.notification_type}"
@@ -177,6 +189,18 @@ class DeviceSession(models.Model):
 
     class Meta:
         ordering = ['-last_seen_at', '-created_at']
+        indexes = [
+            # The sessions list and every "which session is this" lookup.
+            models.Index(
+                fields=['user', '-last_seen_at'],
+                name='apidevsess_user_seen_idx',
+            ),
+            # Filtering to live sessions, which nearly every request does.
+            models.Index(
+                fields=['user', 'is_active'],
+                name='apidevsess_user_active_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.user.email} - {self.device_label}"
@@ -241,6 +265,18 @@ class PasswordlessLoginRequest(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['user', '-created_at'],
+                name='apipwless_user_created_idx',
+            ),
+            # _expire_stale_passwordless_requests runs on nearly every related
+            # request and scans every pending row in the table without this.
+            models.Index(
+                fields=['status', 'expires_at'],
+                name='apipwless_status_exp_idx',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.user.email} - passwordless {self.status} - {self.requester_device_label}"
@@ -404,6 +440,16 @@ class BulkAccountDeleteRequest(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['user', '-created_at'],
+                name='apibulkdel_user_created_idx',
+            ),
+            models.Index(
+                fields=['status', 'expires_at'],
+                name='apibulkdel_status_exp_idx',
+            ),
+        ]
 
     def __str__(self):
         return (
@@ -456,6 +502,16 @@ class BackupCodeGenerationRequest(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['user', '-created_at'],
+                name='apibkupreq_user_created_idx',
+            ),
+            models.Index(
+                fields=['status', 'expires_at'],
+                name='apibkupreq_status_exp_idx',
+            ),
+        ]
 
     def __str__(self):
         return (

@@ -2308,7 +2308,10 @@ class SyncService {
   }
 
   // ─── Main sync ────────────────────────────────────────────────────────────
-  Future<bool> syncAccounts({bool preferLocalTitleChanges = false}) async {
+  Future<bool> syncAccounts({
+    bool preferLocalTitleChanges = false,
+    bool retryOnConflict = true,
+  }) async {
     if (!(await isSyncEnabled())) {
       debugPrint('Sync disabled by user preference');
       return true;
@@ -2516,6 +2519,22 @@ class SyncService {
         return false;
       }
     } on DioException catch (e) {
+      if (_isStaleUploadConflict(e)) {
+        // Another device wrote while this cycle was building its upload. Start
+        // over once: the download at the top picks up that newer copy and
+        // merges it, and only then is anything written.
+        if (retryOnConflict) {
+          debugPrint('Sync conflict - re-reading and merging before retrying');
+          return syncAccounts(
+            preferLocalTitleChanges: preferLocalTitleChanges,
+            retryOnConflict: false,
+          );
+        }
+        _lastErrorMessage =
+            'Another device is syncing right now. This will finish on the next sync.';
+        debugPrint('Sync conflict persisted; leaving it for the next cycle');
+        return false;
+      }
       _lastErrorMessage = _isSessionRevokedError(e)
           ? (_extractServerError(e.response?.data) ??
               'This device session is no longer active.')
@@ -2873,6 +2892,14 @@ class SyncService {
     }
   }
 
+  /// True when the server refused an upload because another device wrote
+  /// first. Not an error: the next sync reads that newer copy and merges.
+  bool _isStaleUploadConflict(DioException e) {
+    if (e.response?.statusCode != 409) return false;
+    final data = e.response?.data;
+    return data is Map && data['conflict'] == true;
+  }
+
   Future<bool> uploadEncryptedSyncData(
     String dataType, {
     required String encryptedContent,
@@ -3051,14 +3078,34 @@ class SyncService {
     final userBox = await _getUserBox();
 
     try {
+      // A restore says "make my accounts look like this snapshot", not "throw
+      // away whatever else is in the cloud". Merge the stored copy in first, so
+      // an account that exists only on another device survives a restore here,
+      // and refuse outright if it cannot be read -- overwriting a vault this
+      // device cannot open is the one thing sync must never do.
       var cloudVersion = 0;
+      var storedDeletions = '[]';
       try {
         final existing = await getEncryptedSyncData('otp_accounts');
         if (existing != null) {
           cloudVersion =
               int.tryParse(existing['version']?.toString() ?? '0') ?? 0;
+          final storedDeletedRaw =
+              existing['deleted_accounts']?.toString() ?? '';
+          if (storedDeletedRaw.isNotEmpty) storedDeletions = storedDeletedRaw;
+
+          final cipherText = existing['encrypted_content']?.toString() ?? '';
+          if (cipherText.isNotEmpty) {
+            if (tryDecodeAccountsPayload(cipherText, _encryptionKey!) == null) {
+              _lastErrorMessage = _vaultKeyMismatchMessage();
+              return false;
+            }
+            await downloadAndMergeAccounts();
+          }
         }
-      } catch (_) {}
+      } on DioException catch (e) {
+        if (e.response?.statusCode != 404) rethrow;
+      }
 
       final finalData = await Future.wait(
         userBox.values.map((a) async {
@@ -3084,7 +3131,9 @@ class SyncService {
         encryptedContent: encrypted,
         version: cloudVersion + 1,
         itemCount: finalData.length,
-        deletedAccounts: '[]',
+        // Carried forward, not reset. Clearing this used to resurrect every
+        // account the user had ever deleted.
+        deletedAccounts: storedDeletions,
       );
     } catch (_) {
       _lastErrorMessage = 'Could not sync restored accounts everywhere.';
@@ -3113,14 +3162,33 @@ class SyncService {
     final userId = await _getCurrentUserId();
 
     try {
+      // Same rule as the accounts restore: merge what is stored before writing
+      // over it, and refuse if this device cannot read it.
       var cloudVersion = 0;
       try {
         final existing = await getEncryptedSyncData('password_entries');
         if (existing != null) {
           cloudVersion =
               int.tryParse(existing['version']?.toString() ?? '0') ?? 0;
+          final cipherText = existing['encrypted_content']?.toString() ?? '';
+          if (cipherText.isNotEmpty) {
+            try {
+              EncryptionService.decryptSensitiveSyncPayload(
+                cipherText,
+                _encryptionKey!,
+                context: _passwordEntriesSyncContext,
+                allowLegacyPlaintextFallback: true,
+              );
+            } catch (_) {
+              _lastErrorMessage = _vaultKeyMismatchMessage();
+              return false;
+            }
+            await downloadAndMergePasswordEntries();
+          }
         }
-      } catch (_) {}
+      } on DioException catch (e) {
+        if (e.response?.statusCode != 404) rethrow;
+      }
 
       final payload = passwordBox.values.map((entry) {
         return {
@@ -4196,6 +4264,11 @@ class SyncService {
       return null;
     }
   }
+
+  /// Where exports are written: the same place the recovery PDF goes, so
+  /// people look in one folder for the things they need to keep.
+  Future<Directory> resolveExportDirectory() async =>
+      _resolveBackupCodesDirectory();
 
   Future<Directory> _resolveBackupCodesDirectory() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {

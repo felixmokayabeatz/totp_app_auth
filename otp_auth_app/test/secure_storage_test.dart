@@ -61,7 +61,8 @@ void main() {
     // If the derived key were recomputed differently on a later call, the
     // first value would stop decrypting.
     await storage.write(SecureStorageService.userIdKey, 'first');
-    await storage.write(SecureStorageService.userEmailKey, 'second@example.com');
+    await storage.write(
+        SecureStorageService.userEmailKey, 'second@example.com');
 
     expect(await storage.read(SecureStorageService.userIdKey), 'first');
     expect(
@@ -71,7 +72,8 @@ void main() {
   });
 
   test('the stored form is not the plain text', () async {
-    await storage.write(SecureStorageService.currentUserKey, 'felix@example.com');
+    await storage.write(
+        SecureStorageService.currentUserKey, 'felix@example.com');
 
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(SecureStorageService.currentUserKey);
