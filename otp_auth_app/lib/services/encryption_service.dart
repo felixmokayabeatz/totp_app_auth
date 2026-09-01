@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 
 class EncryptionService {
   static String generateKey(String password, String salt) {
@@ -32,14 +33,65 @@ class EncryptionService {
     return utf8.decode(decrypted);
   }
 
-  static String encryptSecret(String secret, String userId) {
-    final key = generateKey(userId, 'otp_local_encryption_salt');
-    return simpleEncrypt(secret, key);
+  // The local vault used to be encrypted with generateKey(userId, salt), where
+  // userId is the account's email address -- public information. Anyone with
+  // the .hive file could derive the same key and read every secret in it. It
+  // was obfuscation wearing the shape of encryption.
+  //
+  // A random per-install secret now goes into that derivation, so the key is no
+  // longer computable from anything an attacker holding the file can see. It is
+  // configured once at start-up from secure storage rather than threaded
+  // through the thirty-odd call sites that pass a userId, which keeps the
+  // change small enough to reason about.
+  //
+  // Until it is configured, the legacy derivation is used unchanged: reading
+  // existing data must never depend on initialisation order.
+
+  static String? _localVaultSecret;
+
+  static void configureLocalVaultSecret(String secret) {
+    _localVaultSecret = secret.isEmpty ? null : secret;
   }
 
+  @visibleForTesting
+  static void resetLocalVaultSecretForTest() => _localVaultSecret = null;
+
+  static bool get localVaultSecretConfigured => _localVaultSecret != null;
+
+  static String legacyLocalKeyFor(String userId) =>
+      generateKey(userId, 'otp_local_encryption_salt');
+
+  static String _localKeyFor(String userId) {
+    final secret = _localVaultSecret;
+    if (secret == null) return legacyLocalKeyFor(userId);
+    return generateKey('$userId|$secret', 'otp_local_encryption_salt_v2');
+  }
+
+  static String encryptSecret(String secret, String userId) {
+    if (_localVaultSecret == null) {
+      // Not configured yet: keep writing what this install can already read.
+      return simpleEncrypt(secret, legacyLocalKeyFor(userId));
+    }
+    return authenticatedEncrypt(
+      secret,
+      _localKeyFor(userId),
+      context: localVaultContext,
+    );
+  }
+
+  /// Decrypt a locally stored secret, accepting either format.
+  ///
+  /// Values written before the per-install secret existed stay readable, and
+  /// are rewritten in the current format the next time they are saved.
   static String decryptSecret(String encryptedSecret, String userId) {
-    final key = generateKey(userId, 'otp_local_encryption_salt');
-    return simpleDecrypt(encryptedSecret, key);
+    if (encryptedSecret.startsWith('bl2:')) {
+      return authenticatedDecrypt(
+        encryptedSecret,
+        _localKeyFor(userId),
+        context: localVaultContext,
+      );
+    }
+    return simpleDecrypt(encryptedSecret, legacyLocalKeyFor(userId));
   }
 
   static String encryptPasswordEntrySecret(String secret, String userId) {
@@ -97,6 +149,70 @@ class EncryptionService {
     );
   }
 
+  // --- Key derivation -------------------------------------------------------
+  // generateKey below is a single SHA-256. As a password KDF that is no work
+  // at all: a GPU walks billions of candidate passwords a second against a
+  // stored wrap. Anything a password protects goes through PBKDF2-HMAC-SHA256
+  // instead, which costs an attacker the same iteration count it costs us.
+  //
+  // Implemented here rather than pulled in, because PBKDF2 is a short, exactly
+  // specified construction and the alternative was another dependency on the
+  // launch path. It is checked against published test vectors in
+  // test/kdf_test.dart -- do not change it without those passing.
+
+  /// OWASP's floor for PBKDF2-HMAC-SHA256. Raise it, never lower it: a stored
+  /// wrap records the count it was made with, so old wraps keep opening.
+  static const int passwordKdfIterations = 210000;
+
+  static List<int> pbkdf2(
+    List<int> password,
+    List<int> salt,
+    int iterations,
+    int keyLengthBytes,
+  ) {
+    if (iterations < 1) throw ArgumentError.value(iterations, 'iterations');
+    final hmac = Hmac(sha256, password);
+    final output = <int>[];
+
+    for (var block = 1; output.length < keyLengthBytes; block++) {
+      // U1 = HMAC(P, S || INT_32_BE(block))
+      var u = hmac.convert([
+        ...salt,
+        (block >> 24) & 0xff,
+        (block >> 16) & 0xff,
+        (block >> 8) & 0xff,
+        block & 0xff,
+      ]).bytes;
+      final accumulator = List<int>.from(u);
+
+      for (var round = 1; round < iterations; round++) {
+        u = hmac.convert(u).bytes;
+        for (var i = 0; i < accumulator.length; i++) {
+          accumulator[i] ^= u[i];
+        }
+      }
+      output.addAll(accumulator);
+    }
+
+    return output.sublist(0, keyLengthBytes);
+  }
+
+  /// A key from a password, at a real cost. Returned as 32 hex characters so
+  /// it drops into every place that already takes a String key.
+  static String deriveKeyFromPassword(
+    String password,
+    String salt, {
+    int iterations = passwordKdfIterations,
+  }) {
+    final bytes = pbkdf2(
+      utf8.encode(password),
+      utf8.encode(salt),
+      iterations,
+      16,
+    );
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
   // --- Vault keyring --------------------------------------------------------
   // The vault used to be encrypted with a key derived straight from the
   // account identity and password. Every serious failure in this app came out
@@ -112,6 +228,14 @@ class EncryptionService {
   // a password re-wraps thirty-two bytes and does not touch the vault. A reset
   // unwraps through a recovery code. Nothing derives anything from an identity,
   // so how the address is spelled stops mattering entirely.
+
+  /// The synced OTP vault. It used to be stored under simpleEncrypt, a
+  /// repeating-key XOR: the payload is JSON whose first thirty-two bytes are
+  /// guessable, and thirty-two bytes of known plaintext is the whole key. The
+  /// password never even entered into breaking it.
+  static const String otpAccountsSyncContext = 'otp-accounts-sync';
+  static const String snapshotSyncContext = 'otp-vault-snapshots';
+  static const String localVaultContext = 'local-vault';
 
   static const String _dataKeyPasswordContext = 'vault-datakey-password';
   static const String _dataKeyCodeContext = 'vault-datakey-code';
@@ -138,18 +262,33 @@ class EncryptionService {
         .join();
   }
 
-  static String _passwordWrappingKey(String password, String salt) {
-    return generateKey(password, 'vault_keyring|$salt');
+  /// [iterations] of 0 means the original single-SHA-256 derivation, which
+  /// keyrings written before PBKDF2 landed still use. Those keep opening, and
+  /// are re-wrapped at the current cost the first time they are opened.
+  static String _passwordWrappingKey(
+    String password,
+    String salt, {
+    required int iterations,
+  }) {
+    if (iterations <= 0) {
+      return generateKey(password, 'vault_keyring|$salt');
+    }
+    return deriveKeyFromPassword(
+      password,
+      'vault_keyring|$salt',
+      iterations: iterations,
+    );
   }
 
   static String wrapDataKeyWithPassword(
     String dataKey,
     String password,
-    String salt,
-  ) {
+    String salt, {
+    int iterations = passwordKdfIterations,
+  }) {
     return authenticatedEncrypt(
       dataKey,
-      _passwordWrappingKey(password, salt),
+      _passwordWrappingKey(password, salt, iterations: iterations),
       context: _dataKeyPasswordContext,
     );
   }
@@ -158,12 +297,13 @@ class EncryptionService {
   static String? unwrapDataKeyWithPassword(
     String wrapped,
     String password,
-    String salt,
-  ) {
+    String salt, {
+    int iterations = passwordKdfIterations,
+  }) {
     try {
       final key = authenticatedDecrypt(
         wrapped,
-        _passwordWrappingKey(password, salt),
+        _passwordWrappingKey(password, salt, iterations: iterations),
         context: _dataKeyPasswordContext,
       );
       return key.isEmpty ? null : key;
@@ -274,8 +414,14 @@ class EncryptionService {
     String cipherText,
     String key, {
     required String context,
+    bool allowLegacyPlaintextFallback = false,
   }) {
-    return authenticatedDecrypt(cipherText, key, context: context);
+    return authenticatedDecrypt(
+      cipherText,
+      key,
+      context: context,
+      allowLegacyPlaintextFallback: allowLegacyPlaintextFallback,
+    );
   }
 
   static String authenticatedEncrypt(
@@ -303,9 +449,17 @@ class EncryptionService {
     String cipherText,
     String key, {
     required String context,
+    bool allowLegacyPlaintextFallback = false,
   }) {
     if (cipherText.isEmpty) return '';
     if (!cipherText.startsWith('bl2:')) {
+      // Anything without the prefix predates authenticated encryption. Reading
+      // it is only allowed where a caller is explicitly migrating it forward:
+      // left open, this is a downgrade -- strip four bytes and the MAC check
+      // that makes the format worth having disappears with them.
+      if (!allowLegacyPlaintextFallback) {
+        throw const FormatException('Refusing to read unauthenticated payload');
+      }
       return simpleDecrypt(cipherText, key);
     }
 

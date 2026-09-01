@@ -31,11 +31,20 @@ class VaultKeyring {
     required this.salt,
     required this.passwordWrap,
     required this.codeWraps,
+    required this.kdfIterations,
   });
 
   final String salt;
   final String passwordWrap;
   final List<String> codeWraps;
+
+  /// How the password wrap was made. Zero means the original single SHA-256,
+  /// which keyrings written before PBKDF2 landed use; those still open, and are
+  /// re-wrapped at the current cost the first time they do.
+  final int kdfIterations;
+
+  bool get usesStrongKdf =>
+      kdfIterations >= EncryptionService.passwordKdfIterations;
 
   static VaultKeyring? fromJson(String raw) {
     try {
@@ -47,6 +56,7 @@ class VaultKeyring {
       return VaultKeyring(
         salt: salt,
         passwordWrap: passwordWrap,
+        kdfIterations: int.tryParse('${decoded['kdf_iterations'] ?? 0}') ?? 0,
         codeWraps: ((decoded['code_wraps'] as List?) ?? const [])
             .map((wrap) => wrap.toString())
             .where((wrap) => wrap.isNotEmpty)
@@ -58,10 +68,12 @@ class VaultKeyring {
   }
 
   String toJson() => jsonEncode({
-        'version': 1,
+        'version': 2,
         'salt': salt,
         'password_wrap': passwordWrap,
         'code_wraps': codeWraps,
+        'kdf': kdfIterations > 0 ? 'pbkdf2-sha256' : 'sha256',
+        'kdf_iterations': kdfIterations,
       });
 
   VaultKeyring copyWith({String? passwordWrap, List<String>? codeWraps}) {
@@ -69,6 +81,7 @@ class VaultKeyring {
       salt: salt,
       passwordWrap: passwordWrap ?? this.passwordWrap,
       codeWraps: codeWraps ?? this.codeWraps,
+      kdfIterations: kdfIterations,
     );
   }
 }
@@ -332,7 +345,11 @@ class SyncService {
   @visibleForTesting
   List<dynamic>? tryDecodeAccountsPayload(String encryptedContent, String key) {
     try {
-      final decrypted = EncryptionService.simpleDecrypt(encryptedContent, key);
+      final decrypted = _decryptSyncBlob(
+        encryptedContent,
+        key,
+        'otp_accounts',
+      );
       if (decrypted.trim().isEmpty) return null;
       final decoded = jsonDecode(decrypted);
       return decoded is List ? decoded : null;
@@ -460,11 +477,35 @@ class SyncService {
   Future<String?> _dataKeyFromKeyring(String password) async {
     final keyring = await _fetchKeyring();
     if (keyring == null) return null;
-    return EncryptionService.unwrapDataKeyWithPassword(
+
+    final dataKey = EncryptionService.unwrapDataKeyWithPassword(
       keyring.passwordWrap,
       password,
       keyring.salt,
+      iterations: keyring.kdfIterations,
     );
+    if (dataKey == null) return null;
+
+    // Opened under a weaker derivation than we ship. Re-wrap it now, while the
+    // password is in hand -- the vault itself is untouched either way.
+    if (!keyring.usesStrongKdf) {
+      final salt = EncryptionService.generateKeyringSalt();
+      await _storeKeyring(
+        VaultKeyring(
+          salt: salt,
+          passwordWrap: EncryptionService.wrapDataKeyWithPassword(
+            dataKey,
+            password,
+            salt,
+          ),
+          codeWraps: keyring.codeWraps,
+          kdfIterations: EncryptionService.passwordKdfIterations,
+        ),
+      );
+      debugPrint('Keyring re-wrapped at the current KDF cost');
+    }
+
+    return dataKey;
   }
 
   /// Move a legacy account onto a keyring, once.
@@ -489,6 +530,7 @@ class SyncService {
           salt,
         ),
         codeWraps: const [],
+        kdfIterations: EncryptionService.passwordKdfIterations,
       );
 
       if (!await _storeKeyring(keyring)) {
@@ -545,15 +587,7 @@ class SyncService {
 
       String plainText;
       try {
-        plainText = dataType == 'otp_accounts'
-            ? EncryptionService.simpleDecrypt(cipherText, from)
-            : EncryptionService.decryptSensitiveSyncPayload(
-                cipherText,
-                from,
-                context: dataType == 'password_entries'
-                    ? _passwordEntriesSyncContext
-                    : _secureMessagesSyncContext,
-              );
+        plainText = _decryptSyncBlob(cipherText, from, dataType);
         if (plainText.trim().isNotEmpty && jsonDecode(plainText) is! List) {
           throw const FormatException('Synced blob is not a list');
         }
@@ -637,6 +671,7 @@ class SyncService {
       // Recovery-code wraps seal the same unchanged data key, so they keep
       // working across a password change with nothing to redo.
       codeWraps: existing.codeWraps,
+      kdfIterations: EncryptionService.passwordKdfIterations,
     );
     return _storeKeyring(updated);
   }
@@ -695,6 +730,7 @@ class SyncService {
             salt,
           ),
           codeWraps: keyring.codeWraps,
+          kdfIterations: EncryptionService.passwordKdfIterations,
         ),
       );
     }
@@ -935,16 +971,33 @@ class SyncService {
     return 'Nothing on this device can open your cloud vault, so BeatzLock will not touch it -- overwriting it would destroy the only copy of what is in there. Try this on another device that still syncs. If no device can, your synced copy cannot be recovered, but it is left exactly as it is.';
   }
 
-  String _encryptSyncBlob(String plainText, String key, String dataType) {
-    if (dataType == 'otp_accounts') {
-      return EncryptionService.simpleEncrypt(plainText, key);
+  String _syncContextFor(String dataType) {
+    switch (dataType) {
+      case 'otp_accounts':
+        return EncryptionService.otpAccountsSyncContext;
+      case 'password_entries':
+        return _passwordEntriesSyncContext;
+      default:
+        return _secureMessagesSyncContext;
     }
+  }
+
+  String _encryptSyncBlob(String plainText, String key, String dataType) {
     return EncryptionService.encryptSensitiveSyncPayload(
       plainText,
       key,
-      context: dataType == 'password_entries'
-          ? _passwordEntriesSyncContext
-          : _secureMessagesSyncContext,
+      context: _syncContextFor(dataType),
+    );
+  }
+
+  /// Read a synced blob, accepting the unauthenticated form only long enough
+  /// to rewrite it. Every write goes out authenticated.
+  String _decryptSyncBlob(String cipherText, String key, String dataType) {
+    return EncryptionService.decryptSensitiveSyncPayload(
+      cipherText,
+      key,
+      context: _syncContextFor(dataType),
+      allowLegacyPlaintextFallback: true,
     );
   }
 
@@ -2432,9 +2485,10 @@ class SyncService {
         }).toList(),
       );
 
-      final encrypted = EncryptionService.simpleEncrypt(
+      final encrypted = _encryptSyncBlob(
         jsonEncode(finalData),
         _encryptionKey!,
+        'otp_accounts',
       );
       final newVersion = cloudVersion + 1;
 
@@ -3020,9 +3074,10 @@ class SyncService {
         }).toList(),
       );
 
-      final encrypted = EncryptionService.simpleEncrypt(
+      final encrypted = _encryptSyncBlob(
         jsonEncode(finalData),
         _encryptionKey!,
+        'otp_accounts',
       );
       return await uploadEncryptedSyncData(
         'otp_accounts',

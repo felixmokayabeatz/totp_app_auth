@@ -320,9 +320,13 @@ class OtpVaultSnapshotService {
     }
 
     try {
-      final decrypted = EncryptionService.simpleDecrypt(
+      final decrypted = EncryptionService.decryptSensitiveSyncPayload(
         encryptedContent,
         encryptionKey,
+        context: EncryptionService.snapshotSyncContext,
+        // Snapshots written before authenticated encryption are read once so
+        // the next write can put them back in the current format.
+        allowLegacyPlaintextFallback: true,
       );
       if (decrypted.trim().isEmpty) {
         return;
@@ -356,9 +360,10 @@ class OtpVaultSnapshotService {
     final records = await _recordsForCurrentVault();
     final payload =
         records.map((record) => record.toMap()).toList(growable: false);
-    final encrypted = EncryptionService.simpleEncrypt(
+    final encrypted = EncryptionService.encryptSensitiveSyncPayload(
       jsonEncode(payload),
       encryptionKey,
+      context: EncryptionService.snapshotSyncContext,
     );
 
     final existing = await _syncService.getEncryptedSyncData(_cloudDataType);

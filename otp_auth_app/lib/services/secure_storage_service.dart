@@ -16,6 +16,10 @@ class SecureStorageService {
   static const encryptionKey = 'encryption_key';
   static const appPinHashKey = 'app_pin_hash';
 
+  /// Random per-install secret mixed into the local vault key, so that key is
+  /// not computable from the account's email address alone.
+  static const localVaultSecretKey = 'local_vault_secret';
+
   static const List<String> _knownKeys = [
     accessTokenKey,
     refreshTokenKey,
@@ -25,6 +29,7 @@ class SecureStorageService {
     userIdKey,
     encryptionKey,
     appPinHashKey,
+    localVaultSecretKey,
   ];
 
   static final SecureStorageService _instance =
@@ -38,6 +43,19 @@ class SecureStorageService {
     // Each key migrates independently, so they run together rather than as
     // eight sequential preference round trips on the launch path.
     await Future.wait(_knownKeys.map(_migrateLegacyPreference));
+  }
+
+  /// The per-install local vault secret, created on first use.
+  Future<String> localVaultSecret() async {
+    final existing = await read(localVaultSecretKey);
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final random = Random.secure();
+    final secret = List<int>.generate(32, (_) => random.nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    await write(localVaultSecretKey, secret);
+    return secret;
   }
 
   Future<void> write(String key, String value) async {
@@ -133,9 +151,8 @@ class SecureStorageService {
     var blockIndex = 0;
 
     while (written < input.length) {
-      final keystreamBlock = sha256
-          .convert([...prefix, ...utf8.encode(':$blockIndex')])
-          .bytes;
+      final keystreamBlock =
+          sha256.convert([...prefix, ...utf8.encode(':$blockIndex')]).bytes;
       for (final byte in keystreamBlock) {
         if (written >= input.length) break;
         output[written] = input[written] ^ byte;

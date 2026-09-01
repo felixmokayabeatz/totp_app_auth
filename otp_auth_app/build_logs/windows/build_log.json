@@ -586,5 +586,19 @@
     "build_number": "50",
     "artifact_version": "1.10.0_50",
     "host_platform": "Windows"
+  },
+  {
+    "sequence": 43,
+    "platform": "windows",
+    "artifact_type": "installer",
+    "file": "beatzlock_1.11.0_51_x64.exe",
+    "path": "C:\\Programming\\felixmokayabeatz_workspace\\beatzlock_project\\otp_auth_app\\final_builds\\windows\\1.11.0_51\\beatzlock_1.11.0_51_x64.exe",
+    "relative_path": "final_builds/windows/1.11.0_51/beatzlock_1.11.0_51_x64.exe",
+    "is_directory": false,
+    "timestamp": "2026-09-01T09:57:12",
+    "version": "1.11.0+51",
+    "build_number": "51",
+    "artifact_version": "1.11.0_51",
+    "host_platform": "Windows"
   }
 ]

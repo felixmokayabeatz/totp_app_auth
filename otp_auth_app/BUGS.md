@@ -15,6 +15,85 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.12.0 (Build 52)
+
+The primitives, after 1.11.0 fixed the structure. The keyring was sound sitting
+on top of a cipher that could be broken without the password and a KDF that was
+one SHA-256.
+
+Synced vault encrypted with a repeating-key XOR (critical):
+
+- `otp_accounts` -- the OTP secrets themselves -- were stored under
+  `simpleEncrypt`: the 32-byte key XORed repeatedly over JSON whose first 32
+  bytes are guessable (`[{"id": "a1", "service": ...`). 32 bytes of known
+  plaintext is the entire key. Demonstrated against the real functions, key
+  recovered exactly, secrets read out; password strength never entered into it.
+  Anyone with the stored blob -- server operator, database backup, a copied file
+  -- had every seed.
+- It now uses the authenticated format already used for password entries and
+  secure texts, under its own context. Reads accept the old format only behind
+  `allowLegacyPlaintextFallback`, which the migration paths pass and nothing else
+  does, so the vault converts on first sync and the downgrade closes behind it.
+- The `bl2:` fallback in `authenticatedDecrypt` was itself the downgrade: strip
+  four characters and the MAC check vanished with them. It now throws unless a
+  caller explicitly asks for the legacy read.
+
+No key derivation function:
+
+- `generateKey` is a single SHA-256. Against a stored password-wrapped key that
+  is no work at all -- billions of candidate passwords a second on a GPU.
+- Password wrapping goes through PBKDF2-HMAC-SHA256 at 210,000 iterations
+  (OWASP floor). Implemented in-repo rather than adding a dependency, and
+  checked against published vectors in `test/kdf_test.dart` including the
+  multi-block case -- those vectors are the reason hand-rolling it is
+  acceptable, so they must keep passing.
+- Measured at ~1.7s on this desktop for 210,000. That cost is the point, but it
+  made several operations visibly slow, which is what the progress dialogs are
+  for.
+- Keyrings record `kdf_iterations`. A keyring written under the old derivation
+  still opens, and is re-wrapped at the current cost the first time it does.
+  The vault is never touched by that.
+
+Local vault key derivable from the email address:
+
+- `encryptSecret` derived from `generateKey(userId, salt)` where `userId` is the
+  account email -- public. Anyone with the `.hive` file computed the same key.
+  Obfuscation in the shape of encryption. (It is also why local data survived
+  every sync failure this month; useful, but not a security property.)
+- A random per-install secret now goes into that derivation, stored in secure
+  storage and configured in `main` before any box opens. Values written before
+  it stay readable and are rewritten on next save.
+- Done as a configured secret rather than by threading a key through the ~34
+  call sites that pass a userId. A first attempt at that refactor left
+  `encryptSecret` taking the email *as* the key -- both are `String`, so it
+  analysed clean while being worse than what it replaced. Noted because the type
+  system will not catch that class of mistake here.
+
+Progress feedback:
+
+- Saving the recovery PDF from Settings, unlocking sync, repairing sync and
+  checking a recovery code ran with no indication. `lib/widgets/
+  blocking_progress_dialog.dart` covers them; `home_screen` already had its own
+  helper and was left alone.
+
+Known and deliberately not changed:
+
+- `flutter_local_notifications` is held at 21.x by the local
+  `flutter_local_notifications_windows` fork, whose Windows implementation is
+  deliberately stubbed and which requires platform-interface ^11. Moving to 22.x
+  means bumping that fork to ^12 and re-verifying the stub. `pub upgrade
+  --major-versions` correctly changes nothing.
+- `authenticatedEncrypt` is a hand-rolled SHA-256 keystream plus HMAC-SHA256,
+  encrypt-then-MAC with a random nonce and a constant-time compare. Structurally
+  sound but not a reviewed primitive; AES-GCM or XChaCha20-Poly1305 from a real
+  library would be better.
+- `SecureStorageService` still derives its own key from hostname, username and
+  home directory -- all discoverable on the machine. The per-install secret it
+  now holds is only as good as that. Platform keychain (DPAPI, Keychain,
+  Keystore) is the real fix.
+- Still open from earlier: the server's blind `update_or_create`, snapshot
+  restore replacing the cloud, and no bulk export.
+
 ## Fixed in 1.11.0 (Build 51)
 
 The vault key no longer comes from the account identity and password.

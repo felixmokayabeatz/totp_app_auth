@@ -16,6 +16,7 @@ import '../models/otp_account.dart';
 import '../services/app_update_service.dart';
 import '../services/import_file_picker_service.dart';
 import '../services/sync_service.dart';
+import '../widgets/blocking_progress_dialog.dart';
 import '../services/app_lock_service.dart';
 import '../services/otp_import_service.dart';
 import '../services/otp_vault_snapshot_service.dart';
@@ -2013,8 +2014,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         errorText = null;
                       });
 
-                      final success =
-                          await _syncService.repairCloudVaultKey(password);
+                      final success = await runWithProgress<bool>(
+                        dialogContext,
+                        message: 'Repairing cloud sync',
+                        detail:
+                            'Reading your synced vault, then re-locking it with '
+                            'your current key. Nothing is replaced.',
+                        task: () => _syncService.repairCloudVaultKey(password),
+                      );
                       if (!dialogContext.mounted) return;
 
                       if (success) {
@@ -2188,8 +2195,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         errorText = null;
                       });
 
-                      final ok = await _syncService
-                          .restoreVaultKeyFromRecoveryCode(code);
+                      final ok = await runWithProgress<bool>(
+                        dialogContext,
+                        message: 'Checking your recovery code',
+                        detail: 'Unwrapping your vault key.',
+                        task: () =>
+                            _syncService.restoreVaultKeyFromRecoveryCode(code),
+                      );
                       if (!dialogContext.mounted) return;
 
                       if (ok) {
@@ -2324,8 +2336,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       });
                       attemptedUnlock = true;
 
-                      final unlocked = await _syncService
-                          .unlockSyncAfterPasswordless(password);
+                      final unlocked = await runWithProgress<bool>(
+                        dialogContext,
+                        message: 'Unlocking sync',
+                        detail:
+                            'Checking your password and unwrapping your vault '
+                            'key. This takes a moment by design.',
+                        task: () =>
+                            _syncService.unlockSyncAfterPasswordless(password),
+                      );
                       if (!dialogContext.mounted) return;
 
                       if (unlocked) {
@@ -3509,8 +3528,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     setState(() => _isDownloadingBackupCodes = true);
-    final savedPath = await _syncService.downloadBackupCodesPdf(
-      preferDarkTheme: _isDark,
+    final savedPath = await runWithProgress<String?>(
+      context,
+      message: 'Preparing your recovery codes',
+      detail: 'Generating the PDF, attaching your codes to your vault key, and '
+          'saving it to this device.',
+      task: () => _syncService.downloadBackupCodesPdf(
+        preferDarkTheme: _isDark,
+      ),
     );
     if (!mounted) return;
     setState(() => _isDownloadingBackupCodes = false);

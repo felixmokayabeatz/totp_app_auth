@@ -28,6 +28,7 @@ import 'services/approval_notification_service.dart';
 import 'services/background_passwordless_poll_service.dart';
 import 'services/push_messaging_service.dart';
 import 'services/server_lockdown_service.dart';
+import 'services/encryption_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/sync_service.dart';
 
@@ -44,6 +45,12 @@ void main(List<String> launchArgs) async {
       AppUpdateService().cleanupStaleUpdateArtifacts();
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Before any vault box is opened: the local vault key mixes in a random
+    // per-install secret, and reads must not race its configuration.
+    EncryptionService.configureLocalVaultSecret(
+      await SecureStorageService().localVaultSecret(),
+    );
+
     final appSupportDir = await getApplicationSupportDirectory();
     await Hive.initFlutter(appSupportDir.path);
   } else {
@@ -88,7 +95,8 @@ void main(List<String> launchArgs) async {
   await Future.wait<void>([
     BackgroundPasswordlessPollService().initialize(),
     ApprovalNotificationService().initialize().then(
-          (_) => ApprovalNotificationService().refreshPendingActionFromPlatform(),
+          (_) =>
+              ApprovalNotificationService().refreshPendingActionFromPlatform(),
         ),
     PushMessagingService().initialize().then(
           (_) => PushMessagingService().applyServerLockdownState(
