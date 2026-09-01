@@ -15,6 +15,43 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.15.3 (Build 58)
+
+Sync could not be unlocked on any device, reported as a wrong password. Two
+faults, both mine, one masking the other.
+
+`_vaultKeyMismatch` used as a return channel:
+
+- `unlockSyncOnCurrentDevice` resolved the key, called
+  `_activateSyncEncryptionKey`, and *then* read `_vaultKeyMismatch`. That
+  method syncs, and `downloadAndMergeAccounts` sets the same flag on any decode
+  failure -- so the answer to "was the password right" was actually "did the
+  download that ran afterwards decode". The unlock had already succeeded and
+  stored the key by that point.
+- Resolution now reports its own outcome through `_resolveVaultKeyResult`, and
+  the decision is made before activation rather than after.
+
+A keyring that named a key the vault was not under (the actual cause):
+
+- `_resolveVaultKey` returned the keyring's key without checking it opened
+  anything. Unwrapping proves the password, not the key.
+- `_upgradeLegacyVaultToKeyring` writes the keyring first and re-encrypts the
+  vault second, deliberately, so a failed re-encrypt can be retried. But nothing
+  ever retried: the next read took the keyring at its word, got a key that
+  opened nothing, and every device failed identically. The 409 conflict added to
+  `SyncViewSet.sync` in 1.13.0 made that half-finished state much easier to
+  reach -- a second device syncing mid-upgrade is enough.
+- The keyring key is now verified against the stored vault, and falls through to
+  the legacy derivation when it does not open it, which re-runs the upgrade.
+- A failed re-encrypt now re-points the keyring at the key the vault is actually
+  under, so the two can never be left disagreeing. The account keeps working and
+  the upgrade retries later.
+- `test/keyring_consistency_test.dart` covers the stranded state, and why the
+  check has to be against the vault rather than against the unwrap succeeding.
+
+No data was ever at risk here: the vault stayed readable under the key the app
+was declining to fall back to.
+
 ## Fixed in 1.15.2 (Build 57)
 
 An unreadable secret produced a confident wrong code:

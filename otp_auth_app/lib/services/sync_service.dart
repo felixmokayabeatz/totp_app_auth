@@ -587,7 +587,26 @@ class SyncService {
       // Re-encrypt what is stored, having read it under the key that works.
       _encryptionKey = legacyKey;
       if (!await _reEncryptStoredVault(from: legacyKey, to: dataKey)) {
-        debugPrint('Keyring upgrade aborted: vault could not be re-encrypted');
+        // The keyring is already written and now names a key the vault is not
+        // under. Rather than leave those two disagreeing -- which strands every
+        // device that later reads the keyring -- point the keyring back at the
+        // key the vault really uses. The account keeps working, and the upgrade
+        // is retried on the next sign-in.
+        debugPrint(
+          'Vault re-encryption failed; pointing the keyring at the current key',
+        );
+        await _storeKeyring(
+          VaultKeyring(
+            salt: salt,
+            passwordWrap: EncryptionService.wrapDataKeyWithPassword(
+              legacyKey,
+              password,
+              salt,
+            ),
+            codeWraps: const [],
+            kdfIterations: EncryptionService.passwordKdfIterations,
+          ),
+        );
         _encryptionKey = legacyKey;
         return null;
       }
@@ -660,6 +679,27 @@ class SyncService {
 
   /// The vault key for this sign-in: from the keyring where there is one,
   /// otherwise the legacy derivation, upgrading the account as a side effect.
+  /// The outcome of resolving a vault key, reported directly rather than
+  /// through the shared [_vaultKeyMismatch] flag.
+  ///
+  /// That flag is also set by sync operations, and `_activateSyncEncryptionKey`
+  /// runs one. Reading it after activation therefore answered "did the most
+  /// recent download decode", not "did this password produce the right key" --
+  /// so a correct password reported itself as wrong whenever the restore that
+  /// followed it hit anything unreadable.
+  Future<({String key, bool opened})> _resolveVaultKeyResult({
+    required String canonicalUsername,
+    required String password,
+    String? typedIdentifier,
+  }) async {
+    final key = await _resolveVaultKey(
+      canonicalUsername: canonicalUsername,
+      password: password,
+      typedIdentifier: typedIdentifier,
+    );
+    return (key: key, opened: !_vaultKeyMismatch);
+  }
+
   Future<String> _resolveVaultKey({
     required String canonicalUsername,
     required String password,
@@ -669,8 +709,18 @@ class SyncService {
 
     final fromKeyring = await _dataKeyFromKeyring(password);
     if (fromKeyring != null && fromKeyring.isNotEmpty) {
-      debugPrint('Vault key taken from the keyring');
-      return fromKeyring;
+      // Unwrapping proves the password, not the key. If the keyring and the
+      // stored vault disagree -- which happens when an upgrade wrote the
+      // keyring and then failed to re-encrypt the vault -- taking this key on
+      // faith leaves every device holding one that opens nothing, and the
+      // failure surfaces as "your password is wrong" on all of them at once.
+      if (await _keyOpensStoredVault(fromKeyring)) {
+        debugPrint('Vault key taken from the keyring');
+        return fromKeyring;
+      }
+      debugPrint(
+        'Keyring key does not open the stored vault - re-running the upgrade',
+      );
     }
 
     // No keyring, or a keyring this password does not open. Fall back to the
@@ -689,6 +739,16 @@ class SyncService {
 
     final upgraded = await _upgradeLegacyVaultToKeyring(password, legacyKey);
     return upgraded ?? legacyKey;
+  }
+
+  /// Whether [key] actually decrypts what is stored.
+  ///
+  /// An account with nothing in the cloud yet has no vault to contradict the
+  /// key, so it counts as open.
+  Future<bool> _keyOpensStoredVault(String key) async {
+    final payload = await _fetchRawAccountsPayload();
+    if (payload == null || payload.isEmpty) return true;
+    return tryDecodeAccountsPayload(payload, key) != null;
   }
 
   /// Re-wrap the data key under a new password. The vault is not touched.
@@ -2644,16 +2704,21 @@ class SyncService {
       if (response.statusCode == 200) {
         final storedEmail =
             await _secureStorage.read(SecureStorageService.userEmailKey);
-        final encryptionKey = await _resolveVaultKey(
+        final resolved = await _resolveVaultKeyResult(
           canonicalUsername: canonicalUsername,
           password: password,
           typedIdentifier: storedEmail,
         );
-        await _activateSyncEncryptionKey(encryptionKey);
-        if (_vaultKeyMismatch) {
+
+        // Decided before activation, because activation syncs -- and a sync
+        // that cannot decode something would otherwise be reported back to the
+        // user as a wrong password.
+        if (!resolved.opened) {
           _lastErrorMessage = _vaultKeyMismatchMessage();
           return false;
         }
+
+        await _activateSyncEncryptionKey(resolved.key);
         return true;
       }
 

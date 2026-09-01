@@ -1,0 +1,8 @@
+v1.15.3 (Build 58)
+
+Fixes
+- Unlocking sync with your password works again. Two separate faults were stopping it, and both reported the same misleading thing: that your password was wrong.
+- The first was in how the result was decided. Unlocking succeeded and stored your key, then immediately synced, and a sync that could not read something was reported back as a failed unlock. The unlock is now judged on your password and your key alone.
+- The second was the real cause. When your account moved to the newer key storage, that change is made in two steps. If the second step did not finish, your devices were told to use one key while your synced accounts were still stored under another. Every device then unlocked correctly and still could not read anything.
+- BeatzLock now checks that the key it was handed actually opens your accounts, and repairs the mismatch rather than trusting it. If the two-step change fails partway, it now leaves your account fully working on the key it already had and tries again next time.
+- Nothing was lost by any of this. Your synced accounts were readable the whole time, under a key the app was refusing to fall back to.
