@@ -15,6 +15,70 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.15.0 (Build 55)
+
+Import could not run on Linux:
+
+- `ImportFilePickerService` gated desktop picking on `Platform.isWindows` and
+  called `file_selector_windows` directly, so a Linux or Fedora user had no way
+  to get accounts into the app at all. It now uses the umbrella `file_selector`,
+  which covers Windows, Linux and macOS through the same call, with the Android
+  method channel unchanged. The dialog also filters to `.bl`, `.txt` and
+  `.json` rather than offering every file on the machine.
+
+Import did not read the app's own encrypted export:
+
+- The `.bl` backup added in 1.13.0 is JSON with an encrypted payload, so the
+  plain parser found nothing in it. `OtpExportService.looksLikeEncryptedExport`
+  recognises it cheaply, and only then is a passphrase asked for -- a plain
+  otpauth file or another authenticator's export never prompts for one it does
+  not need. The plain `.txt` export already parsed, through `_parseOtpAuthUri`.
+
+Duplicate detection was name-only:
+
+- Imports were deduplicated on service plus label. The same account exported
+  from another authenticator usually comes back labelled differently, so it
+  imported again and left two entries generating identical codes with no way to
+  tell them apart. Secrets are now compared too, normalised for whitespace,
+  padding and case.
+- The result names what it skipped -- "Already in your vault: GitHub, AWS" --
+  rather than reporting a count. The running sets are also updated as the import
+  proceeds, so a file containing the same account twice no longer imports it
+  twice.
+
+Export restricted to the primary device:
+
+- An export writes every secret the account has into one file, which is worth
+  pinning to the device the account already treats as authoritative. Import is
+  deliberately left open to any device: it only adds accounts, and a device that
+  has just been set up is exactly the one that needs it.
+- A device that is not signed in counts as its own primary, so an offline vault
+  stays exportable. Enforced in `_exportAllAccounts`, not only described in the
+  tile.
+
+Passwords and Secure Self Text removed:
+
+- Seven files deleted, and references cleared from `sync_service` (107 of them),
+  `otp_vault_snapshot_service`, `encryption_service`, `main`, and three screens.
+  Snapshots keep the password fields in their stored record format so existing
+  snapshots still parse; nothing reads them back.
+- Neither was ever a table. Both were `EncryptedData` rows keyed by
+  `data_type`, which is why removing them touches no schema. Migration `0020`
+  deletes those rows: they are end-to-end encrypted, nothing can read them, and
+  nothing will ask for them again.
+- **Passwordless sign-in was not touched.** It is a separate feature -- the
+  typed four-digit approval -- and `PasswordlessLoginRequest`,
+  `passwordless_login_screen` and `passwordless_requests_screen` all stay. The
+  names are similar enough that this has already been confused once in this
+  project's history.
+
+Caught by the lints enabled in 1.14.0:
+
+- `use_build_context_synchronously` flagged the export gate added in this
+  release: a `BuildContext` used after an await with no `mounted` check between.
+  Worth recording that the rule earned its place within one release of being
+  turned on.
+
 ## Fixed in 1.14.0 (Build 54)
 
 The last three from the audit. Done together at the user's direction, after

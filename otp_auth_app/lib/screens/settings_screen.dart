@@ -3617,10 +3617,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     return;
                                   }
 
-                                  final entries = OTPImportService().parse(
+                                  // One of this app's own encrypted backups
+                                  // needs a passphrase before it is anything
+                                  // but JSON; everything else parses directly.
+                                  List<OTPImportEntry> entries;
+                                  if (OtpExportService.looksLikeEncryptedExport(
                                     file.content,
-                                    preserveDuplicates: true,
-                                  );
+                                  )) {
+                                    if (!dialogContext.mounted) return;
+                                    final passphrase =
+                                        await _askForImportPassphrase(
+                                      dialogContext,
+                                    );
+                                    if (passphrase == null) {
+                                      setDialogState(
+                                        () => isPickingFile = false,
+                                      );
+                                      return;
+                                    }
+                                    final decoded =
+                                        _exportService.decodeEncryptedExport(
+                                      file.content,
+                                      passphrase,
+                                    );
+                                    if (decoded == null) {
+                                      setDialogState(() {
+                                        isPickingFile = false;
+                                        errorText = _exportService
+                                                .lastErrorMessage ??
+                                            'That backup could not be opened.';
+                                      });
+                                      return;
+                                    }
+                                    entries = decoded
+                                        .map(
+                                          (a) => OTPImportEntry(
+                                            service:
+                                                a['service']?.toString() ?? '',
+                                            secret:
+                                                a['secret']?.toString() ?? '',
+                                            issuer: a['issuer']?.toString(),
+                                            accountLabel:
+                                                a['account_label']?.toString(),
+                                          ),
+                                        )
+                                        .where((e) => e.secret.isNotEmpty)
+                                        .toList();
+                                  } else {
+                                    entries = OTPImportService().parse(
+                                      file.content,
+                                      preserveDuplicates: true,
+                                    );
+                                  }
                                   setDialogState(() {
                                     selectedEntries = entries;
                                     selectedFileName = file.fileName;
@@ -3659,7 +3707,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     )
                   else
                     Text(
-                      'File import is available on Android and Windows right now.',
+                      'File import is not available on this platform.',
                       style: TextStyle(
                         color: Colors.orange.shade700,
                         fontSize: 12,
@@ -3764,6 +3812,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  /// Ask for the passphrase that opens an encrypted BeatzLock backup.
+  Future<String?> _askForImportPassphrase(BuildContext hostContext) async {
+    final controller = TextEditingController();
+    var obscure = true;
+
+    final passphrase = await showDialog<String>(
+      context: hostContext,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          scrollable: true,
+          backgroundColor: _cardColor,
+          title: Text(
+            'Encrypted backup',
+            style: TextStyle(color: _textPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter the passphrase you chose when this backup was exported.',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                obscureText: obscure,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Passphrase',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                    ),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Open'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    controller.dispose();
+    return (passphrase == null || passphrase.isEmpty) ? null : passphrase;
   }
 
   Future<_ImportResult> _importOtpEntries(
