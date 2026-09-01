@@ -15,6 +15,73 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.14.0 (Build 54)
+
+The last three from the audit. Done together at the user's direction, after
+1.13.0 was verified in use -- signed out, signed back in, 44 accounts synced.
+
+Hand-rolled authenticated encryption replaced with AES-256-GCM:
+
+- The previous construction was a SHA-256 keystream with an HMAC over it:
+  encrypt-then-MAC, random nonce, constant-time compare. Not broken as far as
+  anyone could tell, which is not the standard for the app holding someone's
+  second factor.
+- Now `GCMBlockCipher(AESEngine())` from pointycastle, written as `bl3:`. The
+  key is `sha256(key|aes256gcm|context)`, the nonce is 12 random bytes, and the
+  context is authenticated as associated data as well as mixed into the key --
+  so swapping a payload between contexts fails the tag rather than merely
+  deriving a wrong key.
+- `InvalidCipherTextException` is re-thrown as `FormatException`, which is what
+  every existing caller already handles for a wrong key or altered payload.
+- `bl2:` stays readable, so stored data migrates on its next write. The
+  unauthenticated original stays gated behind the explicit flag.
+- pointycastle was chosen over `cryptography` because its API is synchronous.
+  The async one would have meant making ~30 call sites async, in the middle of
+  a crypto change, which is how mistakes get in.
+
+Secure storage moved to the platform keychain:
+
+- Tokens, the vault key and the per-install local secret lived in
+  SharedPreferences behind a key derived from hostname, OS username and home
+  directory -- all readable by anything already on the machine, which is the
+  only case that encryption existed for.
+- Now DPAPI / Keychain / Keystore / libsecret via flutter_secure_storage.
+  Values written under the old scheme move across the first time they are read,
+  and the preference copy is deleted so the weaker one is not left behind as a
+  second source of the same secret.
+- The old path stays as a fallback, chosen by a write-read-delete probe rather
+  than by assuming the plugin's presence means a working backing store -- which
+  is exactly how Linux without libsecret fails. Locking someone out of their
+  vault to improve key storage is not a trade worth making.
+
+Push listeners outlived the session:
+
+- `PushMessagingService` stored three `StreamSubscription`s and never cancelled
+  them, and had no teardown at all. After a sign-out the app kept receiving and
+  acting on push messages addressed to the account that had just left.
+- `dispose()` cancels all three and clears the initialisation future, and
+  `logout` calls it.
+
+Static analysis:
+
+- `use_build_context_synchronously`, `cancel_subscriptions`, `close_sinks`,
+  `empty_catches` and `unawaited_futures` are now enforced. Between them they
+  describe most of the defects in this file.
+- Notably it found **no** `use_build_context_synchronously` violations: the
+  screens were already careful with context across awaits, contrary to a
+  hand-rolled grep that suggested dozens. Worth recording -- the regex was
+  wrong, the analyser was right.
+- `avoid_slow_async_io` is deliberately left off. It advises swapping async
+  `dart:io` for the synchronous twin, which blocks the isolate; on a UI thread
+  that trades a small per-call cost for visible jank.
+- Fire-and-forget calls in `home_screen` are now explicit `unawaited(...)`
+  rather than bare, so a future that starts failing is not silently ignored.
+
+Not done:
+
+- A GUI sweep still needs someone looking at running screens. The static audit
+  above is what can be checked without that.
+
 ## Fixed in 1.13.0 (Build 53)
 
 Server accepted any version and blindly overwrote:

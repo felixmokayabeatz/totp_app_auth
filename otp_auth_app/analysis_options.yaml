@@ -32,8 +32,28 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
+    # The defects that actually bite in this app, promoted from "not checked"
+    # to "the build fails". Each one has already cost real debugging here.
+    #
+    # A BuildContext held across an await belongs to a widget that may be gone
+    # by the time it is used -- the source of the "setState called after
+    # dispose" crashes.
+    use_build_context_synchronously: true
+    # Controllers and timers that are created and never disposed. This screenful
+    # of dialogs leaked several before they were found by hand.
+    close_sinks: true
+    cancel_subscriptions: true
+    # Silent failure. An empty catch or an ignored Future is how a sync error
+    # became "the account list is just empty".
+    empty_catches: true
+    unawaited_futures: true
+    # Deliberately NOT enabled: avoid_slow_async_io tells you to swap async
+    # dart:io for its synchronous twin, which blocks the isolate. On the UI
+    # thread of an app that reads files during start-up and export, that trades
+    # a small per-call cost for visible jank. Wrong direction here.
+    no_adjacent_strings_in_list: true
+    prefer_final_locals: false
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

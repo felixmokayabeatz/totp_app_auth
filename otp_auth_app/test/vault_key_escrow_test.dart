@@ -88,7 +88,7 @@ void main() {
     final wrapped = EncryptionService.wrapVaultKey(_vaultKey, _code);
     expect(wrapped, isNot(contains(_vaultKey)));
     expect(wrapped, isNot(contains(_code)));
-    expect(wrapped, startsWith('bl2:'));
+    expect(wrapped, startsWith('bl3:'));
   });
 
   test('two wraps of the same key differ, so the blob is not a fingerprint',

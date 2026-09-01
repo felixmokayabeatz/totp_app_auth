@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SecureStorageService {
@@ -39,6 +40,55 @@ class SecureStorageService {
 
   static const _prefix = 'bls1:';
 
+  // --- Platform keychain ----------------------------------------------------
+  // These values were kept in SharedPreferences, encrypted with a key derived
+  // from the hostname, the OS username and the home directory. All three are
+  // readable by anything already on the machine, so the encryption did not
+  // survive an attacker who had the file -- which is the only case it existed
+  // for.
+  //
+  // They now live in the platform's own store: DPAPI on Windows, Keychain on
+  // Apple platforms, the Android Keystore, libsecret on Linux. Values written
+  // under the old scheme are moved across the first time they are read.
+  //
+  // The old path stays as a fallback rather than an assumption. A Linux desktop
+  // without libsecret installed would otherwise fail to store a session at all,
+  // and locking someone out of their vault to improve key storage is not a
+  // trade worth making.
+
+  // Android defaults to an AES-GCM storage cipher with a Keystore-wrapped key,
+  // so it needs nothing here. On Apple platforms first_unlock is deliberate:
+  // background sync has to reach these after a reboot, before the user has
+  // unlocked the device for the first time in that session.
+  static const _keychain = FlutterSecureStorage(
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+    mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
+  /// Null until probed. False means this platform has no usable keychain and
+  /// the encrypted-preferences path is being used instead.
+  static bool? _keychainUsable;
+
+  Future<bool> _keychainAvailable() async {
+    if (_keychainUsable != null) return _keychainUsable!;
+    try {
+      // A write-read-delete probe: presence of the plugin is not the same as a
+      // working backing store, which is exactly how Linux fails.
+      const probeKey = 'beatzlock_keychain_probe';
+      await _keychain.write(key: probeKey, value: 'ok');
+      final readBack = await _keychain.read(key: probeKey);
+      await _keychain.delete(key: probeKey);
+      _keychainUsable = readBack == 'ok';
+    } catch (e) {
+      debugPrint('Platform keychain unavailable, using encrypted prefs: $e');
+      _keychainUsable = false;
+    }
+    return _keychainUsable!;
+  }
+
+  @visibleForTesting
+  static void resetKeychainProbeForTest() => _keychainUsable = null;
+
   Future<void> init() async {
     // Each key migrates independently, so they run together rather than as
     // eight sequential preference round trips on the launch path.
@@ -59,15 +109,58 @@ class SecureStorageService {
   }
 
   Future<void> write(String key, String value) async {
+    if (await _keychainAvailable()) {
+      try {
+        await _keychain.write(key: key, value: value);
+        // Drop any copy left in preferences, so the weaker one is not left
+        // sitting there as a second source of the same secret.
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(key);
+        return;
+      } catch (e) {
+        debugPrint('Keychain write failed for $key, falling back: $e');
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(key, _encrypt(value));
   }
 
   Future<String?> read(String key) async {
-    return _migrateLegacyPreference(key);
+    if (await _keychainAvailable()) {
+      try {
+        final value = await _keychain.read(key: key);
+        if (value != null) return value;
+      } catch (e) {
+        debugPrint('Keychain read failed for $key, falling back: $e');
+      }
+    }
+
+    // Not in the keychain: either this platform has none, or the value predates
+    // the move. Read it the old way and, if the keychain works, move it over.
+    final legacyValue = await _migrateLegacyPreference(key);
+    if (legacyValue == null) return null;
+
+    if (await _keychainAvailable()) {
+      try {
+        await _keychain.write(key: key, value: legacyValue);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(key);
+        debugPrint('Moved $key into the platform keychain');
+      } catch (e) {
+        debugPrint('Could not move $key into the keychain: $e');
+      }
+    }
+    return legacyValue;
   }
 
   Future<void> delete(String key) async {
+    if (await _keychainAvailable()) {
+      try {
+        await _keychain.delete(key: key);
+      } catch (e) {
+        debugPrint('Keychain delete failed for $key: $e');
+      }
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(key);
   }

@@ -233,7 +233,7 @@ void main() {
 
       expect(wrap, isNot(contains(dataKey)));
       expect(wrap, isNot(contains(_password)));
-      expect(wrap, startsWith('bl2:'));
+      expect(wrap, startsWith('bl3:'));
     });
   });
 }

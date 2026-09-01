@@ -9,10 +9,9 @@ import 'package:path_provider/path_provider.dart';
 import '../models/app_notification_item.dart';
 import '../models/device_session_info.dart';
 import '../models/otp_account.dart';
-import '../models/password_entry.dart';
-import '../models/secure_message.dart';
 import 'encryption_service.dart';
 import 'otp_service.dart';
+import 'push_messaging_service.dart';
 import 'server_lockdown_service.dart';
 import 'secure_storage_service.dart';
 import '../config/app_config.dart';
@@ -107,8 +106,6 @@ class VaultRepairPreview {
 }
 
 class SyncService {
-  static const _passwordDeletedIdsPrefix = 'password_deleted_ids_';
-  static const _secureMessageDeletedIdsPrefix = 'secure_message_deleted_ids_';
   static const _passwordlessUnlockKeyPrefix = 'passwordless_unlock_key_';
   static const _passwordlessSyncUnlockContext = 'passwordless-sync-unlock';
   // ─── Singleton ────────────────────────────────────────────────────────────
@@ -1119,15 +1116,10 @@ class SyncService {
         _encryptionKey = readableKey;
         await _storeEncryptionKey(readableKey);
         await downloadAndMergeAccounts();
-        await downloadAndMergePasswordEntries();
-        await downloadAndMergeSecureMessages();
       }
 
-      final userId = await _getCurrentUserId();
       final deviceId = await getOrCreateDeviceId();
       final userBox = await _getUserBox();
-      final passwordBox = await _getPasswordBox();
-      final messageBox = await _getSecureMessageBox();
 
       final accounts = await Future.wait(
         userBox.values.map((a) async {
@@ -1142,37 +1134,8 @@ class SyncService {
         }).toList(),
       );
 
-      final passwords = passwordBox.values
-          .map(
-            (entry) => <String, dynamic>{
-              'id': entry.id,
-              'title': entry.title,
-              'username': entry.username,
-              'password': entry.getPassword(userId),
-              'note': entry.getNote(userId),
-              'server_ip': entry.serverIP,
-              'created_at': entry.createdAt.toIso8601String(),
-              'updated_at': entry.updatedAt.toIso8601String(),
-            },
-          )
-          .toList();
-
-      final secureTexts = messageBox.values
-          .map(
-            (message) => <String, dynamic>{
-              'id': message.id,
-              'text': message.getText(userId),
-              'created_at': message.createdAt.toIso8601String(),
-              'author_device_label': message.authorDeviceLabel,
-              'retention_minutes': message.retentionMinutes,
-            },
-          )
-          .toList();
-
       final payloads = <String, List<Map<String, dynamic>>>{
         'otp_accounts': accounts,
-        'password_entries': passwords,
-        'secure_messages': secureTexts,
       };
 
       for (final entry in payloads.entries) {
@@ -1235,8 +1198,7 @@ class SyncService {
       _vaultKeyMismatch = false;
       debugPrint(
         'Cloud vault re-encrypted under the canonical identity: '
-        '${accounts.length} accounts, ${passwords.length} passwords, '
-        '${secureTexts.length} secure texts',
+        '${accounts.length} accounts',
       );
       return true;
     } on DioException catch (e) {
@@ -1331,45 +1293,6 @@ class SyncService {
 
   Future<Box<OTPAccount>> getUserBox() async => await _getUserBox();
   Future<String> getCurrentUserBoxName() async => await _getUserBoxName();
-
-  Future<String> _getPasswordBoxName() async {
-    final username =
-        await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey);
-    if (username == null || username.isEmpty) return 'passwords_default';
-    return 'passwords_$username';
-  }
-
-  Future<Box<PasswordEntry>> _getPasswordBox() async {
-    final boxName = await _getPasswordBoxName();
-    if (!Hive.isBoxOpen(boxName)) {
-      await Hive.openBox<PasswordEntry>(boxName);
-    }
-    return Hive.box<PasswordEntry>(boxName);
-  }
-
-  Future<Box<PasswordEntry>> getPasswordBox() async => await _getPasswordBox();
-  Future<String> getCurrentPasswordBoxName() async =>
-      await _getPasswordBoxName();
-
-  Future<String> _getSecureMessageBoxName() async {
-    final username =
-        await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey);
-    if (username == null || username.isEmpty) return 'secure_messages_default';
-    return 'secure_messages_$username';
-  }
-
-  Future<Box<SecureMessage>> _getSecureMessageBox() async {
-    final boxName = await _getSecureMessageBoxName();
-    if (!Hive.isBoxOpen(boxName)) {
-      await Hive.openBox<SecureMessage>(boxName);
-    }
-    return Hive.box<SecureMessage>(boxName);
-  }
-
-  Future<Box<SecureMessage>> getSecureMessageBox() async =>
-      await _getSecureMessageBox();
 
   String _decodeLegacySecretForMigration(
     String storedSecret,
@@ -1607,188 +1530,6 @@ class SyncService {
   }
 
   Future<String> getCurrentVaultIdentity() async => await _getCurrentUserId();
-
-  Future<String> _getPasswordDeletedIdsKey() async {
-    final username =
-        await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
-            'default_user';
-    return '$_passwordDeletedIdsPrefix$username';
-  }
-
-  Future<Set<String>> _getDeletedPasswordEntryIds() async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = await _getPasswordDeletedIdsKey();
-    final raw = prefs.getStringList(key) ?? const <String>[];
-    return raw.where((id) => id.trim().isNotEmpty).toSet();
-  }
-
-  Future<void> _storeDeletedPasswordEntryIds(Set<String> ids) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = await _getPasswordDeletedIdsKey();
-    await prefs.setStringList(key, ids.toList()..sort());
-  }
-
-  Future<void> markPasswordEntryDeleted(String entryId) async {
-    final deletedIds = await _getDeletedPasswordEntryIds();
-    deletedIds.add(entryId);
-    await _storeDeletedPasswordEntryIds(deletedIds);
-  }
-
-  _DeletedState _parseDeletedState(String? rawValue) {
-    if (rawValue == null || rawValue.trim().isEmpty) {
-      return const _DeletedState();
-    }
-
-    try {
-      final decoded = jsonDecode(rawValue);
-      if (decoded is List) {
-        return _DeletedState(
-          deletedIds: decoded.map((item) => item.toString()).toSet(),
-        );
-      }
-      if (decoded is Map) {
-        final deletedRaw = decoded['deleted'];
-        final restoredRaw = decoded['restored'];
-        final deletedIds = deletedRaw is List
-            ? deletedRaw.map((item) => item.toString()).toSet()
-            : <String>{};
-        final restoredIds = restoredRaw is List
-            ? restoredRaw.map((item) => item.toString()).toSet()
-            : <String>{};
-        return _DeletedState(deletedIds: deletedIds, restoredIds: restoredIds);
-      }
-    } catch (_) {}
-
-    return const _DeletedState();
-  }
-
-  Future<String> _getSecureMessageDeletedIdsKey() async {
-    final username =
-        await _secureStorage.read(SecureStorageService.currentUserKey) ??
-            await _secureStorage.read(SecureStorageService.localVaultUserKey) ??
-            'default_user';
-    return '$_secureMessageDeletedIdsPrefix$username';
-  }
-
-  Future<Set<String>> _getDeletedSecureMessageIds() async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = await _getSecureMessageDeletedIdsKey();
-    final raw = prefs.getStringList(key) ?? const <String>[];
-    return raw.where((id) => id.trim().isNotEmpty).toSet();
-  }
-
-  Future<void> _storeDeletedSecureMessageIds(Set<String> ids) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = await _getSecureMessageDeletedIdsKey();
-    await prefs.setStringList(key, ids.toList()..sort());
-  }
-
-  Future<void> markSecureMessageDeleted(String messageId) async {
-    final deletedIds = await _getDeletedSecureMessageIds();
-    deletedIds.add(messageId);
-    await _storeDeletedSecureMessageIds(deletedIds);
-    await _clearSecureSelfTextNotificationsForMessageIds([messageId]);
-  }
-
-  int _parseSecureMessageRetentionMinutes(dynamic value) {
-    if (value is int) {
-      return SecureMessage.normalizeRetentionMinutes(value);
-    }
-    if (value is num) {
-      return SecureMessage.normalizeRetentionMinutes(value.toInt());
-    }
-    return SecureMessage.normalizeRetentionMinutes(
-      int.tryParse(value?.toString() ?? ''),
-    );
-  }
-
-  bool isSecureMessageExpired(
-    DateTime createdAt, {
-    int? retentionMinutes,
-    DateTime? now,
-  }) {
-    final normalizedRetention = SecureMessage.normalizeRetentionMinutes(
-      retentionMinutes,
-    );
-    if (normalizedRetention == SecureMessage.foreverRetentionMinutes) {
-      return false;
-    }
-    final currentTime = now ?? DateTime.now();
-    return createdAt
-        .add(Duration(minutes: normalizedRetention))
-        .isBefore(currentTime);
-  }
-
-  Future<int> purgeExpiredSecureMessages() async {
-    final box = await _getSecureMessageBox();
-    final now = DateTime.now();
-    final expiredIds = box.values
-        .where(
-          (message) => isSecureMessageExpired(
-            message.createdAt,
-            retentionMinutes: message.retentionMinutes,
-            now: now,
-          ),
-        )
-        .map((message) => message.id)
-        .toList();
-
-    if (expiredIds.isEmpty) {
-      return 0;
-    }
-
-    for (final id in expiredIds) {
-      await box.delete(id);
-    }
-
-    final deletedIds = await _getDeletedSecureMessageIds();
-    deletedIds.addAll(expiredIds);
-    await _storeDeletedSecureMessageIds(deletedIds);
-    await _clearSecureSelfTextNotificationsForMessageIds(expiredIds);
-    return expiredIds.length;
-  }
-
-  Future<void> _clearSecureSelfTextNotificationsForMessageIds(
-    Iterable<String> messageIds,
-  ) async {
-    final normalizedIds = messageIds
-        .map((id) => id.trim())
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    if (normalizedIds.isEmpty) {
-      return;
-    }
-
-    final previousErrorMessage = _lastErrorMessage;
-
-    try {
-      await _updateAuthHeader();
-      final token = await _secureStorage.read(
-        SecureStorageService.accessTokenKey,
-      );
-      if (token == null || token.isEmpty) {
-        return;
-      }
-
-      await _requestWithRetry(
-        (accessToken) => _dio.post(
-          'notifications/clear/',
-          data: {
-            'notification_type': 'secure_self_text',
-            'message_ids': normalizedIds,
-          },
-          options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-        ),
-      );
-    } catch (_) {
-      // Secure-self-text notification cleanup is best-effort only.
-    } finally {
-      _lastErrorMessage = previousErrorMessage;
-    }
-  }
 
   Future<String> getOrCreateDeviceId() async {
     final mobileFingerprint = await _getStableMobileDeviceFingerprint();
@@ -2551,121 +2292,6 @@ class SyncService {
     }
   }
 
-  // ─── 2FA / password helpers ───────────────────────────────────────────────
-  Future<void> downloadAndMergePasswordEntries() async {
-    await _updateAuthHeader();
-    final token = await _secureStorage.read(
-      SecureStorageService.accessTokenKey,
-    );
-    if (token == null || token.isEmpty) {
-      return;
-    }
-
-    if (!await _ensureEncryptionKeyAvailable()) {
-      debugPrint('Encryption key not set - user must log in first');
-      return;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    var deviceId = prefs.getString('device_id') ?? '';
-    if (deviceId.isEmpty) {
-      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
-      await prefs.setString('device_id', deviceId);
-    }
-
-    try {
-      final response = await _requestWithRetry(
-        (_) => _dio.get(
-          'sync/get-data/',
-          queryParameters: {
-            'data_type': 'password_entries',
-            'device_id': deviceId,
-          },
-        ),
-      );
-
-      if (response.statusCode != 200 ||
-          response.data['encrypted_content'] == null) {
-        return;
-      }
-
-      final encryptedContent = response.data['encrypted_content'].toString();
-      if (encryptedContent.isEmpty) {
-        debugPrint('Cloud has no password entry data');
-        return;
-      }
-
-      final decrypted = EncryptionService.decryptSensitiveSyncPayload(
-        encryptedContent,
-        _encryptionKey!,
-        context: 'password-entries-sync',
-      );
-      if (decrypted.trim().isEmpty) {
-        return;
-      }
-
-      final localBox = await _getPasswordBox();
-      final userId = await _getCurrentUserId();
-      final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
-      final cloudDeletedState = _parseDeletedState(cloudDeletedIdsRaw);
-      final cloudDeletedIds = cloudDeletedState.deletedIds;
-      final restoredIds = cloudDeletedState.restoredIds;
-      final localDeletedIds = await _getDeletedPasswordEntryIds();
-      localDeletedIds.removeAll(restoredIds);
-      final deletedIds = {...cloudDeletedIds, ...localDeletedIds};
-
-      final List<dynamic> cloudEntries = jsonDecode(decrypted);
-      for (final rawEntry in cloudEntries) {
-        final id = rawEntry['id']?.toString() ?? '';
-        if (id.isEmpty || deletedIds.contains(id)) {
-          continue;
-        }
-
-        final cloudUpdatedAt =
-            DateTime.tryParse(rawEntry['updated_at']?.toString() ?? '') ??
-                DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
-                DateTime.now();
-
-        final existing = localBox.get(id);
-        if (existing != null) {
-          if (!cloudUpdatedAt.isAfter(existing.updatedAt)) {
-            continue;
-          }
-        }
-
-        final entry = PasswordEntry(
-          id: id,
-          title: rawEntry['title']?.toString() ?? 'Password',
-          username: rawEntry['username']?.toString() ?? '',
-          password: rawEntry['password']?.toString() ?? '',
-          note: rawEntry['note']?.toString(),
-          serverIP: rawEntry['server_ip']?.toString(),
-          createdAt:
-              DateTime.tryParse(rawEntry['created_at']?.toString() ?? '') ??
-                  DateTime.now(),
-          updatedAt: cloudUpdatedAt,
-          userId: userId,
-        );
-
-        await localBox.put(id, entry);
-      }
-
-      for (final deletedId in deletedIds) {
-        if (localBox.containsKey(deletedId)) {
-          await localBox.delete(deletedId);
-        }
-      }
-
-      await _storeDeletedPasswordEntryIds(deletedIds);
-    } on DioException catch (e) {
-      if (e.response?.statusCode != 404) {
-        debugPrint('downloadAndMergePasswordEntries error: $e');
-      }
-    } catch (e) {
-      debugPrint('downloadAndMergePasswordEntries error: $e');
-    }
-  }
-
   Future<void> _applyAuthenticatedResponse(
     Map<String, dynamic> data, {
     String? password,
@@ -2745,8 +2371,6 @@ class SyncService {
     try {
       if (await isSyncEnabled()) {
         await downloadAndMergeAccounts();
-        await downloadAndMergePasswordEntries();
-        await downloadAndMergeSecureMessages();
       }
     } catch (e) {
       debugPrint('Cloud restore error after unlock: $e');
@@ -3049,15 +2673,6 @@ class SyncService {
     }
   }
 
-  Future<void> clearRestoredPasswordDeletionMarkers(
-    List<String> entryIds,
-  ) async {
-    if (entryIds.isEmpty) return;
-    final deletedIds = await _getDeletedPasswordEntryIds();
-    deletedIds.removeWhere((id) => entryIds.contains(id));
-    await _storeDeletedPasswordEntryIds(deletedIds);
-  }
-
   Future<bool> uploadCurrentAccountsAsAuthoritative() async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -3137,536 +2752,6 @@ class SyncService {
       );
     } catch (_) {
       _lastErrorMessage = 'Could not sync restored accounts everywhere.';
-      return false;
-    }
-  }
-
-  Future<bool> uploadCurrentPasswordsAsAuthoritative() async {
-    await _updateAuthHeader();
-    _lastErrorMessage = null;
-
-    final token = await _secureStorage.read(
-      SecureStorageService.accessTokenKey,
-    );
-    if (token == null || token.isEmpty) {
-      _lastErrorMessage = 'Sign in to sync restored passwords everywhere.';
-      return false;
-    }
-
-    if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage = _syncUnlockRequiredMessage();
-      return false;
-    }
-
-    final passwordBox = await _getPasswordBox();
-    final userId = await _getCurrentUserId();
-
-    try {
-      // Same rule as the accounts restore: merge what is stored before writing
-      // over it, and refuse if this device cannot read it.
-      var cloudVersion = 0;
-      try {
-        final existing = await getEncryptedSyncData('password_entries');
-        if (existing != null) {
-          cloudVersion =
-              int.tryParse(existing['version']?.toString() ?? '0') ?? 0;
-          final cipherText = existing['encrypted_content']?.toString() ?? '';
-          if (cipherText.isNotEmpty) {
-            try {
-              EncryptionService.decryptSensitiveSyncPayload(
-                cipherText,
-                _encryptionKey!,
-                context: _passwordEntriesSyncContext,
-                allowLegacyPlaintextFallback: true,
-              );
-            } catch (_) {
-              _lastErrorMessage = _vaultKeyMismatchMessage();
-              return false;
-            }
-            await downloadAndMergePasswordEntries();
-          }
-        }
-      } on DioException catch (e) {
-        if (e.response?.statusCode != 404) rethrow;
-      }
-
-      final payload = passwordBox.values.map((entry) {
-        return {
-          'id': entry.id,
-          'title': entry.title,
-          'username': entry.username,
-          'password': entry.getPassword(userId),
-          'note': entry.getNote(userId),
-          'server_ip': entry.serverIP,
-          'created_at': entry.createdAt.toIso8601String(),
-          'updated_at': entry.updatedAt.toIso8601String(),
-        };
-      }).toList(growable: false);
-
-      final encrypted = EncryptionService.encryptSensitiveSyncPayload(
-        jsonEncode(payload),
-        _encryptionKey!,
-        context: 'password-entries-sync',
-      );
-      return await uploadEncryptedSyncData(
-        'password_entries',
-        encryptedContent: encrypted,
-        version: cloudVersion + 1,
-        deletedAccounts: jsonEncode({
-          'deleted': <String>[],
-          'restored': payload
-              .map((entry) => entry['id']?.toString() ?? '')
-              .where((id) => id.trim().isNotEmpty)
-              .toList(growable: false),
-        }),
-      );
-    } catch (_) {
-      _lastErrorMessage = 'Could not sync restored passwords everywhere.';
-      return false;
-    }
-  }
-
-  Future<bool> syncPasswordEntries() async {
-    if (!(await isSyncEnabled())) {
-      debugPrint('Password sync disabled by user preference');
-      return true;
-    }
-
-    await _updateAuthHeader();
-    final prefs = await SharedPreferences.getInstance();
-    final token = await _secureStorage.read(
-      SecureStorageService.accessTokenKey,
-    );
-    if (token == null || token.isEmpty) {
-      _lastErrorMessage = 'Sign in to sync passwords across devices.';
-      return false;
-    }
-
-    if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage = _syncUnlockRequiredMessage();
-      return false;
-    }
-
-    final passwordBox = await _getPasswordBox();
-    final userId = await _getCurrentUserId();
-    var deviceId = prefs.getString('device_id') ?? '';
-    if (deviceId.isEmpty) {
-      deviceId = DateTime.now().millisecondsSinceEpoch.toString();
-      await prefs.setString('device_id', deviceId);
-    }
-
-    try {
-      var cloudVersion = 0;
-      var cloudDeletedIds = <String>{};
-      final cloudEntriesById = <String, Map<String, dynamic>>{};
-
-      try {
-        final downloadResponse = await _requestWithRetry(
-          (_) => _dio.get(
-            'sync/get-data/',
-            queryParameters: {
-              'data_type': 'password_entries',
-              'device_id': deviceId,
-            },
-          ),
-        );
-
-        if (downloadResponse.statusCode == 200 &&
-            downloadResponse.data['encrypted_content'] != null) {
-          final encryptedContent =
-              downloadResponse.data['encrypted_content'].toString();
-          if (encryptedContent.isNotEmpty) {
-            final decrypted = EncryptionService.decryptSensitiveSyncPayload(
-              encryptedContent,
-              _encryptionKey!,
-              context: 'password-entries-sync',
-            );
-            if (decrypted.trim().isNotEmpty) {
-              final List<dynamic> cloudEntries = jsonDecode(decrypted);
-              for (final rawEntry in cloudEntries) {
-                final id = rawEntry['id']?.toString() ?? '';
-                if (id.isEmpty) continue;
-                cloudEntriesById[id] = Map<String, dynamic>.from(rawEntry);
-              }
-            }
-          }
-
-          cloudVersion =
-              int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
-          final cloudDeletedIdsRaw =
-              downloadResponse.data['deleted_accounts']?.toString();
-          if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
-            final cloudDeletedState = _parseDeletedState(cloudDeletedIdsRaw);
-            cloudDeletedIds = cloudDeletedState.deletedIds;
-            final restoredIds = cloudDeletedState.restoredIds;
-            final localDeletedIds = await _getDeletedPasswordEntryIds();
-            localDeletedIds.removeAll(restoredIds);
-            await _storeDeletedPasswordEntryIds(localDeletedIds);
-          }
-        }
-      } on DioException catch (e) {
-        if (e.response?.statusCode != 404) {
-          rethrow;
-        }
-      }
-
-      final localDeletedIds = await _getDeletedPasswordEntryIds();
-      final deletedIds = {...cloudDeletedIds, ...localDeletedIds};
-
-      for (final cloudEntry in cloudEntriesById.entries) {
-        if (deletedIds.contains(cloudEntry.key)) {
-          continue;
-        }
-
-        final value = cloudEntry.value;
-        final cloudUpdatedAt =
-            DateTime.tryParse(value['updated_at']?.toString() ?? '') ??
-                DateTime.tryParse(value['created_at']?.toString() ?? '') ??
-                DateTime.now();
-        final existing = passwordBox.get(cloudEntry.key);
-        if (existing != null && !cloudUpdatedAt.isAfter(existing.updatedAt)) {
-          continue;
-        }
-        final entry = PasswordEntry(
-          id: cloudEntry.key,
-          title: value['title']?.toString() ?? 'Password',
-          username: value['username']?.toString() ?? '',
-          password: value['password']?.toString() ?? '',
-          note: value['note']?.toString(),
-          serverIP: value['server_ip']?.toString(),
-          createdAt: DateTime.tryParse(value['created_at']?.toString() ?? '') ??
-              DateTime.now(),
-          updatedAt: cloudUpdatedAt,
-          userId: userId,
-        );
-        await passwordBox.put(entry.id, entry);
-      }
-
-      final finalEntries = <Map<String, dynamic>>[];
-      final currentEntries = passwordBox.values.toList();
-      for (final entry in currentEntries) {
-        if (deletedIds.contains(entry.id)) {
-          if (passwordBox.containsKey(entry.id)) {
-            await passwordBox.delete(entry.id);
-          }
-          continue;
-        }
-
-        finalEntries.add({
-          'id': entry.id,
-          'title': entry.title,
-          'username': entry.username,
-          'password': entry.getPassword(userId),
-          'note': entry.getNote(userId),
-          'server_ip': entry.serverIP,
-          'created_at': entry.createdAt.toIso8601String(),
-          'updated_at': entry.updatedAt.toIso8601String(),
-        });
-      }
-
-      final encrypted = EncryptionService.encryptSensitiveSyncPayload(
-        jsonEncode(finalEntries),
-        _encryptionKey!,
-        context: 'password-entries-sync',
-      );
-
-      final uploadResponse = await _requestWithRetry(
-        (_) => _dio.post(
-          'sync/sync/',
-          data: {
-            'data_type': 'password_entries',
-            'encrypted_content': encrypted,
-            'version': cloudVersion + 1,
-            'device_id': deviceId,
-            'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
-          },
-        ),
-      );
-
-      if (uploadResponse.statusCode == 200) {
-        await _storeDeletedPasswordEntryIds(deletedIds);
-        return true;
-      }
-
-      _lastErrorMessage = 'Password sync failed. Please try again.';
-      return false;
-    } on DioException catch (e) {
-      _lastErrorMessage = _isSessionRevokedError(e)
-          ? (_extractServerError(e.response?.data) ??
-              'This device session is no longer active.')
-          : _friendlyRequestError(e, 'Password sync failed. Please try again.');
-      debugPrint('syncPasswordEntries error: $e');
-      return false;
-    } catch (e) {
-      _lastErrorMessage = 'Password sync failed. Please try again.';
-      debugPrint('syncPasswordEntries error: $e');
-      return false;
-    }
-  }
-
-  Future<void> downloadAndMergeSecureMessages() async {
-    await _updateAuthHeader();
-
-    final token = await _secureStorage.read(
-      SecureStorageService.accessTokenKey,
-    );
-    if (token == null || token.isEmpty) return;
-    if (!await _ensureEncryptionKeyAvailable()) return;
-
-    final localBox = await _getSecureMessageBox();
-    final localDeletedIds = await _getDeletedSecureMessageIds();
-    final now = DateTime.now();
-    final userId = await _getCurrentUserId();
-    final deviceId = await getOrCreateDeviceId();
-
-    try {
-      final response = await _requestWithRetry(
-        (_) => _dio.get(
-          'sync/get-data/',
-          queryParameters: {
-            'data_type': 'secure_messages',
-            'device_id': deviceId,
-          },
-        ),
-      );
-
-      final encryptedContent =
-          response.data['encrypted_content']?.toString() ?? '';
-      if (encryptedContent.isEmpty) return;
-
-      final decrypted = EncryptionService.decryptSensitiveSyncPayload(
-        encryptedContent,
-        _encryptionKey!,
-        context: 'secure-messages-sync',
-      );
-      if (decrypted.trim().isEmpty) return;
-
-      final cloudDeletedIdsRaw = response.data['deleted_accounts']?.toString();
-      final cloudDeletedIds =
-          cloudDeletedIdsRaw == null || cloudDeletedIdsRaw.trim().isEmpty
-              ? <String>{}
-              : List<String>.from(jsonDecode(cloudDeletedIdsRaw)).toSet();
-      final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
-
-      final cloudMessages = List<Map<String, dynamic>>.from(
-        (jsonDecode(decrypted) as List).map(
-          (item) => Map<String, dynamic>.from(item),
-        ),
-      );
-
-      for (final rawMessage in cloudMessages) {
-        final id = rawMessage['id']?.toString() ?? '';
-        final createdAt =
-            DateTime.tryParse(rawMessage['created_at']?.toString() ?? '') ??
-                DateTime.now();
-        final retentionMinutes = _parseSecureMessageRetentionMinutes(
-          rawMessage['retention_minutes'],
-        );
-        if (id.isEmpty || deletedIds.contains(id) || localBox.containsKey(id)) {
-          continue;
-        }
-        if (isSecureMessageExpired(
-          createdAt,
-          retentionMinutes: retentionMinutes,
-          now: now,
-        )) {
-          deletedIds.add(id);
-          continue;
-        }
-
-        final message = SecureMessage(
-          id: id,
-          text: rawMessage['text']?.toString() ?? '',
-          createdAt: createdAt,
-          authorDeviceLabel: rawMessage['author_device_label']?.toString(),
-          retentionMinutes: retentionMinutes,
-          userId: userId,
-        );
-        await localBox.put(id, message);
-      }
-
-      for (final deletedId in deletedIds) {
-        if (localBox.containsKey(deletedId)) {
-          await localBox.delete(deletedId);
-        }
-      }
-      await _storeDeletedSecureMessageIds(deletedIds);
-    } on DioException catch (e) {
-      if (e.response?.statusCode != 404) {
-        debugPrint('downloadAndMergeSecureMessages error: $e');
-      }
-    } catch (e) {
-      debugPrint('downloadAndMergeSecureMessages error: $e');
-    }
-  }
-
-  Future<bool> syncSecureMessages() async {
-    if (!(await isSyncEnabled())) {
-      debugPrint('Secure message sync disabled by user preference');
-      return true;
-    }
-
-    await _updateAuthHeader();
-    final token = await _secureStorage.read(
-      SecureStorageService.accessTokenKey,
-    );
-    if (token == null || token.isEmpty) {
-      _lastErrorMessage = 'Sign in to sync secure texts across devices.';
-      return false;
-    }
-
-    if (!await _ensureEncryptionKeyAvailable()) {
-      _lastErrorMessage = _syncUnlockRequiredMessage();
-      return false;
-    }
-
-    final messageBox = await _getSecureMessageBox();
-    final localDeletedIds = await _getDeletedSecureMessageIds();
-    final now = DateTime.now();
-    final userId = await _getCurrentUserId();
-    final deviceId = await getOrCreateDeviceId();
-
-    try {
-      final mergedMessages = <String, Map<String, dynamic>>{};
-      var cloudVersion = 0;
-      var cloudDeletedIds = <String>{};
-
-      try {
-        final downloadResponse = await _requestWithRetry(
-          (_) => _dio.get(
-            'sync/get-data/',
-            queryParameters: {
-              'data_type': 'secure_messages',
-              'device_id': deviceId,
-            },
-          ),
-        );
-
-        if (downloadResponse.statusCode == 200 &&
-            downloadResponse.data['encrypted_content'] != null) {
-          final encryptedContent =
-              downloadResponse.data['encrypted_content'].toString();
-          if (encryptedContent.isNotEmpty) {
-            final decrypted = EncryptionService.decryptSensitiveSyncPayload(
-              encryptedContent,
-              _encryptionKey!,
-              context: 'secure-messages-sync',
-            );
-            if (decrypted.trim().isNotEmpty) {
-              final List<dynamic> cloudMessages = jsonDecode(decrypted);
-              for (final rawMessage in cloudMessages) {
-                final id = rawMessage['id']?.toString() ?? '';
-                if (id.isEmpty) continue;
-                mergedMessages[id] = Map<String, dynamic>.from(rawMessage);
-              }
-            }
-          }
-          cloudVersion =
-              int.tryParse('${downloadResponse.data['version'] ?? 0}') ?? 0;
-          final cloudDeletedIdsRaw =
-              downloadResponse.data['deleted_accounts']?.toString();
-          if (cloudDeletedIdsRaw != null && cloudDeletedIdsRaw.isNotEmpty) {
-            cloudDeletedIds = List<String>.from(
-              jsonDecode(cloudDeletedIdsRaw),
-            ).toSet();
-          }
-        }
-      } on DioException catch (e) {
-        if (e.response?.statusCode != 404) {
-          rethrow;
-        }
-      }
-
-      final deletedIds = {...localDeletedIds, ...cloudDeletedIds};
-
-      for (final cloudMessage
-          in List<MapEntry<String, Map<String, dynamic>>>.from(
-        mergedMessages.entries,
-      )) {
-        final retentionMinutes = _parseSecureMessageRetentionMinutes(
-          cloudMessage.value['retention_minutes'],
-        );
-        final createdAt = DateTime.tryParse(
-              cloudMessage.value['created_at']?.toString() ?? '',
-            ) ??
-            DateTime.now();
-        if (deletedIds.contains(cloudMessage.key) ||
-            isSecureMessageExpired(
-              createdAt,
-              retentionMinutes: retentionMinutes,
-              now: now,
-            )) {
-          mergedMessages.remove(cloudMessage.key);
-          deletedIds.add(cloudMessage.key);
-        }
-      }
-
-      for (final message in messageBox.values) {
-        if (deletedIds.contains(message.id) ||
-            isSecureMessageExpired(
-              message.createdAt,
-              retentionMinutes: message.retentionMinutes,
-              now: now,
-            )) {
-          if (messageBox.containsKey(message.id)) {
-            await messageBox.delete(message.id);
-          }
-          deletedIds.add(message.id);
-          continue;
-        }
-        mergedMessages[message.id] = {
-          'id': message.id,
-          'text': message.getText(userId),
-          'created_at': message.createdAt.toIso8601String(),
-          'author_device_label': message.authorDeviceLabel,
-          'retention_minutes': message.retentionMinutes,
-        };
-      }
-
-      final payload = mergedMessages.values.toList()
-        ..sort(
-          (a, b) => (a['created_at']?.toString() ?? '').compareTo(
-            b['created_at']?.toString() ?? '',
-          ),
-        );
-
-      final encrypted = EncryptionService.encryptSensitiveSyncPayload(
-        jsonEncode(payload),
-        _encryptionKey!,
-        context: 'secure-messages-sync',
-      );
-
-      final uploadResponse = await _requestWithRetry(
-        (_) => _dio.post(
-          'sync/sync/',
-          data: {
-            'data_type': 'secure_messages',
-            'encrypted_content': encrypted,
-            'version': cloudVersion + 1,
-            'device_id': deviceId,
-            'deleted_accounts': jsonEncode(deletedIds.toList()..sort()),
-          },
-        ),
-      );
-
-      if (uploadResponse.statusCode == 200) {
-        await _storeDeletedSecureMessageIds(deletedIds);
-        return true;
-      }
-      return false;
-    } on DioException catch (e) {
-      _lastErrorMessage = _isSessionRevokedError(e)
-          ? (_extractServerError(e.response?.data) ??
-              'This device session is no longer active.')
-          : _friendlyRequestError(
-              e,
-              'Secure text sync failed. Please try again.',
-            );
-      debugPrint('syncSecureMessages error: $e');
-      return false;
-    } catch (e) {
-      _lastErrorMessage = 'Secure text sync failed. Please try again.';
-      debugPrint('syncSecureMessages error: $e');
       return false;
     }
   }
@@ -4481,11 +3566,6 @@ class SyncService {
     }
 
     try {
-      await purgeExpiredSecureMessages();
-      await _clearSecureSelfTextNotificationsForMessageIds(
-        await _getDeletedSecureMessageIds(),
-      );
-
       final response = await _requestWithRetry(
         (accessToken) => _dio.get(
           'notifications/',
@@ -5509,6 +4589,14 @@ class SyncService {
 
     await _clearStoredEncryptionKey();
 
+    // Detach the push listeners with the session. Left attached, they kept
+    // handling messages for the account that just signed out.
+    try {
+      await PushMessagingService().dispose();
+    } catch (e) {
+      debugPrint('Push teardown on logout failed: $e');
+    }
+
     _encryptionKey = null;
     OTPService().clearCachedUserId();
     _dio.options.headers.remove('Authorization');
@@ -5524,14 +4612,4 @@ class SyncService {
   Future<String?> getCurrentUser() async {
     return _secureStorage.read(SecureStorageService.currentUserKey);
   }
-}
-
-class _DeletedState {
-  const _DeletedState({
-    this.deletedIds = const <String>{},
-    this.restoredIds = const <String>{},
-  });
-
-  final Set<String> deletedIds;
-  final Set<String> restoredIds;
 }

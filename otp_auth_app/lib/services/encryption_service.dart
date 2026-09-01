@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:pointycastle/export.dart';
 
 class EncryptionService {
   static String generateKey(String password, String salt) {
@@ -84,7 +85,10 @@ class EncryptionService {
   /// Values written before the per-install secret existed stay readable, and
   /// are rewritten in the current format the next time they are saved.
   static String decryptSecret(String encryptedSecret, String userId) {
-    if (encryptedSecret.startsWith('bl2:')) {
+    // Either authenticated format. Checking only for the older prefix here is
+    // what broke when AES-GCM landed: newly written values fell through to the
+    // unauthenticated reader and threw on its base64.
+    if (isAuthenticatedPayload(encryptedSecret)) {
       return authenticatedDecrypt(
         encryptedSecret,
         _localKeyFor(userId),
@@ -92,61 +96,6 @@ class EncryptionService {
       );
     }
     return simpleDecrypt(encryptedSecret, legacyLocalKeyFor(userId));
-  }
-
-  static String encryptPasswordEntrySecret(String secret, String userId) {
-    final key = generateKey(userId, 'password_entry_local_encryption_salt');
-    return authenticatedEncrypt(secret, key, context: 'password-entry-local');
-  }
-
-  static String decryptPasswordEntrySecret(
-    String encryptedSecret,
-    String userId,
-  ) {
-    final key = generateKey(userId, 'password_entry_local_encryption_salt');
-    return authenticatedDecrypt(
-      encryptedSecret,
-      key,
-      context: 'password-entry-local',
-    );
-  }
-
-  static String encryptPasswordEntryNote(String note, String userId) {
-    final key = generateKey(
-      userId,
-      'password_entry_note_local_encryption_salt',
-    );
-    return authenticatedEncrypt(
-      note,
-      key,
-      context: 'password-entry-note-local',
-    );
-  }
-
-  static String decryptPasswordEntryNote(String encryptedNote, String userId) {
-    final key = generateKey(
-      userId,
-      'password_entry_note_local_encryption_salt',
-    );
-    return authenticatedDecrypt(
-      encryptedNote,
-      key,
-      context: 'password-entry-note-local',
-    );
-  }
-
-  static String encryptSecureMessageText(String text, String userId) {
-    final key = generateKey(userId, 'secure_message_local_encryption_salt');
-    return authenticatedEncrypt(text, key, context: 'secure-message-local');
-  }
-
-  static String decryptSecureMessageText(String encryptedText, String userId) {
-    final key = generateKey(userId, 'secure_message_local_encryption_salt');
-    return authenticatedDecrypt(
-      encryptedText,
-      key,
-      context: 'secure-message-local',
-    );
   }
 
   // --- Key derivation -------------------------------------------------------
@@ -424,25 +373,106 @@ class EncryptionService {
     );
   }
 
+  // --- AES-256-GCM ----------------------------------------------------------
+  // Everything here used to run on a hand-rolled construction: a SHA-256
+  // keystream with an HMAC over it. It was encrypt-then-MAC with a random nonce
+  // and a constant-time compare, so it was not broken -- but "not broken as far
+  // as I can tell" is not the standard a 2FA vault should be held to. This is
+  // AES-256-GCM from pointycastle, which is a reviewed implementation of a
+  // reviewed primitive.
+  //
+  // Written as bl3. bl2 payloads stay readable so existing data migrates on its
+  // next write, and the unauthenticated original stays gated behind an explicit
+  // flag.
+
+  static const String _aesPrefix = 'bl3:';
+
+  /// Whether [value] is in one of the authenticated formats, rather than the
+  /// unauthenticated original. Anything that dispatches on format must use
+  /// this: hard-coding a single prefix silently breaks on the next change.
+  static bool isAuthenticatedPayload(String value) =>
+      value.startsWith(_aesPrefix) || value.startsWith(_legacyMacPrefix);
+
+  static const String _legacyMacPrefix = 'bl2:';
+  static const int _gcmNonceBytes = 12;
+  static const int _gcmMacBits = 128;
+
+  /// A 256-bit key from the caller's key string, bound to its context so a
+  /// payload written for one purpose cannot be read as another.
+  static Uint8List _aesKeyFor(String key, String context) {
+    return Uint8List.fromList(
+      sha256.convert(utf8.encode('$key|aes256gcm|$context')).bytes,
+    );
+  }
+
+  static GCMBlockCipher _gcm(
+    Uint8List key,
+    Uint8List nonce,
+    String context, {
+    required bool forEncryption,
+  }) {
+    final cipher = GCMBlockCipher(AESEngine())
+      ..init(
+        forEncryption,
+        AEADParameters(
+          KeyParameter(key),
+          _gcmMacBits,
+          nonce,
+          // The context is authenticated as associated data as well as mixed
+          // into the key: tampering that swaps a payload between contexts fails
+          // the tag rather than merely deriving the wrong key.
+          Uint8List.fromList(utf8.encode(context)),
+        ),
+      );
+    return cipher;
+  }
+
+  static String _aesEncrypt(String plainText, String key, String context) {
+    final random = Random.secure();
+    final nonce = Uint8List.fromList(
+      List<int>.generate(_gcmNonceBytes, (_) => random.nextInt(256)),
+    );
+    final sealed = _gcm(
+      _aesKeyFor(key, context),
+      nonce,
+      context,
+      forEncryption: true,
+    ).process(Uint8List.fromList(utf8.encode(plainText)));
+
+    return '$_aesPrefix${base64Encode([...nonce, ...sealed])}';
+  }
+
+  static String _aesDecrypt(String cipherText, String key, String context) {
+    final payload = base64.decode(cipherText.substring(_aesPrefix.length));
+    if (payload.length <= _gcmNonceBytes) {
+      throw const FormatException('Invalid encrypted payload');
+    }
+
+    final nonce = Uint8List.fromList(payload.sublist(0, _gcmNonceBytes));
+    final sealed = Uint8List.fromList(payload.sublist(_gcmNonceBytes));
+
+    try {
+      final plain = _gcm(
+        _aesKeyFor(key, context),
+        nonce,
+        context,
+        forEncryption: false,
+      ).process(sealed);
+      return utf8.decode(plain);
+    } on InvalidCipherTextException {
+      // Surfaced as FormatException so every existing caller's handling of a
+      // wrong key or altered payload keeps working unchanged.
+      throw const FormatException('Encrypted payload authentication failed');
+    }
+  }
+
   static String authenticatedEncrypt(
     String plainText,
     String key, {
     required String context,
   }) {
     if (plainText.isEmpty) return '';
-
-    final nonce = List<int>.generate(16, (_) => Random.secure().nextInt(256));
-    final input = utf8.encode(plainText);
-    final encryptionKey =
-        sha256.convert(utf8.encode('$key|enc|$context')).bytes;
-    final authKey = sha256.convert(utf8.encode('$key|auth|$context')).bytes;
-    final encrypted = _xorWithKeystream(input, encryptionKey, nonce);
-    final mac = Hmac(
-      sha256,
-      authKey,
-    ).convert([...utf8.encode(context), ...nonce, ...encrypted]).bytes;
-
-    return 'bl2:${base64Encode([...nonce, ...mac, ...encrypted])}';
+    return _aesEncrypt(plainText, key, context);
   }
 
   static String authenticatedDecrypt(
@@ -452,7 +482,10 @@ class EncryptionService {
     bool allowLegacyPlaintextFallback = false,
   }) {
     if (cipherText.isEmpty) return '';
-    if (!cipherText.startsWith('bl2:')) {
+    if (cipherText.startsWith(_aesPrefix)) {
+      return _aesDecrypt(cipherText, key, context);
+    }
+    if (!cipherText.startsWith(_legacyMacPrefix)) {
       // Anything without the prefix predates authenticated encryption. Reading
       // it is only allowed where a caller is explicitly migrating it forward:
       // left open, this is a downgrade -- strip four bytes and the MAC check
@@ -463,7 +496,10 @@ class EncryptionService {
       return simpleDecrypt(cipherText, key);
     }
 
-    final payload = base64.decode(cipherText.substring(4));
+    // The previous hand-rolled format. Read only, so existing payloads survive
+    // until their next write puts them in AES-GCM.
+    final payload =
+        base64.decode(cipherText.substring(_legacyMacPrefix.length));
     if (payload.length < 48) {
       throw const FormatException('Invalid encrypted payload');
     }

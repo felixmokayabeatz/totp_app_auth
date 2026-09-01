@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/otp_account.dart';
-import '../models/password_entry.dart';
 import 'encryption_service.dart';
 import 'sync_service.dart';
 
@@ -80,7 +79,6 @@ class OtpVaultSnapshotService {
   }) async {
     final userBoxName = await _syncService.getCurrentUserBoxName();
     final userBox = await _syncService.getUserBox();
-    final passwordBox = await _syncService.getPasswordBox();
     final snapshotBox = await _openSnapshotBox();
     final now = DateTime.now().toUtc();
     final snapshotId = now.microsecondsSinceEpoch.toString();
@@ -98,30 +96,13 @@ class OtpVaultSnapshotService {
         )
         .toList(growable: false);
 
-    final passwordEntries = passwordBox.values
-        .map(
-          (entry) => {
-            'id': entry.id,
-            'title': entry.title,
-            'username': entry.username,
-            'encrypted_password': entry.encryptedPassword,
-            'encrypted_note': entry.encryptedNote,
-            'server_ip': entry.serverIP,
-            'created_at': entry.createdAt.toIso8601String(),
-            'updated_at': entry.updatedAt.toIso8601String(),
-          },
-        )
-        .toList(growable: false);
-
     await snapshotBox.put(snapshotId, {
       'id': snapshotId,
       'box_name': userBoxName,
       'created_at': now.toIso8601String(),
       'account_count': otpAccounts.length,
-      'password_count': passwordEntries.length,
       'reason': reason,
       'accounts': otpAccounts,
-      'password_entries': passwordEntries,
     });
 
     await _pruneSnapshots(userBoxName);
@@ -186,9 +167,7 @@ class OtpVaultSnapshotService {
     }
 
     final userBox = await _syncService.getUserBox();
-    final passwordBox = await _syncService.getPasswordBox();
     await userBox.clear();
-    await passwordBox.clear();
 
     for (final account in record.accounts) {
       final createdAt =
@@ -205,56 +184,24 @@ class OtpVaultSnapshotService {
       await userBox.put(restored.id, restored);
     }
 
-    for (final entry in record.passwordEntries) {
-      final createdAt =
-          DateTime.tryParse(entry['created_at']?.toString() ?? '') ??
-              record.createdAt;
-      final restored = PasswordEntry(
-        id: entry['id']?.toString() ?? '',
-        title: entry['title']?.toString() ?? 'Password',
-        username: entry['username']?.toString() ?? '',
-        password: entry['encrypted_password']?.toString() ?? '',
-        serverIP: entry['server_ip']?.toString(),
-        createdAt: createdAt,
-        updatedAt: DateTime.tryParse(entry['updated_at']?.toString() ?? '') ??
-            createdAt,
-      );
-      final encryptedNote = entry['encrypted_note']?.toString();
-      restored.encryptedNote =
-          encryptedNote == null || encryptedNote.trim().isEmpty
-              ? null
-              : encryptedNote;
-      await passwordBox.put(restored.id, restored);
-    }
-
     var syncedToCloud = false;
     if (syncToCloud && await _shouldUseCloudSnapshots()) {
       final restoredOtpIds = record.accounts
           .map((account) => account['id']?.toString() ?? '')
           .where((id) => id.trim().isNotEmpty)
           .toList(growable: false);
-      final restoredPasswordIds = record.passwordEntries
-          .map((entry) => entry['id']?.toString() ?? '')
-          .where((id) => id.trim().isNotEmpty)
-          .toList(growable: false);
       final prepared = await _syncService.clearRestoredAccountTombstones(
         restoredOtpIds,
       );
-      await _syncService.clearRestoredPasswordDeletionMarkers(
-        restoredPasswordIds,
-      );
       if (prepared) {
-        final syncedAccounts =
+        syncedToCloud =
             await _syncService.uploadCurrentAccountsAsAuthoritative();
-        final syncedPasswords =
-            await _syncService.uploadCurrentPasswordsAsAuthoritative();
-        syncedToCloud = syncedAccounts && syncedPasswords;
       }
     }
 
     return OtpVaultSnapshotRestoreResult(
       restoredOtpCount: record.accounts.length,
-      restoredPasswordCount: record.passwordEntries.length,
+      restoredPasswordCount: 0,
       snapshotCreatedAt: record.createdAt,
       syncedToCloud: syncedToCloud,
     );

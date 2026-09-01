@@ -146,7 +146,7 @@ void main() {
       EncryptionService.configureLocalVaultSecret('a1b2c3d4e5f6a7b8c9d0e1f2');
       final stored = EncryptionService.encryptSecret(secret, userId);
 
-      expect(stored, startsWith('bl2:'));
+      expect(stored, startsWith('bl3:'));
 
       // Deriving the key from the address no longer gets anywhere: it either
       // throws on the format or produces something that is not the secret.

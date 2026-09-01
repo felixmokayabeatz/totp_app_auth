@@ -32,11 +32,9 @@ import 'device_sessions_screen.dart';
 import 'legal_document_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
-import 'passwords_screen.dart';
 import 'passwordless_requests_screen.dart';
 import 'profile_screen.dart';
 import 'recover_primary_device_screen.dart';
-import 'secure_self_text_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -48,6 +46,14 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final SyncService _syncService = SyncService();
   final OtpExportService _exportService = OtpExportService();
+
+  /// Exporting is restricted to the primary device; importing is not.
+  ///
+  /// An export writes every secret this account has into one file, so it is
+  /// worth pinning to the device the account already treats as authoritative.
+  /// Importing only adds accounts, so any device can do it -- and a device that
+  /// has just been set up is exactly the one that needs to.
+  bool _isPrimaryDevice = true;
   final AppLockService _appLockService = AppLockService();
   final AppUpdateService _appUpdateService = AppUpdateService();
   final AppRatingService _appRatingService = AppRatingService();
@@ -134,11 +140,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSyncPreference() async {
     final enabled = await _syncService.isSyncEnabled();
     final syncLocked = await _syncService.isSyncLockedOnCurrentDevice();
+    final isPrimary = await _resolveIsPrimaryDevice();
     if (mounted) {
       setState(() {
         _syncEnabled = enabled;
         _syncLockedOnThisDevice = syncLocked;
+        _isPrimaryDevice = isPrimary;
       });
+    }
+  }
+
+  /// A device that is not signed in has no primary to defer to, so it counts
+  /// as its own: an offline vault must still be exportable.
+  Future<bool> _resolveIsPrimaryDevice() async {
+    if (!await _syncService.isLoggedIn()) return true;
+    try {
+      final session = await _syncService.getCurrentDeviceSession();
+      return session?.isPrimary == true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -1273,83 +1293,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _dividerLine(),
             _tappableTile(
               icon: Icons.download_rounded,
-              label: 'Import OTP Accounts',
+              label: 'Import All Accounts',
               sub:
-                  'Import CSV, otpauth links, or Google Authenticator QR exports',
+                  'BeatzLock backups, otpauth links, CSV, or Google Authenticator QR exports',
               onTap: _showImportAccountsDialog,
             ),
             _dividerLine(),
             _tappableTile(
-              icon: Icons.upload_file_rounded,
-              label: 'Import Passwords',
-              sub:
-                  'Import CSV or JSON password exports into your encrypted password vault only',
-              onTap: () async {
-                if (!await _requireSignedIn(
-                  'Password import is available after you sign in.',
-                )) {
-                  return;
-                }
-                if (!context.mounted) return;
-                final authenticated =
-                    await _appLockService.authenticateToUnlock(context);
-                if (!context.mounted || !authenticated) return;
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const PasswordsScreen(openImportOnStart: true),
-                  ),
-                );
-              },
-            ),
-            _dividerLine(),
-            _tappableTile(
-              icon: Icons.password_rounded,
-              label: 'Passwords',
-              sub: authProvider.isAuthenticated
-                  ? 'Save encrypted passwords and private notes to your own account vault'
-                  : 'Sign in to use the encrypted passwords and notes vault',
-              onTap: () async {
-                if (!await _requireSignedIn(
-                  'The password vault is available after you sign in.',
-                )) {
-                  return;
-                }
-                if (!context.mounted) return;
-                final authenticated =
-                    await _appLockService.authenticateToUnlock(context);
-                if (!context.mounted || !authenticated) return;
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PasswordsScreen()),
-                );
-              },
-            ),
-            _dividerLine(),
-            _tappableTile(
-              icon: Icons.chat_bubble_rounded,
-              label: 'Secure Self Text',
-              sub: authProvider.isAuthenticated
-                  ? 'Send live encrypted texts to yourself across your own devices'
-                  : 'Sign in to use your encrypted self-text feed',
-              onTap: () async {
-                if (!await _requireSignedIn(
-                  'Secure self text is available after you sign in.',
-                )) {
-                  return;
-                }
-                if (!context.mounted) return;
-                final authenticated =
-                    await _appLockService.authenticateToUnlock(context);
-                if (!context.mounted || !authenticated) return;
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const SecureSelfTextScreen(),
-                  ),
-                );
-              },
+              icon: Icons.ios_share_rounded,
+              label: 'Export All Accounts',
+              sub: _isPrimaryDevice
+                  ? 'Save every account to one file you control'
+                  : 'Available on your primary device only',
+              onTap: _exportAllAccounts,
             ),
             _dividerLine(),
 
@@ -1452,13 +1408,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _unlockSyncOnThisDevice,
               ),
             ],
-            _dividerLine(),
-            _tappableTile(
-              icon: Icons.ios_share_rounded,
-              label: 'Export All Accounts',
-              sub: 'Save every account on this device to one file you control',
-              onTap: _exportAllAccounts,
-            ),
             if (authProvider.isAuthenticated) ...[
               _dividerLine(),
               _tappableTile(
@@ -2264,6 +2213,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Works from local storage, which does not depend on the sync key, so it
   /// still works when cloud sync is broken -- which is when it matters most.
   Future<void> _exportAllAccounts() async {
+    if (!await _resolveIsPrimaryDevice()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Exporting is done from your primary device. Open BeatzLock there '
+            'and export from Settings.',
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     final unlocked = await _appLockService.authenticateToUnlock(context);
     if (!mounted || !unlocked) return;
 
@@ -3816,15 +3781,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
           (account) => _otpIdentityKey(account.service, account.accountLabel),
         )
         .toSet();
+    // Also keyed by secret: the same account exported from another app often
+    // comes back with a different label, and importing it again would leave two
+    // entries generating identical codes with no way to tell them apart.
+    final existingSecrets = <String>{};
+    for (final account in userBox.values) {
+      try {
+        existingSecrets.add(_normalisedSecret(account.getSecret(userId)));
+      } catch (_) {
+        // An unreadable stored secret cannot be compared; name matching still
+        // applies to it.
+      }
+    }
+
     var importedCount = 0;
     var skippedCount = 0;
+    final skippedNames = <String>[];
 
     for (final entry in entries) {
       final identityKey = _otpIdentityKey(entry.service, entry.accountLabel);
-      if (existingKeys.contains(identityKey)) {
+      final secretKey = _normalisedSecret(entry.secret);
+      if (existingKeys.contains(identityKey) ||
+          existingSecrets.contains(secretKey)) {
         skippedCount++;
+        final label = (entry.accountLabel ?? '').trim();
+        skippedNames.add(
+          label.isEmpty ? entry.service : '${entry.service} ($label)',
+        );
         continue;
       }
+      existingKeys.add(identityKey);
+      existingSecrets.add(secretKey);
 
       final account = OTPAccount(
         id: '${DateTime.now().millisecondsSinceEpoch}_$importedCount',
@@ -3853,11 +3840,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _syncService.syncAccounts();
     }
 
-    final message = importedCount == 0
-        ? 'No new accounts imported.'
-        : 'Imported $importedCount account${importedCount == 1 ? '' : 's'}${skippedCount > 0 ? ', skipped $skippedCount duplicate${skippedCount == 1 ? '' : 's'}' : ''}.';
+    final skippedDetail = skippedNames.isEmpty
+        ? ''
+        : skippedNames.length <= 3
+            ? ' Already in your vault: ${skippedNames.join(', ')}.'
+            : ' Already in your vault: ${skippedNames.take(3).join(', ')} '
+                'and ${skippedNames.length - 3} more.';
+
+    final String message;
+    if (importedCount == 0 && skippedCount > 0) {
+      message = skippedCount == 1
+          ? 'That account is already in your vault, so nothing was added.'
+              '$skippedDetail'
+          : 'All $skippedCount accounts are already in your vault, so nothing '
+              'was added.$skippedDetail';
+    } else if (importedCount == 0) {
+      message = 'No new accounts imported.';
+    } else {
+      message =
+          'Imported $importedCount account${importedCount == 1 ? '' : 's'}'
+          '${skippedCount > 0 ? ', skipped $skippedCount already in your vault' : ''}.'
+          '$skippedDetail';
+    }
     return _ImportResult(importedCount, skippedCount, message);
   }
+
+  /// Secrets compared without spacing or padding, and case-folded: the same
+  /// seed is written half a dozen ways across authenticator exports.
+  String _normalisedSecret(String secret) =>
+      secret.replaceAll(RegExp(r'[\s=]'), '').toUpperCase();
 
   String _otpIdentityKey(String service, String? accountLabel) {
     return [

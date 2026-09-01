@@ -23,7 +23,6 @@ import 'settings_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
 import 'passwordless_requests_screen.dart';
-import 'passwords_screen.dart';
 import 'show_qr_screen.dart';
 import 'profile_screen.dart';
 import '../config/app_config.dart';
@@ -126,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await _initUserBox();
       await _loadProfileData();
       _startTimer();
-      _updateAllOTPs();
+      unawaited(_updateAllOTPs());
       if (mounted) {
         setState(() {
           _isLoadingVault = false;
@@ -163,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (isSignedIn && syncEnabled) {
         await _syncService.downloadAndMergeAccounts();
         await _initUserBox();
-        _updateAllOTPs();
+        unawaited(_updateAllOTPs());
         if (mounted) {
           setState(() {});
         }
@@ -817,7 +816,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     await _syncService.downloadAndMergeAccounts();
     await _initUserBox();
-    _updateAllOTPs();
+    unawaited(_updateAllOTPs());
     if (!mounted) return;
     setState(() {});
     _showSnackBar(
@@ -1328,14 +1327,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _showBulkDeleteByDateDialog,
           tooltip: 'Delete OTP accounts by date',
         ),
-        _headerAction(Icons.password_rounded, () async {
-          final unlocked = await _appLockService.authenticateToUnlock(context);
-          if (!mounted || !unlocked) return;
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PasswordsScreen()),
-          );
-        }, tooltip: 'Passwords'),
         _headerAction(
           Icons.notifications_none_rounded,
           () async {
@@ -1414,7 +1405,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         context,
                         MaterialPageRoute(builder: (_) => ProfileScreen()),
                       );
-                      if (result == true) _loadProfileData();
+                      if (result == true) unawaited(_loadProfileData());
                     },
                     child: Container(
                       width: 40,
@@ -1738,7 +1729,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     if (result == true) {
       await _initUserBox();
-      _updateAllOTPs();
+      unawaited(_updateAllOTPs());
       await _loadUnreadNotificationCount();
       await _showOfflineBackupReminderIfNeeded();
       if (!mounted) return;
@@ -2641,7 +2632,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     await _initUserBox();
-    _updateAllOTPs();
+    unawaited(_updateAllOTPs());
     if (!mounted) return;
 
     setState(() {});
@@ -3322,7 +3313,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _loadUnreadNotificationCount();
     await _initializePasswordlessApprovals();
     await _checkBackupCodeRequirement();
-    _updateAllOTPs();
+    unawaited(_updateAllOTPs());
   }
 
   void _syncData() async {
@@ -3353,7 +3344,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() => _isSyncing = false);
       if (success) {
         await _initUserBox();
-        _updateAllOTPs();
+        unawaited(_updateAllOTPs());
         await _loadUnreadNotificationCount();
         _showSnackBar('Sync completed!', Colors.green);
       } else {

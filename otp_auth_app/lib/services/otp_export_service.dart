@@ -236,6 +236,21 @@ class OtpExportService {
     return '${lines.join('\n')}\n';
   }
 
+  /// Whether [fileContents] is one of this app's encrypted exports.
+  ///
+  /// Checked before asking for a passphrase, so a plain otpauth file or another
+  /// authenticator's export does not prompt for one it does not need.
+  static bool looksLikeEncryptedExport(String fileContents) {
+    final trimmed = fileContents.trimLeft();
+    if (!trimmed.startsWith('{')) return false;
+    try {
+      final decoded = jsonDecode(fileContents);
+      return decoded is Map && decoded['format'] == 'beatzlock-otp-export';
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Read back an encrypted export. The counterpart of the file above.
   List<Map<String, dynamic>>? decodeEncryptedExport(
     String fileContents,

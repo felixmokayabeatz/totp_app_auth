@@ -3,6 +3,6 @@ class AppBuildInfo {
 
   // Desktop debug/package metadata can be unavailable, so keep a fallback
   // build label in sync with pubspec.yaml for update checks and UI labels.
-  static const String version = '1.13.0';
-  static const String buildNumber = '53';
+  static const String version = '1.14.0';
+  static const String buildNumber = '54';
 }
