@@ -1447,6 +1447,74 @@ def build_linux():
         return build_linux_rpm()
     return build_linux_deb()
 
+def check_windows_desktop_requirements():
+    """Verify the Windows C++ toolchain can build the plugins we depend on.
+
+    flutter_secure_storage_windows includes <atlstr.h>, which ships with the
+    "C++ ATL for latest build tools" component rather than the base C++ build
+    tools. Without it the build gets all the way through pub, NuGet and most of
+    CMake before failing on a missing header -- an hour of wall clock to learn
+    something checkable in a second.
+    """
+    if platform.system() != "Windows":
+        return True
+
+    vswhere = os.path.join(
+        os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+        "Microsoft Visual Studio",
+        "Installer",
+        "vswhere.exe",
+    )
+    if not os.path.exists(vswhere):
+        # No vswhere means no Visual Studio installer metadata to consult.
+        # Flutter's own doctor covers that case; do not block on it here.
+        return True
+
+    try:
+        result = subprocess.run(
+            [
+                vswhere,
+                "-latest",
+                "-products",
+                "*",
+                "-requires",
+                "Microsoft.VisualStudio.Component.VC.ATL",
+                "-property",
+                "installationPath",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except Exception:
+        return True
+
+    if result.stdout.strip():
+        return True
+
+    print_color("\nMissing Visual Studio component: C++ ATL", Colors.RED)
+    print_color(
+        "flutter_secure_storage_windows needs <atlstr.h>, which comes with the "
+        "ATL component.",
+        Colors.YELLOW,
+    )
+    print_color("\nInstall it with:", Colors.CYAN)
+    print_color(
+        '  "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\'
+        'vs_installer.exe" modify ^\n'
+        '    --installPath "C:\\Program Files (x86)\\Microsoft Visual Studio\\'
+        '18\\BuildTools" ^\n'
+        "    --add Microsoft.VisualStudio.Component.VC.ATL --quiet --norestart",
+        Colors.BOLD,
+    )
+    print_color(
+        "\nOr open the Visual Studio Installer, Modify, Individual components, "
+        'and tick "C++ ATL for latest v143 build tools".',
+        Colors.YELLOW,
+    )
+    return False
+
+
 def build_windows():
     """Build Windows app files and copy them to the final builds folder"""
     print_color("\nWindows build starting...", Colors.CYAN)
@@ -1456,6 +1524,11 @@ def build_windows():
         print_color("   Use: GitHub Actions, Windows VM, or actual Windows machine", Colors.YELLOW)
         return False
     
+    # Before the cache is cleared, not after: a failure here should leave the
+    # previous build intact rather than deleting it on the way to an error.
+    if not check_windows_desktop_requirements():
+        return False
+
     clean_windows_cache()
     
     print_color("\nBuilding Flutter Windows app...", Colors.BLUE)
