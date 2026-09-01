@@ -1447,6 +1447,46 @@ def build_linux():
         return build_linux_rpm()
     return build_linux_deb()
 
+FIREBASE_SDK_SEARCH_PATHS = [
+    os.path.join("C:" + os.sep, "Programming", "_sdks", "firebase_cpp_sdk_windows"),
+]
+
+
+def ensure_firebase_sdk_env():
+    """Point firebase_core at a Firebase C++ SDK outside the build tree.
+
+    firebase_core's CMakeLists caches its ~1 GB SDK zip inside CMAKE_BINARY_DIR,
+    which is build/windows -- exactly what clean_windows_cache() deletes. Left
+    alone, every Windows build re-downloads a gigabyte before compiling a single
+    file, and a stalled download leaves an orphaned cmake holding the build tree.
+
+    The CMakeLists skips all of that when FIREBASE_CPP_SDK_DIR points at a
+    matching SDK. Setting it here rather than relying on the shell means it
+    works in whatever terminal the build is started from -- a User-scope
+    variable is invisible to any shell that was already open when it was set,
+    which is a genuinely easy way to lose an hour.
+    """
+    if platform.system() != "Windows":
+        return
+
+    existing = os.environ.get("FIREBASE_CPP_SDK_DIR", "").strip()
+    if existing and os.path.exists(os.path.join(existing, "include", "firebase", "version.h")):
+        print_color(f"Firebase C++ SDK: {existing}", Colors.GREEN)
+        return
+
+    for candidate in FIREBASE_SDK_SEARCH_PATHS:
+        if os.path.exists(os.path.join(candidate, "include", "firebase", "version.h")):
+            os.environ["FIREBASE_CPP_SDK_DIR"] = candidate
+            print_color(f"Firebase C++ SDK: {candidate}", Colors.GREEN)
+            return
+
+    print_color(
+        "Firebase C++ SDK not staged locally - CMake will download ~1 GB, "
+        "and will do so again after every clean.",
+        Colors.YELLOW,
+    )
+
+
 def check_windows_desktop_requirements():
     """Verify the Windows C++ toolchain can build the plugins we depend on.
 
@@ -1528,6 +1568,8 @@ def build_windows():
     # previous build intact rather than deleting it on the way to an error.
     if not check_windows_desktop_requirements():
         return False
+
+    ensure_firebase_sdk_env()
 
     clean_windows_cache()
     
