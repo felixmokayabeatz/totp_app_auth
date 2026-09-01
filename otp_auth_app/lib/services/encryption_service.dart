@@ -97,6 +97,102 @@ class EncryptionService {
     );
   }
 
+  // --- Vault keyring --------------------------------------------------------
+  // The vault used to be encrypted with a key derived straight from the
+  // account identity and password. Every serious failure in this app came out
+  // of that one decision: lowercasing the email changed the key, a username
+  // that was not the email changed the key, a password change meant rewriting
+  // the whole vault, and a password reset -- which by definition happens
+  // without the old password -- left the vault sealed under a key nobody could
+  // ever derive again.
+  //
+  // The keyring removes the cause rather than handling the symptoms. The vault
+  // is encrypted with a random data key that never changes. That key is stored
+  // wrapped: once under the password, once under each recovery code. Changing
+  // a password re-wraps thirty-two bytes and does not touch the vault. A reset
+  // unwraps through a recovery code. Nothing derives anything from an identity,
+  // so how the address is spelled stops mattering entirely.
+
+  static const String _dataKeyPasswordContext = 'vault-datakey-password';
+  static const String _dataKeyCodeContext = 'vault-datakey-code';
+
+  /// A fresh random data key. Hex, so it is a plain String like every other
+  /// key this service takes.
+  static String generateVaultDataKey() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
+    return bytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join()
+        .substring(0, 32);
+  }
+
+  /// A random, non-secret salt stored beside the wrapped key.
+  ///
+  /// It is what makes the wrapping key depend on the password alone rather
+  /// than on the account identity, which is the whole point.
+  static String generateKeyringSalt() {
+    final random = Random.secure();
+    return List<int>.generate(16, (_) => random.nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  static String _passwordWrappingKey(String password, String salt) {
+    return generateKey(password, 'vault_keyring|$salt');
+  }
+
+  static String wrapDataKeyWithPassword(
+    String dataKey,
+    String password,
+    String salt,
+  ) {
+    return authenticatedEncrypt(
+      dataKey,
+      _passwordWrappingKey(password, salt),
+      context: _dataKeyPasswordContext,
+    );
+  }
+
+  /// The data key, or null when [password] is not the one it was wrapped under.
+  static String? unwrapDataKeyWithPassword(
+    String wrapped,
+    String password,
+    String salt,
+  ) {
+    try {
+      final key = authenticatedDecrypt(
+        wrapped,
+        _passwordWrappingKey(password, salt),
+        context: _dataKeyPasswordContext,
+      );
+      return key.isEmpty ? null : key;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String wrapDataKeyWithRecoveryCode(String dataKey, String code) {
+    return authenticatedEncrypt(
+      dataKey,
+      _escrowKeyFor(code),
+      context: _dataKeyCodeContext,
+    );
+  }
+
+  static String? unwrapDataKeyWithRecoveryCode(String wrapped, String code) {
+    try {
+      final key = authenticatedDecrypt(
+        wrapped,
+        _escrowKeyFor(code),
+        context: _dataKeyCodeContext,
+      );
+      return key.isEmpty ? null : key;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // --- Vault key escrow ----------------------------------------------------
   // The vault key is derived from the account password, so a password reset --
   // which by definition happens without the old password -- used to leave the

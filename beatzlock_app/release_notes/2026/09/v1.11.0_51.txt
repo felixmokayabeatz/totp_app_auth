@@ -1,0 +1,15 @@
+v1.11.0 (Build 51)
+
+What's New
+- Your synced accounts are no longer locked with your password. They are locked with a key of their own, and that key is what your password unlocks. Your account is upgraded to this automatically, once, the next time you sign in on a device that can already read your vault. Nothing to do.
+- Changing your password is now instant and cannot lose anything. Before, it re-encrypted every account, password and secure text you had synced. Now it re-locks a single small key and does not touch your data at all.
+- Your recovery codes keep working after a password change. They unlock the same key, which does not move, so codes you saved months ago still work today.
+
+Security
+- A password reset can no longer lock you out of your synced accounts, as long as you have your recovery codes PDF. Enter a code and BeatzLock unlocks your vault and re-locks it under your new password.
+- How your email address is written no longer affects anything. Capital letters, an old username, a changed address: none of it can lock you out any more, because none of it goes into the key.
+- A wrong password or a wrong recovery code is refused outright rather than producing a wrong key.
+
+Fixes and Performance
+- If the upgrade cannot finish for any reason, your vault stays exactly as it was and keeps working the way it did. It simply tries again next time.
+- Generate a fresh recovery codes PDF after updating, so your codes are attached to the new key.

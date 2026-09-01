@@ -15,6 +15,68 @@ The pop must apper on all devices fro alredy logged in user without the recovery
       button, so a user is never stuck in it -- it comes back on the next
       launch until the PDF is saved.
 
+## Fixed in 1.11.0 (Build 51)
+
+The vault key no longer comes from the account identity and password.
+
+Every serious failure in this project traces back to that one derivation.
+Lowercasing the email in the email-only migration changed the key. An account
+whose username was never the email could not derive it at all. A password
+change had to rewrite the entire vault, and did it by uploading one device's
+copy over the stored one. A password reset -- which by definition happens
+without the old password -- sealed the vault under a key nobody could ever
+derive again. Each of those was fixed on its own; this removes the thing they
+had in common.
+
+The design:
+
+- The vault is encrypted with a random data key that never changes
+  (`EncryptionService.generateVaultDataKey`).
+- That key is stored wrapped, in a `vault_keyring` blob: once under the
+  password, once under each recovery code. Wrapping is authenticated, and the
+  password and code wraps use different contexts so neither can be replayed as
+  the other.
+- The password wrapping key is `generateKey(password, 'vault_keyring|<salt>')`
+  with a random per-account salt stored beside it. There is no identity in it,
+  so how the address is spelled cannot matter any more.
+- No backend change. The keyring rides the existing sync endpoints, and the
+  server only ever holds wrapped bytes.
+
+What this deletes rather than adds:
+
+- `changePassword` re-wraps thirty-two bytes and does not touch the vault. The
+  whole class of "a password change lost synced data" is gone, not guarded.
+- Recovery codes wrap the data key, which does not move, so they survive
+  password changes with nothing to redo. The escrow chain from 1.10.0 existed
+  only to work around a key that changed; it stays for accounts not yet
+  upgraded and can go once they are.
+- `repairCloudVaultKey` and the candidate-key negotiation become transition-only
+  machinery, needed until an account has a keyring and not after.
+
+Migration, and why it is ordered the way it is:
+
+- `_resolveVaultKey` asks the keyring first. With no keyring it falls back to the
+  legacy derivation, and upgrades the account once, in place.
+- The keyring is written **before** the vault is re-encrypted. If the
+  re-encryption then fails, the vault is still readable under the legacy key,
+  resolution falls back to it, and the upgrade retries. The other order would
+  leave a vault nothing could open, which is the exact failure this release is
+  about.
+- `_reEncryptStoredVault` reads each blob before writing it and stops at the
+  first one it cannot read, so it never replaces what it could not verify.
+- An account whose vault nothing can open is not upgraded at all. Writing a
+  keyring for a vault this device cannot re-encrypt would strand it.
+
+Still open, unchanged by this:
+
+- `SyncViewSet.sync` is an `update_or_create` that takes the client's version
+  without comparing it and keeps no previous copy. The client refuses to write
+  over what it cannot read; the server still would.
+- Snapshot restore uploads local data as authoritative with `deleted_accounts`
+  reset. Deliberate for a restore, but it is a replace-the-cloud path.
+- There is no bulk export. A user holding the only copy of their accounts has
+  no way to get them all out at once.
+
 ## Fixed in 1.10.0 (Build 50)
 
 App -- a password reset orphaned the synced vault, permanently and silently:

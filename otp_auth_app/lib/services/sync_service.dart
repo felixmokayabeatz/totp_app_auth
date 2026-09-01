@@ -20,6 +20,59 @@ import '../utils/network_error_messages.dart';
 import 'dart:convert';
 import 'dart:io';
 
+/// The wrapped copies of an account's vault data key.
+///
+/// Stored in the cloud as plain JSON: everything inside is either already
+/// encrypted or deliberately public. The salt is not a secret -- it exists so
+/// the password wrapping key depends on the password alone, never on how the
+/// account identity happens to be spelled.
+class VaultKeyring {
+  const VaultKeyring({
+    required this.salt,
+    required this.passwordWrap,
+    required this.codeWraps,
+  });
+
+  final String salt;
+  final String passwordWrap;
+  final List<String> codeWraps;
+
+  static VaultKeyring? fromJson(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final salt = decoded['salt']?.toString() ?? '';
+      final passwordWrap = decoded['password_wrap']?.toString() ?? '';
+      if (salt.isEmpty || passwordWrap.isEmpty) return null;
+      return VaultKeyring(
+        salt: salt,
+        passwordWrap: passwordWrap,
+        codeWraps: ((decoded['code_wraps'] as List?) ?? const [])
+            .map((wrap) => wrap.toString())
+            .where((wrap) => wrap.isNotEmpty)
+            .toList(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String toJson() => jsonEncode({
+        'version': 1,
+        'salt': salt,
+        'password_wrap': passwordWrap,
+        'code_wraps': codeWraps,
+      });
+
+  VaultKeyring copyWith({String? passwordWrap, List<String>? codeWraps}) {
+    return VaultKeyring(
+      salt: salt,
+      passwordWrap: passwordWrap ?? this.passwordWrap,
+      codeWraps: codeWraps ?? this.codeWraps,
+    );
+  }
+}
+
 /// What a "Repair Cloud Sync Key" run from this device would do.
 class VaultRepairPreview {
   const VaultRepairPreview({
@@ -362,6 +415,294 @@ class SyncService {
     return fallback;
   }
 
+  // --- Vault keyring --------------------------------------------------------
+  // Where the vault key comes from now. The vault is encrypted with a random
+  // data key that never changes; the keyring holds that key wrapped under the
+  // password and under each recovery code. A password change re-wraps thirty-
+  // two bytes instead of rewriting the vault, and a reset unwraps through a
+  // recovery code, so neither can strand anything.
+  //
+  // Accounts created before this have no keyring and a vault encrypted under a
+  // key derived from identity and password. They are upgraded once, in place,
+  // the first time a device signs in with a key that opens the vault.
+
+  static const _keyringDataType = 'vault_keyring';
+
+  Future<VaultKeyring?> _fetchKeyring() async {
+    try {
+      final stored = await getEncryptedSyncData(_keyringDataType);
+      final raw = stored?['encrypted_content']?.toString() ?? '';
+      if (raw.isEmpty) return null;
+      return VaultKeyring.fromJson(raw);
+    } catch (e) {
+      debugPrint('Could not read vault keyring: $e');
+      return null;
+    }
+  }
+
+  Future<bool> _storeKeyring(VaultKeyring keyring) async {
+    try {
+      final stored = await getEncryptedSyncData(_keyringDataType);
+      final version = int.tryParse(stored?['version']?.toString() ?? '0') ?? 0;
+      return await uploadEncryptedSyncData(
+        _keyringDataType,
+        encryptedContent: keyring.toJson(),
+        version: version + 1,
+        deletedAccounts: 'N/A',
+      );
+    } catch (e) {
+      debugPrint('Could not write vault keyring: $e');
+      return false;
+    }
+  }
+
+  /// The data key for this account, or null if [password] does not open it.
+  Future<String?> _dataKeyFromKeyring(String password) async {
+    final keyring = await _fetchKeyring();
+    if (keyring == null) return null;
+    return EncryptionService.unwrapDataKeyWithPassword(
+      keyring.passwordWrap,
+      password,
+      keyring.salt,
+    );
+  }
+
+  /// Move a legacy account onto a keyring, once.
+  ///
+  /// [legacyKey] must already be known to open the vault. The keyring is
+  /// written before the vault is re-encrypted: if the re-encryption then fails,
+  /// the vault is still readable under the legacy key and key resolution falls
+  /// back to it, so the upgrade simply retries. Writing them the other way
+  /// round would leave a vault nothing could open.
+  Future<String?> _upgradeLegacyVaultToKeyring(
+    String password,
+    String legacyKey,
+  ) async {
+    try {
+      final dataKey = EncryptionService.generateVaultDataKey();
+      final salt = EncryptionService.generateKeyringSalt();
+      final keyring = VaultKeyring(
+        salt: salt,
+        passwordWrap: EncryptionService.wrapDataKeyWithPassword(
+          dataKey,
+          password,
+          salt,
+        ),
+        codeWraps: const [],
+      );
+
+      if (!await _storeKeyring(keyring)) {
+        debugPrint('Keyring upgrade aborted: keyring could not be stored');
+        return null;
+      }
+
+      // Re-encrypt what is stored, having read it under the key that works.
+      _encryptionKey = legacyKey;
+      if (!await _reEncryptStoredVault(from: legacyKey, to: dataKey)) {
+        debugPrint('Keyring upgrade aborted: vault could not be re-encrypted');
+        _encryptionKey = legacyKey;
+        return null;
+      }
+
+      debugPrint('Vault upgraded to a keyring-held data key');
+      return dataKey;
+    } catch (e) {
+      debugPrint('Keyring upgrade error: $e');
+      return null;
+    }
+  }
+
+  /// Read every synced blob under [from] and write it back under [to].
+  ///
+  /// Reads before it writes, blob by blob, and stops at the first one it cannot
+  /// read rather than replacing it.
+  Future<bool> _reEncryptStoredVault({
+    required String from,
+    required String to,
+  }) async {
+    final deviceId = await getOrCreateDeviceId();
+    for (final dataType in const [
+      'otp_accounts',
+      'password_entries',
+      'secure_messages',
+    ]) {
+      Response<dynamic> current;
+      try {
+        current = await _requestWithRetry(
+          (_) => _dio.get(
+            'sync/get-data/',
+            queryParameters: {'data_type': dataType, 'device_id': deviceId},
+          ),
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) continue;
+        rethrow;
+      }
+      if (current.statusCode != 200) continue;
+
+      final cipherText = current.data['encrypted_content']?.toString() ?? '';
+      if (cipherText.isEmpty) continue;
+
+      String plainText;
+      try {
+        plainText = dataType == 'otp_accounts'
+            ? EncryptionService.simpleDecrypt(cipherText, from)
+            : EncryptionService.decryptSensitiveSyncPayload(
+                cipherText,
+                from,
+                context: dataType == 'password_entries'
+                    ? _passwordEntriesSyncContext
+                    : _secureMessagesSyncContext,
+              );
+        if (plainText.trim().isNotEmpty && jsonDecode(plainText) is! List) {
+          throw const FormatException('Synced blob is not a list');
+        }
+      } catch (_) {
+        debugPrint('Re-encrypt stopped: $dataType could not be read');
+        return false;
+      }
+      if (plainText.trim().isEmpty) continue;
+
+      final version = int.tryParse('${current.data['version'] ?? 0}') ?? 0;
+      final uploaded = await _requestWithRetry(
+        (_) => _dio.post(
+          'sync/sync/',
+          data: {
+            'data_type': dataType,
+            'encrypted_content': _encryptSyncBlob(plainText, to, dataType),
+            'version': version + 1,
+            'device_id': deviceId,
+            'deleted_accounts':
+                current.data['deleted_accounts']?.toString() ?? '[]',
+          },
+        ),
+      );
+      if (uploaded.statusCode != 200) return false;
+    }
+    return true;
+  }
+
+  /// The vault key for this sign-in: from the keyring where there is one,
+  /// otherwise the legacy derivation, upgrading the account as a side effect.
+  Future<String> _resolveVaultKey({
+    required String canonicalUsername,
+    required String password,
+    String? typedIdentifier,
+  }) async {
+    _vaultKeyMismatch = false;
+
+    final fromKeyring = await _dataKeyFromKeyring(password);
+    if (fromKeyring != null && fromKeyring.isNotEmpty) {
+      debugPrint('Vault key taken from the keyring');
+      return fromKeyring;
+    }
+
+    // No keyring, or a keyring this password does not open. Fall back to the
+    // derivation this account was created under.
+    final legacyKey = await _resolveVaultEncryptionKey(
+      canonicalUsername: canonicalUsername,
+      password: password,
+      typedIdentifier: typedIdentifier,
+    );
+
+    if (_vaultKeyMismatch) {
+      // Nothing opens the vault. Do not upgrade -- that would write a keyring
+      // for a vault this device cannot re-encrypt.
+      return legacyKey;
+    }
+
+    final upgraded = await _upgradeLegacyVaultToKeyring(password, legacyKey);
+    return upgraded ?? legacyKey;
+  }
+
+  /// Re-wrap the data key under a new password. The vault is not touched.
+  ///
+  /// This is what makes a password change cheap and safe: thirty-two bytes are
+  /// rewritten instead of every account, password and secure text.
+  Future<bool> rewrapKeyringForNewPassword(String newPassword) async {
+    final dataKey = await getAvailableEncryptionKey();
+    if (dataKey == null || dataKey.isEmpty) return false;
+
+    final existing = await _fetchKeyring();
+    if (existing == null) return false;
+
+    final salt = EncryptionService.generateKeyringSalt();
+    final updated = VaultKeyring(
+      salt: salt,
+      passwordWrap: EncryptionService.wrapDataKeyWithPassword(
+        dataKey,
+        newPassword,
+        salt,
+      ),
+      // Recovery-code wraps seal the same unchanged data key, so they keep
+      // working across a password change with nothing to redo.
+      codeWraps: existing.codeWraps,
+    );
+    return _storeKeyring(updated);
+  }
+
+  /// Add recovery-code wraps for the current data key.
+  Future<bool> addRecoveryCodesToKeyring(List<String> recoveryCodes) async {
+    final codes = recoveryCodes
+        .map(EncryptionService.normalizeRecoveryCode)
+        .where((code) => code.isNotEmpty)
+        .toList();
+    if (codes.isEmpty) return false;
+
+    final dataKey = await getAvailableEncryptionKey();
+    if (dataKey == null || dataKey.isEmpty) return false;
+
+    final existing = await _fetchKeyring();
+    if (existing == null) return false;
+
+    return _storeKeyring(
+      existing.copyWith(
+        codeWraps: [
+          for (final code in codes)
+            EncryptionService.wrapDataKeyWithRecoveryCode(dataKey, code),
+        ],
+      ),
+    );
+  }
+
+  /// Recover the data key with a recovery code, and re-wrap it under
+  /// [newPassword] when one is given -- the path back after a reset.
+  Future<String?> dataKeyFromRecoveryCode(
+    String recoveryCode, {
+    String? newPassword,
+  }) async {
+    final code = EncryptionService.normalizeRecoveryCode(recoveryCode);
+    if (code.isEmpty) return null;
+
+    final keyring = await _fetchKeyring();
+    if (keyring == null) return null;
+
+    String? dataKey;
+    for (final wrap in keyring.codeWraps) {
+      dataKey = EncryptionService.unwrapDataKeyWithRecoveryCode(wrap, code);
+      if (dataKey != null) break;
+    }
+    if (dataKey == null) return null;
+
+    if (newPassword != null && newPassword.isNotEmpty) {
+      final salt = EncryptionService.generateKeyringSalt();
+      await _storeKeyring(
+        VaultKeyring(
+          salt: salt,
+          passwordWrap: EncryptionService.wrapDataKeyWithPassword(
+            dataKey,
+            newPassword,
+            salt,
+          ),
+          codeWraps: keyring.codeWraps,
+        ),
+      );
+    }
+    return dataKey;
+  }
+
+  Future<bool> hasVaultKeyring() async => (await _fetchKeyring()) != null;
+
   // --- Vault key escrow -----------------------------------------------------
   // The vault key comes from the account password. A password reset happens
   // precisely because the old password is gone, so before this the reset left
@@ -388,6 +729,14 @@ class SyncService {
         .where((code) => code.isNotEmpty)
         .toList();
     if (codes.isEmpty) return false;
+
+    // On a keyring account the codes wrap the data key, which never changes --
+    // so these wraps keep working through password changes with nothing to
+    // redo. The standalone escrow below is only for accounts not yet upgraded.
+    if (await addRecoveryCodesToKeyring(codes)) {
+      debugPrint('Recovery codes added to the vault keyring');
+      return true;
+    }
 
     final vaultKey = await getAvailableEncryptionKey();
     if (vaultKey == null || vaultKey.isEmpty) {
@@ -460,6 +809,8 @@ class SyncService {
 
   /// Whether this account has an escrow that a recovery code could open.
   Future<bool> hasVaultKeyEscrow() async {
+    final keyring = await _fetchKeyring();
+    if (keyring != null && keyring.codeWraps.isNotEmpty) return true;
     try {
       final stored = await getEncryptedSyncData(_vaultEscrowDataType);
       final raw = stored?['encrypted_content']?.toString() ?? '';
@@ -488,6 +839,14 @@ class SyncService {
     }
 
     try {
+      final fromKeyring = await dataKeyFromRecoveryCode(code);
+      if (fromKeyring != null && fromKeyring.isNotEmpty) {
+        await _activateSyncEncryptionKey(fromKeyring);
+        _vaultKeyMismatch = false;
+        debugPrint('Vault data key restored from a recovery code');
+        return true;
+      }
+
       final stored = await getEncryptedSyncData(_vaultEscrowDataType);
       final raw = stored?['encrypted_content']?.toString() ?? '';
       if (raw.isEmpty) {
@@ -1643,7 +2002,7 @@ class SyncService {
         await _updateAuthHeader();
 
         // Treat successful token issuance as a successful login.
-        final encryptionKey = await _resolveVaultEncryptionKey(
+        final encryptionKey = await _resolveVaultKey(
           canonicalUsername: canonicalUsername,
           password: password,
           typedIdentifier: loginIdentifier,
@@ -2279,7 +2638,7 @@ class SyncService {
     }
 
     if (password != null && password.isNotEmpty) {
-      final encryptionKey = await _resolveVaultEncryptionKey(
+      final encryptionKey = await _resolveVaultKey(
         canonicalUsername: canonicalUsername,
         password: password,
         typedIdentifier: user?['email']?.toString(),
@@ -2539,7 +2898,7 @@ class SyncService {
       if (response.statusCode == 200) {
         final storedEmail =
             await _secureStorage.read(SecureStorageService.userEmailKey);
-        final encryptionKey = await _resolveVaultEncryptionKey(
+        final encryptionKey = await _resolveVaultKey(
           canonicalUsername: canonicalUsername,
           password: password,
           typedIdentifier: storedEmail,
@@ -3474,13 +3833,17 @@ class SyncService {
 
       if (r.statusCode != 200) return false;
 
-      // The vault key is derived from the password, so it has to be rewritten.
-      // This used to upload only this device's accounts, straight over the
-      // stored copy, with the deletion list reset -- losing anything that was
-      // in the cloud and not here -- and it re-encrypted otp_accounts alone,
-      // leaving synced passwords and secure texts under the previous key and
-      // therefore unreadable for good. Re-keying does all three, and reads
-      // what is stored before writing it, so nothing is replaced.
+      // With a keyring the vault key does not depend on the password, so a
+      // password change re-wraps thirty-two bytes and leaves every account,
+      // password and secure text exactly where it is. Nothing is re-encrypted,
+      // so nothing can be lost doing it.
+      if (await rewrapKeyringForNewPassword(newPassword)) {
+        debugPrint('Password changed and keyring re-wrapped');
+        return true;
+      }
+
+      // No keyring yet: fall back to re-keying the vault in place, which reads
+      // what is stored before writing it.
       final rekeyed = await repairCloudVaultKey(newPassword);
       if (!rekeyed) {
         // The password did change; only the rewrite did not. The stored vault
