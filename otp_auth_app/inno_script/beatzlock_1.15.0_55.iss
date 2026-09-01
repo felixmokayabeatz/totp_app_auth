@@ -47,10 +47,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\final_builds\windows\1.15.0_55\app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\final_builds\windows\1.15.0_55\app\data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
-Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\final_builds\windows\1.15.0_55\app\file_selector_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\final_builds\windows\1.15.0_55\app\local_auth_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\final_builds\windows\1.15.0_55\app\url_launcher_windows_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\final_builds\windows\1.15.0_55\app\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\final_builds\windows\1.15.0_55\app\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Programming\felixmokayabeatz_workspace\beatzlock_project\otp_auth_app\vc_redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Registry]

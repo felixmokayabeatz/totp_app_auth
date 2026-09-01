@@ -388,6 +388,7 @@ def sync_inno_setup_script(script_path: Path):
     saw_artifact_define = False
     saw_close_applications = False
     saw_restart_applications = False
+    saw_dll_wildcard = False
     setup_section_index = None
 
     for index, line in enumerate(lines):
@@ -440,6 +441,26 @@ def sync_inno_setup_script(script_path: Path):
             lower_line = line.lower()
             quote_start = line.find('"')
             app_index = lower_line.find("\\app", quote_start)
+
+            # Every DLL in the staged folder, as one wildcard, replacing the
+            # per-plugin lines these scripts used to carry.
+            #
+            # This function only ever rewrote the paths inside Source lines; it
+            # never added any. The DLL list was therefore inherited from
+            # whichever .iss was seeded years ago, so adding a Flutter plugin
+            # produced an installer that omitted its DLL and an app that died on
+            # launch with "the code execution cannot proceed". Nothing failed at
+            # build time -- flutter_secure_storage_windows_plugin.dll was sitting
+            # correctly in the staged folder, just never packaged.
+            if quote_start != -1 and app_index != -1 and lower_line.rstrip().find(".dll") != -1:
+                if not saw_dll_wildcard:
+                    updated_lines.append(
+                        'Source: "%s\\*.dll"; DestDir: "{app}"; '
+                        "Flags: ignoreversion" % app_source_dir
+                    )
+                    saw_dll_wildcard = True
+                continue
+
             if quote_start != -1 and app_index != -1:
                 updated_lines.append(line[:quote_start + 1] + app_source_dir + line[app_index + 4:])
                 continue
