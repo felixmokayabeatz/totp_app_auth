@@ -460,5 +460,19 @@
     "build_number": "55",
     "artifact_version": "1.15.0_55",
     "host_platform": "Linux"
+  },
+  {
+    "sequence": 34,
+    "platform": "linux",
+    "artifact_type": "deb",
+    "file": "beatzlock_1.15.1_56_amd64.deb",
+    "path": "/home/felixmokayabeatz/Programming/totp_app/otp_auth_app/final_builds/linux/1.15.1_56/beatzlock_1.15.1_56_amd64.deb",
+    "relative_path": "final_builds/linux/1.15.1_56/beatzlock_1.15.1_56_amd64.deb",
+    "is_directory": false,
+    "timestamp": "2026-09-01T16:10:06",
+    "version": "1.15.1+56",
+    "build_number": "56",
+    "artifact_version": "1.15.1_56",
+    "host_platform": "Linux"
   }
 ]
