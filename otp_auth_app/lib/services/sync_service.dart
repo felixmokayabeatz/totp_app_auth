@@ -3032,7 +3032,7 @@ class SyncService {
         await _storeEncryptionKey(canonical);
         _encryptionKey = canonical;
         _lastErrorMessage =
-            'Your password was changed, but your synced vault could not be re-encrypted here, so it was left untouched. Open Settings and use "Repair Cloud Sync Key" on a device that still syncs.';
+            'Your password was changed, but your synced vault could not be re-encrypted here, so it was left untouched. Sign out and back in with your new password on a device that still syncs -- that repairs it automatically.';
         debugPrint('Password changed; vault re-key deferred');
         return true;
       }
