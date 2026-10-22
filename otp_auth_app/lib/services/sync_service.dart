@@ -85,26 +85,6 @@ class VaultKeyring {
   }
 }
 
-/// What a "Repair Cloud Sync Key" run from this device would do.
-class VaultRepairPreview {
-  const VaultRepairPreview({
-    required this.localAccounts,
-    required this.cloudHasData,
-    required this.cloudReadable,
-  });
-
-  final int localAccounts;
-  final bool cloudHasData;
-
-  /// Whether some key this device can construct opens the cloud vault.
-  /// Repair runs only when this is true (or when there is no cloud vault at
-  /// all); the cloud is never overwritten with something that did not come
-  /// from reading it first.
-  final bool cloudReadable;
-
-  bool get canRepair => cloudReadable || !cloudHasData;
-}
-
 class SyncService {
   static const _passwordlessUnlockKeyPrefix = 'passwordless_unlock_key_';
   static const _passwordlessSyncUnlockContext = 'passwordless-sync-unlock';
@@ -961,92 +941,6 @@ class SyncService {
     }
   }
 
-  /// Recover the vault key from [recoveryCode] and activate it on this device.
-  ///
-  /// This is the way back after a password reset. It only ever reads: the
-  /// stored vault is not touched, and the key is accepted only once it has
-  /// actually opened it.
-  Future<bool> restoreVaultKeyFromRecoveryCode(String recoveryCode) async {
-    await _updateAuthHeader();
-    _lastErrorMessage = null;
-
-    final code = EncryptionService.normalizeRecoveryCode(recoveryCode);
-    if (code.isEmpty) {
-      _lastErrorMessage = 'Enter one of your recovery codes.';
-      return false;
-    }
-
-    try {
-      final fromKeyring = await dataKeyFromRecoveryCode(code);
-      if (fromKeyring != null && fromKeyring.isNotEmpty) {
-        await _activateSyncEncryptionKey(fromKeyring);
-        _vaultKeyMismatch = false;
-        debugPrint('Vault data key restored from a recovery code');
-        return true;
-      }
-
-      final stored = await getEncryptedSyncData(_vaultEscrowDataType);
-      final raw = stored?['encrypted_content']?.toString() ?? '';
-      if (raw.isEmpty) {
-        _lastErrorMessage =
-            'This account has no recovery escrow, so a recovery code cannot unlock its synced vault. Escrow is created when you generate recovery codes.';
-        return false;
-      }
-
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) {
-        _lastErrorMessage = 'Your recovery escrow could not be read.';
-        return false;
-      }
-
-      String? vaultKey;
-      for (final wrapped in ((decoded['wrapped_keys'] as List?) ?? const [])) {
-        vaultKey = EncryptionService.unwrapVaultKey(wrapped.toString(), code);
-        if (vaultKey != null) break;
-      }
-
-      if (vaultKey == null) {
-        _lastErrorMessage =
-            'That recovery code does not match this account. Check the code and try again.';
-        return false;
-      }
-
-      // Follow any re-keys recorded since the escrow was written.
-      for (final link in ((decoded['chain'] as List?) ?? const [])) {
-        final next =
-            EncryptionService.unchainVaultKey(link.toString(), vaultKey!);
-        if (next != null) vaultKey = next;
-      }
-
-      // Accept it only if it actually opens the vault.
-      final cloudPayload = await _fetchRawAccountsPayload();
-      if (cloudPayload != null &&
-          cloudPayload.isNotEmpty &&
-          tryDecodeAccountsPayload(cloudPayload, vaultKey!) == null) {
-        _lastErrorMessage =
-            'That recovery code unlocked a key that no longer opens your synced vault. Nothing was changed.';
-        return false;
-      }
-
-      await _activateSyncEncryptionKey(vaultKey!);
-      _vaultKeyMismatch = false;
-      debugPrint('Vault key restored from a recovery code');
-      return true;
-    } on DioException catch (e) {
-      _lastErrorMessage = _friendlyRequestError(
-        e,
-        'Could not reach your recovery escrow.',
-      );
-      return false;
-    } catch (e) {
-      _lastErrorMessage = NetworkErrorMessages.forUnexpected(
-        e,
-        'Could not use that recovery code.',
-      );
-      return false;
-    }
-  }
-
   // --- Vault re-key ---------------------------------------------------------
   // Key negotiation above recovers a vault whose key this device can still
   // construct from some spelling of the account identity. Where it succeeds but
@@ -1115,36 +1009,6 @@ class SyncService {
       ),
     );
     return keys;
-  }
-
-  /// Whether a repair from this device could run, without changing anything.
-  Future<VaultRepairPreview> previewCloudVaultRepair() async {
-    var accounts = 0;
-    try {
-      accounts = (await _getUserBox()).length;
-    } catch (e) {
-      debugPrint('Vault repair preview could not read local storage: $e');
-    }
-
-    final cloudPayload = await _fetchRawAccountsPayload();
-    if (cloudPayload == null || cloudPayload.isEmpty) {
-      return VaultRepairPreview(
-        localAccounts: accounts,
-        cloudHasData: false,
-        cloudReadable: false,
-      );
-    }
-
-    final storedKey = await getAvailableEncryptionKey();
-    final readable = storedKey != null &&
-        storedKey.isNotEmpty &&
-        tryDecodeAccountsPayload(cloudPayload, storedKey) != null;
-
-    return VaultRepairPreview(
-      localAccounts: accounts,
-      cloudHasData: true,
-      cloudReadable: readable,
-    );
   }
 
   /// Rewrite the cloud vault under the key the account password derives today.
@@ -3455,11 +3319,6 @@ class SyncService {
       return null;
     }
   }
-
-  /// Where exports are written: the same place the recovery PDF goes, so
-  /// people look in one folder for the things they need to keep.
-  Future<Directory> resolveExportDirectory() async =>
-      _resolveBackupCodesDirectory();
 
   Future<Directory> _resolveBackupCodesDirectory() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
