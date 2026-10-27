@@ -16,6 +16,15 @@ Each project owns everything it needs — its own `.env`, `requirements.txt`,
 virtualenv, static files and templates — so working on one never means
 reading the other.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Desktop account list, dark theme](screenshots/01-desktop-home.png) | ![Desktop account list, light theme](screenshots/02-desktop-detail.png) |
+| ![Mobile account list, dark theme](screenshots/03-mobile-home.jpg) | ![Mobile account list, light theme](screenshots/04-mobile-detail.jpg) |
+
+![Settings screen](screenshots/05-mobile-settings.jpg)
+
 ## The two Django projects
 
 Separate settings, separate databases, separate `auth_user` tables.
