@@ -1,7 +1,0 @@
-v1.7.4 (Build 41)
-
-What's New
-- Update secure self text/message.
-- Restored the passwordless sign-in button on the login screen for users who want primary-phone approval directly.
-- Normal email and password login still sends the regular email verification code first.
-- The verification-code screen keeps the alternate passwordless approval option for secondary-device sign-in.

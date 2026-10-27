@@ -1,5 +1,0 @@
-v1.2.0 (Build 4)
-- Added in-app update checking
-- Improved the website download update flow
-- Better app version detection and release handling
-- Bug fixes and stability improvements

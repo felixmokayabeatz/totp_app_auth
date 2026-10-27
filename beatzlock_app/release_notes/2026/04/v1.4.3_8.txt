@@ -1,5 +1,0 @@
-v1.4.3 (Build 8)
-- Restricted primary-device changes so only the device currently set as primary can transfer that role
-- Updated the active devices screen to reflect when primary-device changes are locked on the current device
-- Improved device-session security around primary-device management
-- Bug fixes and stability improvements

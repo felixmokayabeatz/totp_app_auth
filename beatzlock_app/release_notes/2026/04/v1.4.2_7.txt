@@ -1,6 +1,0 @@
-v1.4.2 (Build 7)
-- Improved live remote logout behavior for active devices
-- Added primary device protection for Sign Out All Other Devices
-- Improved device session handling so one primary device is always preserved when available
-- Fixed logout cleanup so local app PINs are not cleared unexpectedly
-- Bug fixes and stability improvements

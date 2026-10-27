@@ -1,7 +1,0 @@
-v1.9.0 (Build 48)
-
-Fixes and Performance
-- Signing in on a new device brings your accounts with it again. If your email address has a capital letter in it, the move to email-only accounts changed the key your vault is locked with, and a device signing in for the first time since then could not open it. It arrived signed in, with notifications working, and an empty account list. BeatzLock now finds the right key by itself, so a fresh sign-in restores your vault the way it always did.
-- A device that cannot open your vault will no longer sync over it. Before, it treated an unreadable vault as an empty one and uploaded that, replacing the copy in the cloud. Your accounts stay put now until a device that can read them signs in.
-- BeatzLock tells you when it cannot open your vault instead of showing an empty list. Settings offers to unlock sync here, and approving a passwordless sign-in from a device that still shows your accounts hands this one the key it needs.
-- Updated networking, storage and file-picker libraries.

@@ -1,9 +1,0 @@
-v1.6.15 (Build 30)
-
-What's New
-- Improved passwordless sign-in so the remembered primary device can sign in again directly after being logged out.
-- Added clearer fallback guidance when another device tries passwordless sign-in while the primary device is currently signed out.
-- Added a Start again action on the passwordless waiting screen after expiry or other failed approval states.
-- Updated passwordless approval prompts and sync-unlock dialogs to behave more reliably on larger screens and tablets.
-- Refined account lookup messaging so unknown usernames now show a clearer account not available response.
-- Continued stability fixes around passwordless approval, primary-device handling, and sync unlock recovery flows.

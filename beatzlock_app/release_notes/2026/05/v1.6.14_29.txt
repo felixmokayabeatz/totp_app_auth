@@ -1,9 +1,0 @@
-v1.6.14 (Build 29)
-
-What's New
-- Improved sync behavior and internal service flow for more reliable app state updates.
-- Enhanced vault restore point loading with clearer feedback while restore data is being prepared.
-- Added better snapshot and sync-unlock handling around secured vault data.
-- Password and vault records now track updated timestamps more consistently for cloud sync.
-- Refined OTP state handling to keep account and restore flows more stable.
-- Continued cleanup and refactoring across sync and vault components to improve maintainability and debugging.

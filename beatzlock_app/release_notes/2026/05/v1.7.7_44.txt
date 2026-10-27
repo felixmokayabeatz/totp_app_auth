@@ -1,6 +1,0 @@
-v1.7.7 (Build 44)
-
-What's New
-- Added a Cancel button while vault restore points are loading so you can back out if the fetch is taking too long.
-- Privacy Policy and Terms of Service now show readable dates like June 11, 2026 instead of YYYY-MM-DD.
-- Links inside the Privacy Policy and Terms of Service are now actually clickable inside the app.

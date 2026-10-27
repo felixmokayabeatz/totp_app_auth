@@ -1,8 +1,0 @@
-v1.5.4 (Build 14)
-
-What's new
-- Ratings now ask for the display name you want shown publicly.
-- If you leave the display name blank, your review shows as Anonymous user.
-- Editing a rating from another device now keeps your original platform and adds the new one beside it.
-- Rating dates now show the time added or edited.
-- Small fixes and polish.

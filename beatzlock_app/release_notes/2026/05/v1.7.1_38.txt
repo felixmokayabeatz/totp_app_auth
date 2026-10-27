@@ -1,8 +1,0 @@
-v1.7.1 (Build 38)
-
-What's New
-- Added Server Lockdown in Settings so you can keep BeatzLock fully offline while still using your local vault.
-- Sensitive actions now try your device security first on every platform, then fall back to your BeatzLock PIN when needed.
-- QR and secret reveal, account deletion, Delete Everywhere, and App PIN changes now follow the same unlock flow for more consistent protection.
-- Windows in-app updates now ask before closing the app and open the normal installer after you confirm.
-- Linux desktop updates now prepare the package installer flow more safely and guide you to reopen the app after the update.

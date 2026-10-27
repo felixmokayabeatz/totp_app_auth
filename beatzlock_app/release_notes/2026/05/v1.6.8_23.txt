@@ -1,8 +1,0 @@
-v1.6.8 (Build 23)
-
-What's new
-- Profile picture is now shown on settings screen.
-- QR codes shared to another authenticator app now include email data for each account.
-- Improved account transfer details for a clearer import experience.
-- Better support for accounts that use the same service name with different emails.
-- Small fixes to make QR sharing and importing more reliable.

@@ -1,9 +1,0 @@
-v1.15.2 (Build 57)
-
-Fixes
-- BeatzLock no longer shows a wrong code when it cannot read an account. If a device cannot unlock a stored secret, that account now reads "Locked" instead of displaying a six-digit code generated from unreadable data. Those codes looked completely normal and never worked, and there was no way to tell which was which.
-- This affects display only. Your accounts and the codes on a device that can read them are unchanged.
-
-If one of your devices shows different codes to the others
-- Check that device's clock first. Codes are generated from the current time, so a clock that is off by more than half a minute produces different codes everywhere, on every account.
-- If the clock is correct and an account now reads "Locked" on that device, it cannot read that account's secret. Sign in again there, or use Settings, Repair Cloud Sync Key on a device that shows your accounts correctly.

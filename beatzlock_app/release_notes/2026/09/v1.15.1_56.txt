@@ -1,5 +1,0 @@
-v1.15.1 (Build 56)
-
-Fixes
-- Signing in with an emailed 6-digit code works again. If a device still had an old sign-in stored, BeatzLock was sending that expired session along with the sign-in request, and our server rejected the whole request before it ever looked at your code. The app reported that as "invalid email or password", so it looked like your details were wrong when they were fine.
-- Sign-in, sign-up, password reset and recovery-code screens no longer send a previous session with the request. They are the requests that create a session, so they should never carry one.

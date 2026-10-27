@@ -1,5 +1,0 @@
-v1.4.1 (Build 7)
-- Fixed remote device logout behavior
-- Improved session validation so revoked devices return to the login screen more reliably
-- Improved device labeling to avoid generic localhost-style device names
-- Bug fixes and stability improvements

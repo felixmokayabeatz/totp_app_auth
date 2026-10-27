@@ -1,6 +1,0 @@
-v1.4.4 (Build 9)
-- Restricted primary-device changes so only the device currently set as primary can transfer that role
-- Blocked remote sign-out of the primary device from other devices
-- Added a Mark all read action for notifications
-- Improved device-session protection and notification management
-- Bug fixes and stability improvements

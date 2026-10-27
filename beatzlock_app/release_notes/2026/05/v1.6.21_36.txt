@@ -1,8 +1,0 @@
-v1.6.21 (Build 36)
-
-What's New
-- Desktop in-app updates now open the installer as soon as the download finishes and close BeatzLock before installation starts.
-- Windows update downloads now launch the normal installer UI instead of using silent install flags.
-- Required update blocking screen now includes a manual download page option with browser confirmation.
-- Updated app dependencies and removed unused desktop/OTP packages that blocked newer plugin versions.
-- Updated the app version metadata for the next release.
