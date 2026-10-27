@@ -378,5 +378,4 @@ cd otp_auth_app && flutter run -d windows              # or -d linux, -d android
 
 ## License
 
-Add a license file before publishing if you intend this to be used by
-others — none is currently declared.
+Yeah do whatever you want, I will put the lience later.
