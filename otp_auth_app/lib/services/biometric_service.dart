@@ -9,32 +9,32 @@ import 'dart:math';
 
 import 'secure_storage_service.dart';
 
-/// How a system unlock attempt (device PIN / pattern / fingerprint / face /
-/// Windows Hello) ended.
-///
-/// The distinction matters because BeatzLock uses exactly one unlock method per
-/// device: the operating system lock when the device has one, the BeatzLock PIN
-/// when it does not. A user who backs out of the system prompt must land back
-/// on the lock screen, not on a PIN pad -- the PIN pad would be a second door
-/// into the same vault. Only [unavailable], which means the OS itself cannot
-/// authenticate on this device any more, may move a device onto the app PIN.
+
+
+
+
+
+
+
+
+
 enum SystemAuthOutcome {
-  /// The operating system confirmed the user.
+
   success,
 
-  /// The user dismissed the prompt, it timed out, or the OS interrupted it.
-  /// The device keeps using system unlock; the caller stays locked.
+
+
   canceled,
 
-  /// The device can no longer authenticate through the OS at all (screen lock
-  /// removed, Windows Hello unenrolled, platform error).
+
+
   unavailable,
 }
 
 class BiometricService {
-  // One LocalAuthentication and one cached capability answer per process: the
-  // capability check is a platform channel round trip and the unlock path used
-  // to pay for it several times per unlock.
+
+
+
   static final LocalAuthentication _localAuth = LocalAuthentication();
   static bool? _cachedSystemAuthAvailable;
 
@@ -44,11 +44,11 @@ class BiometricService {
   final SecureStorageService _secureStorage = SecureStorageService();
 
   Future<void> init() async {
-    // Warm the capability cache so the first unlock does not wait on it.
+
     await canUseSystemAuthentication();
   }
 
-  // Check if device has system authentication (for mobile)
+
   Future<bool> isDeviceAuthenticationAvailable() async {
     try {
       return await _localAuth.isDeviceSupported();
@@ -57,10 +57,10 @@ class BiometricService {
     }
   }
 
-  /// Whether this device unlocks BeatzLock with the operating system lock.
-  ///
-  /// When this is true the BeatzLock PIN is not used anywhere: it is not
-  /// offered on the lock screen, and it cannot be set from Settings.
+
+
+
+
   Future<bool> canUseSystemAuthentication() async {
     final cached = _cachedSystemAuthAvailable;
     if (cached != null) return cached;
@@ -72,19 +72,19 @@ class BiometricService {
     return available;
   }
 
-  /// Drops the cached capability answer so the next check asks the platform
-  /// again. Called when the OS reports it can no longer authenticate.
+
+
   void invalidateSystemAuthCache() {
     _cachedSystemAuthAvailable = null;
   }
 
-  /// Codes that mean "the OS itself can no longer authenticate on this
-  /// device". Everything else -- including every flavour of cancel, timeout and
-  /// lockout -- leaves system unlock in place and simply fails this attempt.
-  ///
-  /// local_auth documents that codes may be added without a breaking change, so
-  /// this is a set rather than an exhaustive switch: an unrecognised code is
-  /// treated as a failed attempt, never as a reason to hand the vault to a PIN.
+
+
+
+
+
+
+
   static const Set<LocalAuthExceptionCode> _systemAuthBrokenCodes = {
     LocalAuthExceptionCode.noCredentialsSet,
     LocalAuthExceptionCode.uiUnavailable,
@@ -92,13 +92,13 @@ class BiometricService {
     LocalAuthExceptionCode.unknownError,
   };
 
-  /// Runs the operating system unlock prompt and reports how it ended.
+
   Future<SystemAuthOutcome> authenticateWithSystem() async {
     try {
       final authenticated = await _localAuth.authenticate(
         localizedReason: 'Unlock BeatzLock',
         persistAcrossBackgrounding: true,
-        biometricOnly: false, // Allow PIN/Pattern/Password
+        biometricOnly: false, 
       );
       return authenticated
           ? SystemAuthOutcome.success
@@ -122,7 +122,7 @@ class BiometricService {
     }
   }
 
-  // ========== APP PIN (only when the device has no system lock) ==========
+
 
   Future<bool> isAppPinEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -195,7 +195,7 @@ class BiometricService {
     return diff == 0;
   }
 
-  // For devices with no system lock - authenticate with the BeatzLock PIN
+
   Future<bool> authenticateWithAppPin(BuildContext context) async {
     if (!context.mounted) return false;
 
@@ -276,7 +276,7 @@ class BiometricService {
     return resolved ?? false;
   }
 
-  // Check if we're on desktop
+
   bool isDesktop() {
     return Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   }
@@ -285,7 +285,7 @@ class BiometricService {
     return Platform.isWindows;
   }
 
-  // Check if we're on mobile
+
   bool isMobile() {
     return Platform.isAndroid || Platform.isIOS;
   }

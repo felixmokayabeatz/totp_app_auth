@@ -63,13 +63,13 @@ class _LoginScreenState extends State<LoginScreen> {
   static const String _syncValueMessage =
       'You can use BeatzLock offline. Sign in only when you want automatic cross-platform sync.';
 
-  // Password strength variables
+
   double _passwordStrength = 0.0;
   String _passwordStrengthText = '';
   Color _passwordStrengthColor = Colors.grey;
   List<String> _passwordSuggestions = [];
 
-  // Reset password strength
+
   double _resetPasswordStrength = 0.0;
   String _resetPasswordStrengthText = '';
   Color _resetPasswordStrengthColor = Colors.grey;
@@ -524,12 +524,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
                       SizedBox(height: 16),
-                      // Your synced vault is encrypted with a key derived from
-                      // your password. A reset happens without the old one, so
-                      // unless the key was escrowed under your recovery codes,
-                      // nothing afterwards can derive it again. Saying so here
-                      // is the difference between an informed choice and
-                      // silently losing a backup.
+
+
+
+
+
+
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
@@ -851,7 +851,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Text('Back to Login'),
                       ),
                     ] else if (!_show2FA) ...[
-                      // Email field
+
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -866,7 +866,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       SizedBox(height: 16),
 
-                      // Password field with visibility toggle
+
                       TextFormField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
@@ -892,7 +892,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
-                      // Password strength indicator (only for registration)
+
                       if (!_isLogin && _passwordController.text.isNotEmpty) ...[
                         SizedBox(height: 8),
                         Column(
@@ -975,7 +975,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
 
-                      // Password suggestion and length controls (only for registration)
+
                       if (!_isLogin) ...[
                         SizedBox(height: 8),
                         Row(
@@ -1024,7 +1024,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
 
-                      // Confirm password field (only for registration)
+
                       if (!_isLogin) ...[
                         SizedBox(height: 8),
                         TextFormField(
@@ -1153,7 +1153,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 4),
                       ],
 
-                      // Forgot Password link
+
                       if (_isLogin)
                         TextButton(
                           onPressed: () {
@@ -1168,7 +1168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                      // Toggle login/register
+
                       TextButton(
                         onPressed: () {
                           setState(() {
@@ -1186,7 +1186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ] else ...[
-                      // 2FA Verification Screen
+
                       Text(
                         _useRecoveryCodeFor2FA
                             ? 'Use one of your recovery codes if you cannot access email right now'

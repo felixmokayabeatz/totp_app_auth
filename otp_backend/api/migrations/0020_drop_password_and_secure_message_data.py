@@ -23,10 +23,6 @@ def drop_removed_feature_data(apps, schema_editor):
     if deleted:
         print(f'  Removed {deleted} stored blob(s) for withdrawn features.')
 
-    # Notifications for those features outlive the blobs, and without this they
-    # sit in the list for good: nothing creates them any more, the app has no
-    # filter for them and no screen to open them with, so they would be rows a
-    # user can see and never act on.
     AppNotification = apps.get_model('api', 'AppNotification')
     deleted, _ = AppNotification.objects.filter(
         notification_type__in=DROPPED_NOTIFICATION_TYPES

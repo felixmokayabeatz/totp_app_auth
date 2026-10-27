@@ -12,7 +12,6 @@ from django.utils import timezone
 
 from .models import AppNotification
 
-# The project-wide account model; users.User, keyed by email.
 User = get_user_model()
 
 

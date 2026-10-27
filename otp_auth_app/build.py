@@ -13,11 +13,7 @@ import tarfile
 from datetime import datetime
 from pathlib import Path
 
-# ==================== CONFIGURATION ====================
 SCRIPT_DIR = Path(__file__).resolve().parent
-# Everything this script reads or writes -- inno_script/, vc_redist/, the build
-# outputs and the scratch package dirs -- lives inside otp_auth_app/, so the repo
-# root holds nothing but the three projects.
 WORKSPACE_DIR = SCRIPT_DIR
 PROJECT_DIR = str(SCRIPT_DIR)
 FINAL_BUILDS_DIR = WORKSPACE_DIR / "final_builds"
@@ -34,7 +30,6 @@ INNO_SCRIPT_SEEDS = [
     WORKSPACE_DIR / "BeatzLock.iss",
 ]
 
-# Platform-specific build dirs
 LINUX_DIR = str(FINAL_BUILDS_DIR / "linux")
 FEDORA_DIR = str(FINAL_BUILDS_DIR / "fedora")
 WINDOWS_DIR = str(FINAL_BUILDS_DIR / "windows")
@@ -42,7 +37,6 @@ ANDROID_DIR = str(FINAL_BUILDS_DIR / "android")
 BUILD_TOOLS_DIR = WORKSPACE_DIR / ".build_tools" / "bin"
 RPM_BUILD_DIR = WORKSPACE_DIR / "rpm_pkg"
 
-# App metadata (customize these)
 APP_NAME = "BeatzLock"
 DEB_PACKAGE_NAME = "beatzlock"
 RPM_PACKAGE_NAME = "beatzlock"
@@ -52,12 +46,9 @@ LINUX_APPLICATION_ID = "com.beatzlock.auth"
 APP_MAINTAINER = "Felix Mokaya <info@example.com>"
 APP_DESCRIPTION = "BeatzLock OTP Authentication App"
 
-# Color codes for terminal output (Windows & Linux compatible)
 class Colors:
     """ANSI color codes for terminal output"""
     if platform.system() == "Windows":
-        # Windows doesn't support ANSI by default, but we'll still use them
-        # They work in Windows Terminal and PowerShell 7+
         pass
     RED = '\033[91m'
     GREEN = '\033[92m'
@@ -71,7 +62,6 @@ class Colors:
 
 def print_color(text, color=Colors.WHITE):
     """Print colored text (works on both Windows and Linux)"""
-    # Check if running in a terminal that supports colors
     if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
         print(f"{color}{text}{Colors.END}")
     else:
@@ -163,9 +153,6 @@ def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
             "cmake",
             "gcc-c++",
             "gtk3-devel",
-            # flutter_secure_storage links libsecret on Linux. Without the
-            # headers the Linux build fails at CMake, and the app's runtime
-            # fallback cannot help with a build that never produced a binary.
             "libsecret-devel",
             "libstdc++-devel",
             "libwebp-devel",
@@ -188,8 +175,6 @@ def get_linux_desktop_install_commands(include_rpm=False) -> list[str]:
             "clang",
             "cmake",
             "libgtk-3-dev",
-            # See the dnf list: libsecret is a build-time requirement of
-            # flutter_secure_storage, not just a runtime one.
             "libsecret-1-dev",
             "libstdc++-12-dev",
             "libwebp-dev",
@@ -374,10 +359,6 @@ def sync_inno_setup_script(script_path: Path):
     app_source_dir = to_inno_path(get_windows_app_dir())
     output_dir = to_inno_path(get_windows_installer_dir())
     vc_redist_path = to_inno_path(VC_REDIST_DIR / "VC_redist.x64.exe")
-    # The installer icon: the Flutter runner's own .ico, resolved from this
-    # checkout. It used to be carried forward verbatim from whichever .iss was
-    # seeded, which meant an absolute path baked in on someone's machine years
-    # ago -- it finally broke when the repo moved to a new folder.
     setup_icon_path = to_inno_path(
         SCRIPT_DIR / "windows" / "runner" / "resources" / "app_icon.ico"
     )
@@ -442,16 +423,6 @@ def sync_inno_setup_script(script_path: Path):
             quote_start = line.find('"')
             app_index = lower_line.find("\\app", quote_start)
 
-            # Every DLL in the staged folder, as one wildcard, replacing the
-            # per-plugin lines these scripts used to carry.
-            #
-            # This function only ever rewrote the paths inside Source lines; it
-            # never added any. The DLL list was therefore inherited from
-            # whichever .iss was seeded years ago, so adding a Flutter plugin
-            # produced an installer that omitted its DLL and an app that died on
-            # launch with "the code execution cannot proceed". Nothing failed at
-            # build time -- flutter_secure_storage_windows_plugin.dll was sitting
-            # correctly in the staged folder, just never packaged.
             if quote_start != -1 and app_index != -1 and lower_line.rstrip().find(".dll") != -1:
                 if not saw_dll_wildcard:
                     updated_lines.append(
@@ -795,7 +766,6 @@ def check_flutter():
         print("  Try: flutter doctor -v")
         return False
     
-    # Quick check - don't run full doctor unless needed
     return True
 
 def check_linux_desktop_requirements():
@@ -1043,7 +1013,6 @@ def clean_windows_cache():
     """Clean Windows build cache to fix CMake generator mismatch"""
     print_color("\n🧹 Cleaning Windows CMake cache...", Colors.YELLOW)
     
-    # Paths to clean
     paths_to_clean = [
         Path(PROJECT_DIR) / "build/windows",
         Path(PROJECT_DIR) / "windows/CMakeCache.txt",
@@ -1061,12 +1030,10 @@ def clean_windows_cache():
                 shutil.rmtree(path)
                 print_color(f"✓ Removed directory: {path}", Colors.GREEN)
     
-    # Run flutter clean
     run("flutter clean", cwd=PROJECT_DIR)
     
     print_color("✅ Windows CMake cache cleaned!", Colors.GREEN)
 
-# ==================== RUN FUNCTIONS ====================
 def run_linux():
     """Run the Linux app in debug mode"""
     print_color("\n🐧 Running Linux app...", Colors.CYAN)
@@ -1127,7 +1094,6 @@ def hot_reload():
     else:
         run("flutter run", cwd=PROJECT_DIR, env=get_linux_build_env())
 
-# ==================== BUILD FUNCTIONS ====================
 def build_linux_deb(skip_deb_package=False):
     """Build Debian .deb package"""
     print_color("\n🐧 Building Linux .deb package...", Colors.CYAN)
@@ -1138,7 +1104,6 @@ def build_linux_deb(skip_deb_package=False):
     if not skip_deb_package and not check_deb_packaging_requirements():
         return False
     
-    # Build Flutter Linux app
     linux_build_env = get_linux_build_env()
     if not run("flutter build linux --release", cwd=PROJECT_DIR, env=linux_build_env):
         return False
@@ -1157,13 +1122,11 @@ def build_linux_deb(skip_deb_package=False):
         if deb_dir.exists():
             shutil.rmtree(deb_dir)
 
-        # Create DEBIAN control directory
         os.makedirs(deb_dir / "DEBIAN", exist_ok=True)
         os.makedirs(deb_dir / "usr/local" / APP_NAME, exist_ok=True)
         os.makedirs(deb_dir / "usr/share/applications", exist_ok=True)
         os.makedirs(deb_dir / "usr/share/icons/hicolor/256x256/apps", exist_ok=True)
 
-        # Copy app files
         shutil.copytree(bundle_path, deb_dir / "usr/local" / APP_NAME, dirs_exist_ok=True)
         linux_icon_source = SCRIPT_DIR / "linux/runner/resources/app_icon.png"
         if linux_icon_source.exists():
@@ -1181,7 +1144,6 @@ def build_linux_deb(skip_deb_package=False):
             print_color(f"❌ {error}", Colors.RED)
             return False
 
-        # Create control file
         control_content = f"""Package: {DEB_PACKAGE_NAME}
 Version: {APP_FULL_VERSION}
 Section: utils
@@ -1194,7 +1156,6 @@ Description: {APP_DESCRIPTION}
         with open(deb_dir / "DEBIAN" / "control", "w") as f:
             f.write(control_content)
 
-        # Optional: Create post-installation script
         postinst_content = """#!/bin/bash
 set -e
 chmod +x /usr/local/{APP_NAME}/{APP_BINARY_NAME}
@@ -1206,13 +1167,11 @@ exit 0
             f.write(postinst_content)
         os.chmod(deb_dir / "DEBIAN" / "postinst", 0o755)
 
-        # Build .deb
         deb_file = f"{DEB_PACKAGE_NAME}_{APP_ARTIFACT_VERSION}_amd64.deb"
         deb_output = WORKSPACE_DIR / deb_file
         if not run(f'dpkg-deb --build "{deb_dir}" "{deb_output}"', cwd=str(WORKSPACE_DIR)):
             return False
 
-        # Move to platform/version directory
         linux_version_dir = get_platform_version_dir("linux")
         linux_version_dir.mkdir(parents=True, exist_ok=True)
         final_deb_path = linux_version_dir / deb_file
@@ -1527,8 +1486,6 @@ def check_windows_desktop_requirements():
         "vswhere.exe",
     )
     if not os.path.exists(vswhere):
-        # No vswhere means no Visual Studio installer metadata to consult.
-        # Flutter's own doctor covers that case; do not block on it here.
         return True
 
     try:
@@ -1585,8 +1542,6 @@ def build_windows():
         print_color("   Use: GitHub Actions, Windows VM, or actual Windows machine", Colors.YELLOW)
         return False
     
-    # Before the cache is cleared, not after: a failure here should leave the
-    # previous build intact rather than deleting it on the way to an error.
     if not check_windows_desktop_requirements():
         return False
 
@@ -1691,7 +1646,6 @@ def build_linux_and_apk():
     android_ok = build_android("1")
     return linux_ok and android_ok
 
-# ==================== UTILITIES ====================
 def clean_all():
     """Clean all build artifacts"""
     print_color("\n🧹 Cleaning all build artifacts...", Colors.YELLOW)
@@ -1715,7 +1669,6 @@ def clean_all():
                 shutil.rmtree(dir_path)
                 print_color(f"✓ Removed directory: {dir_path}", Colors.GREEN)
     
-    # Clean Flutter cache
     run("flutter clean", cwd=PROJECT_DIR)
     
     print_color("✅ Clean complete!", Colors.GREEN)
@@ -1755,10 +1708,8 @@ def fix_windows_build():
     """Specifically fix Windows build issues"""
     print_color("\n🔧 Fixing Windows build environment...", Colors.YELLOW)
     
-    # Clean all caches
     clean_windows_cache()
     
-    # Check Visual Studio
     print_color("\n🔍 Checking Visual Studio installation...", Colors.BLUE)
     vs_paths = [
         r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat",
@@ -1791,7 +1742,6 @@ def analyze_code():
     print_color("\n🔍 Analyzing code...", Colors.CYAN)
     run("flutter analyze", cwd=PROJECT_DIR)
 
-# ==================== MAIN MENU ====================
 def main_menu():
     """Display main menu"""
     system = platform.system()

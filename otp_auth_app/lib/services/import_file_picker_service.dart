@@ -21,10 +21,10 @@ class ImportFilePickerService {
     'com.beatzlock.otp/file_picker',
   );
 
-  // Desktop picking used to go through file_selector_windows directly, which
-  // is why importing worked on Windows and Android and nowhere else -- a Linux
-  // or Fedora user had no way to get accounts in at all. The umbrella
-  // file_selector package covers Windows, Linux and macOS with the same call.
+
+
+
+
   bool get _isSupportedDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
@@ -56,10 +56,10 @@ class ImportFilePickerService {
   }
 
   Future<PickedImportFile?> _pickDesktopImportFile() async {
-    // Both of this app's own export formats, plus the plain-text and JSON
-    // exports other authenticators produce. Left unfiltered the dialog offers
-    // every file on the machine, which is how people end up picking the wrong
-    // one and getting a parse error they cannot explain.
+
+
+
+
     const beatzlockGroup = XTypeGroup(
       label: 'BeatzLock export',
       extensions: <String>['bl', 'txt', 'json'],

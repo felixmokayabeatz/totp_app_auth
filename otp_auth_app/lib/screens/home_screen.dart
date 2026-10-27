@@ -56,12 +56,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Map<String, String> currentOTPs = {};
   Map<String, bool> blurredCodes = {};
 
-  /// Seconds left in the current 30-second window.
-  ///
-  /// Every account shares the same window, so this is one notifier rather than
-  /// a map. Only the visible cards listen to it, which keeps the countdown off
-  /// the screen-wide setState that used to re-sort and re-filter the whole
-  /// vault once a second just to move a progress bar.
+
+
+
+
+
+
   final ValueNotifier<int> _secondsRemaining = ValueNotifier<int>(30);
   Timer? _otpTicker;
   String _searchQuery = '';
@@ -83,12 +83,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Timer? _passwordlessPollTimer;
   Color get _accent => Theme.of(context).colorScheme.primary;
 
-  /// The themed card surface. Screens used to paint a frozen navy here, which
-  /// no longer matches the accent-tinted surface the theme builds.
+
+
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _accentSecondary => Theme.of(context).colorScheme.secondary;
 
-  // Track sync status for warning messages
+
   bool _isSyncEnabled = false;
 
   @override
@@ -492,8 +492,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Map<String, dynamic> currentItem = Map<String, dynamic>.from(item);
     String label =
         currentItem['requester_device_label']?.toString() ?? 'Unknown device';
-    // Typed, not picked from a list: nothing in the request payload can
-    // stand in for reading the code off the requesting device.
+
+
     final codeController = TextEditingController();
     Timer? dialogRefreshTimer;
     BuildContext? activeDialogContext;
@@ -612,7 +612,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   borderSide: BorderSide(color: _accent, width: 2),
                 ),
               ),
-              // Redraws so Accept enables the moment four digits are in.
+
               onChanged: (_) => setDialogState(() {}),
             );
           }
@@ -645,8 +645,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ],
             ),
             actions: [
-              // Deny is a decision; Close is not. Without this, dismissing the
-              // dialog meant denying someone else's sign-in by accident.
+
+
               TextButton(
                 onPressed: () {
                   dialogClosed = true;
@@ -767,7 +767,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
         actions: [
-          // Closing leaves the request pending; Deny actively rejects it.
+
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Close'),
@@ -865,7 +865,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
         actions: [
-          // Closing leaves the request pending; Deny actively rejects it.
+
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Close'),
@@ -1059,9 +1059,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 actions: [
-                  // The reminder comes back on the next launch, so a way out
-                  // costs nothing -- and both action buttons are conditional,
-                  // so without this the dialog can render with no buttons.
+
+
+
                   TextButton(
                     onPressed: () => Navigator.pop(dialogContext),
                     child: const Text('Later'),
@@ -1180,10 +1180,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  // secondsRemaining() counts down to the end of the current TOTP window, so a
-  // value larger than the previous tick's means the window rolled over and the
-  // codes are genuinely new. Every other tick -- 29 out of 30 -- only the
-  // countdown has changed.
+
+
+
+
   int _lastOtpSecondsRemaining = -1;
 
   void _startTimer() {
@@ -1203,10 +1203,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    // Nothing here is worth doing while the codes are off screen: the ticker
-    // walked the vault every second, decrypted every secret every thirty, and
-    // called setState on a widget tree nobody was looking at. Mobile throttles
-    // background timers for us; the desktop builds do not.
+
+
+
+
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
@@ -1215,9 +1215,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     if (state == AppLifecycleState.resumed && _otpTicker == null) {
-      // The window almost certainly rolled over while the app was away, so
-      // refresh before the first tick rather than showing a stale code for up
-      // to a second.
+
+
+
       _lastOtpSecondsRemaining = -1;
       unawaited(_updateAllOTPs());
       _startTimer();
@@ -1227,7 +1227,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _updateAllOTPs() async {
     if (_userBox == null) return;
 
-    // One window for every account, so this is read once rather than per row.
+
     final remaining = _otpService.secondsRemaining();
     final accountIds = <String>{};
 
@@ -1236,11 +1236,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       blurredCodes.putIfAbsent(account.id, () => false);
     }
 
-    // Regenerating every second meant a storage read, a decrypt and an HMAC per
-    // account per second, producing the same six digits 29 times out of 30.
-    // Codes are rebuilt on a rollover, and whenever the accounts on screen
-    // changed -- so one just added shows its code on the next tick instead of
-    // waiting for the window to turn over.
+
+
+
+
+
     final rolledOver = remaining > _lastOtpSecondsRemaining;
     final accountsChanged = currentOTPs.length != accountIds.length ||
         !accountIds.every((id) => currentOTPs.containsKey(id));
@@ -1256,8 +1256,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (!mounted) return;
 
-    // The countdown goes out on its own channel; only a genuinely new set of
-    // codes is worth rebuilding the screen for.
+
+
     _secondsRemaining.value = remaining;
     final rebuiltOtps = newOTPs;
     if (rebuiltOtps != null) {
@@ -1283,7 +1283,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          // Check if it's a wide screen (laptop/desktop)
+
           final isWideScreen = constraints.maxWidth > 600;
 
           return Column(
@@ -1298,7 +1298,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  // ─── Header with account count - FIXED for desktop right alignment ──────────────────
+
   Widget _buildHeader(bool isDark, int accountCount, bool isWideScreen) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final actionButtons = Wrap(
@@ -1583,7 +1583,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  // ─── Search bar with responsive width ───────────────────────────────────────────
+
   Widget _buildSearchBar(bool isDark, bool isWideScreen) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -1746,7 +1746,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  // ─── Accounts list with creation date ─────────────────────────────────────
+
   Widget _buildAccountsList(bool isDark) {
     if (_isLoadingVault) {
       return Center(
@@ -1807,7 +1807,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     var accounts = _userBox!.values.toList();
-    // Sort by creation date (newest first)
+
     accounts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     if (_searchQuery.isNotEmpty) {
@@ -1878,12 +1878,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               final isBlurred = blurredCodes[account.id] ?? false;
               final accountSubtitle = _accountSubtitle(account);
 
-              // Format creation date
+
               final addedDate = _formatDate(account.createdAt);
 
-              // Only the cards actually on screen follow the countdown. The
-              // header, the search field and the sorted list above them stay
-              // put between window rollovers.
+
+
+
               return ValueListenableBuilder<int>(
                 valueListenable: _secondsRemaining,
                 builder: (context, timer, _) {
@@ -1923,12 +1923,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         children: [
                           LayoutBuilder(
                             builder: (context, cardConstraints) {
-                              // The six-digit code is the whole point of the
-                              // card, so once the card is too narrow to sit it
-                              // beside the name it drops underneath at full
-                              // size. Squeezing it into the leftovers of a
-                              // shared row is what produced the overflow
-                              // stripes on a shrunk desktop window.
+
+
+
+
+
+
                               final stacked = cardConstraints.maxWidth < 260;
 
                               final logo = AccountLogoBadge(
@@ -1963,7 +1963,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                  // Added date
+
                                   Row(
                                     children: [
                                       Icon(
@@ -2747,7 +2747,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return null;
   }
 
-  // ─── Delete account dialog with enhanced warnings ─────────────────────────
+
   void _showDeleteAccountDialog(String accountId, String serviceName) async {
     const deleteEverywherePhrase = 'Delete Account Everywhere';
     final isLoggedIn = await _syncService.isLoggedIn();
@@ -2758,7 +2758,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final textPrimary = isDark ? Colors.white : const Color(0xFF1A1A2E);
     final textSecondary = isDark ? Colors.white38 : Colors.grey.shade500;
 
-    // First, show the choice dialog
+
     final choice = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
@@ -2836,7 +2836,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     if (choice == 'local') {
-      // Show warning about sync if enabled
+
       if (isLoggedIn && _isSyncEnabled) {
         if (!mounted) return;
         final confirmed = await showDialog<bool>(
@@ -3157,7 +3157,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
+
   String _formatOtp(String otp) {
     if (otp.length == 6) return '${otp.substring(0, 3)} ${otp.substring(3)}';
     return otp;
@@ -3373,8 +3373,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        // Explanations of why something failed run long. Three seconds was not
-        // enough to read one, so the toast stays up in proportion to it.
+
+
         duration: Duration(
           milliseconds: (2200 + message.length * 55).clamp(3000, 9000),
         ),
@@ -3401,9 +3401,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     required String message,
     required Future<T> Function() action,
   }) async {
-    // Held so the dialog is dismissed by its own context. The old code popped
-    // whatever route happened to be on top of the root navigator, which would
-    // have closed the screen underneath had the dialog ever gone first.
+
+
+
     BuildContext? progressContext;
 
     if (mounted) {
@@ -3415,8 +3415,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           builder: (dialogContext) {
             progressContext = dialogContext;
             return PopScope(
-              // The back gesture must not dismiss this, but the Hide button
-              // below can: a stalled network call should never trap the app.
+
+
               canPop: false,
               child: AlertDialog(
                 content: Row(

@@ -84,7 +84,7 @@ class AppUpdateService {
         );
       }
     } catch (_) {
-      // Fall through to the bundled fallback below.
+
     }
 
     return const _CurrentAppVersion(
@@ -121,7 +121,7 @@ class AppUpdateService {
         '${tempDir.path}${separator}beatzlock_update.sh',
       ]);
     } catch (_) {
-      // Temporary update cleanup is best-effort only.
+
     }
   }
 
@@ -474,7 +474,7 @@ class AppUpdateService {
           await partialFile.delete();
         }
       } catch (_) {
-        // Ignore cleanup failures for partially downloaded installers.
+
       }
       rethrow;
     }
@@ -549,7 +549,7 @@ class AppUpdateService {
             break;
         }
       } catch (_) {
-        // Ignore best-effort update cleanup failures.
+
       }
     }
   }
@@ -574,7 +574,7 @@ class AppUpdateService {
         await file.delete();
       }
     } catch (_) {
-      // Temporary Android update files can be safely ignored if cleanup fails.
+
     }
 
     if (savedPath == null || savedPath.isEmpty) {
@@ -853,9 +853,9 @@ fi
       }
     }
 
-    // Shared plain-language wording for anything that failed before a
-    // response came back, so an offline device is told it is offline rather
-    // than being handed a certificate or DNS explanation.
+
+
+
     final transportMessage = NetworkErrorMessages.forTransport(error);
     if (transportMessage != null) {
       return transportMessage;

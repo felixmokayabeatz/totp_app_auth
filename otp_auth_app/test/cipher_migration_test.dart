@@ -1,9 +1,9 @@
-// The two ciphers, and the migration between them.
-//
-// The synced OTP vault used to be stored under simpleEncrypt: a repeating-key
-// XOR over JSON whose first thirty-two bytes are guessable. Thirty-two bytes of
-// known plaintext is the whole key, so the password never entered into breaking
-// it. These tests pin the replacement and the path old data takes to reach it.
+
+
+
+
+
+
 
 import 'dart:convert';
 
@@ -18,7 +18,7 @@ final _vault = jsonEncode([
 void main() {
   group('the weakness that was replaced', () {
     test('known plaintext recovers the whole XOR key', () {
-      // Demonstrated, not asserted from theory: this is why the format changed.
+
       final blob = EncryptionService.simpleEncrypt(_vault, _key);
       final cipherBytes = base64.decode(blob);
       final crib = _vault.substring(0, 32);
@@ -41,7 +41,7 @@ void main() {
       final cipherBytes = base64.decode(blob.substring(4));
       final crib = _vault.substring(0, 32);
 
-      // The keystream is nonce-derived, so the same crib yields nothing usable.
+
       final attempt = String.fromCharCodes([
         for (var i = 0; i < 32; i++) cipherBytes[48 + i] ^ crib.codeUnitAt(i),
       ]);
@@ -65,8 +65,8 @@ void main() {
         _vault,
       );
 
-      // Flip a byte of ciphertext: the MAC must catch it. Under XOR this
-      // silently changed the decrypted secret instead.
+
+
       final raw = base64.decode(blob.substring(4));
       raw[raw.length - 1] ^= 0x01;
       expect(
@@ -100,7 +100,7 @@ void main() {
     test('unauthenticated input is refused unless migration asks for it', () {
       final legacy = EncryptionService.simpleEncrypt(_vault, _key);
 
-      // Left open, stripping four bytes would disable the MAC check entirely.
+
       expect(
         () => EncryptionService.decryptSensitiveSyncPayload(
           legacy,
@@ -110,7 +110,7 @@ void main() {
         throwsA(isA<FormatException>()),
       );
 
-      // The migration read is the one caller allowed to see it.
+
       expect(
         EncryptionService.decryptSensitiveSyncPayload(
           legacy,
@@ -132,7 +132,7 @@ void main() {
 
     test('without a per-install secret it is derivable from the email alone',
         () {
-      // The old behaviour, kept only so existing data stays readable.
+
       final stored = EncryptionService.encryptSecret(secret, userId);
       final attackerKey = EncryptionService.legacyLocalKeyFor(userId);
       expect(
@@ -148,8 +148,8 @@ void main() {
 
       expect(stored, startsWith('bl3:'));
 
-      // Deriving the key from the address no longer gets anywhere: it either
-      // throws on the format or produces something that is not the secret.
+
+
       String? attackerResult;
       try {
         attackerResult = EncryptionService.simpleDecrypt(

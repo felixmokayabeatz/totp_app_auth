@@ -1,4 +1,3 @@
-# Generated for BeatzLock release archive flags.
 
 from django.db import migrations, models
 

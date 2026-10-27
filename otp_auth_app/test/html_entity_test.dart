@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:beatzlock_auth/screens/legal_document_screen.dart';
 
-/// The legal documents arrive as CMS HTML, so the renderer has to resolve
-/// character references the browser resolves for free.
+
+
 void main() {
   String render(String html) => LegalHtmlTestHooks.plainText(html);
 
@@ -57,7 +57,7 @@ void main() {
 
   group('last updated line', () {
     test('shows the local time, not just the date', () {
-      // The shape the live API actually returns: a full UTC timestamp.
+
       final value = DateTime.parse('2026-08-28T21:47:02.634415+00:00');
       final local = value.toLocal();
       final hh = local.hour.toString().padLeft(2, '0');

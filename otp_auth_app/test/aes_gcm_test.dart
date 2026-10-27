@@ -1,10 +1,10 @@
-// AES-256-GCM, and the two older formats it has to keep reading.
-//
-// The previous construction was a hand-rolled SHA-256 keystream with an HMAC
-// over it -- encrypt-then-MAC, random nonce, constant-time compare, so not
-// broken as far as anyone could tell. "As far as anyone could tell" is not the
-// bar for a 2FA vault. This is a reviewed implementation of a reviewed
-// primitive; these tests pin its behaviour and the migration path.
+
+
+
+
+
+
+
 
 import 'dart:convert';
 
@@ -134,7 +134,7 @@ void main() {
 
   group('reading what is already stored', () {
     test('bl2 payloads still open, so existing data is not stranded', () {
-      // Written the way the previous version wrote it.
+
       final legacy = _legacyBl2(_plain, _key, _context);
       expect(legacy, startsWith('bl2:'));
       expect(
@@ -185,8 +185,8 @@ void main() {
   });
 }
 
-/// Reproduces the pre-AES bl2 format, so the migration path is tested against
-/// something actually shaped like what is stored rather than a stub.
+
+
 String _legacyBl2(String plainText, String key, String context) {
   final nonce = List<int>.generate(16, (i) => (i * 7 + 3) & 0xff);
   final input = utf8.encode(plainText);

@@ -5,23 +5,16 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# .env lives at the project root next to manage.py -- the same place every
-# other felixmokayabeatz site keeps it, and where deploy/deploy.sh reads it.
 load_dotenv(BASE_DIR / '.env')
 
-# DJANGO_SECRET_KEY is the name deploy/deploy.sh reads and can generate; the
-# bare SECRET_KEY is still honoured so an older .env keeps working.
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or os.getenv('SECRET_KEY')
 
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-#====================================================================
-# Local settings for development
 try:
     from .local import *
 except ImportError:
     pass
-#====================================================================
 
 SITE_DOMAIN = os.getenv('SITE_DOMAIN', 'api.example.com')
 SITE_URL = os.getenv('SITE_URL', 'https://' + SITE_DOMAIN)
@@ -41,8 +34,6 @@ if DEBUG:
     ALLOWED_HOSTS = ['*']
 else:
     allowed_hosts = _split_csv_env('ALLOWED_HOSTS', 'DJANGO_ALLOWED_HOSTS')
-    # SERVER_IP accepts requests that reach the server by bare IP instead of the
-    # domain; without it those hit DisallowedHost before any view runs.
     ALLOWED_HOSTS = list(dict.fromkeys(
         allowed_hosts + [
             host for host in (
@@ -61,11 +52,6 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-# .env has carried EMAIL_TIMEOUT for a while but nothing read it, so Django's
-# default of None applied: the SMTP socket had no timeout at all and a hung
-# mail host would hold a gunicorn worker open indefinitely. Every 2FA code,
-# reset code and security notice is sent from inside a request, so this is the
-# ceiling on how slow any of those endpoints can get.
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', 10))
 SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', '') or EMAIL_HOST_USER or ''
 DEFAULT_FROM_EMAIL = (
@@ -78,12 +64,7 @@ BEATZLOCK_INTERNAL_SERVICE_SECRET = os.getenv('BEATZLOCK_INTERNAL_SERVICE_SECRET
 AUTH_USER_MODEL = 'users.User'
 
 INSTALLED_APPS = [
-    # accounts comes first only so that its management/commands/createsuperuser.py
-    # wins over django.contrib.auth's: Django resolves a duplicated command name
-    # to whichever app is listed earlier.
     'accounts',
-    # 'users' holds AUTH_USER_MODEL: an account is an email address and a
-    # password, with no username or name columns behind it.
     'users',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -133,21 +114,11 @@ CSRF_TRUSTED_ORIGINS = _split_csv_env('CSRF_TRUSTED_ORIGINS') or [SITE_URL]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Production hardening. All of it is off in DEBUG so local development over
-# plain HTTP still works -- with these on, a dev server would redirect to https
-# and then refuse to send back a cookie it just set.
-#
-# The API authenticates with bearer tokens rather than cookies, so these do not
-# protect sync. They protect the Django admin at /beatzlock_admin/, whose
-# session cookie is a full administrative credential and was previously allowed
-# to travel over plain HTTP.
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'True').lower() == 'true'
-    # Six months, and opt-in for the subdomain/preload parts: those are hard to
-    # walk back, so they stay a deliberate choice rather than a default.
     SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '15552000'))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = (
         os.getenv('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'False').lower() == 'true'
@@ -199,8 +170,6 @@ DATABASES = {
         'USER': os.getenv('DJANGO_DB_USER'),
         'PASSWORD': os.getenv('DJANGO_DB_PASSWORD'),
         'HOST': os.getenv('DJANGO_DB_HOST', 'localhost'),
-        # DJANGO_DB_PORT_POSTGRESQL was the old name for this key; it is still
-        # read so a stale .env cannot silently fall through to the default.
         'PORT': (
             os.getenv('DJANGO_DB_PORT')
             or os.getenv('DJANGO_DB_PORT_POSTGRESQL')
@@ -242,12 +211,8 @@ STATICFILES_DIRS = [
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 
-# ===================
-# LOGGING CONFIGURATION
-# ===================
 from .logging_config import get_logging_config
 
-# Setup logging
 LOGGING = get_logging_config(DEBUG)
     
 if DEBUG:

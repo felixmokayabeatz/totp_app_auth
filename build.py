@@ -43,7 +43,6 @@ def load_inner_build_script():
 def main() -> int:
     module, script_path = load_inner_build_script()
 
-    # Make paths inside the inner script resolve from its project directory.
     os.chdir(script_path.parent)
 
     if hasattr(module, "main_menu"):

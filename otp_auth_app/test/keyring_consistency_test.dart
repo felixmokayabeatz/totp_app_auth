@@ -1,11 +1,11 @@
-// A keyring that disagrees with the stored vault.
-//
-// Unwrapping the keyring proves the password, not the key. If an upgrade wrote
-// the keyring and then failed to re-encrypt the vault -- a dropped connection,
-// or the version conflict the server started returning in 1.13.0 -- the keyring
-// names one key while the vault is under another. Taking the keyring's word for
-// it left every device holding a key that opened nothing, reported to the user
-// as a wrong password on all of them at once.
+
+
+
+
+
+
+
+
 
 import 'dart:convert';
 
@@ -33,8 +33,8 @@ void main() {
   });
 
   test('a keyring key that does not match the vault is detectable', () {
-    // The stranded state: the keyring was written naming dataKey, but the
-    // re-encryption never happened so the vault is still under legacyKey.
+
+
     final legacyKey = EncryptionService.generateVaultDataKey();
     final dataKey = EncryptionService.generateVaultDataKey();
     final stored = _vaultUnder(legacyKey);
@@ -53,8 +53,8 @@ void main() {
   });
 
   test('the password still unwraps a keyring that names the wrong key', () {
-    // Why the check has to be against the vault rather than the unwrap: the
-    // unwrap succeeds regardless, so it cannot tell these two apart.
+
+
     final wrongKey = EncryptionService.generateVaultDataKey();
     final salt = EncryptionService.generateKeyringSalt();
     final wrap = EncryptionService.wrapDataKeyWithPassword(
@@ -71,8 +71,8 @@ void main() {
   });
 
   test('healing restores agreement between keyring and vault', () {
-    // What the recovery path does: fall back to the key that opens the vault,
-    // then re-point the keyring at it.
+
+
     final legacyKey = EncryptionService.generateVaultDataKey();
     final stored = _vaultUnder(legacyKey);
 

@@ -1,5 +1,4 @@
-﻿# Generated manually for one-review-per-user app ratings.
-
+﻿
 from django.db import migrations, models
 
 

@@ -1,8 +1,8 @@
-// PBKDF2-HMAC-SHA256 against published test vectors.
-//
-// This is hand-written crypto on the path that protects every password-wrapped
-// key in the app. These vectors are the reason that is acceptable: if the
-// implementation drifts, they fail. Do not weaken or skip them.
+
+
+
+
+
 
 import 'dart:convert';
 
@@ -14,8 +14,8 @@ String _hex(List<int> bytes) =>
 
 void main() {
   group('PBKDF2-HMAC-SHA256 published vectors', () {
-    // Widely published vectors for PBKDF2 with HMAC-SHA256,
-    // P = "password", S = "salt", dkLen = 32.
+
+
     const cases = <int, String>{
       1: '120fb6cffcf8b32c43e7225256c4f837'
           'a86548c92ccc35480805987cb70be17b',
@@ -38,8 +38,8 @@ void main() {
     });
 
     test('a longer derived key spans multiple blocks correctly', () {
-      // P = "passwordPASSWORDpassword",
-      // S = "saltSALTsaltSALTsaltSALTsaltSALTsalt", c = 4096, dkLen = 40.
+
+
       final actual = EncryptionService.pbkdf2(
         utf8.encode('passwordPASSWORDpassword'),
         utf8.encode('saltSALTsaltSALTsaltSALTsaltSALTsalt'),
@@ -80,8 +80,8 @@ void main() {
     });
 
     test('it is not the old single-SHA-256 derivation', () {
-      // The whole point: the cheap derivation must not survive anywhere that
-      // a password is what stands between an attacker and a key.
+
+
       expect(
         EncryptionService.deriveKeyFromPassword('pw', 'salt'),
         isNot(EncryptionService.generateKey('pw', 'salt')),

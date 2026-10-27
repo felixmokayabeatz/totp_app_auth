@@ -101,12 +101,8 @@ from twofa.email_templates import (
 from twofa.models import EmailVerification
 from twofa.views import _consume_recovery_code
 
-# The project-wide account model; users.User, keyed by email.
 User = get_user_model()
 
-# ===================
-# LOGGING SETUP
-# ===================
 logger = logging.getLogger(__name__)
 
 
@@ -273,8 +269,6 @@ def _generate_passwordless_code() -> str:
 
 def _generate_passwordless_seed() -> str:
     alphabet = string.ascii_uppercase + string.digits
-    # secrets, not random: this seed derives every code the approving phone
-    # will ever show for this request.
     return ''.join(secrets.choice(alphabet) for _ in range(6))
 
 
@@ -381,7 +375,6 @@ def _build_backup_code_pdf_payload(*, user: User, current_session: DeviceSession
         theme=pdf_theme,
     )
 
-    # The address, reduced to what is safe in a Content-Disposition filename.
     safe_name = ''.join(
         char for char in user.email if char.isalnum() or char in ('-', '_')
     ) or 'user'
@@ -390,10 +383,6 @@ def _build_backup_code_pdf_payload(*, user: User, current_session: DeviceSession
         'pdf_bytes': pdf_bytes,
         'file_name': filename,
         'generated_at': generated_at,
-        # Handed back so the caller can put them in a response header for the
-        # app to escrow the vault key under. These are the same codes already
-        # inside the PDF body going to the same authenticated user, so nothing
-        # new is disclosed -- but they must never be stored in plaintext.
         'codes': codes,
     }
 
@@ -443,9 +432,6 @@ def _apply_account_tombstones(user: User, account_ids: list[str]) -> int:
     return len(normalized_ids)
 
 
-# ===================
-# AUTH VIEWSET
-# ===================
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
@@ -934,9 +920,6 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response({'success': True, 'message': 'Sync unlocked successfully.'})
 
 
-# ===================
-# SYNC VIEWSET
-# ===================
 class SyncViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = EncryptedDataSerializer
@@ -976,16 +959,6 @@ class SyncViewSet(viewsets.GenericViewSet):
             if incoming_version is None:
                 return Response({'error': 'version must be a number'}, status=400)
 
-            # Optimistic concurrency. This used to be a bare update_or_create
-            # that took the client's version without looking at it and kept no
-            # previous copy, so any client -- including one that had just failed
-            # to decrypt what was here -- could overwrite a vault outright. The
-            # client refuses to do that now, but the rule only means something
-            # if it is enforced where the data actually lives.
-            #
-            # Clients read the stored version and send it incremented, so a
-            # number that is not ahead means someone else wrote in between and
-            # this upload was built on a copy that is now stale.
             with transaction.atomic():
                 existing = (
                     EncryptedData.objects
@@ -1281,11 +1254,9 @@ class SyncViewSet(viewsets.GenericViewSet):
         logger.warning(f"Delete all accounts request - User: {user.email}, Device: {device_id}")
         
         try:
-            # Delete all OTP accounts
             deleted_count, _ = EncryptedData.objects.filter(user=request.user, data_type='otp_accounts').delete()
             debug_print(f"[SYNC] Deleted {deleted_count} EncryptedData records")
             
-            # Create global tombstone
             tombstone, created = AccountTombstone.objects.get_or_create(user=request.user, account_id='__ALL__')
             debug_print(f"[SYNC] Global tombstone {'created' if created else 'already existed'}")
             
@@ -1576,9 +1547,6 @@ class PasswordlessLoginRequestViewSet(viewsets.ReadOnlyModelViewSet):
             login_request.save(update_fields=['status', 'updated_at'])
             return Response({'error': 'This sign-in request already expired.'}, status=410)
 
-        # Typed on the approving phone, read off the requesting device's
-        # screen. There is no list of candidates to pick from any more, so
-        # there is no "selected" code either.
         entered_code = (request.data.get('code') or '').strip()
         if not entered_code:
             return Response(
@@ -2054,9 +2022,6 @@ class BackupCodeGenerationRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 'success': True,
                 'file_name': file_name,
                 'pdf_base64': base64.b64encode(pdf_bytes).decode('ascii'),
-                # Same purpose as the X-Backup-Codes header on the direct
-                # download: the approving device escrows its vault key under
-                # these before discarding them.
                 'codes': payload['codes'],
                 'generated_at': generated_at,
             }
@@ -2228,7 +2193,6 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         current_session = self._ensure_current_session()
         ensure_primary_session(request.user)
         base_queryset = self.get_queryset()
-        # Count every active device; the slice below only caps what is serialized.
         active_count = base_queryset.count()
         queryset = base_queryset[:25]
         create_daily_active_devices_notification(
@@ -2436,7 +2400,6 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({
             'success': True,
             'active_count': active_count,
-            # Keep this null rather than '' when there is no session to report.
             'current_session_id': str(current_session.id) if current_session else (get_request_session_id(request) or None),
         })
 
@@ -2445,8 +2408,6 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         current_session = self._ensure_current_session()
         if current_session is None:
             session_id = get_request_session_id(request)
-            # Filtering a UUID primary key on '' would raise, so only look it up
-            # when the token actually carried a session id.
             current_session = DeviceSession.objects.filter(
                 id=session_id,
                 user=request.user,
@@ -2474,9 +2435,6 @@ class DeviceSessionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'success': True})
 
 
-# ===================
-# DELETE OTP VIEWS
-# ===================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_delete_otp(request):
@@ -2498,20 +2456,15 @@ def send_delete_otp(request):
         return Response({'success': False, 'error': 'No email associated with account'}, status=400)
     
     try:
-        # Generate 6-digit code. secrets, not random: this authorises deleting
-        # every account in the vault.
         code = ''.join(secrets.choice(string.digits) for _ in range(6))
         debug_print(f"[DELETE OTP] Generated code: {code}")
         
-        # Delete old unused codes for this user
         old_codes_deleted = DeleteOTPCode.objects.filter(user=user, used=False).delete()
         debug_print(f"[DELETE OTP] Deleted {old_codes_deleted[0]} old unused codes")
         
-        # Create new OTP
         otp_obj = DeleteOTPCode.objects.create(user=user, code=code)
         debug_print(f"[DELETE OTP] Created OTP record - ID: {otp_obj.id}")
         
-        # Get email template
         html_message = get_delete_otp_email_template(code)
         
         debug_print(f"[DELETE OTP] Sending email to: {user.email}")
@@ -2563,8 +2516,6 @@ def verify_delete_otp(request):
         return Response({'success': False, 'error': 'Code is required'}, status=400)
     
     try:
-        # Fetch the live code rather than looking one up by the value supplied:
-        # a lookup by value has no way to count how many wrong values came in.
         otp_obj = DeleteOTPCode.objects.filter(
             user=user,
             used=False,
@@ -2621,9 +2572,6 @@ def verify_delete_otp(request):
         return Response({'success': False, 'error': _server_error_detail(e)}, status=500)
 
 
-# ===================
-# SYNC PREFERENCE VIEWS
-# ===================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_sync_preference(request):
@@ -2718,7 +2666,7 @@ def get_sync_preference(request):
         debug_print(f"[SYNC PREF] Traceback:\n{error_details}")
         
         logger.error("Reading sync preference failed.\n%s", error_details)
-        return Response({'sync_enabled': True})  # Return default on error
+        return Response({'sync_enabled': True})
 
 
 @api_view(['GET'])
@@ -2774,9 +2722,6 @@ def download_backup_codes(request):
         pdf_bytes = payload['pdf_bytes']
         filename = payload['file_name']
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
-        # Lets the app re-wrap its vault key under the new codes, so a future
-        # password reset can recover the vault instead of orphaning it. The
-        # server never sees the vault key itself.
         response['X-Backup-Codes'] = ','.join(payload['codes'])
         response['Access-Control-Expose-Headers'] = 'X-Backup-Codes'
         response['Content-Disposition'] = f'attachment; filename="{filename}"'

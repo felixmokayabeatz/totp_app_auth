@@ -1,5 +1,4 @@
-﻿# Generated manually for BeatzLock app ratings.
-
+﻿
 from django.db import migrations, models
 import django.core.validators
 import django.db.models.deletion

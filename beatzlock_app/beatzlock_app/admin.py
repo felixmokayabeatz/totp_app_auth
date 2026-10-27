@@ -268,9 +268,6 @@ class LegalPageAdmin(admin.ModelAdmin):
         )
 
     def get_form(self, request, obj=None, **kwargs):
-        # formfield_for_dbfield gets no obj, and the version dropdown needs to
-        # know the value already on this revision so a release deleted since
-        # then does not make the form unsavable.
         request._legalpage_obj = obj
         return super().get_form(request, obj, **kwargs)
 
@@ -289,8 +286,6 @@ class LegalPageAdmin(admin.ModelAdmin):
                 label += f" - released {release.released_at:%d %b %Y}"
             choices.append((release.version, label))
 
-        # An old revision may point at a version whose release row is gone.
-        # Keep it selectable rather than silently blanking the field on save.
         current = getattr(request, '_legalpage_obj', None)
         existing = current.app_version if current else ''
         if existing and existing not in seen:
@@ -304,8 +299,6 @@ class LegalPageAdmin(admin.ModelAdmin):
 
         if db_field.name == 'app_version':
             choices = self._app_version_choices(request)
-            # No releases recorded yet: a dropdown with nothing in it would be a
-            # dead end, so fall through to the normal text input.
             if choices:
                 return forms.ChoiceField(
                     choices=[('', '--- Not tied to a version ---')] + choices,
@@ -553,19 +546,11 @@ class TotalDownloadCountAdmin(admin.ModelAdmin):
         return False
 
 
-# ==============================================================================
-# STAFF ACCOUNTS
-# ==============================================================================
-# Email addresses are the login here -- see identity.py. The admin neither
-# shows nor asks for a username; it is written from the email address on save,
-# so the two can never drift apart.
 
 
 class EmailAdminAuthenticationForm(AdminAuthenticationForm):
     """Sign in to the admin with an email address, like the rest of the site."""
 
-    # Deliberately a text input, not an email input: the browser's type="email"
-    # validation would block the legacy username fallback below.
     username = forms.CharField(
         label="Email",
         widget=forms.TextInput(
@@ -583,7 +568,6 @@ class EmailAdminAuthenticationForm(AdminAuthenticationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # AuthenticationForm clamps this to the username field's max_length.
         self.fields["username"].max_length = 254
         self.fields["username"].widget.attrs["maxlength"] = 254
 
@@ -623,9 +607,6 @@ class StaffChangeForm(UserChangeForm):
 
     class Meta(UserChangeForm.Meta):
         model = User
-        # The admin drops username from the form anyway, by way of the
-        # fieldsets below. Excluding it here too means the form behaves the
-        # same wherever else it is used.
         exclude = ("username",)
 
     def clean_email(self):
@@ -637,8 +618,6 @@ class StaffChangeForm(UserChangeForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        # Changing the address changes the login, so the username column moves
-        # with it rather than being left pointing at the old one.
         user.username = user.email
         if commit:
             user.save()

@@ -352,7 +352,6 @@ class PasswordlessLoginFlowTests(APITestCase):
             PasswordlessLoginRequest.STATUS_EXPIRED,
         )
 
-        # Even the correct code cannot revive a request whose budget is spent.
         response = self._approve(request_obj, request_obj.get_verification_code())
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         request_obj.refresh_from_db()
@@ -1353,9 +1352,6 @@ class SyncVersionGuardTests(APITestCase):
         self.assertEqual(self._stored().encrypted_content, 'bl2:current')
 
     def test_the_same_version_is_rejected_too(self):
-        # Two devices that both read version 5 and both send 6: the second one
-        # built its upload without seeing the first, so it cannot be trusted to
-        # replace it.
         self._upload('bl2:current', 5)
 
         response = self._upload('bl2:concurrent', 5)

@@ -30,7 +30,6 @@ class UserModelShapeTests(TestCase):
 
         self.assertNotIn('auth_user_groups', tables)
         self.assertNotIn('auth_user_user_permissions', tables)
-        # The table the model actually lives in is still there.
         self.assertIn('auth_user', tables)
 
     def test_email_is_the_login_field(self):
@@ -39,7 +38,6 @@ class UserModelShapeTests(TestCase):
         self.assertTrue(User._meta.get_field('email').unique)
 
     def test_it_still_lives_in_the_auth_user_table(self):
-        # Reusing the table is what kept every existing foreign key valid.
         self.assertEqual(User._meta.db_table, 'auth_user')
 
 
@@ -184,8 +182,6 @@ class PermissionModelTests(TestCase):
         self.assertFalse(self.superuser.has_module_perms('api'))
 
     def test_checking_a_permission_costs_no_queries(self):
-        # The old path went through the auth backend and into auth_permission,
-        # auth_user_groups and auth_group on every check.
         with self.assertNumQueries(0):
             self.superuser.has_perm('api.change_devicesession')
             self.staff.has_perm('api.change_devicesession')

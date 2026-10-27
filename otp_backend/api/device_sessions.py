@@ -6,7 +6,6 @@ from django.utils import timezone
 from .models import DeviceSession
 from .notifications import build_device_label
 
-# The project-wide account model; users.User, keyed by email.
 User = get_user_model()
 
 

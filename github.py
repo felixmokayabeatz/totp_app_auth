@@ -8,11 +8,7 @@ import subprocess
 import sys
 import os
 
-# Your details
 USERNAME = "felixmokayabeatz"
-# The git commit address, not a site address. It stays on Proton
-# because that is the one verified on the GitHub account -- changing it
-# would leave new commits unattributed.
 EMAIL = "felixmokayabeatz.git@proton.me"
 
 def run_git_command(args):
@@ -21,7 +17,6 @@ def run_git_command(args):
         result = subprocess.run(['git'] + args, capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        # Don't print errors for config queries (they just mean not set)
         if "config" in args and "user.name" in args:
             return None
         print(f"Error: {e.stderr}")
@@ -42,9 +37,7 @@ def set_config(scope, username, email):
     print(f"   Username: {username}")
     print(f"   Email: {email}")
     
-    # Set username
     result_user = run_git_command(['config', scope, 'user.name', username])
-    # Set email  
     result_email = run_git_command(['config', scope, 'user.email', email])
     
     if result_user is not None and result_email is not None:
@@ -58,13 +51,11 @@ def show_current_config():
     """Show current git configuration"""
     print("\n📋 Current Git Configuration:")
     
-    # Global config
     global_name = run_git_command(['config', '--global', 'user.name'])
     global_email = run_git_command(['config', '--global', 'user.email'])
     
     print(f"   Global:  {global_name or '(not set)'} <{global_email or '(not set)'}>")
     
-    # Local config (if in repo)
     if check_git_repo():
         local_name = run_git_command(['config', 'user.name'])
         local_email = run_git_command(['config', 'user.email'])
@@ -77,17 +68,14 @@ def main():
     print("🚀 Git Configuration Helper")
     print("="*50)
     
-    # Check if we're in a git repo
     in_repo = check_git_repo()
     
     if not in_repo:
         print("\n⚠️  Not in a git repository!")
         print("   Only global configuration will be available.\n")
     
-    # Show current config
     show_current_config()
     
-    # Ask user for preference
     if in_repo:
         print("Where would you like to set the configuration?")
         print("  1) 🌍 Global (for all repositories)")
@@ -98,7 +86,6 @@ def main():
         print("Setting configuration globally (only option available)...")
         choice = "1"
     
-    # Set configuration based on choice
     if choice == "1":
         set_config('--global', USERNAME, EMAIL)
     elif choice == "2":
@@ -116,7 +103,6 @@ def main():
         print("❌ Invalid choice. Exiting.")
         sys.exit(1)
     
-    # Show updated config
     print("\n" + "="*50)
     print("✅ Updated Configuration:")
     show_current_config()

@@ -1,4 +1,3 @@
-# Generated manually for rating platform history and public reviewer names.
 
 from django.db import migrations, models
 

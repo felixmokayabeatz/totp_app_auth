@@ -1,4 +1,4 @@
-// lib/services/otp_service.dart
+
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -6,7 +6,7 @@ import 'encryption_service.dart';
 import 'secure_storage_service.dart';
 
 class OTPService {
-  // Singleton so all callers share the same cached userId
+
   static final OTPService _instance = OTPService._internal();
   factory OTPService() => _instance;
   OTPService._internal();
@@ -27,15 +27,15 @@ class OTPService {
     _cachedUserId = null;
   }
 
-  /// Returns the current TOTP counter (30-second window).
-  /// Using integer division means ALL calls in the same 30s window get
-  /// the exact same counter → the exact same OTP for the same secret.
+
+
+
   int _currentCounter() {
     final epochSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    return epochSeconds ~/ 30; // integer division – no floating point drift
+    return epochSeconds ~/ 30; 
   }
 
-  /// Seconds remaining in the current 30-second window.
+
   int secondsRemaining() {
     final epochSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     return 30 - (epochSeconds % 30);
@@ -48,7 +48,7 @@ class OTPService {
       final userId = await getCurrentUserId();
       final secret = _safeDecrypt(encryptedSecret, userId);
       if (secret == null) {
-        // Say so, rather than generate a confident wrong answer.
+
         return 'Locked';
       }
 
@@ -65,7 +65,7 @@ class OTPService {
       final key = _base32Decode(cleanSecret);
       if (key.isEmpty) return 'Error';
 
-      // Use the normalised counter – same for every call in the same window
+
       final counter = _currentCounter();
 
       final counterBytes = ByteData(8)..setInt64(0, counter);
@@ -85,18 +85,18 @@ class OTPService {
     }
   }
 
-  /// The account's base32 seed, or null if this device cannot read it.
-  ///
-  /// Null matters. This used to fall back to returning the stored ciphertext,
-  /// which then had its non-base32 characters stripped and was fed to the HMAC
-  /// -- producing a stable, plausible, completely wrong six-digit code with no
-  /// indication anything was amiss. For an authenticator that is the worst
-  /// available behaviour: a visible error costs the user a support question,
-  /// silently wrong codes cost them access and they cannot tell why.
+
+
+
+
+
+
+
+
   String? _safeDecrypt(String storedSecret, String userId) {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
     if (_looksLikeBase32(strippedSpaces)) {
-      // Stored unencrypted by an older build. Genuinely the seed.
+
       return storedSecret;
     }
 
@@ -108,9 +108,9 @@ class OTPService {
       return null;
     }
 
-    // The unauthenticated legacy format cannot report a wrong key, so a bad
-    // key yields plausible-looking bytes rather than an error. Anything that is
-    // not a base32 seed is treated as a failure to read it.
+
+
+
     if (!_looksLikeBase32(decrypted.replaceAll(RegExp(r'\s+'), ''))) {
       debugPrint('OTP secret decrypted to something that is not base32');
       return null;

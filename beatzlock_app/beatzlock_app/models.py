@@ -554,9 +554,6 @@ class LegalPage(models.Model):
         return f"{label}{version}{state}"
 
     def save(self, *args, **kwargs):
-        # Stamp the moment of first publication and keep it stamped. Later edits
-        # to a live revision must not rewrite the date users were shown, and
-        # un-ticking then re-ticking should not invent a second "first" date.
         if self.is_published and self.published_at is None:
             self.published_at = timezone.now()
         super().save(*args, **kwargs)
@@ -989,11 +986,7 @@ class UserProfile(models.Model):
         null=True,
         help_text="Square images look best. Anything larger than 2MB is rejected.",
     )
-    # Google's stable account identifier. Kept so a user who later changes the
-    # email on their Google account is still recognised as the same person.
     google_sub = models.CharField(max_length=64, blank=True, default='', db_index=True)
-    # Google hosts the picture itself, so only the URL is stored. It is the
-    # fallback when nothing has been uploaded here.
     google_avatar_url = models.URLField(blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1005,8 +998,6 @@ class UserProfile(models.Model):
         return self.user.email or self.user.username
 
     def save(self, *args, **kwargs):
-        # Replacing the image leaves the old file behind otherwise; the upload
-        # path only clears the folder for files it is about to write into.
         if self.pk:
             previous = (
                 UserProfile.objects.filter(pk=self.pk)

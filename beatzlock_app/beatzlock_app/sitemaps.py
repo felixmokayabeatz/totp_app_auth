@@ -48,8 +48,6 @@ class LegalSitemap(Sitemap):
         items = []
         for page_type, url_name in (('terms', 'beatzlock_app:legal_terms'),
                                     ('privacy', 'beatzlock_app:legal_privacy')):
-            # Only list a document that is actually published; a draft or a
-            # never-written one renders a "coming soon" placeholder.
             if LegalPage.current(page_type) is not None:
                 items.append(url_name)
         return items

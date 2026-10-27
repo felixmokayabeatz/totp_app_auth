@@ -1,10 +1,10 @@
-// models/otp_account.dart
+
 
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../services/encryption_service.dart';
 
-part 'otp_account.g.dart'; // ← ADD THIS LINE
+part 'otp_account.g.dart'; 
 
 @HiveType(typeId: 0)
 class OTPAccount {

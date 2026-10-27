@@ -60,12 +60,12 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    // A missing or non-opening local key means sync is locked on this
-    // device, not that the user is signed out -- the stored token is still
-    // good, and Settings' "Unlock Sync On This Device" is what recovers it.
-    // Logging out here would discard a valid session on every single
-    // restart until that tile is used, which is indistinguishable from the
-    // app forgetting the user.
+
+
+
+
+
+
     final restoredKey = await syncService.restoreEncryptionKey();
 
     final email =

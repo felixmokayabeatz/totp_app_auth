@@ -1,4 +1,3 @@
-# beatzlock_app/admin_download_stats.py
 
 from django.db.models import Sum
 from django.template.defaulttags import register
@@ -30,7 +29,6 @@ PLATFORM_CHART_STYLES = {
     },
 }
 
-# Add this helper filter for dictionary access in templates
 @register.filter
 def get_item(dictionary, key):
     return dictionary.get(key)
@@ -171,5 +169,5 @@ def download_stats(request):
 
 def get_flag_url(country_code):
     if not country_code or len(country_code) != 2:
-        return "https://flagcdn.com/w80/un.png"  # World/unknown fallback
+        return "https://flagcdn.com/w80/un.png"
     return f"https://flagcdn.com/w40/{country_code.lower()}.png"

@@ -1,4 +1,3 @@
-# Generated for the LegalPage draft/publish/archive rework.
 from django.db import migrations, models
 
 
@@ -18,7 +17,6 @@ def mark_existing_pages_published(apps, schema_editor):
 
 
 def unmark_pages(apps, schema_editor):
-    # Reversing only needs to leave the rows intact; the columns go away.
     pass
 
 

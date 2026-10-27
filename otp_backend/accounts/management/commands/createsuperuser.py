@@ -43,15 +43,12 @@ class Command(createsuperuser.Command):
         if find_user_by_email(email) is not None:
             raise CommandError("An account already exists for {}.".format(email))
 
-        # USERNAME_FIELD is "email" too, so this fills the one field Django
-        # would otherwise prompt for and leaves the password as the only ask.
         options["email"] = email
         return super().handle(*args, **options)
 
     def _ask_for_email(self):
         field = self.UserModel._meta.get_field("email")
         while True:
-            # get_input_data reports its own validation errors and returns None.
             value = normalize_email(self.get_input_data(field, "Email address: "))
             if not value:
                 continue

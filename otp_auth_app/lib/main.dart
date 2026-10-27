@@ -36,15 +36,15 @@ void main(List<String> launchArgs) async {
     debugPrint = (String? message, {int? wrapWidth}) {};
   }
 
-  // Best-effort housekeeping that nothing below depends on. Started here and
-  // awaited just before runApp so it overlaps storage and service setup
-  // instead of adding its own file-system round trip to the launch path.
+
+
+
   final updateArtifactCleanup =
       AppUpdateService().cleanupStaleUpdateArtifacts();
 
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    // Before any vault box is opened: the local vault key mixes in a random
-    // per-install secret, and reads must not race its configuration.
+
+
     EncryptionService.configureLocalVaultSecret(
       await SecureStorageService().localVaultSecret(),
     );
@@ -59,16 +59,16 @@ void main(List<String> launchArgs) async {
     Hive.registerAdapter(OTPAccountAdapter());
   }
 
-  // Four independent boxes; opening them in sequence made launch wait on four
-  // separate disk reads for no reason.
+
+
   await Future.wait<void>([
     Hive.openBox<OTPAccount>('otp_accounts'),
     Hive.openBox('settings'),
   ]);
 
   final serverLockdownService = ServerLockdownService();
-  // Lockdown state, the stored-key migration and the unlock-capability probe
-  // touch different things and none reads another's result.
+
+
   await Future.wait<void>([
     serverLockdownService.initialize(),
     SecureStorageService().init(),
@@ -77,11 +77,11 @@ void main(List<String> launchArgs) async {
   final themeProvider = ThemeProvider();
   final lockdownEnabled = await serverLockdownService.isEnabled();
 
-  // Four independent chains, each a run of platform-channel calls: the work
-  // queue, the notification channel, Firebase, and the stored theme. Only the
-  // steps inside a chain depend on each other, and every initialize() here
-  // caches its own in-flight future, so overlapping them cannot double-run any
-  // of the setup.
+
+
+
+
+
   await Future.wait<void>([
     BackgroundPasswordlessPollService().initialize(),
     ApprovalNotificationService().initialize().then(
@@ -134,8 +134,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _initialized = false;
   bool _isLocked = true;
   bool _unlockInProgress = false;
-  // Which of the two unlock methods this device uses. Resolved once at startup
-  // so the lock screen never offers both.
+
+
   AppUnlockMethod _unlockMethod = AppUnlockMethod.systemLock;
   bool _systemUnlockDismissed = false;
   bool _reconcilingUnlockMethod = false;
@@ -279,9 +279,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (dialogContext != null &&
           dialogContext.mounted &&
           _firstRunFlowCompleted) {
-        // Reconciles, explains any switch, and enforces a PIN where one is
-        // needed. It must own the first reconcile of the launch, since a
-        // silent one before it would leave nothing for it to report.
+
+
+
         final method = await _appLockService.ensureMandatoryLock(dialogContext);
         if (mounted) {
           setState(() => _unlockMethod = method);
@@ -714,8 +714,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final authenticated = await _appLockService.authenticateToUnlock(context);
       await WidgetsBinding.instance.endOfFrame;
-      // The OS prompt can report that this device lost its screen lock, which
-      // moves it onto the BeatzLock PIN. Re-read the method either way.
+
+
       await _refreshUnlockMethod();
       if (!mounted) return;
 
@@ -741,13 +741,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  /// Re-reads which single unlock method this device uses.
-  /// Re-checks the method and records it, without any user-facing notice.
-  ///
-  /// Used after an unlock attempt, where the OS may have just reported that it
-  /// can no longer authenticate: the force-PIN dialog the user was walked
-  /// through already explained the switch, so a second announcement later would
-  /// only repeat it.
+
+
+
+
+
+
+
   Future<void> _refreshUnlockMethod() async {
     final resolution = await _appLockService.reconcileUnlockMethod();
     if (!mounted || resolution.method == _unlockMethod) return;
@@ -769,8 +769,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         context,
       );
       await WidgetsBinding.instance.endOfFrame;
-      // A device that has since gained a screen lock switches back to it here
-      // rather than staying on the PIN until the next restart.
+
+
       await _refreshUnlockMethod();
       if (!mounted) return;
 
@@ -831,12 +831,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
-  /// Re-checks the device unlock method every time the app comes forward.
-  ///
-  /// Adding or removing a screen lock happens in the system settings, so a
-  /// resume is exactly the moment the answer can have changed. The capability
-  /// answer is cached for the rest of the foreground session, so this costs one
-  /// platform call per resume.
+
+
+
+
+
+
   Future<void> _reconcileUnlockMethodOnResume() async {
     if (_reconcilingUnlockMethod) return;
     _reconcilingUnlockMethod = true;
@@ -847,7 +847,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (dialogContext == null ||
           !dialogContext.mounted ||
           !_firstRunFlowCompleted) {
-        // No surface to explain a switch on yet -- just keep the method fresh.
+
         await _refreshUnlockMethod();
         return;
       }
@@ -1442,9 +1442,9 @@ class _AppLockScreen extends StatelessWidget {
   final bool isBusy;
   final AppUnlockMethod unlockMethod;
 
-  /// True when the user just backed out of the system prompt. BeatzLock does
-  /// not fall back to a PIN in that case, so the screen says why and offers the
-  /// same prompt again.
+
+
+
   final bool wasDismissed;
   final Future<void> Function(BuildContext context) onUnlock;
   final Future<void> Function(BuildContext context) onUsePin;

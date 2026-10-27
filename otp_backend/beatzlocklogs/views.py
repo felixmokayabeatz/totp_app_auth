@@ -37,9 +37,6 @@ def _group_logs(log_files: list[dict]) -> list[dict]:
 
 
 def _safe_log_path(log_file: str) -> Path:
-    # Paths arrive relative to BASE_DIR (e.g. "logs/2026/07/errors_2026-07-23.log"),
-    # but only files the viewer actually lists may be served. Anchoring on BASE_DIR
-    # alone would expose settings.py, the database and .env to any staff account.
     logs_dir = Path(LOGS_DIR).resolve()
     log_path = (Path(settings.BASE_DIR).resolve() / log_file).resolve()
 
@@ -172,12 +169,6 @@ def log_viewer(request, log_file=None):
     except ValueError:
         lines = 500
 
-    # Logs rotate daily with no size ceiling, and this API writes a line per
-    # sync, login and notification, so a single day's file can be very large.
-    # Reading it with readlines() held every line of it in memory at once just
-    # to show the last few hundred. One streaming pass counts the whole file
-    # while a bounded deque keeps only the lines that will actually be
-    # rendered.
     total_line_count = 0
     filtered_count = 0
     error_count = 0
@@ -207,7 +198,6 @@ def log_viewer(request, log_file=None):
     displayed_lines = list(tail)
     log_entries = _build_log_entries(displayed_lines)
 
-    # One stat() rather than the four this context used to take.
     log_stat = log_path.stat()
 
     detail_context = {

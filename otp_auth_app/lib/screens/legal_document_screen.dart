@@ -25,8 +25,8 @@ String _formatReadableDate(DateTime value) {
   return '${monthNames[local.month - 1]} ${local.day}, ${local.year}';
 }
 
-/// Zero-padded 24-hour local time, matching how device sessions,
-/// notifications and sign-in requests already print theirs.
+
+
 String _formatReadableTime(DateTime value) {
   final local = value.toLocal();
   final hour = local.hour.toString().padLeft(2, '0');
@@ -36,8 +36,8 @@ String _formatReadableTime(DateTime value) {
 
 String _formatUpdatedAt(DateTime? value) {
   if (value == null) return '';
-  // The date alone left it ambiguous which of two same-day revisions you
-  // were looking at. The server sends a full timestamp, so show it.
+
+
   return 'Last updated ${_formatReadableDate(value)} '
       'at ${_formatReadableTime(value)}';
 }
@@ -566,17 +566,17 @@ class _InlineStyleFrame {
   final String? href;
 }
 
-/// Test-only access to the HTML helpers, which are otherwise private to this
-/// screen. The entity decoding they do is the difference between a legal
-/// document reading `&middot;` and reading `·`, so it is worth pinning down.
+
+
+
 @visibleForTesting
 class LegalHtmlTestHooks {
   const LegalHtmlTestHooks._();
 
   static String plainText(String html) => _HtmlParser.plainText(html);
 
-  /// The user-visible "Last updated ..." line, including its local-time
-  /// conversion.
+
+
   static String updatedAt(DateTime? value) => _formatUpdatedAt(value);
 
   static String inlineText(String html, TextStyle baseStyle) =>
@@ -894,10 +894,10 @@ class _HtmlParser {
     return null;
   }
 
-  /// The HTML4 Latin-1 entity names, in code point order from 160 (`&nbsp;`)
-  /// through 255 (`&yuml;`). Held as a list because the set is contiguous --
-  /// ninety-six map literals would say the same thing at six times the size.
-  /// `&middot;` lives here, at 183.
+
+
+
+
   static const List<String> _latin1EntityNames = [
     'nbsp',
     'iexcl',
@@ -997,8 +997,8 @@ class _HtmlParser {
     'yuml',
   ];
 
-  /// The core five, plus the punctuation and symbols a rich-text editor
-  /// actually emits into a legal document.
+
+
   static const Map<String, int> _extraEntities = {
     'amp': 0x26,
     'lt': 0x3C,
@@ -1057,12 +1057,12 @@ class _HtmlParser {
     r'&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});',
   );
 
-  /// Resolves HTML character references in one pass.
-  ///
-  /// One pass matters: the old chained `replaceAll` decoded `&amp;` before the
-  /// rest, so `&amp;lt;` came out as `<` instead of the literal `&lt;` the
-  /// document asked for. Here each reference is resolved exactly once and the
-  /// result is never rescanned.
+
+
+
+
+
+
   static String _decode(String value) {
     if (!value.contains('&')) return value;
 
@@ -1077,9 +1077,9 @@ class _HtmlParser {
         code = _namedEntities[token];
       }
 
-      // An unknown name, or a code point that is not a usable character, is
-      // left exactly as written -- better a visible `&foo;` than silently
-      // dropping something the document meant to show.
+
+
+
       if (code == null ||
           code < 0 ||
           code > 0x10FFFF ||

@@ -1,4 +1,4 @@
-// providers/auth_provider.dart
+
 
 import 'package:flutter/material.dart';
 
@@ -29,7 +29,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
-    // This will be called after successful login from sync service
+
     _userEmail = email;
     _isAuthenticated = true;
     _isOfflineMode = false;

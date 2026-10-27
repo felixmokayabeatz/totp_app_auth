@@ -19,15 +19,11 @@ from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
-    # The migration that adopts auth_user needs create_superuser at times.
     use_in_migrations = True
 
     def _create_user(self, email, password, **extra_fields):
         if not email:
             raise ValueError('An email address is required.')
-        # normalize_email only lowercases the domain; the whole address is
-        # lowercased here so that the unique constraint and the __iexact
-        # lookups in accounts.identity agree on what counts as one account.
         email = self.normalize_email(email).strip().lower()
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
@@ -51,8 +47,6 @@ class UserManager(BaseUserManager):
         return self._create_user(email, password, **extra_fields)
 
     def get_by_natural_key(self, username):
-        # Addresses are stored lowercased, but a sign-in form is free to send
-        # any casing, so the lookup that ModelBackend runs is case-insensitive.
         return self.get(**{f'{self.model.USERNAME_FIELD}__iexact': username})
 
 
@@ -96,20 +90,6 @@ class User(AbstractBaseUser):
         super().clean()
         self.email = self.__class__.objects.normalize_email(self.email).strip().lower()
 
-    # -- Permissions ------------------------------------------------------
-    #
-    # This model used to inherit PermissionsMixin, which brought two
-    # many-to-many tables with it: auth_user_groups and
-    # auth_user_user_permissions. Both were empty, and so were auth_group and
-    # auth_group_permissions behind them -- nothing in this project has ever
-    # created a group or granted a per-user permission, and every staff account
-    # is a superuser. The mixin is gone and the join tables with it.
-    #
-    # What is left is the rule that was always in force: a superuser can do
-    # everything in the admin, and nobody else can do anything there. These
-    # three methods are the whole interface ModelAdmin and the admin templates
-    # use, so they are implemented directly rather than delegated to an auth
-    # backend that would only look in tables that no longer exist.
 
     def has_perm(self, perm, obj=None):
         return self.is_active and self.is_superuser

@@ -19,12 +19,12 @@ import '../utils/network_error_messages.dart';
 import 'dart:convert';
 import 'dart:io';
 
-/// The wrapped copies of an account's vault data key.
-///
-/// Stored in the cloud as plain JSON: everything inside is either already
-/// encrypted or deliberately public. The salt is not a secret -- it exists so
-/// the password wrapping key depends on the password alone, never on how the
-/// account identity happens to be spelled.
+
+
+
+
+
+
 class VaultKeyring {
   const VaultKeyring({
     required this.salt,
@@ -37,9 +37,9 @@ class VaultKeyring {
   final String passwordWrap;
   final List<String> codeWraps;
 
-  /// How the password wrap was made. Zero means the original single SHA-256,
-  /// which keyrings written before PBKDF2 landed use; those still open, and are
-  /// re-wrapped at the current cost the first time they do.
+
+
+
   final int kdfIterations;
 
   bool get usesStrongKdf =>
@@ -88,7 +88,7 @@ class VaultKeyring {
 class SyncService {
   static const _passwordlessUnlockKeyPrefix = 'passwordless_unlock_key_';
   static const _passwordlessSyncUnlockContext = 'passwordless-sync-unlock';
-  // ─── Singleton ────────────────────────────────────────────────────────────
+
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
   SyncService._internal() {
@@ -103,16 +103,16 @@ class SyncService {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
-          // Endpoints that establish a session must never carry one.
-          //
-          // DRF runs DEFAULT_AUTHENTICATION_CLASSES on every request that has
-          // an Authorization header, before permission classes -- so a stale or
-          // revoked token makes DeviceSessionJWTAuthentication raise 401 on
-          // AllowAny views too. Sign-in then failed with "Invalid email or
-          // password" while the credentials were perfectly good, because the
-          // shared Dio instance was still carrying the previous session's
-          // token. Stripping it here rather than at each call site means a new
-          // auth endpoint cannot reintroduce the bug by forgetting to.
+
+
+
+
+
+
+
+
+
+
           if (_isUnauthenticatedPath(options.path)) {
             options.headers.remove('Authorization');
           }
@@ -127,8 +127,8 @@ class SyncService {
     );
   }
 
-  /// Paths that are reached before a session exists, or in order to create
-  /// one. Anything here is sent without an Authorization header.
+
+
   static const Set<String> _unauthenticatedPaths = {
     'auth/login/',
     'auth/register/',
@@ -148,8 +148,8 @@ class SyncService {
       _isUnauthenticatedPath(path);
 
   static bool _isUnauthenticatedPath(String path) {
-    // Dio hands the path as given at the call site, but a leading slash or a
-    // full URL should match just the same.
+
+
     final normalised = path
         .replaceFirst(RegExp(r'^.*?/api/'), '')
         .replaceFirst(RegExp(r'^/+'), '');
@@ -171,8 +171,8 @@ class SyncService {
 
   String? get lastErrorMessage => _lastErrorMessage;
 
-  /// Set when the cloud vault exists but no key this device can derive opens
-  /// it, so the UI can offer key transfer instead of showing an empty list.
+
+
   bool _vaultKeyMismatch = false;
   bool get vaultKeyMismatch => _vaultKeyMismatch;
 
@@ -192,10 +192,10 @@ class SyncService {
     if (!await isLoggedIn()) {
       return false;
     }
-    // A key that is present but does not open the cloud vault leaves sync just
-    // as unusable as no key at all, and wants the same tile: entering the
-    // password re-derives the key against the vault instead of assuming one
-    // spelling of the account identity.
+
+
+
+
     if (_vaultKeyMismatch) {
       return true;
     }
@@ -289,9 +289,9 @@ class SyncService {
       return _normalizeAuthError(serverError, statusCode: statusCode);
     }
 
-    // Transport failures get their wording from one shared place, so "no
-    // internet" reads the same everywhere in the app and never mentions DNS,
-    // proxies or certificate trust -- none of which a user can act on.
+
+
+
     final transportMessage = NetworkErrorMessages.forTransport(error);
     if (transportMessage != null) {
       return transportMessage;
@@ -316,10 +316,10 @@ class SyncService {
     return fallback;
   }
 
-  // ─── Sync-enabled preference key ─────────────────────────────────────────
+
   static const _syncEnabledKey = 'sync_to_cloud_enabled';
 
-  // ─── Encryption key storage in Hive ──────────────────────────────────────
+
   Future<void> _storeEncryptionKey(String key) async {
     await _secureStorage.write(SecureStorageService.encryptionKey, key);
   }
@@ -349,17 +349,17 @@ class SyncService {
     await _restoreSyncedVaultDataAfterUnlock();
   }
 
-  // ─── Vault key negotiation ───────────────────────────────────────────────
-  // The vault key is derived from the identity the API returns as
-  // user["username"] plus the password, and that derivation is
-  // case-sensitive. The identity used to be a stored username column and is
-  // now the email address, lowercased in the database. An account whose
-  // address had any capital in it therefore derives a different key today
-  // than it did when its cloud blob was written: installs already signed in
-  // keep working from the key in secure storage, while a fresh sign-in on a
-  // new device derives the new spelling and cannot open the blob. Rather than
-  // trust one derivation, try every spelling this device can construct
-  // against the actual cloud payload and keep the one that opens it.
+
+
+
+
+
+
+
+
+
+
+
 
   static const _vaultKeySalt = 'beatzLockKenya2099';
 
@@ -367,7 +367,7 @@ class SyncService {
     return EncryptionService.generateKey(identity + password, _vaultKeySalt);
   }
 
-  /// Decode an `otp_accounts` payload, or null if [key] does not open it.
+
   @visibleForTesting
   List<dynamic>? tryDecodeAccountsPayload(String encryptedContent, String key) {
     try {
@@ -384,8 +384,8 @@ class SyncService {
     }
   }
 
-  /// Every distinct key the spellings of [identities] can produce, with the
-  /// canonical derivation first so a healthy account never changes behaviour.
+
+
   @visibleForTesting
   List<String> candidateVaultKeys(
     Iterable<String> identities,
@@ -404,7 +404,7 @@ class SyncService {
     return keys;
   }
 
-  /// The raw encrypted `otp_accounts` blob, or null when the account has none.
+
   Future<String?> _fetchRawAccountsPayload() async {
     try {
       final deviceId = await getOrCreateDeviceId();
@@ -420,12 +420,12 @@ class SyncService {
     }
   }
 
-  /// The key that actually opens this account's cloud vault.
-  ///
-  /// Falls back to the canonical derivation when there is nothing in the cloud
-  /// to test against (a new account), and sets [vaultKeyMismatch] when a vault
-  /// exists that no derivable key opens -- that account's key only exists on a
-  /// device that is already signed in, and has to be transferred from there.
+
+
+
+
+
+
   Future<String> _resolveVaultEncryptionKey({
     required String canonicalUsername,
     required String password,
@@ -458,16 +458,16 @@ class SyncService {
     return fallback;
   }
 
-  // --- Vault keyring --------------------------------------------------------
-  // Where the vault key comes from now. The vault is encrypted with a random
-  // data key that never changes; the keyring holds that key wrapped under the
-  // password and under each recovery code. A password change re-wraps thirty-
-  // two bytes instead of rewriting the vault, and a reset unwraps through a
-  // recovery code, so neither can strand anything.
-  //
-  // Accounts created before this have no keyring and a vault encrypted under a
-  // key derived from identity and password. They are upgraded once, in place,
-  // the first time a device signs in with a key that opens the vault.
+
+
+
+
+
+
+
+
+
+
 
   static const _keyringDataType = 'vault_keyring';
 
@@ -499,7 +499,7 @@ class SyncService {
     }
   }
 
-  /// The data key for this account, or null if [password] does not open it.
+
   Future<String?> _dataKeyFromKeyring(String password) async {
     final keyring = await _fetchKeyring();
     if (keyring == null) return null;
@@ -512,8 +512,8 @@ class SyncService {
     );
     if (dataKey == null) return null;
 
-    // Opened under a weaker derivation than we ship. Re-wrap it now, while the
-    // password is in hand -- the vault itself is untouched either way.
+
+
     if (!keyring.usesStrongKdf) {
       final salt = EncryptionService.generateKeyringSalt();
       await _storeKeyring(
@@ -534,13 +534,13 @@ class SyncService {
     return dataKey;
   }
 
-  /// Move a legacy account onto a keyring, once.
-  ///
-  /// [legacyKey] must already be known to open the vault. The keyring is
-  /// written before the vault is re-encrypted: if the re-encryption then fails,
-  /// the vault is still readable under the legacy key and key resolution falls
-  /// back to it, so the upgrade simply retries. Writing them the other way
-  /// round would leave a vault nothing could open.
+
+
+
+
+
+
+
   Future<String?> _upgradeLegacyVaultToKeyring(
     String password,
     String legacyKey,
@@ -564,14 +564,14 @@ class SyncService {
         return null;
       }
 
-      // Re-encrypt what is stored, having read it under the key that works.
+
       _encryptionKey = legacyKey;
       if (!await _reEncryptStoredVault(from: legacyKey, to: dataKey)) {
-        // The keyring is already written and now names a key the vault is not
-        // under. Rather than leave those two disagreeing -- which strands every
-        // device that later reads the keyring -- point the keyring back at the
-        // key the vault really uses. The account keeps working, and the upgrade
-        // is retried on the next sign-in.
+
+
+
+
+
         debugPrint(
           'Vault re-encryption failed; pointing the keyring at the current key',
         );
@@ -599,10 +599,10 @@ class SyncService {
     }
   }
 
-  /// Read every synced blob under [from] and write it back under [to].
-  ///
-  /// Reads before it writes, blob by blob, and stops at the first one it cannot
-  /// read rather than replacing it.
+
+
+
+
   Future<bool> _reEncryptStoredVault({
     required String from,
     required String to,
@@ -657,16 +657,16 @@ class SyncService {
     return true;
   }
 
-  /// The vault key for this sign-in: from the keyring where there is one,
-  /// otherwise the legacy derivation, upgrading the account as a side effect.
-  /// The outcome of resolving a vault key, reported directly rather than
-  /// through the shared [_vaultKeyMismatch] flag.
-  ///
-  /// That flag is also set by sync operations, and `_activateSyncEncryptionKey`
-  /// runs one. Reading it after activation therefore answered "did the most
-  /// recent download decode", not "did this password produce the right key" --
-  /// so a correct password reported itself as wrong whenever the restore that
-  /// followed it hit anything unreadable.
+
+
+
+
+
+
+
+
+
+
   Future<({String key, bool opened})> _resolveVaultKeyResult({
     required String canonicalUsername,
     required String password,
@@ -689,11 +689,11 @@ class SyncService {
 
     final fromKeyring = await _dataKeyFromKeyring(password);
     if (fromKeyring != null && fromKeyring.isNotEmpty) {
-      // Unwrapping proves the password, not the key. If the keyring and the
-      // stored vault disagree -- which happens when an upgrade wrote the
-      // keyring and then failed to re-encrypt the vault -- taking this key on
-      // faith leaves every device holding one that opens nothing, and the
-      // failure surfaces as "your password is wrong" on all of them at once.
+
+
+
+
+
       if (await _keyOpensStoredVault(fromKeyring)) {
         debugPrint('Vault key taken from the keyring');
         return fromKeyring;
@@ -703,8 +703,8 @@ class SyncService {
       );
     }
 
-    // No keyring, or a keyring this password does not open. Fall back to the
-    // derivation this account was created under.
+
+
     final legacyKey = await _resolveVaultEncryptionKey(
       canonicalUsername: canonicalUsername,
       password: password,
@@ -712,8 +712,8 @@ class SyncService {
     );
 
     if (_vaultKeyMismatch) {
-      // Nothing opens the vault. Do not upgrade -- that would write a keyring
-      // for a vault this device cannot re-encrypt.
+
+
       return legacyKey;
     }
 
@@ -721,20 +721,20 @@ class SyncService {
     return upgraded ?? legacyKey;
   }
 
-  /// Whether [key] actually decrypts what is stored.
-  ///
-  /// An account with nothing in the cloud yet has no vault to contradict the
-  /// key, so it counts as open.
+
+
+
+
   Future<bool> _keyOpensStoredVault(String key) async {
     final payload = await _fetchRawAccountsPayload();
     if (payload == null || payload.isEmpty) return true;
     return tryDecodeAccountsPayload(payload, key) != null;
   }
 
-  /// Re-wrap the data key under a new password. The vault is not touched.
-  ///
-  /// This is what makes a password change cheap and safe: thirty-two bytes are
-  /// rewritten instead of every account, password and secure text.
+
+
+
+
   Future<bool> rewrapKeyringForNewPassword(String newPassword) async {
     final dataKey = await getAvailableEncryptionKey();
     if (dataKey == null || dataKey.isEmpty) return false;
@@ -750,15 +750,15 @@ class SyncService {
         newPassword,
         salt,
       ),
-      // Recovery-code wraps seal the same unchanged data key, so they keep
-      // working across a password change with nothing to redo.
+
+
       codeWraps: existing.codeWraps,
       kdfIterations: EncryptionService.passwordKdfIterations,
     );
     return _storeKeyring(updated);
   }
 
-  /// Add recovery-code wraps for the current data key.
+
   Future<bool> addRecoveryCodesToKeyring(List<String> recoveryCodes) async {
     final codes = recoveryCodes
         .map(EncryptionService.normalizeRecoveryCode)
@@ -782,8 +782,8 @@ class SyncService {
     );
   }
 
-  /// Recover the data key with a recovery code, and re-wrap it under
-  /// [newPassword] when one is given -- the path back after a reset.
+
+
   Future<String?> dataKeyFromRecoveryCode(
     String recoveryCode, {
     String? newPassword,
@@ -821,26 +821,26 @@ class SyncService {
 
   Future<bool> hasVaultKeyring() async => (await _fetchKeyring()) != null;
 
-  // --- Vault key escrow -----------------------------------------------------
-  // The vault key comes from the account password. A password reset happens
-  // precisely because the old password is gone, so before this the reset left
-  // the synced vault locked under a key nobody could ever derive again: dead
-  // ciphertext, silently, with no warning and no way back.
-  //
-  // The escrow wraps the vault key under each recovery code, so the PDF users
-  // are already required to save can unlock it. The server stores only the
-  // wrapped blob and never sees the key.
-  //
-  // Re-keys are handled without needing the codes again: each one appends the
-  // new key sealed under the previous one, so an escrow written before a
-  // password change still leads to the current key by walking the chain.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   static const _vaultEscrowDataType = 'vault_key_escrow';
 
-  /// Wrap the active vault key under [recoveryCodes] and store it.
-  ///
-  /// Called when recovery codes are generated, which is the only moment the
-  /// app holds them in plaintext. They are not persisted anywhere.
+
+
+
+
   Future<bool> publishVaultKeyEscrow(List<String> recoveryCodes) async {
     final codes = recoveryCodes
         .map(EncryptionService.normalizeRecoveryCode)
@@ -848,9 +848,9 @@ class SyncService {
         .toList();
     if (codes.isEmpty) return false;
 
-    // On a keyring account the codes wrap the data key, which never changes --
-    // so these wraps keep working through password changes with nothing to
-    // redo. The standalone escrow below is only for accounts not yet upgraded.
+
+
+
     if (await addRecoveryCodesToKeyring(codes)) {
       debugPrint('Recovery codes added to the vault keyring');
       return true;
@@ -869,8 +869,8 @@ class SyncService {
           for (final code in codes)
             EncryptionService.wrapVaultKey(vaultKey, code),
         ],
-        // Re-keys append here rather than rewriting wrapped_keys, which cannot
-        // be rebuilt without the codes.
+
+
         'chain': <String>[],
       };
 
@@ -892,7 +892,7 @@ class SyncService {
     }
   }
 
-  /// Record that the vault key changed, so an existing escrow still reaches it.
+
   Future<void> _appendVaultKeyEscrowLink(
     String previousKey,
     String newKey,
@@ -925,7 +925,7 @@ class SyncService {
     }
   }
 
-  /// Whether this account has an escrow that a recovery code could open.
+
   Future<bool> hasVaultKeyEscrow() async {
     final keyring = await _fetchKeyring();
     if (keyring != null && keyring.codeWraps.isNotEmpty) return true;
@@ -941,20 +941,20 @@ class SyncService {
     }
   }
 
-  // --- Vault re-key ---------------------------------------------------------
-  // Key negotiation above recovers a vault whose key this device can still
-  // construct from some spelling of the account identity. Where it succeeds but
-  // other devices derive a different key, the vault can be rewritten under the
-  // key everyone derives today, and this is what does that.
-  //
-  // The cloud copy is authoritative and is never replaced by local data. A
-  // rewrite only ever happens after this device has successfully read what is
-  // up there, so the content it writes is the cloud's own content merged with
-  // this device's -- a superset, never a substitution. When nothing can open
-  // the cloud vault, the repair refuses. That ciphertext is the only copy of
-  // whatever it holds, and a device having lost the key is not a reason to
-  // destroy it: a key may still exist on a device that has not been opened in
-  // a while, and overwriting would end that permanently.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   String _rekeyFailureMessage() {
     return 'Could not rewrite your cloud vault. Nothing was changed. Check your connection and try again.';
@@ -968,9 +968,9 @@ class SyncService {
     if (dataType == 'otp_accounts') {
       return EncryptionService.otpAccountsSyncContext;
     }
-    // Deliberately loud. This used to fall through to the secure-messages
-    // context for anything unrecognised, so a typo would encrypt under a
-    // context nothing ever reads back and fail only much later.
+
+
+
     throw ArgumentError.value(dataType, 'dataType', 'Unknown synced data type');
   }
 
@@ -982,8 +982,8 @@ class SyncService {
     );
   }
 
-  /// Read a synced blob, accepting the unauthenticated form only long enough
-  /// to rewrite it. Every write goes out authenticated.
+
+
   String _decryptSyncBlob(String cipherText, String key, String dataType) {
     return EncryptionService.decryptSensitiveSyncPayload(
       cipherText,
@@ -993,7 +993,7 @@ class SyncService {
     );
   }
 
-  /// Every key this device could use to open the cloud vault, best first.
+
   Future<List<String>> _vaultRescueKeys(String password) async {
     final canonicalUsername =
         await _secureStorage.read(SecureStorageService.currentUserKey) ?? '';
@@ -1011,11 +1011,11 @@ class SyncService {
     return keys;
   }
 
-  /// Rewrite the cloud vault under the key the account password derives today.
-  ///
-  /// Runs only when this device can read what is already in the cloud, so the
-  /// rewrite carries that content forward rather than replacing it. Refuses
-  /// otherwise, leaving the stored vault untouched.
+
+
+
+
+
   Future<bool> repairCloudVaultKey(String password) async {
     await _updateAuthHeader();
     _lastErrorMessage = null;
@@ -1057,8 +1057,8 @@ class SyncService {
     final originalKey = await getAvailableEncryptionKey();
 
     try {
-      // Find a key that opens what is up there. Nothing is written unless one
-      // does -- an unreadable vault is left alone, not replaced.
+
+
       final cloudPayload = await _fetchRawAccountsPayload();
       final cloudIsEmpty = cloudPayload == null || cloudPayload.isEmpty;
 
@@ -1076,8 +1076,8 @@ class SyncService {
           return false;
         }
 
-        // Merge the cloud in under the key that opens it, so the rewrite
-        // carries every item it holds -- including any this device lacks.
+
+
         _encryptionKey = readableKey;
         await _storeEncryptionKey(readableKey);
         await downloadAndMergeAccounts();
@@ -1104,8 +1104,8 @@ class SyncService {
       };
 
       for (final entry in payloads.entries) {
-        // Carry the stored version and deletion list forward rather than
-        // resetting them: this is a re-encryption, not a fresh vault.
+
+
         var version = 0;
         var deletedAccounts = '[]';
         try {
@@ -1151,8 +1151,8 @@ class SyncService {
         }
       }
 
-      // Keep any recovery escrow reaching the current key, without needing
-      // the codes -- the new key is sealed under the one it replaces.
+
+
       if (originalKey != null && originalKey.isNotEmpty) {
         await _appendVaultKeyEscrowLink(originalKey, newKey);
       }
@@ -1180,15 +1180,15 @@ class SyncService {
     }
   }
 
-  /// Put back the key this device started with, so a failed repair does not
-  /// leave it holding one it never had.
+
+
   Future<void> _restoreKeyAfterFailedRepair(String? originalKey) async {
     if (originalKey == null || originalKey.isEmpty) return;
     _encryptionKey = originalKey;
     await _storeEncryptionKey(originalKey);
   }
 
-  // ─── Sync preference ──────────────────────────────────────────────────────
+
   Future<bool> isSyncEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     final storedValue = prefs.getBool(_syncEnabledKey);
@@ -1239,7 +1239,7 @@ class SyncService {
     }
   }
 
-  // ─── Box helpers ──────────────────────────────────────────────────────────
+
   Future<String> _getUserBoxName() async {
     final username =
         await _secureStorage.read(SecureStorageService.currentUserKey) ??
@@ -1348,7 +1348,7 @@ class SyncService {
     }
   }
 
-  // ─── Auth helpers ─────────────────────────────────────────────────────────
+
   Future<void> _updateAuthHeader() async {
     final token = await _secureStorage.read(
       SecureStorageService.accessTokenKey,
@@ -1479,7 +1479,7 @@ class SyncService {
     }
   }
 
-  // ─── Encryption init ──────────────────────────────────────────────────────
+
   void _initEncryption(String username, String password) {
     if (_encryptionKey != null) return;
     _encryptionKey = EncryptionService.generateKey(
@@ -1630,7 +1630,7 @@ class SyncService {
     return 'unknown';
   }
 
-  // ─── Decrypt local secret back to plain for uploading ────────────────────
+
   Future<String> _decryptSecretForUpload(String storedSecret) async {
     final strippedSpaces = storedSecret.replaceAll(RegExp(r'\s+'), '');
     final isRawBase32 = RegExp(r'^[A-Z2-7a-z]+$').hasMatch(strippedSpaces);
@@ -1643,7 +1643,7 @@ class SyncService {
     }
   }
 
-  // ─── Register ─────────────────────────────────────────────────────────────
+
   Future<bool> register(String email, String password) async {
     try {
       _lastErrorMessage = null;
@@ -1711,7 +1711,7 @@ class SyncService {
     }
   }
 
-  // ─── Login ────────────────────────────────────────────────────────────────
+
   Future<bool> login(String email, String password) async {
     try {
       _lastErrorMessage = null;
@@ -1760,7 +1760,7 @@ class SyncService {
         OTPService().clearCachedUserId();
         await _updateAuthHeader();
 
-        // Treat successful token issuance as a successful login.
+
         final encryptionKey = await _resolveVaultKey(
           canonicalUsername: canonicalUsername,
           password: password,
@@ -1785,7 +1785,7 @@ class SyncService {
     }
   }
 
-  // ─── Restore encryption key on app restart ───────────────────────────────
+
   Future<bool> restoreEncryptionKey() async {
     final storedKey = await _getStoredEncryptionKey();
     if (storedKey != null && storedKey.isNotEmpty) {
@@ -1797,7 +1797,7 @@ class SyncService {
     return false;
   }
 
-  // ─── Delete a single account ──────────────────────────────────────────────
+
   Future<void> deleteAccountLocalOnly(String accountId) async {
     final userBox = await _getUserBox();
     await userBox.delete(accountId);
@@ -1862,7 +1862,7 @@ class SyncService {
     }
   }
 
-  // ─── Delete ALL accounts ──────────────────────────────────────────────────
+
   Future<void> deleteAllLocalOnly() async {
     final userBox = await _getUserBox();
     await userBox.clear();
@@ -1888,7 +1888,7 @@ class SyncService {
     }
   }
 
-  // ─── Download and merge ───────────────────────────────────────────────────
+
   Future<void> downloadAndMergeAccounts() async {
     await _updateAuthHeader();
     final token = await _secureStorage.read(
@@ -1933,8 +1933,8 @@ class SyncService {
         );
 
         if (cloudAccounts == null) {
-          // The blob is there but this device's key does not open it. Say so
-          // rather than leaving the account list silently empty.
+
+
           _vaultKeyMismatch = true;
           _lastErrorMessage = _vaultKeyMismatchMessage();
           debugPrint('Cloud vault could not be decrypted with this key');
@@ -2013,7 +2013,7 @@ class SyncService {
     return {};
   }
 
-  // ─── Main sync ────────────────────────────────────────────────────────────
+
   Future<bool> syncAccounts({
     bool preferLocalTitleChanges = false,
     bool retryOnConflict = true,
@@ -2051,10 +2051,10 @@ class SyncService {
       Map<String, dynamic> cloudAccountsMap = {};
       int cloudVersion = 0;
       List<String> cloudDeletedAccounts = [];
-      // True when the cloud holds a vault this device's key cannot open. The
-      // upload below replaces the stored blob outright and the server keeps no
-      // older version, so uploading in that state would destroy the only copy
-      // of accounts this device has never been able to read.
+
+
+
+
       var cloudVaultUnreadable = false;
 
       try {
@@ -2105,9 +2105,9 @@ class SyncService {
       }
 
       if (cloudVaultUnreadable) {
-        // Stop before the upload. Merging cannot see the accounts that are up
-        // there, so an upload now would write a vault missing every one of
-        // them over the only copy that exists.
+
+
+
         _vaultKeyMismatch = true;
         _lastErrorMessage = _vaultKeyMismatchMessage();
         debugPrint('Sync aborted - refusing to overwrite an unreadable vault');
@@ -2226,9 +2226,9 @@ class SyncService {
       }
     } on DioException catch (e) {
       if (_isStaleUploadConflict(e)) {
-        // Another device wrote while this cycle was building its upload. Start
-        // over once: the download at the top picks up that newer copy and
-        // merges it, and only then is anything written.
+
+
+
         if (retryOnConflict) {
           debugPrint('Sync conflict - re-reading and merging before retrying');
           return syncAccounts(
@@ -2481,8 +2481,8 @@ class SyncService {
     }
   }
 
-  /// True when the server refused an upload because another device wrote
-  /// first. Not an error: the next sync reads that newer copy and merges.
+
+
   bool _isStaleUploadConflict(DioException e) {
     if (e.response?.statusCode != 409) return false;
     final data = e.response?.data;
@@ -2574,9 +2574,9 @@ class SyncService {
           typedIdentifier: storedEmail,
         );
 
-        // Decided before activation, because activation syncs -- and a sync
-        // that cannot decode something would otherwise be reported back to the
-        // user as a wrong password.
+
+
+
         if (!resolved.opened) {
           _lastErrorMessage = _vaultKeyMismatchMessage();
           return false;
@@ -2663,11 +2663,11 @@ class SyncService {
     final userBox = await _getUserBox();
 
     try {
-      // A restore says "make my accounts look like this snapshot", not "throw
-      // away whatever else is in the cloud". Merge the stored copy in first, so
-      // an account that exists only on another device survives a restore here,
-      // and refuse outright if it cannot be read -- overwriting a vault this
-      // device cannot open is the one thing sync must never do.
+
+
+
+
+
       var cloudVersion = 0;
       var storedDeletions = '[]';
       try {
@@ -2716,8 +2716,8 @@ class SyncService {
         encryptedContent: encrypted,
         version: cloudVersion + 1,
         itemCount: finalData.length,
-        // Carried forward, not reset. Clearing this used to resurrect every
-        // account the user had ever deleted.
+
+
         deletedAccounts: storedDeletions,
       );
     } catch (_) {
@@ -3011,23 +3011,23 @@ class SyncService {
 
       if (r.statusCode != 200) return false;
 
-      // With a keyring the vault key does not depend on the password, so a
-      // password change re-wraps thirty-two bytes and leaves every account,
-      // password and secure text exactly where it is. Nothing is re-encrypted,
-      // so nothing can be lost doing it.
+
+
+
+
       if (await rewrapKeyringForNewPassword(newPassword)) {
         debugPrint('Password changed and keyring re-wrapped');
         return true;
       }
 
-      // No keyring yet: fall back to re-keying the vault in place, which reads
-      // what is stored before writing it.
+
+
       final rekeyed = await repairCloudVaultKey(newPassword);
       if (!rekeyed) {
-        // The password did change; only the rewrite did not. The stored vault
-        // is left exactly as it was rather than being overwritten. Move this
-        // device onto the new key so it is consistent with the account, and
-        // let the sync-locked path offer the rest.
+
+
+
+
         final canonical = _deriveVaultKey(username, newPassword);
         await _storeEncryptionKey(canonical);
         _encryptionKey = canonical;
@@ -3089,7 +3089,7 @@ class SyncService {
     }
   }
 
-  // ─── Logout ───────────────────────────────────────────────────────────────
+
   Future<bool> verifyLoginWithRecoveryCode(
     String email,
     String password,
@@ -3358,8 +3358,8 @@ class SyncService {
     return file.path;
   }
 
-  /// Escrow the vault key under codes handed back with a freshly generated
-  /// PDF. Silent on absence: an un-updated server simply sends no header.
+
+
   Future<void> _escrowUnderHeaderCodes(String? headerValue) async {
     final codes = (headerValue ?? '')
         .split(',')
@@ -3403,9 +3403,9 @@ class SyncService {
         return null;
       }
 
-      // The only moment this app holds the codes in plaintext. Wrap the vault
-      // key under them now so a later password reset can recover it, then let
-      // them go -- they are never written to storage.
+
+
+
       await _escrowUnderHeaderCodes(response.headers.value('x-backup-codes'));
 
       final username =
@@ -4520,8 +4520,8 @@ class SyncService {
 
     await _clearStoredEncryptionKey();
 
-    // Detach the push listeners with the session. Left attached, they kept
-    // handling messages for the account that just signed out.
+
+
     try {
       await PushMessagingService().dispose();
     } catch (e) {

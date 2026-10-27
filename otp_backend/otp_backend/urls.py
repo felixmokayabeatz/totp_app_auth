@@ -1,4 +1,3 @@
-# otp_backend/otp_backend/urls.py
 
 from django.contrib import admin
 from django.urls import path, include
@@ -68,7 +67,6 @@ urlpatterns = [
     path('beatzlock_admin/', admin.site.urls),
     path('', go_to_main_site, name='go_to_main_site'),
     path('favicon.ico', RedirectView.as_view(url='/static/favicon.ico')),
-    # API URLs
     path('api/health/', health, name='health'),
     path('api/', include(router.urls)),
     path('api/token/refresh/', DeviceSessionTokenRefreshView.as_view(), name='token_refresh'),
