@@ -40,7 +40,6 @@ import traceback
 import sys
 from django.conf import settings as django_settings
 
-# The project-wide account model; users.User, keyed by email.
 User = get_user_model()
 
 logger = logging.getLogger(__name__)
@@ -108,7 +107,6 @@ def send_2fa_code(request):
     email = email_from_request(request.data)
     password = request.data.get('password')
     
-    # Debug print
     debug_print(f"\n{'='*60}")
     debug_print(f"[2FA] send_2fa_code called")
     debug_print(f"[2FA] Email: {email}")
@@ -117,7 +115,6 @@ def send_2fa_code(request):
     debug_print(f"[2FA] User Agent: {request.META.get('HTTP_USER_AGENT', 'unknown')[:50]}")
     debug_print(f"{'='*60}\n")
     
-    # Log to file
     logger.info(f"2FA code request - Email: {email}, IP: {request.META.get('REMOTE_ADDR')}")
     
     if not email or not password:
@@ -143,22 +140,18 @@ def send_2fa_code(request):
         
         debug_print(f"[2FA] User email: {user.email}")
         
-        # Delete old codes
         debug_print(f"[2FA] Deleting old unused codes for user: {user.email}")
         deleted_count = EmailVerification.objects.filter(user=user, is_used=False).delete()[0]
         debug_print(f"[2FA] Deleted {deleted_count} old codes")
         
-        # Create new verification code
         debug_print(f"[2FA] Creating new verification code")
         verification = EmailVerification.objects.create(user=user)
         debug_print(f"[2FA] Created code: {verification.code} for user: {user.email}")
         
-        # Prepare email
         debug_print(f"[2FA] Preparing email to: {user.email}")
         html_content = get_2fa_email_template(verification.code)
         text_content = get_2fa_email_text(verification.code)
 
-        # Send email
         debug_print(f"[2FA] Sending email...")
         send_transactional_email(
             subject='Your 2FA Verification Code - BeatzLock Authenticator',
@@ -219,7 +212,6 @@ def verify_2fa_code(request):
             raise User.DoesNotExist
         debug_print(f"[2FA] User found: {user.email} (ID: {user.id})")
         
-        # Get the LATEST unused code
         debug_print(f"[2FA] Fetching latest unused code for user")
         verification = EmailVerification.objects.filter(
             user=user, 
@@ -233,8 +225,6 @@ def verify_2fa_code(request):
         
         debug_print(f"[2FA] Found code - ID: {verification.id}, Code: {verification.code}, Created: {verification.created_at}")
         
-        # Expiry and the attempt budget are checked before the code itself, so
-        # a burnt-out code cannot be probed any further.
         if not verification.is_valid():
             debug_print(f"[2FA] Code no longer usable - Created: {verification.created_at}")
             logger.warning(f'Code expired or exhausted for user: {user.email}')
@@ -316,17 +306,14 @@ def send_password_reset_code(request):
             raise User.DoesNotExist
         debug_print(f"[PASSWORD RESET] User found: {user.email} (ID: {user.id})")
 
-        # Delete old codes
         debug_print(f"[PASSWORD RESET] Deleting old unused reset codes")
         deleted_count = EmailVerification.objects.filter(user=user, is_used=False).delete()[0]
         debug_print(f"[PASSWORD RESET] Deleted {deleted_count} old codes")
         
-        # Create new code
         debug_print(f"[PASSWORD RESET] Creating new reset code")
         verification = EmailVerification.objects.create(user=user)
         debug_print(f"[PASSWORD RESET] Created code: {verification.code}")
         
-        # Prepare and send email
         debug_print(f"[PASSWORD RESET] Preparing reset email")
         html_content = get_password_reset_email_template(verification.code)
         text_content = get_password_reset_email_text(verification.code)
@@ -400,7 +387,6 @@ def reset_password(request):
             raise User.DoesNotExist
         debug_print(f"[PASSWORD RESET] User found: {user.email} (ID: {user.id})")
 
-        # Get the LATEST unused reset code
         debug_print(f"[PASSWORD RESET] Fetching latest unused reset code")
         verification = EmailVerification.objects.filter(
             user=user, 
@@ -414,10 +400,6 @@ def reset_password(request):
         
         debug_print(f"[PASSWORD RESET] Found code - ID: {verification.id}, Code: {verification.code}, Created: {verification.created_at}")
         
-        # This endpoint hands out a new password on a correct code, so the
-        # attempt budget matters more here than anywhere else: check that the
-        # code is still live before comparing, and spend an attempt when it is
-        # wrong.
         if not verification.is_valid():
             debug_print(f"[PASSWORD RESET] Code no longer usable")
             logger.warning(f"Password reset - Expired or exhausted code for user: {user.email}")
@@ -450,7 +432,6 @@ def reset_password(request):
 
         debug_print(f"[PASSWORD RESET] Code matches")
         
-        # Reset password
         debug_print(f"[PASSWORD RESET] Resetting password for user: {user.email}")
         user.set_password(new_password)
         user.save()
@@ -460,22 +441,16 @@ def reset_password(request):
             source='email reset code',
         )
         
-        # Mark code as used
         verification.consume()
         debug_print(f"[PASSWORD RESET] Code marked as used")
         
-        # Delete any other unused codes
         deleted_count = EmailVerification.objects.filter(user=user, is_used=False).delete()[0]
         debug_print(f"[PASSWORD RESET] Deleted {deleted_count} other unused codes")
         
-        # Send password changed notification
         debug_print(f"[PASSWORD RESET] Sending password changed notification to: {user.email}")
         html_content = get_password_changed_email_template()
         text_content = get_password_changed_email_text()
 
-        # The password is already changed by this point. If the mail host is
-        # down, that is worth logging, not worth telling the caller their reset
-        # failed when it did not.
         send_transactional_email(
             subject='Password Changed Successfully - BeatzLock Authenticator',
             recipient=user.email,
@@ -628,8 +603,6 @@ def reset_password_with_recovery_code(request):
             'remaining_codes': result['remaining_codes'],
             'user': {
                 'id': user.id,
-                # Kept for the same reason as UserSerializer.username: the
-                # installed app reads this key and anchors its local vault to it.
                 'username': user.email,
                 'email': user.email,
             },

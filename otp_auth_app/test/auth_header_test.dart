@@ -1,11 +1,11 @@
-// Sign-in endpoints must not carry a session.
-//
-// DRF runs DEFAULT_AUTHENTICATION_CLASSES on any request with an Authorization
-// header, before permission classes. DeviceSessionJWTAuthentication raises
-// AuthenticationFailed for a revoked or expired session, so a stale token turns
-// an AllowAny endpoint into a 401 -- and the app reports 401 on sign-in as
-// "Invalid email or password". The credentials were never the problem, which is
-// what made it so hard to read.
+
+
+
+
+
+
+
+
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:beatzlock_auth/services/sync_service.dart';
@@ -44,8 +44,8 @@ void main() {
   });
 
   group('paths that must keep Authorization', () {
-    // Stripping the header from these would break them outright: they are the
-    // endpoints that require a session.
+
+
     const mustKeepAuth = [
       'sync/sync/',
       'sync/get-data/',
@@ -64,8 +64,8 @@ void main() {
     }
 
     test('a near-miss does not match by prefix', () {
-      // 'reset-password/' is unauthenticated; the recovery-code variant is a
-      // different path and both are listed explicitly rather than by prefix.
+
+
       expect(
         SyncService.debugIsUnauthenticatedPath('sync/reset-password/'),
         isFalse,

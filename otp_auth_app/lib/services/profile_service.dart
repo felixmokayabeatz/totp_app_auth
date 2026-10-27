@@ -1,4 +1,4 @@
-// profile_service.dart
+
 
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -16,7 +16,7 @@ class ProfileService {
   ProfileService() {
     _dio = Dio(
       BaseOptions(
-        baseUrl: AppConfig.apiUrl, // Use config
+        baseUrl: AppConfig.apiUrl, 
         connectTimeout: Duration(seconds: 30),
         receiveTimeout: Duration(seconds: 30),
       ),

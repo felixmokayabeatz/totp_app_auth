@@ -1,5 +1,4 @@
-﻿# beatzlock_app/views.py
-
+﻿
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import Http404, JsonResponse
 from django.views.decorators.cache import never_cache
@@ -25,8 +24,6 @@ import json
 import hashlib
 import re
 
-# Shipped with this app, not with the project, so the app folder can be moved
-# or copied without leaving its country database behind.
 GEOIP_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'GeoLite2-Country.mmdb')
 PLATFORM_ORDER = ['windows', 'android', 'linux', 'macos', 'ios']
 LINUX_DISTRO_ICONS = {
@@ -113,10 +110,6 @@ def _build_update_payload(current_version, current_build_number, latest_app, req
         else:
             reason = 'A newer bug-fix update is available.'
 
-    # Reversed, never written out: this app was mounted under /beatzlock-apps/
-    # when it was part of the main site and now sits at the root of its own
-    # subdomain. These two go out to the native clients as the update's
-    # download link, so a stale prefix here is a dead button in the app.
     download_path = reverse('beatzlock_app:download_file', args=[latest_app.id])
     downloads_page_path = reverse('beatzlock_app:download_list')
 
@@ -157,7 +150,6 @@ def _get_geoip_reader():
         return _geoip_reader
 
     with _geoip_reader_lock:
-        # Another thread may have opened it while this one waited.
         if _geoip_reader is not None or _geoip_reader_failed:
             return _geoip_reader
         try:
@@ -170,8 +162,6 @@ def _get_geoip_reader():
             _geoip_reader = geoip2.database.Reader(GEOIP_PATH)
         except Exception as e:
             print(f"Error opening the GeoIP database: {e}")
-            # Remember the failure so a missing database does not mean a failed
-            # open attempt on every single download.
             _geoip_reader_failed = True
             return None
 
@@ -188,8 +178,6 @@ def get_country_from_ip(ip_address):
             if response.country.iso_code:
                 return response.country.iso_code, response.country.name
         except Exception as e:
-            # AddressNotFoundError for private and unrouted addresses is normal
-            # and falls through to the defaults below.
             print(f"Error getting country from IP: {e}")
 
     if ip_address in ['127.0.0.1', 'localhost', '0.0.0.0']:
@@ -255,8 +243,6 @@ def _matches_target(app, platform, linux_distribution=''):
     wanted = DownloadableApp.normalized_linux_distribution_value(linux_distribution)
     stored = str(app.linux_distribution or '').strip().lower()
     if wanted == DownloadableApp.DEFAULT_LINUX_DISTRIBUTION:
-        # A build saved before distributions existed has a blank column and
-        # belongs to the default one, exactly as the SQL filter has it.
         return stored == wanted or stored == ''
     return stored == wanted
 
@@ -349,7 +335,6 @@ def _build_download_cards(apps=None):
 
 def _archived_apps_for_target(platform, linux_distribution='', all_apps=None):
     all_apps = _all_active_released_apps() if all_apps is None else all_apps
-    # Already newest-first from _all_active_released_apps.
     for_target = _apps_for_target(all_apps, platform, linux_distribution)
 
     apps = [
@@ -438,7 +423,6 @@ def archived_downloads(request):
     return render(request, 'beatzlock_app/archived_downloads.html', context)
 
 
-# ── Release notes JSON (for modal fetch) ─────────────────────────────────────
 
 def release_notes_json(request, app_id):
     """Returns the shared release notes text for a given platform build."""
@@ -524,7 +508,6 @@ def update_check(request):
     return JsonResponse(payload)
 
 
-# ── Standalone legal pages ────────────────────────────────────────
 
 LEGAL_COMING_SOON_HTML = (
     '<p>This document is being written and will be published here shortly.</p>'
@@ -683,7 +666,6 @@ def legal_privacy_revision(request, revision_id):
     return _render_legal_revision(request, 'privacy', revision_id)
 
 
-# ── File download ─────────────────────────────────────────────────────────────
 
 @never_cache
 def download_file(request, app_id):
@@ -700,12 +682,10 @@ def download_file(request, app_id):
     else:
         ip_address = request.META.get('REMOTE_ADDR', '0.0.0.0')
 
-    # ── DEBUG override ────────────────────────────────────────────────────────
     if settings.DEBUG:
         print(f"DEBUG: Client IP: {ip_address}")
         ip_address = '41.207.81.1'
         print(f"DEBUG: Using test IP: {ip_address}")
-    # ─────────────────────────────────────────────────────────────────────────
 
     already_counted = _is_duplicate_request(ip_address, app_id)
 
@@ -725,8 +705,6 @@ def download_file(request, app_id):
             print("DEBUG: Duplicate request - not counting")
 
     try:
-        # Serve via nginx X-Accel-Redirect in production so large app binaries
-        # don't stream through a Gunicorn worker (fast, non-blocking downloads).
         original_filename = os.path.basename(app.file.name)
         return x_accel_file_response(
             app.file, as_attachment=True, download_name=original_filename
@@ -745,10 +723,6 @@ def legal_document_json(request, page_type):
     if normalized_type not in ('terms', 'privacy'):
         return JsonResponse({'error': 'Unknown legal document.'}, status=404)
 
-    # Same stand-in as the web pages, so a client that asks before the
-    # document is published is told it is coming rather than handed a 404.
-    # Drafts are excluded here for the same reason they are on the web:
-    # nothing the app shows a user should be a document still being written.
     page, coming_soon = _legal_page_or_placeholder(normalized_type)
     web_name = LEGAL_PAGE_URL_NAMES[normalized_type]
     archive_name = LEGAL_ARCHIVE_URL_NAMES[normalized_type]
@@ -1253,7 +1227,6 @@ def mark_rating_useful(request, rating_id):
     return _ensure_rating_voter_cookie(request, response)
 
 
-# ── Account ────────────────────────────────────────────────────────────────
 
 @login_required
 def account(request):
@@ -1289,8 +1262,6 @@ def account(request):
             password_form = password_form_class(request.user, request.POST)
             if password_form.is_valid():
                 user = password_form.save()
-                # Changing the password rotates the session hash, which would
-                # otherwise sign them out on the very next request.
                 update_session_auth_hash(request, user)
                 messages.success(
                     request,
@@ -1335,8 +1306,6 @@ def signup(request):
         form = SignUpForm(request.POST)
         if form.is_valid():
             user = form.save()
-            # Nothing authenticated them, so login() has to be told which
-            # backend to record on the session.
             auth_login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             messages.success(request, "Welcome to {}.".format(settings.SITE_NAME))
             return redirect(_safe_redirect_target(next_url))

@@ -6,35 +6,35 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'biometric_service.dart';
 
-/// Which single unlock method this device uses.
-///
-/// BeatzLock deliberately uses one method, never two. A device with an
-/// operating system lock (phone PIN, pattern, fingerprint, face, Windows Hello)
-/// uses only that; a device without one uses only the BeatzLock PIN. Backing
-/// out of the system prompt returns the user to the lock screen instead of
-/// opening a PIN pad, because a second unlock path would be a second door into
-/// the same vault -- and usually a weaker one.
+
+
+
+
+
+
+
+
 enum AppUnlockMethod {
-  /// The operating system's own lock.
+
   systemLock,
 
-  /// The BeatzLock PIN, for devices with no system lock available.
+
   appPin,
 }
 
-/// The result of re-checking which unlock method a device uses.
+
 class UnlockMethodResolution {
   const UnlockMethodResolution({required this.method, required this.previous});
 
-  /// What this device uses now.
+
   final AppUnlockMethod method;
 
-  /// What it used last time BeatzLock looked, or null the first time -- an
-  /// install has no previous method, so its first resolution is not a change.
+
+
   final AppUnlockMethod? previous;
 
-  /// True when the device genuinely switched methods, which is the only case
-  /// worth interrupting the user about.
+
+
   bool get changed => previous != null && previous != method;
 }
 
@@ -49,25 +49,25 @@ class AppLockService {
 
   static const int _defaultTimeout = 0;
 
-  /// Broadcasts the current method so screens already on-screen follow a switch
-  /// instead of showing what was true when they were opened.
+
+
   static final ValueNotifier<AppUnlockMethod?> methodChanges =
       ValueNotifier<AppUnlockMethod?>(null);
 
-  /// The one unlock method this device uses.
+
   Future<AppUnlockMethod> unlockMethod() async {
     return await _biometricService.canUseSystemAuthentication()
         ? AppUnlockMethod.systemLock
         : AppUnlockMethod.appPin;
   }
 
-  /// Re-checks the device and brings stored state in line with what it finds.
-  ///
-  /// Gaining a screen lock deletes the BeatzLock PIN: its only reason to exist
-  /// was that the OS could not do the job, and a credential the user can no
-  /// longer see or change must not be able to quietly become the way in again
-  /// months later. Losing a screen lock therefore always means creating a fresh
-  /// PIN rather than recalling a forgotten one -- there is no PIN recovery.
+
+
+
+
+
+
+
   Future<UnlockMethodResolution> reconcileUnlockMethod() async {
     final method = await unlockMethod();
     final prefs = await SharedPreferences.getInstance();
@@ -82,8 +82,8 @@ class AppLockService {
     }
 
     if (previous != method) {
-      // Runs on the first resolution too, which clears the orphaned PIN left
-      // behind on devices that used to be offered both methods.
+
+
       if (method == AppUnlockMethod.systemLock) {
         await _biometricService.deleteAppPin();
       }
@@ -94,15 +94,15 @@ class AppLockService {
     return UnlockMethodResolution(method: method, previous: previous);
   }
 
-  /// Forgets the cached capability answer so the next check asks the platform
-  /// again. Call this when the device may have changed underneath the app --
-  /// on resume, the user may just have come back from the system settings.
+
+
+
   void invalidateUnlockMethodCache() {
     _biometricService.invalidateSystemAuthCache();
   }
 
-  /// True when the BeatzLock PIN is this device's unlock method. When false the
-  /// PIN is not offered anywhere -- not on the lock screen, not in Settings.
+
+
   Future<bool> usesAppPin() async =>
       await unlockMethod() == AppUnlockMethod.appPin;
 
@@ -152,12 +152,12 @@ class AppLockService {
     return difference.inMinutes >= timeoutMinutes;
   }
 
-  /// Re-checks the device, tells the user if the way in changed, and makes sure
-  /// a device that needs a BeatzLock PIN has one.
-  ///
-  /// Safe to call repeatedly -- on launch, and on every resume, which is when a
-  /// user coming back from the system settings may just have added or removed
-  /// their screen lock.
+
+
+
+
+
+
   Future<AppUnlockMethod> ensureMandatoryLock(BuildContext context) async {
     final resolution = await reconcileUnlockMethod();
     if (!context.mounted) return resolution.method;
@@ -169,7 +169,7 @@ class AppLockService {
     }
     if (!context.mounted) return resolution.method;
 
-    // A BeatzLock PIN is only ever required on a device the OS cannot unlock.
+
     if (resolution.method != AppUnlockMethod.appPin) return resolution.method;
 
     final hasPin = await _biometricService.hasAppPin();
@@ -179,13 +179,13 @@ class AppLockService {
     return resolution.method;
   }
 
-  /// Unlocks with this device's single unlock method.
-  ///
-  /// On a device with a system lock this runs the OS prompt and nothing else:
-  /// cancelling it returns false so the caller keeps the user on the lock
-  /// screen. The BeatzLock PIN is reached only if the OS reports that it can no
-  /// longer authenticate at all, at which point the device has genuinely
-  /// switched methods.
+
+
+
+
+
+
+
   Future<bool> authenticateToUnlock(BuildContext context) async {
     if (await _biometricService.canUseSystemAuthentication()) {
       final outcome = await _biometricService.authenticateWithSystem();
@@ -193,10 +193,10 @@ class AppLockService {
         case SystemAuthOutcome.success:
           return true;
         case SystemAuthOutcome.canceled:
-          // The user aborted. Stay locked -- do not open the PIN pad.
+
           return false;
         case SystemAuthOutcome.unavailable:
-          // The device lost its screen lock, so this device now uses the PIN.
+
           break;
       }
     }
@@ -205,9 +205,9 @@ class AppLockService {
     return authenticateWithPinOnly(context);
   }
 
-  /// Unlocks with the BeatzLock PIN. Only valid on a device with no system
-  /// lock; on any other device it defers to [authenticateToUnlock] so the PIN
-  /// can never become a bypass for the OS prompt.
+
+
+
   Future<bool> authenticateWithPinOnly(BuildContext context) async {
     if (await _biometricService.canUseSystemAuthentication()) {
       if (!context.mounted) return false;
@@ -218,9 +218,9 @@ class AppLockService {
     final hasPin = await _biometricService.hasAppPin();
     if (!context.mounted) return false;
     if (!hasPin) {
-      // Whoever just chose the PIN is the person holding the device, so making
-      // them immediately type back what they typed ten seconds ago proves
-      // nothing. Cancelling the setup still leaves the app locked.
+
+
+
       return _showForceSetAppPinDialog(context);
     }
 
@@ -265,10 +265,10 @@ class AppLockService {
     await prefs.setBool(_lockIntroShownKey, true);
   }
 
-  /// Tells the user the way into BeatzLock just changed, and why.
-  ///
-  /// A security app that silently swaps its own front door is a support ticket
-  /// waiting to happen, so both directions get said out loud.
+
+
+
+
   Future<void> _showMethodChangedNotice(
     BuildContext context,
     UnlockMethodResolution resolution,
@@ -324,7 +324,7 @@ class AppLockService {
   }
 
   Future<bool> setupAppPinFromSettings(BuildContext context) async {
-    // On a device the OS can unlock, there is no BeatzLock PIN to change.
+
     if (await _biometricService.canUseSystemAuthentication()) {
       return false;
     }
@@ -352,8 +352,8 @@ class AppLockService {
     );
   }
 
-  /// The single PIN create/confirm dialog, shared by first-run setup and
-  /// Settings so the two cannot drift apart.
+
+
   Future<bool> _showPinEntryDialog({
     required BuildContext context,
     required String title,

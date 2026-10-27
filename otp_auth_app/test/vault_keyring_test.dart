@@ -1,10 +1,10 @@
-// The vault keyring: a random data key that never changes, held wrapped under
-// the password and under each recovery code.
-//
-// Every serious failure this app has had came out of deriving the vault key
-// from the account identity and password. These tests are written as the
-// failures that used to happen, so they fail loudly if the derivation ever
-// creeps back in.
+
+
+
+
+
+
+
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:beatzlock_auth/services/encryption_service.dart';
@@ -39,10 +39,10 @@ void main() {
 
   group('the failures this design removes', () {
     test('how the account identity is spelled no longer matters', () {
-      // The original bug: lowercasing the stored email changed the vault key,
-      // and an account whose username was never the email could not derive it
-      // at all. Shown as a contrast -- the old derivation gives a different key
-      // for every spelling, the new wrap has no identity in it to differ over.
+
+
+
+
       const spellings = [
         'Felix@Gmail.com',
         'felix@gmail.com',
@@ -65,7 +65,7 @@ void main() {
       final wrap =
           EncryptionService.wrapDataKeyWithPassword(dataKey, _password, salt);
 
-      // Identity is not an input, so none of those spellings can change this.
+
       expect(
         EncryptionService.unwrapDataKeyWithPassword(wrap, _password, salt),
         dataKey,
@@ -80,8 +80,8 @@ void main() {
     });
 
     test('a password change does not change the key the vault is under', () {
-      // The vault used to be re-encrypted on every password change, which is
-      // where data went missing. Now only the wrap changes.
+
+
       final dataKey = EncryptionService.generateVaultDataKey();
       final oldSalt = EncryptionService.generateKeyringSalt();
       final oldWrap = EncryptionService.wrapDataKeyWithPassword(
@@ -120,16 +120,16 @@ void main() {
     });
 
     test('a password reset recovers instead of orphaning the vault', () {
-      // The worst one: a reset happens without the old password, so the vault
-      // used to stay sealed under a key nobody could derive again. A recovery
-      // code unwraps the same data key and re-wraps it under the new password.
+
+
+
       final dataKey = EncryptionService.generateVaultDataKey();
       final codeWraps = [
         for (final code in _codes)
           EncryptionService.wrapDataKeyWithRecoveryCode(dataKey, code),
       ];
 
-      // The password is gone. The codes are not.
+
       String? recovered;
       for (final wrap in codeWraps) {
         recovered =
@@ -155,9 +155,9 @@ void main() {
     });
 
     test('recovery codes keep working across a password change', () {
-      // They wrap the data key, not the password, so nothing about them goes
-      // stale when the password moves. This is what the escrow chain existed
-      // to work around, and why the chain is no longer needed.
+
+
+
       final dataKey = EncryptionService.generateVaultDataKey();
       final codeWrap =
           EncryptionService.wrapDataKeyWithRecoveryCode(dataKey, _codes[0]);
@@ -204,8 +204,8 @@ void main() {
     });
 
     test('a password wrap cannot be opened as a code wrap, or the reverse', () {
-      // Separate contexts, so one kind of wrap can never be replayed as the
-      // other even when the underlying secret happens to match.
+
+
       const shared = 'K7QP2M9XZ4';
       final dataKey = EncryptionService.generateVaultDataKey();
       final salt = EncryptionService.generateKeyringSalt();

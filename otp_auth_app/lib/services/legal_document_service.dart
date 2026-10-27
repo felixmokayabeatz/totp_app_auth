@@ -19,9 +19,9 @@ class LegalDocument {
   final DateTime? lastUpdated;
   final String webUrl;
 
-  /// The site answers with a placeholder, rather than a 404, for a document
-  /// that has not been written yet. Saying so plainly beats reporting the
-  /// missing date as if something had gone wrong.
+
+
+
   final bool comingSoon;
 
   factory LegalDocument.fromJson(Map<String, dynamic> json) {

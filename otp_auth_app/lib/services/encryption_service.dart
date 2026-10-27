@@ -1,4 +1,4 @@
-// encryption_service.dart
+
 
 import 'dart:convert';
 import 'dart:math';
@@ -34,19 +34,19 @@ class EncryptionService {
     return utf8.decode(decrypted);
   }
 
-  // The local vault used to be encrypted with generateKey(userId, salt), where
-  // userId is the account's email address -- public information. Anyone with
-  // the .hive file could derive the same key and read every secret in it. It
-  // was obfuscation wearing the shape of encryption.
-  //
-  // A random per-install secret now goes into that derivation, so the key is no
-  // longer computable from anything an attacker holding the file can see. It is
-  // configured once at start-up from secure storage rather than threaded
-  // through the thirty-odd call sites that pass a userId, which keeps the
-  // change small enough to reason about.
-  //
-  // Until it is configured, the legacy derivation is used unchanged: reading
-  // existing data must never depend on initialisation order.
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   static String? _localVaultSecret;
 
@@ -70,7 +70,7 @@ class EncryptionService {
 
   static String encryptSecret(String secret, String userId) {
     if (_localVaultSecret == null) {
-      // Not configured yet: keep writing what this install can already read.
+
       return simpleEncrypt(secret, legacyLocalKeyFor(userId));
     }
     return authenticatedEncrypt(
@@ -80,14 +80,14 @@ class EncryptionService {
     );
   }
 
-  /// Decrypt a locally stored secret, accepting either format.
-  ///
-  /// Values written before the per-install secret existed stay readable, and
-  /// are rewritten in the current format the next time they are saved.
+
+
+
+
   static String decryptSecret(String encryptedSecret, String userId) {
-    // Either authenticated format. Checking only for the older prefix here is
-    // what broke when AES-GCM landed: newly written values fell through to the
-    // unauthenticated reader and threw on its base64.
+
+
+
     if (isAuthenticatedPayload(encryptedSecret)) {
       return authenticatedDecrypt(
         encryptedSecret,
@@ -98,19 +98,19 @@ class EncryptionService {
     return simpleDecrypt(encryptedSecret, legacyLocalKeyFor(userId));
   }
 
-  // --- Key derivation -------------------------------------------------------
-  // generateKey below is a single SHA-256. As a password KDF that is no work
-  // at all: a GPU walks billions of candidate passwords a second against a
-  // stored wrap. Anything a password protects goes through PBKDF2-HMAC-SHA256
-  // instead, which costs an attacker the same iteration count it costs us.
-  //
-  // Implemented here rather than pulled in, because PBKDF2 is a short, exactly
-  // specified construction and the alternative was another dependency on the
-  // launch path. It is checked against published test vectors in
-  // test/kdf_test.dart -- do not change it without those passing.
 
-  /// OWASP's floor for PBKDF2-HMAC-SHA256. Raise it, never lower it: a stored
-  /// wrap records the count it was made with, so old wraps keep opening.
+
+
+
+
+
+
+
+
+
+
+
+
   static const int passwordKdfIterations = 210000;
 
   static List<int> pbkdf2(
@@ -124,7 +124,7 @@ class EncryptionService {
     final output = <int>[];
 
     for (var block = 1; output.length < keyLengthBytes; block++) {
-      // U1 = HMAC(P, S || INT_32_BE(block))
+
       var u = hmac.convert([
         ...salt,
         (block >> 24) & 0xff,
@@ -146,8 +146,8 @@ class EncryptionService {
     return output.sublist(0, keyLengthBytes);
   }
 
-  /// A key from a password, at a real cost. Returned as 32 hex characters so
-  /// it drops into every place that already takes a String key.
+
+
   static String deriveKeyFromPassword(
     String password,
     String salt, {
@@ -162,26 +162,26 @@ class EncryptionService {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  // --- Vault keyring --------------------------------------------------------
-  // The vault used to be encrypted with a key derived straight from the
-  // account identity and password. Every serious failure in this app came out
-  // of that one decision: lowercasing the email changed the key, a username
-  // that was not the email changed the key, a password change meant rewriting
-  // the whole vault, and a password reset -- which by definition happens
-  // without the old password -- left the vault sealed under a key nobody could
-  // ever derive again.
-  //
-  // The keyring removes the cause rather than handling the symptoms. The vault
-  // is encrypted with a random data key that never changes. That key is stored
-  // wrapped: once under the password, once under each recovery code. Changing
-  // a password re-wraps thirty-two bytes and does not touch the vault. A reset
-  // unwraps through a recovery code. Nothing derives anything from an identity,
-  // so how the address is spelled stops mattering entirely.
 
-  /// The synced OTP vault. It used to be stored under simpleEncrypt, a
-  /// repeating-key XOR: the payload is JSON whose first thirty-two bytes are
-  /// guessable, and thirty-two bytes of known plaintext is the whole key. The
-  /// password never even entered into breaking it.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   static const String otpAccountsSyncContext = 'otp-accounts-sync';
   static const String snapshotSyncContext = 'otp-vault-snapshots';
   static const String localVaultContext = 'local-vault';
@@ -189,8 +189,8 @@ class EncryptionService {
   static const String _dataKeyPasswordContext = 'vault-datakey-password';
   static const String _dataKeyCodeContext = 'vault-datakey-code';
 
-  /// A fresh random data key. Hex, so it is a plain String like every other
-  /// key this service takes.
+
+
   static String generateVaultDataKey() {
     final random = Random.secure();
     final bytes = List<int>.generate(32, (_) => random.nextInt(256));
@@ -200,10 +200,10 @@ class EncryptionService {
         .substring(0, 32);
   }
 
-  /// A random, non-secret salt stored beside the wrapped key.
-  ///
-  /// It is what makes the wrapping key depend on the password alone rather
-  /// than on the account identity, which is the whole point.
+
+
+
+
   static String generateKeyringSalt() {
     final random = Random.secure();
     return List<int>.generate(16, (_) => random.nextInt(256))
@@ -211,9 +211,9 @@ class EncryptionService {
         .join();
   }
 
-  /// [iterations] of 0 means the original single-SHA-256 derivation, which
-  /// keyrings written before PBKDF2 landed still use. Those keep opening, and
-  /// are re-wrapped at the current cost the first time they are opened.
+
+
+
   static String _passwordWrappingKey(
     String password,
     String salt, {
@@ -242,7 +242,7 @@ class EncryptionService {
     );
   }
 
-  /// The data key, or null when [password] is not the one it was wrapped under.
+
   static String? unwrapDataKeyWithPassword(
     String wrapped,
     String password,
@@ -282,16 +282,16 @@ class EncryptionService {
     }
   }
 
-  // --- Vault key escrow ----------------------------------------------------
-  // The vault key is derived from the account password, so a password reset --
-  // which by definition happens without the old password -- used to leave the
-  // synced vault locked under a key nobody could ever derive again. Wrapping
-  // the key under each recovery code gives the PDF the user is already made to
-  // save a way to unlock it, turning those codes into a real recovery path
-  // rather than only a way back into the account.
-  //
-  // Authenticated, so a wrong code fails loudly instead of yielding a
-  // plausible-looking wrong key that would then be used to "decrypt" the vault.
+
+
+
+
+
+
+
+
+
+
   static const String vaultEscrowContext = 'vault-key-escrow';
 
   static String normalizeRecoveryCode(String rawCode) {
@@ -313,8 +313,8 @@ class EncryptionService {
     );
   }
 
-  /// The vault key sealed in [wrapped], or null if [recoveryCode] is not the
-  /// code it was wrapped under.
+
+
   static String? unwrapVaultKey(String wrapped, String recoveryCode) {
     try {
       final key = authenticatedDecrypt(
@@ -328,8 +328,8 @@ class EncryptionService {
     }
   }
 
-  /// Seal [newKey] under [previousKey], so a re-key stays reachable from an
-  /// escrow entry written before it without needing the codes again.
+
+
   static String chainVaultKey(String newKey, String previousKey) {
     return authenticatedEncrypt(
       newKey,
@@ -373,23 +373,23 @@ class EncryptionService {
     );
   }
 
-  // --- AES-256-GCM ----------------------------------------------------------
-  // Everything here used to run on a hand-rolled construction: a SHA-256
-  // keystream with an HMAC over it. It was encrypt-then-MAC with a random nonce
-  // and a constant-time compare, so it was not broken -- but "not broken as far
-  // as I can tell" is not the standard a 2FA vault should be held to. This is
-  // AES-256-GCM from pointycastle, which is a reviewed implementation of a
-  // reviewed primitive.
-  //
-  // Written as bl3. bl2 payloads stay readable so existing data migrates on its
-  // next write, and the unauthenticated original stays gated behind an explicit
-  // flag.
+
+
+
+
+
+
+
+
+
+
+
 
   static const String _aesPrefix = 'bl3:';
 
-  /// Whether [value] is in one of the authenticated formats, rather than the
-  /// unauthenticated original. Anything that dispatches on format must use
-  /// this: hard-coding a single prefix silently breaks on the next change.
+
+
+
   static bool isAuthenticatedPayload(String value) =>
       value.startsWith(_aesPrefix) || value.startsWith(_legacyMacPrefix);
 
@@ -397,8 +397,8 @@ class EncryptionService {
   static const int _gcmNonceBytes = 12;
   static const int _gcmMacBits = 128;
 
-  /// A 256-bit key from the caller's key string, bound to its context so a
-  /// payload written for one purpose cannot be read as another.
+
+
   static Uint8List _aesKeyFor(String key, String context) {
     return Uint8List.fromList(
       sha256.convert(utf8.encode('$key|aes256gcm|$context')).bytes,
@@ -418,9 +418,9 @@ class EncryptionService {
           KeyParameter(key),
           _gcmMacBits,
           nonce,
-          // The context is authenticated as associated data as well as mixed
-          // into the key: tampering that swaps a payload between contexts fails
-          // the tag rather than merely deriving the wrong key.
+
+
+
           Uint8List.fromList(utf8.encode(context)),
         ),
       );
@@ -460,8 +460,8 @@ class EncryptionService {
       ).process(sealed);
       return utf8.decode(plain);
     } on InvalidCipherTextException {
-      // Surfaced as FormatException so every existing caller's handling of a
-      // wrong key or altered payload keeps working unchanged.
+
+
       throw const FormatException('Encrypted payload authentication failed');
     }
   }
@@ -486,18 +486,18 @@ class EncryptionService {
       return _aesDecrypt(cipherText, key, context);
     }
     if (!cipherText.startsWith(_legacyMacPrefix)) {
-      // Anything without the prefix predates authenticated encryption. Reading
-      // it is only allowed where a caller is explicitly migrating it forward:
-      // left open, this is a downgrade -- strip four bytes and the MAC check
-      // that makes the format worth having disappears with them.
+
+
+
+
       if (!allowLegacyPlaintextFallback) {
         throw const FormatException('Refusing to read unauthenticated payload');
       }
       return simpleDecrypt(cipherText, key);
     }
 
-    // The previous hand-rolled format. Read only, so existing payloads survive
-    // until their next write puts them in AES-GCM.
+
+
     final payload =
         base64.decode(cipherText.substring(_legacyMacPrefix.length));
     if (payload.length < 48) {

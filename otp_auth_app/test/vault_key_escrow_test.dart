@@ -1,10 +1,10 @@
-// Vault key escrow.
-//
-// The vault key is derived from the account password. A password reset happens
-// precisely because the old password is gone, so before escrow existed a reset
-// left the synced vault locked under a key nobody could derive again -- dead
-// ciphertext, with no warning and no way back. Wrapping the key under each
-// recovery code gives the PDF users are already made to save a way to open it.
+
+
+
+
+
+
+
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:beatzlock_auth/services/encryption_service.dart';
@@ -31,8 +31,8 @@ void main() {
   });
 
   test('a wrong code returns null rather than a plausible wrong key', () {
-    // This is why the envelope is authenticated. A wrong key that silently
-    // produced garbage would be handed to the vault as if it were real.
+
+
     final wrapped = EncryptionService.wrapVaultKey(_vaultKey, _code);
     for (final wrong in ['AAAAAAAAAA', 'K7QP2M9XZ5', '']) {
       expect(EncryptionService.unwrapVaultKey(wrapped, wrong), isNull);
@@ -55,14 +55,14 @@ void main() {
 
   group('re-keys stay reachable without the codes', () {
     test('the chain leads an old escrow to the current key', () {
-      // Escrow written when the vault used key one.
+
       const keyOne = _vaultKey;
       const keyTwo = 'ffffffff11111111222222223333333f';
       const keyThree = '99998888777766665555444433332222';
 
       final wrapped = EncryptionService.wrapVaultKey(keyOne, _code);
 
-      // Two later re-keys, neither of which had the codes available.
+
       final chain = <String>[
         EncryptionService.chainVaultKey(keyTwo, keyOne),
         EncryptionService.chainVaultKey(keyThree, keyTwo),
@@ -93,8 +93,8 @@ void main() {
 
   test('two wraps of the same key differ, so the blob is not a fingerprint',
       () {
-    // A deterministic wrap would let anyone with the stored escrow tell that
-    // two accounts share a vault key, or that a key had not changed.
+
+
     final first = EncryptionService.wrapVaultKey(_vaultKey, _code);
     final second = EncryptionService.wrapVaultKey(_vaultKey, _code);
     expect(first, isNot(equals(second)));

@@ -12,8 +12,6 @@ from django.utils.dateparse import parse_datetime
 
 logger = logging.getLogger(__name__)
 
-# Every platform otp_auth_app/build.py writes a log for. Fedora was missing
-# here, so its builds were being written and then never shown.
 PLATFORMS = ("windows", "linux", "fedora", "android")
 PLATFORM_LABELS = {
     "windows": "Windows",
@@ -33,10 +31,6 @@ ARTIFACT_LABELS = {
 
 
 def _default_build_logs_dir() -> Path:
-    # The Flutter client is this project's sibling in the repo -- BASE_DIR is
-    # beatzlock_app/, so its build logs are one level up and across, not below.
-    # BEATZLOCK_BUILD_LOGS_DIR in .env overrides this and is what the server
-    # actually uses.
     return Path(settings.BASE_DIR).resolve().parent / "otp_auth_app" / "build_logs"
 
 

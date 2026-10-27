@@ -148,7 +148,6 @@ class VerificationCodeBruteForceTests(APITestCase):
         self.assertTrue(verification.is_used)
         self.assertFalse(verification.is_valid())
 
-        # Even the right code no longer works once the budget is spent.
         self.assertEqual(self._guess(verification.code).status_code, 400)
 
     def test_the_response_says_how_many_guesses_are_left(self):
@@ -186,8 +185,6 @@ class VerificationCodeBruteForceTests(APITestCase):
             )
             self.assertEqual(response.status_code, 400)
 
-        # The real code is now worthless, so the password cannot be changed
-        # by anyone who guessed their way here.
         response = self.client.post(
             reverse('reset_password'),
             {

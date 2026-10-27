@@ -32,8 +32,6 @@ class EmailAuthenticationForm(AuthenticationForm):
     collects an email and resolves it before the password is checked.
     """
 
-    # Deliberately a text input, not an email input: the browser's type="email"
-    # validation would block the legacy username fallback below.
     username = forms.CharField(
         label="Email address",
         max_length=254,
@@ -66,8 +64,6 @@ class EmailAuthenticationForm(AuthenticationForm):
     }
 
     def clean_username(self):
-        # Resolve the address to the username the auth backend expects, with
-        # the username fallback that covers accounts predating this.
         identifier = self.cleaned_data.get("username", "")
         user = find_user_by_login_identifier(identifier)
         return user.username if user is not None else identifier
@@ -146,8 +142,6 @@ class EmailSetPasswordForm(SetPasswordForm):
         })
 
 
-# 2MB. Big enough for a photo off a phone, small enough that nobody fills the
-# disk with one; nginx would take a much larger body without complaining.
 MAX_AVATAR_BYTES = 2 * 1024 * 1024
 
 
@@ -174,8 +168,6 @@ class AvatarForm(forms.ModelForm):
 
     def clean_avatar(self):
         avatar = self.cleaned_data.get('avatar')
-        # Only a freshly uploaded file has a size to check; an unchanged one
-        # comes back as the existing FieldFile.
         if avatar and hasattr(avatar, 'size') and avatar.size > MAX_AVATAR_BYTES:
             raise forms.ValidationError(
                 "That image is {:.1f}MB. Please keep it under 2MB.".format(

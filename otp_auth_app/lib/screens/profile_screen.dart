@@ -1,4 +1,4 @@
-// profile_screen.dart
+
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -229,9 +229,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       'November',
       'December',
     ];
-    // joined_on is a real timestamp from the API (date_joined), so it carries
-    // a time; toLocal turns the server's UTC into whatever this device is set
-    // to before any of it is read.
+
+
+
     final local = dateTime.toLocal();
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
@@ -265,23 +265,23 @@ class _ProfileScreenState extends State<ProfileScreen>
           : SingleChildScrollView(
               child: Column(
                 children: [
-                  // Profile Photo Section
+
                   Container(
                     padding: EdgeInsets.all(24),
                     child: Column(
                       children: [
                         Stack(
                           children: [
-                            // Profile Image
+
                             Container(
                               width: 120,
                               height: 120,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(
-                                  // Follows the chosen accent instead of a
-                                  // fixed purple, which stayed purple no
-                                  // matter which colour was picked.
+
+
+
                                   colors: [
                                     _accent,
                                     Theme.of(context).colorScheme.secondary,
@@ -326,7 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           )),
                               ),
                             ),
-                            // Edit Button
+
                             Positioned(
                               bottom: 0,
                               right: 0,
@@ -375,7 +375,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   ),
 
-                  // Bio Section
+
                   Container(
                     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     padding: EdgeInsets.all(20),
@@ -431,7 +431,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                   ),
 
-                  // Account Info Section
+
                   Container(
                     margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     padding: EdgeInsets.all(20),

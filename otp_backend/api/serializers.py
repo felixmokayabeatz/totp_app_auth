@@ -1,4 +1,3 @@
-# api/serializers.py
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
@@ -17,11 +16,6 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
-    # There is no username column any more, but the installed app still reads
-    # user["username"] out of every auth response and keeps it as the identity
-    # its local vault is encrypted under. The key stays on the wire, carrying
-    # the one identifier there is, so an app that has not been updated keeps
-    # working. Drop it only once no released build reads it.
     username = serializers.EmailField(source='email', read_only=True)
 
     class Meta:
@@ -79,10 +73,6 @@ class AppNotificationSerializer(serializers.ModelSerializer):
         ]
 
     def _payload(self, obj):
-        # Five SerializerMethodFields need this payload, and decrypting it five
-        # times over a hundred-row list was most of the time that list spent on
-        # the server. The result is cached on the instance being serialized,
-        # which is discarded with the response.
         cached = getattr(obj, '_decrypted_payload', None)
         if cached is not None:
             return cached
@@ -169,10 +159,6 @@ class DeviceSessionSerializer(serializers.ModelSerializer):
 
 
 class PasswordlessLoginRequestSerializer(serializers.ModelSerializer):
-    # There is deliberately no field carrying the verification code or any set
-    # of candidates containing it. The approving phone proves it can see the
-    # requesting device's screen by typing what is on it, which it cannot do
-    # from anything this response contains.
     code_expires_at = serializers.SerializerMethodField()
     attempts_remaining = serializers.SerializerMethodField()
     unlock_transfer_key = serializers.SerializerMethodField()

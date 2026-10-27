@@ -9,7 +9,6 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import DeviceSession
 
-# The project-wide account model; users.User, keyed by email.
 User = get_user_model()
 
 

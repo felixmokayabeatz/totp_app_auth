@@ -794,7 +794,6 @@ class EmailAsLoginTests(TestCase):
         user = get_user_model().objects.get()
         self.assertTrue(user.is_superuser)
         self.assertEqual(user.email, 'deploy.admin@example.com')
-        # The column still exists, so it is kept equal to the address.
         self.assertEqual(user.username, 'deploy.admin@example.com')
 
     def test_createsuperuser_refuses_an_address_already_in_use(self):
@@ -831,7 +830,6 @@ class EmailAsLoginTests(TestCase):
                 self.assertNotIn('_auth_user_id', client.session)
 
     def test_legacy_account_with_a_separate_username_can_still_sign_in(self):
-        # Nothing here creates these, but a restored dump can carry them.
         get_user_model().objects.create_user(
             username='felixmokayabeatz',
             email='legacy@example.com',
@@ -993,7 +991,6 @@ class GoogleSignInTests(TestCase):
         self.assertEqual(query['scope'][0], 'openid email profile')
         self.assertEqual(query['response_type'][0], 'code')
         self.assertNotIn('client_secret', query)
-        # The state is what makes a forged callback detectable.
         self.assertEqual(client.session['google_oauth_state'], query['state'][0])
 
     def test_callback_refuses_a_state_it_did_not_issue(self):
@@ -1020,7 +1017,6 @@ class GoogleSignInTests(TestCase):
         self.assertIn('_auth_user_id', client.session)
         self.assertEqual(user.username, 'newperson@example.com')
         self.assertEqual((user.first_name, user.last_name), ('New', 'Person'))
-        # Nothing was typed, so there is no password to guess.
         self.assertFalse(user.has_usable_password())
 
         profile = user.profile
@@ -1058,7 +1054,6 @@ class GoogleSignInTests(TestCase):
         )
         self.assertEqual(client.session['_auth_user_id'], str(existing.pk))
         existing.refresh_from_db()
-        # Linking Google must not cost them their password.
         self.assertTrue(existing.has_usable_password())
 
 
@@ -1113,7 +1108,6 @@ class AccountPageTests(TestCase):
             profile = self.user.profile
             profile.refresh_from_db()
             self.assertTrue(profile.avatar)
-            # One folder per user, so nothing collides between accounts.
             self.assertTrue(
                 profile.avatar.name.startswith(f'accounts/avatars/{self.user.pk}/')
             )
@@ -1152,10 +1146,8 @@ class AccountPageTests(TestCase):
         self.assertFalse(self.user.profile.avatar)
 
     def test_initials_stand_in_for_a_missing_picture(self):
-        # profile_for is the accessor: profiles are created on first use, not by
-        # a signal on every User.save() anywhere.
         profile = profile_for(self.user)
-        self.assertEqual(profile.initials, 'AE')  # acct@example.com
+        self.assertEqual(profile.initials, 'AE')
         self.user.first_name, self.user.last_name = 'Felix', 'Mokaya'
         self.user.save(update_fields=['first_name', 'last_name'])
         self.assertEqual(profile_for(self.user).initials, 'FM')
@@ -1190,7 +1182,6 @@ class SignUpTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn('_auth_user_id', self.client.session)
-        # The email is the login here, so the username column follows it.
         self.assertEqual(user.username, 'brand.new@example.com')
         self.assertEqual((user.first_name, user.last_name), ('Brand', 'New'))
         self.assertTrue(user.check_password(self.password))
@@ -1268,7 +1259,6 @@ class AccountPasswordTests(TestCase):
         response = self.client.get(self.url)
         self.assertContains(response, 'Set a password')
         self.assertContains(response, 'new_password1')
-        # They have never had one, so there is nothing to confirm against.
         self.assertNotContains(response, 'old_password')
 
     def test_setting_a_password_keeps_them_signed_in_and_adds_the_second_way_in(self):
@@ -1283,9 +1273,7 @@ class AccountPasswordTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(user.has_usable_password())
-        # update_session_auth_hash, or the new hash would log them straight out.
         self.assertEqual(self.client.get(self.url).status_code, 200)
-        # Google still works: the link is untouched.
         self.assertEqual(profile_for(user).google_sub, 'google-uid-9')
 
         fresh = Client()
@@ -1332,7 +1320,6 @@ class AccountPasswordTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual((user.first_name, user.last_name), ('Felix', 'Mokaya'))
-        # The two forms post separately; one must not half-submit the other.
         self.assertTrue(user.check_password('Old-Passw0rd!x'))
 
 
@@ -1423,7 +1410,6 @@ class LegalRevisionFlowTests(TestCase):
             self.assertNotIn('1.7.0', body)
             self.assertNotIn('App version', body)
 
-        # ...but it is still stored, for the admin's own reference.
         live.refresh_from_db()
         self.assertEqual(live.app_version, '1.8.0')
 
@@ -1612,8 +1598,6 @@ class LegalTimestampFormatTests(TestCase):
         return page
 
     def test_afternoon_time_is_not_shown_as_12_hour(self):
-        # 16:45 UTC is 19:45 in Africa/Nairobi -- a time a 12-hour clock would
-        # render as "7:45 p.m.", so it catches both bugs at once.
         old = self._published(
             datetime(2026, 7, 19, 16, 45, tzinfo=dt_timezone.utc), '<p>V1</p>'
         )
@@ -1640,7 +1624,6 @@ class LegalTimestampFormatTests(TestCase):
             self.assertNotIn('a.m.', body)
 
     def test_midnight_and_noon_stay_unambiguous(self):
-        # 21:00 UTC = 00:00 EAT next day; 09:00 UTC = 12:00 EAT.
         page = self._published(
             datetime(2026, 8, 27, 21, 0, tzinfo=dt_timezone.utc), '<p>midnight</p>'
         )
@@ -1684,7 +1667,6 @@ class SitemapTests(TestCase):
     def test_download_and_binary_urls_are_excluded(self):
         locs = self._locs()
         self.assertTrue(any(l.endswith('/downloads/') for l in locs))
-        # Counted-download and binary endpoints must never be crawled.
         self.assertFalse([l for l in locs if '/download/' in l])
         self.assertFalse([l for l in locs if '/release-notes/' in l])
         self.assertFalse([l for l in locs if '/api/' in l])
@@ -1702,7 +1684,6 @@ class SitemapTests(TestCase):
         locs = self._locs()
         self.assertIn(f'https://{self.HOST}/legal/terms-of-service/', locs)
         self.assertIn(f'https://{self.HOST}/legal/terms-of-service/archive/', locs)
-        # Individual revisions are noindex, so they stay out of the sitemap.
         old = LegalPage.archive_for('terms')[0]
         self.assertNotIn(
             f'https://{self.HOST}/legal/terms-of-service/archive/{old.pk}/', locs)
@@ -1749,7 +1730,7 @@ class DownloadTargetGroupingTests(TestCase):
             ('linux', 'ubuntu'),
             ('linux', 'fedora'),
             ('linux', 'arch'),
-            ('linux', ''),  # a build saved before distributions existed
+            ('linux', ''),
         ]
         for index in range(3):
             release = AppRelease.objects.create(
@@ -1801,8 +1782,6 @@ class DownloadTargetGroupingTests(TestCase):
         from beatzlock_app.models import DownloadableApp
         from beatzlock_app.views import _all_active_released_apps, _apps_for_target
 
-        # save() infers the default distribution for a Linux build that was
-        # given none, so the grouping has to find those builds under it.
         blank_saved = DownloadableApp.objects.filter(
             platform='linux',
             linux_distribution=DownloadableApp.DEFAULT_LINUX_DISTRIBUTION,

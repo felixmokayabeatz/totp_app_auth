@@ -66,8 +66,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AppUpdateInfo? _updateInfo;
   Map<String, dynamic>? _backupCodeStatus;
 
-  // Which single unlock method this device uses. A device the OS can unlock
-  // never shows the BeatzLock PIN tile -- there is no second unlock method.
+
+
   AppUnlockMethod _unlockMethod = AppUnlockMethod.systemLock;
 
   @override
@@ -113,9 +113,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Follows a switch that happened while this screen was already open -- the
-  /// user can add or remove a screen lock with Settings sitting in the
-  /// background, and the App PIN tile has to appear or vanish with it.
+
+
+
   void _handleUnlockMethodChange() {
     final method = AppLockService.methodChanges.value;
     if (method == null || !mounted || method == _unlockMethod) return;
@@ -1292,9 +1292,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
 
-            // The BeatzLock PIN exists only on devices with no usable screen
-            // lock. Offering it alongside device unlock would be a second, and
-            // weaker, door into the same vault.
+
+
+
             if (!_usesSystemUnlock) ...[
               _dividerLine(),
               _tappableTile(
@@ -1363,7 +1363,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
             _dividerLine(),
 
-            // Sync toggle
+
             _switchTile(
               icon: Icons.cloud_sync_rounded,
               label: 'Sync to Cloud',
@@ -2009,7 +2009,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     var isEditing = existingRating == null;
     String? errorText;
 
-    // Dialog-scoped controllers: freed once the dialog is gone.
+
     try {
       await showDialog<void>(
         context: context,
@@ -2813,11 +2813,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ========== EXISTING METHODS (unchanged from your original) ==========
 
-  // --- Clear all data (with local/everywhere choice) ------------------------
+
+
   void _clearAllData() async {
-    // Step 1: ask local-only vs everywhere
+
     final choice = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
@@ -2928,7 +2928,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    // -- "Everywhere" path: require OTP --------------------------------------
+
     if (!await _syncService.isLoggedIn()) {
       if (!mounted) return;
       await showDialog<void>(
@@ -3167,7 +3167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- Change password dialog (unchanged from original) ---------------------
+
   void _showChangePasswordDialog() {
     final currentPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -3537,7 +3537,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     ).whenComplete(() {
-      // Dialog-scoped controllers; without this every open leaked four.
+
       currentPasswordController.dispose();
       newPasswordController.dispose();
       confirmPasswordController.dispose();
@@ -3583,7 +3583,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- UI helpers -----------------------------------------------------------
+
   Widget _profileCard(AuthProvider authProvider) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -4450,7 +4450,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// One labelled colour chip in the accent picker.
+
   Widget _accentSwatch({
     required AccentOption option,
     required bool selected,
@@ -4568,8 +4568,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    // A failed sync is worth explaining properly: the reason is usually the
-    // connection, and a two-second red toast is not long enough to read it.
+
+
     messenger.showSnackBar(
       SnackBar(
         content: Text(

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 try:
     import firebase_admin
     from firebase_admin import credentials, messaging
-except Exception:  # pragma: no cover - handled gracefully at runtime
+except Exception:
     firebase_admin = None
     credentials = None
     messaging = None

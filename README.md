@@ -1,254 +1,91 @@
 # BeatzLock
 
-Everything BeatzLock in one repo, as three projects that share nothing but the
-checkout:
+BeatzLock is a self-hosted two-factor authentication (TOTP) authenticator,
+built as three independent projects that share a checkout but nothing else:
 
 ```text
 beatzlock_project/
 ├── beatzlock_app/     downloads & ratings site   (Django)
 ├── otp_backend/       authenticator API          (Django)
-├── otp_auth_app/      Flutter client + the native build tooling
+├── otp_auth_app/      Flutter client + native build tooling
 ├── build.py           wrapper that runs otp_auth_app/build.py
 └── github.py          git identity helper
 ```
 
-That is the whole top level. Each project owns everything it needs — its
-`.env`, `requirements.txt`, virtualenv, static files, templates, nginx config
-and its own `deploy/deploy.sh` — so working on one never means reading the
-other, and neither deploy script knows the other exists.
+Each project owns everything it needs — its own `.env`, `requirements.txt`,
+virtualenv, static files and templates — so working on one never means
+reading the other.
 
 ## The two Django projects
 
-Separate settings, separate databases, separate `auth_user` tables, separate
-subdomains, separate systemd units, separate deploy scripts.
+Separate settings, separate databases, separate `auth_user` tables.
 
 | | Downloads site | Authenticator API |
 |---|---|---|
 | Where | `./beatzlock_app/` | `./otp_backend/` |
-| Deploy | `./beatzlock_app/deploy/deploy.sh` | `./otp_backend/deploy/deploy.sh` |
-| Subdomain | `apps.example.com` | `api.example.com` |
-| Database | `felixmokayabeatz_beatzlock_db` | `felixmokayabeatz_totp_db` |
-| DB role | `Felix_Apps_Administrator` | `Felix_Apps_Administrator` |
 | Settings | `beatzlock_app/config/settings.py` | `otp_backend/otp_backend/settings.py` |
 | `.env` | `beatzlock_app/.env` | `otp_backend/.env` |
 | WSGI | `config.wsgi` | `otp_backend.wsgi` |
-| Gunicorn port | `8012` | `8002` |
 | Dev port | `8005` | `8000` |
-| systemd unit | `beatzlock` | `beatzlock-api` |
-| Virtualenv | `beatzlock_app/beatzlock_v_env` | `otp_backend/totp_v_env` |
 | Admin | `/beatzlock-admin/` | `/beatzlock_admin/` |
 | Sign-in | email address | email address |
 | Django apps | `beatzlock_app`, `console` | `accounts`, `api`, `twofa`, `beatzlocklogs` |
 | Static | `beatzlock_app/static/` + each app's own `static/` | `otp_backend/static/` |
 
-Both roles are the shared `Felix_Apps_Administrator` used by the other
-felixmokayabeatz sites on the host, so neither `deploy.sh` ever rewrites its
-password — each only creates the role if nothing on the host has one yet.
-
 ### What each one serves
 
 **Downloads site** — `/downloads/`, `/downloads/archive/`, `/rate/`,
 `/legal/terms-of-service/`, `/legal/privacy-policy/`, the `/api/update-check/`
-and `/api/ratings/…` JSON the native apps read, and the staff console at
+and `/api/ratings/…` JSON the native apps read, and a staff console at
 `/console/stats/`, `/console/review-replies/`, `/console/build-history/`.
 
 **Authenticator API** — `/api/` for the native clients: auth, sync, device
-sessions, passwordless login, backup codes, 2FA and recovery codes, plus the
+sessions, passwordless login, backup codes, 2FA and recovery codes, plus a
 log viewer at `/beatzlock_admin/logs/`. `/` redirects to the main site.
-
-### Where the files live
-
-Each Django app carries what belongs to it, so an app folder can be read,
-moved or copied without hunting for its assets:
-
-| | |
-|---|---|
-| `beatzlock_app/beatzlock_app/data/GeoLite2-Country.mmdb` | country lookup for the download stats; committed, the stats view reads it at runtime |
-| `beatzlock_app/beatzlock_app/static/beatzlock_app/` | assets owned by the downloads app |
-| `beatzlock_app/console/static/console/` | the staff console's CSS and JS |
-| `beatzlock_app/static/` | site-wide only: the favicons and the `fmb_theme` stylesheet the base templates load |
-| `beatzlock_app/templates/` | site-wide base templates; per-app templates live in the app |
-| `otp_backend/static/` | the API's favicon, used by its admin and log viewer |
-| `otp_auth_app/inno_script/`, `otp_auth_app/vc_redist/` | Windows installer inputs, read by `otp_auth_app/build.py` |
-| `otp_auth_app/build_logs/` | build metadata the console's build-history page reads |
-| `beatzlock_app/release_notes/`, `beatzlock_app/tos_privacy/` | content published by the downloads site |
 
 ### Signing in
 
-Both projects sign people in by **email address**. Neither asks for a username
-anywhere: not on the sign-in page, not in the admin, not when the deploy script
-creates the first superuser. They arrive there differently, though.
+Both projects sign people in by **email address**. Neither asks for a
+username anywhere: not on the sign-in page, not in the admin.
 
 **`otp_backend` has no username, first name or last name at all.** Its
 `AUTH_USER_MODEL` is `users.User` — an email address, a password, and the
-staff/superuser flags — and the three columns are gone from the database. The
-model keeps `auth_user` as its table so that the switch was three
-`DROP COLUMN`s rather than a table rebuild, leaving every foreign key pointing
-at rows that never moved. `email` carries the unique constraint `username` used
-to, and is stored lowercased so it cannot disagree with the case-insensitive
-lookups. `accounts/identity.py` resolves an account one way only: by address.
+staff/superuser flags. The model keeps `auth_user` as its table name so the
+switch was a column drop rather than a table rebuild. `email` carries the
+unique constraint `username` used to, and is stored lowercased.
+`accounts/identity.py` resolves an account one way only: by address.
 
-Transactional email from the API is addressed to the account, not to a person —
-"Hello," and never "Hello Felix," — because an address is now the only thing an
-account has.
-
-The API still *accepts* a `username` key in request bodies and still returns one
-in auth responses, both carrying the email. That is wire compatibility for
-released app builds, which read `user["username"]` and anchor their local vault
-to it; it is not a second identifier. See `api/serializers.py`.
+The API still *accepts* a `username` key in request bodies and still returns
+one in auth responses, both carrying the email — that's wire compatibility
+for app builds that read `user["username"]` and anchor their local vault to
+it; it is not a second identifier. See `api/serializers.py`.
 
 **`beatzlock_app` still uses Django's stock `auth.User`.** It keeps
-`username` equal to the email — `createsuperuser` is overridden to write the
-address into both columns — and `beatzlock_app/beatzlock_app/identity.py`
-resolves an email first with a username fallback for older rows. The two
-projects share a server and a Postgres role but not a database, so neither has
-to follow the other.
+`username` equal to the email, and `beatzlock_app/beatzlock_app/identity.py`
+resolves an email first with a username fallback for older rows.
 
 ### Migrating an existing API database
 
 The `AUTH_USER_MODEL` swap means every applied migration with an account
-foreign key now depends on `users.0001_initial`, which such a database has
-never applied — Django refuses to run `migrate` at all until that is recorded:
+foreign key depends on `users.0001_initial`, which an existing database has
+never applied — Django refuses to run `migrate` until that's recorded:
 
 ```bash
-python manage.py adopt_user_table   # records users.0001_initial; no-op if done
-python manage.py migrate            # 0002 drops the three columns
+python manage.py adopt_user_table   # records users.0001_initial; no-op if already done
+python manage.py migrate            # drops the old username/first/last columns
 ```
 
-`deploy/deploy.sh` runs both, in that order, so a normal deploy needs nothing
-extra. `migrate` prints any account whose username was not its email address
-before dropping the column: those accounts' next *fresh* sign-in derives a
-different vault key than the one their synced data was encrypted with, because
-the app derives that key from whatever the API returns as `user["username"]`.
+`migrate` prints any account whose username was not its email address before
+dropping the column: those accounts' next *fresh* sign-in derives a different
+vault key than the one their synced data was encrypted with, because the app
+derives that key from whatever the API returns as `user["username"]`.
 Installs that are already signed in keep the key they stored.
-
-## Deploy
-
-Each project deploys itself. Same script, same actions, same menu — one per
-project, each reading only its own `.env` for its domain, ports and database
-credentials, so nothing is prompted for and every step checks the current
-state first. Both are safe to re-run.
-
-```bash
-sudo ./beatzlock_app/deploy/deploy.sh            # menu: pick the action
-sudo ./beatzlock_app/deploy/deploy.sh --update   # or name it outright
-sudo ./otp_backend/deploy/deploy.sh --status
-```
-
-| Action | What it does |
-|---|---|
-| `--fresh` | apt, PostgreSQL role + database, virtualenv, dependencies, migrate, collectstatic, superuser, systemd unit, nginx, firewall |
-| `--update` | routine deploy: dependencies, migrate, collectstatic, re-render unit and nginx site, restart |
-| `--restart` | restart gunicorn, reload nginx |
-| `--status` | service, port, database, migrations, certificate, end-to-end request |
-| `--logs` | gunicorn, nginx and Django logs |
-| `--database` | create/repair, back up, restore, psql shell, reset |
-| `--django …` | any `manage.py` command, e.g. `--django createsuperuser` |
-| `--renew` | renew this subdomain's certificate |
-| `--uninstall` | remove the unit and the nginx site; keeps code, database and `.env` |
-
-Deploying both is two commands, in either order — they touch different
-databases, different units and different nginx sites.
-
-Each subdomain needs a DNS A record pointing at this server *before* its
-first deploy: the certificate is issued over an HTTP-01 challenge, which can
-only be answered for a name that already resolves here. The scripts check this
-before calling certbot and print the exact record to create, because a failed
-issuance still counts against the Let's Encrypt rate limit for the week.
-
-`HTTP2=off` in a project's `.env` drops that site back to HTTP/1.1 over the
-same TLS on the next deploy. It exists for one symptom: a large upload through
-the admin that stalls and leaves the browser reporting
-`ERR_HTTP2_PING_FAILED`, which happens when the HTTP/2 path between a client
-and this host cannot carry a big request body. Everything else is unaffected —
-the setting defaults to `on`, and `--status` prints which is in force.
-
-TLS is not re-issued when an installed certificate already covers the
-subdomain — a wildcard counts. Each project's `deploy/nginx.conf.template` and
-`deploy/gunicorn.service.template` are the single source of truth for what
-gets installed; edit the template, never the copy under `/etc/`. The files
-under each project's `nginx/` are reference copies of what those templates
-produce, kept for reading only.
-
-## Moving the server to this layout
-
-Two moves have happened since the server was last set up. The API used to live
-at `/home/felixmokayabeatz/totp_app/` with its own ad-hoc `deploy.sh` and the
-databases were named `beatzlock_app_db` and `beatzlock_db` under the role
-`beatzlock_user`; more recently the downloads site moved out of the repo root
-into `beatzlock_app/`. On the server, once:
-
-**1. Move the checkout.** The repo root is now `beatzlock_project`, with each
-project one directory below it:
-
-```bash
-cd /home/felixmokayabeatz
-git clone <this repo> beatzlock_project      # or move the existing checkout
-```
-
-**2. Bring the downloads site's untracked files along.** `.env`, the
-virtualenv, `logs/`, `media/`, `staticfiles/` and `backups/` are git-ignored,
-so pulling the restructure leaves them behind at the repo root while the code
-that reads them now lives in `beatzlock_app/`. Move them in — `media/`
-especially, it holds every uploaded binary:
-
-```bash
-cd /home/felixmokayabeatz/beatzlock_project
-for d in .env beatzlock_v_env logs media staticfiles backups; do
-    [ -e "$d" ] && mv "$d" beatzlock_app/
-done
-```
-
-The API's own copies of these were always inside `otp_backend/` and do not
-move. Nothing under `otp_auth_app/` moves either.
-
-**3. Rename the databases.** The deploy scripts create an *empty* database
-when the name in `.env` does not exist — they will not carry the old rows
-over. Rename first, then deploy:
-
-```bash
-sudo -u postgres psql -c 'ALTER DATABASE beatzlock_app_db RENAME TO felixmokayabeatz_totp_db;'
-sudo -u postgres psql -c 'ALTER DATABASE beatzlock_db     RENAME TO felixmokayabeatz_beatzlock_db;'
-
-# Hand both to the shared role the other sites already use.
-sudo -u postgres psql -c 'ALTER DATABASE felixmokayabeatz_totp_db      OWNER TO "Felix_Apps_Administrator";'
-sudo -u postgres psql -c 'ALTER DATABASE felixmokayabeatz_beatzlock_db OWNER TO "Felix_Apps_Administrator";'
-sudo -u postgres psql -d felixmokayabeatz_totp_db      -c 'REASSIGN OWNED BY beatzlock_user TO "Felix_Apps_Administrator";'
-sudo -u postgres psql -d felixmokayabeatz_beatzlock_db -c 'REASSIGN OWNED BY beatzlock_user TO "Felix_Apps_Administrator";'
-```
-
-A rename needs no other session on the database, so stop the old services
-first. Take a dump before any of this:
-`sudo -u postgres pg_dump -Fc beatzlock_app_db > totp.dump`.
-
-**4. Retire the old units and sites.**
-
-```bash
-sudo systemctl disable --now beatzlock          # the old API unit
-sudo rm /etc/nginx/sites-enabled/beatzlock
-```
-
-The new units are `beatzlock` (downloads site) and `beatzlock-api`. The old
-API unit shared the name `beatzlock`, so remove it before deploying the site,
-or the two will fight over it.
-
-**5. Deploy both.** The rendered unit and nginx site carry the project
-directory in them, so this run is also what repoints them at
-`beatzlock_project/beatzlock_app/`:
-
-```bash
-sudo ./beatzlock_app/deploy/deploy.sh --fresh
-sudo ./otp_backend/deploy/deploy.sh  --fresh
-```
-
-**6. Repoint the console's build-log path.** `BEATZLOCK_BUILD_LOGS_DIR` in
-`beatzlock_app/.env` reads
-`/home/felixmokayabeatz/beatzlock_project/otp_auth_app/build_logs`.
 
 ## Local development
 
-Neither `.env` is committed. Copy the server's, or write your own from the
-tables above.
+Neither `.env` is committed. Each settings module reads its database,
+secret key, allowed hosts and mail credentials from its own `.env` — write
+one for each project before running it.
 
 **Downloads site:**
 
@@ -274,30 +111,24 @@ python manage.py runserver 8000
 
 `beatzlock_app/config/local.py` and `otp_backend/otp_backend/local.py` are
 git-ignored, development-only overrides. Each settings module imports its own
-immediately after `DEBUG` is read from `.env` and before anything derived from
-it — the static files storage, the WhiteNoise middleware, `ALLOWED_HOSTS`, the
-secure-cookie flags — so one line there switches all of them together. Each
-`deploy.sh` refuses to run on a host where its project's copy exists, because
-it would quietly serve the site with `DEBUG=True`.
-
-Both `.env` files carry `DEBUG=False`, since they start life as copies of the
-server's. Without a `local.py`, `runserver` therefore runs in production mode:
-static files are resolved through a manifest that only `collectstatic` writes,
-and the first page you open dies with `Missing staticfiles manifest entry for
-'favicon/favicon.ico'`. The whole fix is one line:
+immediately after `DEBUG` is read from `.env` — the static files storage, the
+WhiteNoise middleware, `ALLOWED_HOSTS`, the secure-cookie flags all key off
+it, so one line there switches all of them together:
 
 ```python
 # beatzlock_app/config/local.py
 DEBUG = True
 ```
 
-Per-machine values that are not `DEBUG` — database credentials, ports, hosts —
-belong in `.env`, which is per-machine already.
+Without a `local.py`, `runserver` runs with whatever `DEBUG` your `.env`
+sets. With `DEBUG=False` and no `local.py`, static files are resolved
+through a manifest that only `collectstatic` writes, so the first page can
+fail with `Missing staticfiles manifest entry`.
 
-Set `USE_X_ACCEL_REDIRECT=False` in the downloads site's `.env` for local work:
-in production nginx streams app binaries via `X-Accel-Redirect` so no gunicorn
-worker carries the payload (`beatzlock_app/beatzlock_app/utils/file_serving.py`),
-and there is no nginx in front of `runserver`.
+Set `USE_X_ACCEL_REDIRECT=False` in the downloads site's `.env` for local
+work: in production, nginx streams app binaries via `X-Accel-Redirect`
+(`beatzlock_app/beatzlock_app/utils/file_serving.py`), and there's no nginx
+in front of `runserver` locally.
 
 ## The Flutter client
 
@@ -307,36 +138,26 @@ live inside it. Nothing it produces is written outside that folder.
 
 ### Where its endpoints come from
 
-Every URL the app calls is in `lib/config/app_config.dart`. Each environment is
-built from one base string per server, so the halves cannot drift apart:
+Every URL the app calls is in `lib/config/app_config.dart`. Each environment
+is built from one base string per server:
 
 | | Authenticator API | Downloads site |
 |---|---|---|
-| Production | `https://api.example.com/api/` | `https://apps.example.com/` |
 | Desktop dev | `http://localhost:8000/api/` | `http://localhost:8005/` |
 | Android emulator dev | `http://10.0.2.2:8000/api/` | `http://10.0.2.2:8005/` |
 
-`10.0.2.2` is the emulator's alias for the host machine's localhost, and the
-dev ports are the two `runserver` ports from **Local development** above.
-`AppConfig.isDevelopment` chooses between the columns — it must be `false` in
-anything you ship.
-
-The downloads site used to be mounted at `example.com/beatzlock-apps/`
-and now sits at the root of its own subdomain. Everything the app reads from it
-hangs off that single base URL:
+`10.0.2.2` is the emulator's alias for the host machine's localhost.
+`AppConfig.isDevelopment` chooses between a production base and the local
+one above — set your own deployment's production URLs there.
 
 | `AppConfig` member | Path | What answers it |
 |---|---|---|
-| `updateApiUrl` | `api/update-check/` | update check, including the release notes text |
+| `updateApiUrl` | `api/update-check/` | update check, including release notes |
 | `legalDocumentApiUrl(type)` | `api/legal/<type>/` | terms / privacy as JSON |
 | `legalDocumentWebUrl(type)` | `legal/terms-of-service/`, `legal/privacy-policy/` | the same documents as web pages |
 | `ratingsApiUrl`, `myRatingApiUrl`, `ratingSubmitApiUrl`, `ratingDeleteApiUrl` | `api/ratings/…` | reviews |
 | `rateAppUrl` | `rate/` | the review form |
 | `manualDownloadUrl` | `downloads/` | the downloads page |
-
-If in-app release notes, ratings or update checks stop working while the same
-things still work in a browser, this file is the first place to look: the app
-is talking to a host or a path the site no longer serves.
 
 ### The update check
 
@@ -347,10 +168,9 @@ GET /api/update-check/?platform=<platform>&version=<version>&build_number=<n>
 Add `&linux_distribution=<distro>` for Linux builds. The response carries
 `update_available`, `force_update`, `latest_version`, `latest_build_number`,
 `download_url`, `downloads_page_url`, `release_notes` and a human-readable
-`reason`. An update is forced once a client is five or more releases or builds
-behind. `download_url` and `downloads_page_url` are reversed from the site's
-`urls.py`, never written out by hand, so remounting the site cannot hand the
-app a dead link.
+`reason`. An update is forced once a client is five or more releases or
+builds behind. `download_url` and `downloads_page_url` are reversed from the
+site's `urls.py`, never written out by hand.
 
 ### Developing against the local servers
 
@@ -364,32 +184,27 @@ cd otp_auth_app && flutter pub get && flutter run -d windows
 
 Set `isDevelopment = true` in `lib/config/app_config.dart` first, and set it
 back before building anything you intend to release. Use `-d linux`, `-d
-android` or `-d windows` to pick the target; the platform sections below cover
-each one in detail.
+android` or `-d windows` to pick the target; the platform sections below
+cover each one in detail.
 
 ### Releasing a build
 
 1. **Build.** `python3 build.py` from the repo root opens the menu. Artifacts
-   land in `otp_auth_app/final_builds/<platform>/<version>/`, and the metadata
-   for each one is appended to `otp_auth_app/build_logs/<platform>/build_log.json`.
-2. **Publish.** In the downloads site admin, create the **App Release** first —
-   version, build number and the release-notes `.txt`, which covers every
+   land in `otp_auth_app/final_builds/<platform>/<version>/`, and the
+   metadata for each one is appended to
+   `otp_auth_app/build_logs/<platform>/build_log.json`.
+2. **Publish.** In the downloads site admin, create the **App Release** first
+   — version, build number and the release-notes `.txt`, which covers every
    platform — then add one **Platform Build** per binary pointing at it.
-3. **Check the history.** `/console/build-history/` lists what was built from
-   those `build_log.json` files, per platform and per day. It reads
-   `otp_auth_app/build_logs/` next to the site by itself; set
-   `BEATZLOCK_BUILD_LOGS_DIR` in the site's `.env` only if the Flutter checkout
-   lives somewhere else entirely. A stale absolute path there is ignored, with
-   a warning in the log, rather than leaving the page silently empty.
-4. **Ship.** The next update check each client makes returns the new version,
-   its notes and its download URL.
+3. **Check the history.** `/console/build-history/` lists what was built,
+   reading `otp_auth_app/build_logs/` next to the site.
+4. **Ship.** The next update check each client makes returns the new
+   version, its notes and its download URL.
 
 ## Windows
 
 ### Debug Run
 
-Clean and run on Windows desktop:
-
 ```bash
 flutter clean
 flutter pub get
@@ -403,18 +218,14 @@ flutter run -d windows
 ```
 
 ### Release Build
-
-Build a Windows release executable:
 
 ```bash
 flutter build windows --release
 ```
 
-## Kali Linux
+## Linux (Kali / Debian-based)
 
 ### Debug Run
-
-Clean and run on Linux desktop:
 
 ```bash
 flutter clean
@@ -422,15 +233,7 @@ flutter pub get
 flutter run -d linux
 ```
 
-If you do not need a clean rebuild:
-
-```bash
-flutter run -d linux
-```
-
 ### Release Build
-
-Build the Linux release app:
 
 ```bash
 flutter build linux --release
@@ -444,7 +247,8 @@ Install the Fedora build tools and Flutter desktop dependencies:
 sudo dnf install -y git curl unzip xz zip clang cmake gcc-c++ libstdc++-devel ninja-build pkgconf-pkg-config gtk3-devel libwebp-devel mesa-libGLU patchelf rpm-build rpmdevtools desktop-file-utils xdg-utils
 ```
 
-If Flutter is not already installed, download the Linux SDK from the Flutter SDK archive, extract it, and add Flutter to your shell path:
+If Flutter is not already installed, download the Linux SDK from the Flutter
+SDK archive, extract it, and add Flutter to your shell path:
 
 ```bash
 mkdir -p "$HOME/develop"
@@ -474,10 +278,11 @@ python3 build.py
 ```
 
 `build.py` is a wrapper; the real script is `otp_auth_app/build.py` and every
-path it reads or writes — `inno_script/`, `vc_redist/`, `final_builds/` and the
-scratch package directories — sits inside `otp_auth_app/`.
+path it reads or writes — `inno_script/`, `vc_redist/`, `final_builds/` and
+the scratch package directories — sits inside `otp_auth_app/`.
 
-Choose option `3. Fedora .rpm final build`, or option `1. Linux package for this distro (.deb/.rpm)` while on Fedora.
+Choose option `3. Fedora .rpm final build`, or option
+`1. Linux package for this distro (.deb/.rpm)` while on Fedora.
 
 The RPM is written to:
 
@@ -493,7 +298,8 @@ sudo dnf install ./otp_auth_app/final_builds/fedora/<version_build>/beatzlock_<v
 
 ## Android
 
-Make sure an Android phone is connected with USB debugging enabled, or start an Android emulator first.
+Make sure an Android phone is connected with USB debugging enabled, or start
+an Android emulator first.
 
 Check available devices:
 
@@ -507,7 +313,8 @@ If Flutter does not detect any Android device, check `adb` first:
 adb devices
 ```
 
-If `adb devices` shows no connected devices, restart the ADB server and check again:
+If `adb devices` shows no connected devices, restart the ADB server and check
+again:
 
 ```bash
 adb kill-server
@@ -521,69 +328,21 @@ If no physical device appears, list the available Android emulators:
 flutter emulators
 ```
 
-Example output:
-
-```text
-1 available emulator:
-
-Id             • Name           • Manufacturer • Platform
-Pixel_6_API_34 • Pixel 6 API 34 • Google       • android
-```
-
 ### Start an Emulator on Ubuntu
-
-Launch an emulator from the terminal with:
 
 ```bash
 flutter emulators --launch <emulator-id>
 ```
 
-For example:
-
-```bash
-flutter emulators --launch Pixel_6_API_34
-```
-
-After the emulator starts, verify it is available:
-
-```bash
-flutter devices
-```
-
 ### Start an Emulator on Windows
-
-If you are using Windows, you can start the emulator from Android Studio:
 
 1. Open Android Studio.
 2. Click `More Actions` on the welcome screen, or open `Tools > Device Manager` from a project.
 3. In `Device Manager`, find your virtual device.
 4. Click the `Play` button to start the emulator.
-5. Wait for Android to finish booting, then run:
-
-```bash
-flutter devices
-```
-
-If the emulator still does not appear in Flutter, run:
-
-```bash
-flutter doctor
-```
-
-You can also try:
-
-```bash
-flutter devices --device-timeout 20
-```
-
-For additional troubleshooting, visit:
-
-- https://flutter.dev/setup/
-- https://developer.android.com/studio/run/managing-avds
+5. Wait for Android to finish booting, then run `flutter devices`.
 
 ### Debug Run
-
-Run on Android:
 
 ```bash
 flutter clean
@@ -591,23 +350,10 @@ flutter pub get
 flutter run -d android
 ```
 
-If you want to target a specific Android device, first copy the device id from `flutter devices`, then run:
-
-```bash
-flutter run -d <device-id>
-```
-
 ### Release Build
-
-Build a release APK:
 
 ```bash
 flutter build apk --release
-```
-
-Build an Android App Bundle:
-
-```bash
 flutter build appbundle --release
 ```
 
@@ -618,8 +364,10 @@ Each project runs from its own folder:
 ```bash
 cd beatzlock_app && python manage.py runserver 8005   # downloads site
 cd otp_backend  && python manage.py runserver 8000    # authenticator API
-cd otp_auth_app && flutter run -d windows             # or -d linux, -d android
+cd otp_auth_app && flutter run -d windows              # or -d linux, -d android
 ```
 
-Deployment is `sudo ./<project>/deploy/deploy.sh` — see **Deploy** above. Be
-careful running it against the live server.
+## License
+
+Add a license file before publishing if you intend this to be used by
+others — none is currently declared.

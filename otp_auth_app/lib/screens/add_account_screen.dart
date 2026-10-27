@@ -114,7 +114,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         MobileScanner(
           controller: _scannerController,
           onDetect: (capture) {
-            // Prevent multiple rapid scans
+
             if (_isProcessingQR) return;
 
             final barcode = capture.barcodes.first;
@@ -125,7 +125,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
           },
           errorBuilder: (context, error) {
             String errorMessage = 'Camera unavailable';
-            // Check for permission error
+
             if (error.toString().contains('Permission')) {
               errorMessage =
                   'Camera permission denied. Please grant permission in settings.';
@@ -158,11 +158,11 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             );
           },
         ),
-        // Overlay with frame
+
         Positioned.fill(
           child: CustomPaint(painter: _ScannerOverlayPainter(color: _accent)),
         ),
-        // Bottom hint
+
         Positioned(
           bottom: 0,
           left: 0,
@@ -200,7 +200,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
             ),
           ),
         ),
-        // Back button hint
+
         Positioned(
           top: 16,
           left: 16,
@@ -240,7 +240,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
 
         await _saveImportedEntries(importedEntries, sourceLabel: 'scanned QR');
       } else {
-        // Not a valid OTP auth QR code
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -700,7 +700,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
       final isSignedIn = await syncService.isLoggedIn();
       final shouldSync = isSignedIn && await syncService.isSyncEnabled();
 
-      // Get the USER-SPECIFIC box, not the generic one
+
       final userBox = await syncService.getUserBox();
       if (!mounted) return;
 
@@ -730,7 +730,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         return;
       }
 
-      // Strip spaces from secret on save
+
       final rawSecret = _secretController.text.replaceAll(RegExp(r'\s+'), '');
 
       if (rawSecret.isEmpty) {
@@ -756,7 +756,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
         userId: userId,
       );
 
-      // Save to USER-SPECIFIC box
+
       await userBox.put(newAccount.id, newAccount);
 
       if (shouldSync) {
@@ -819,7 +819,7 @@ class _AddAccountScreenState extends State<AddAccountScreen> {
   }
 }
 
-// Scanner frame overlay painter
+
 class _ScannerOverlayPainter extends CustomPainter {
   const _ScannerOverlayPainter({required this.color});
 
@@ -844,7 +844,7 @@ class _ScannerOverlayPainter extends CustomPainter {
 
     canvas.drawPath(path, paint..blendMode = BlendMode.srcOver);
 
-    // Corner marks
+
     final cornerPaint = Paint()
       ..color = color
       ..strokeWidth = 3
@@ -854,7 +854,7 @@ class _ScannerOverlayPainter extends CustomPainter {
     const cLen = 24.0;
     const r = 16.0;
 
-    // top-left
+
     canvas.drawLine(
       Offset(left + r, top),
       Offset(left + r + cLen, top),
@@ -865,7 +865,7 @@ class _ScannerOverlayPainter extends CustomPainter {
       Offset(left, top + r + cLen),
       cornerPaint,
     );
-    // top-right
+
     canvas.drawLine(
       Offset(left + frameSize - r, top),
       Offset(left + frameSize - r - cLen, top),
@@ -876,7 +876,7 @@ class _ScannerOverlayPainter extends CustomPainter {
       Offset(left + frameSize, top + r + cLen),
       cornerPaint,
     );
-    // bottom-left
+
     canvas.drawLine(
       Offset(left + r, top + frameSize),
       Offset(left + r + cLen, top + frameSize),
@@ -887,7 +887,7 @@ class _ScannerOverlayPainter extends CustomPainter {
       Offset(left, top + frameSize - r - cLen),
       cornerPaint,
     );
-    // bottom-right
+
     canvas.drawLine(
       Offset(left + frameSize - r, top + frameSize),
       Offset(left + frameSize - r - cLen, top + frameSize),

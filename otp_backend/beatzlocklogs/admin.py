@@ -41,6 +41,4 @@ def _safe_unregister(model):
 
 
 if not django_settings.DEBUG:
-    # Group is unregistered outright in users/admin.py; only the account list
-    # is hidden conditionally, so it stays reachable in local development.
     _safe_unregister(get_user_model())

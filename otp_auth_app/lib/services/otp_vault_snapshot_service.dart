@@ -265,8 +265,8 @@ class OtpVaultSnapshotService {
         encryptedContent,
         encryptionKey,
         context: EncryptionService.snapshotSyncContext,
-        // Snapshots written before authenticated encryption are read once so
-        // the next write can put them back in the current format.
+
+
         allowLegacyPlaintextFallback: true,
       );
       if (decrypted.trim().isEmpty) {
@@ -284,7 +284,7 @@ class OtpVaultSnapshotService {
           .toList(growable: false);
       await _replaceRecordsForCurrentVault(records);
     } catch (_) {
-      // Keep the local copy if the cloud snapshot payload cannot be read.
+
     }
   }
 

@@ -78,11 +78,11 @@ class PushMessagingService {
   FirebaseMessaging get _messagingInstance =>
       _messaging ??= FirebaseMessaging.instance;
 
-  /// Stop listening and forget this process's registration.
-  ///
-  /// The three subscriptions were stored but never cancelled and there was no
-  /// way to tear them down, so after a sign-out the app carried on receiving
-  /// and acting on push messages addressed to the account that had just left.
+
+
+
+
+
   Future<void> dispose() async {
     await _messageSubscription?.cancel();
     await _messageOpenedSubscription?.cancel();
@@ -90,8 +90,8 @@ class PushMessagingService {
     _messageSubscription = null;
     _messageOpenedSubscription = null;
     _tokenRefreshSubscription = null;
-    // Cleared so a later sign-in re-runs setup rather than assuming the
-    // listeners from the previous session are still attached.
+
+
     _initializationFuture = null;
   }
 

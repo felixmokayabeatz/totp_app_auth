@@ -19,8 +19,6 @@ def find_user_by_email(email: str):
     if not cleaned:
         return None
 
-    # Addresses are written lowercased, but iexact keeps a row that predates
-    # that -- or one edited by hand -- reachable.
     return get_user_model().objects.filter(email__iexact=cleaned).first()
 
 
@@ -30,8 +28,6 @@ def authenticate_email(email: str, password: str):
     if not cleaned:
         return None
 
-    # ModelBackend passes this to User.objects.get_by_natural_key, which looks
-    # up USERNAME_FIELD -- the email column.
     return authenticate(username=cleaned, password=password)
 
 

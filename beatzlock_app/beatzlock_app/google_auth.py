@@ -35,8 +35,6 @@ GOOGLE_USERINFO_ENDPOINT = 'https://openidconnect.googleapis.com/v1/userinfo'
 GOOGLE_STATE_SESSION_KEY = 'google_oauth_state'
 GOOGLE_NEXT_SESSION_KEY = 'google_oauth_next'
 
-# The backend to attribute the session to. Nothing here checks a password, so
-# login() has to be told which of AUTHENTICATION_BACKENDS to record.
 _MODEL_BACKEND = 'django.contrib.auth.backends.ModelBackend'
 
 _HTTP_TIMEOUT = 10
@@ -74,8 +72,6 @@ def google_login(request):
         'response_type': 'code',
         'scope': 'openid email profile',
         'state': state,
-        # Ask for the account chooser rather than silently reusing whichever
-        # Google account the browser signed in with last.
         'prompt': 'select_account',
     }
     return redirect('{}?{}'.format(GOOGLE_AUTH_ENDPOINT, urlencode(params)))
@@ -95,12 +91,10 @@ def google_callback(request):
     next_url = request.session.pop(GOOGLE_NEXT_SESSION_KEY, None)
 
     if request.GET.get('error'):
-        # The usual one is access_denied: they pressed cancel.
         return _fail(request, "Google sign-in was cancelled.")
 
     state = request.GET.get('state')
     if not expected_state or not state or not secrets.compare_digest(state, expected_state):
-        # Either a forged callback or a session that expired mid-flow.
         return _fail(request, "That Google sign-in link has expired. Please try again.")
 
     code = request.GET.get('code')
@@ -140,8 +134,6 @@ def google_callback(request):
     if not email:
         return _fail(request, "That Google account has no email address on it.")
     if not profile_data.get('email_verified'):
-        # An unverified address would let anyone claim an account by adding it
-        # to a Google profile they own.
         return _fail(request, "Verify your email address with Google first, then sign in.")
 
     user = _user_for_google(profile_data, email)
@@ -168,7 +160,6 @@ def _user_for_google(profile_data, email):
         user = find_user_by_login_identifier(email)
 
     if user is None:
-        # username is kept equal to the email, the same as everywhere else here.
         user = User.objects.create_user(username=email, email=email)
         user.set_unusable_password()
         user.save(update_fields=['password'])

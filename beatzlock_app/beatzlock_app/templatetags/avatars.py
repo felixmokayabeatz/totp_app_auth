@@ -1,4 +1,3 @@
-# beatzlock_app/templatetags/avatars.py
 """Reading a person's picture and initials from a template.
 
 Profiles are created on first use rather than by a signal (see profile_for in
@@ -27,7 +26,7 @@ def avatar_url(user):
         return ''
     try:
         return profile.avatar_url or ''
-    except Exception:  # noqa: BLE001 - a missing file must not break the nav
+    except Exception:
         return ''
 
 
@@ -41,10 +40,9 @@ def initials(user):
     if profile is not None:
         try:
             return profile.initials
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
-    # Same rule the profile uses, applied straight to the user.
     source = (
         f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
         or getattr(user, 'email', '')

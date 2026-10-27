@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// A modal that stays up while something slow runs, and cannot be dismissed
-/// while it does.
-///
-/// Several operations became genuinely slow on purpose: deriving a key from a
-/// password now costs a couple of hundred thousand PBKDF2 rounds, which is the
-/// point of it. Saving the recovery PDF waits on the server and then on the
-/// disk. Without something on screen those all look like a click that did
-/// nothing, so people click again.
+
+
+
+
+
+
+
+
 class _BlockingProgressDialog extends StatelessWidget {
   const _BlockingProgressDialog({required this.message, required this.detail});
 
@@ -22,7 +22,7 @@ class _BlockingProgressDialog extends StatelessWidget {
     final onSurface = theme.colorScheme.onSurface;
 
     return PopScope(
-      // Back or Escape must not tear the dialog off a task still running.
+
       canPop: false,
       child: AlertDialog(
         backgroundColor: theme.colorScheme.surface,
@@ -71,10 +71,10 @@ class _BlockingProgressDialog extends StatelessWidget {
   }
 }
 
-/// Run [task] with a blocking spinner over the screen, and return its result.
-///
-/// The dialog is always closed, including when [task] throws, so a failure
-/// cannot leave the app stuck behind a spinner that never goes away.
+
+
+
+
 Future<T> runWithProgress<T>(
   BuildContext context, {
   required String message,

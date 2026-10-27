@@ -1,4 +1,4 @@
-// auth_service.dart
+
 
 import 'package:crypto/crypto.dart';
 
@@ -10,7 +10,7 @@ class OTPService {
       final timestamp = (DateTime.now().millisecondsSinceEpoch / 1000).floor();
       final counter = (timestamp / 30).floor();
 
-      // Simple HOTP/TOTP implementation
+
       final key = base32Decode(secret.toUpperCase());
       final counterBytes = _intToBytes(counter);
 
@@ -39,7 +39,7 @@ class OTPService {
   }
 }
 
-// Simple Base32 decoder
+
 List<int> base32Decode(String input) {
   const String alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   List<int> result = [];

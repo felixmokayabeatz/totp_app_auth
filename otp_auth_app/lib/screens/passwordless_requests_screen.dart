@@ -35,9 +35,9 @@ class _PasswordlessRequestsScreenState
   bool _isRefreshing = false;
   bool _canManageLogs = false;
   List<Map<String, dynamic>> _requests = const [];
-  // One controller per pending request. The code is typed, not picked
-  // from a list, so nothing the server sends can stand in for seeing
-  // the requesting device's screen.
+
+
+
   final Map<String, TextEditingController> _codeControllers = {};
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -114,9 +114,9 @@ class _PasswordlessRequestsScreenState
             .map((item) => item['id']?.toString() ?? '')
             .where((id) => id.isNotEmpty)
             .toSet();
-        // This list re-reads itself every few seconds. Keep the controller of
-        // every request still on screen, so a half-typed code survives a
-        // refresh, and dispose the rest.
+
+
+
         final goneIds = _codeControllers.keys
             .where((requestId) => !requestIds.contains(requestId))
             .toList();
@@ -580,7 +580,7 @@ class _PasswordlessRequestsScreenState
           borderSide: BorderSide(color: _accent, width: 2),
         ),
       ),
-      // Redraws the card so Accept enables the moment four digits are in.
+
       onChanged: (_) => setState(() {}),
     );
   }

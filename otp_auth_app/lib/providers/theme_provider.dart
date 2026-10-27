@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// One selectable accent, with the name shown next to it in the picker.
+
 class AccentOption {
   const AccentOption(this.name, this.color);
 
@@ -18,17 +18,17 @@ class ThemeProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   int _accentColorIndex = 0;
 
-  /// The accent palette.
-  ///
-  /// The first six slots keep the hue family they had before, so an existing
-  /// user's saved index still lands on the colour they picked -- only the exact
-  /// shade moved. Everything after that is new.
-  ///
-  /// The accent is not only a button fill here: screens also use it for icons
-  /// and label text directly on a white card. That rules out the bright, pale
-  /// tones -- a 500-weight cyan or lime looks lovely on a swatch and is
-  /// unreadable as 13pt text. Every colour below clears 3.5:1 against white
-  /// text as a fill, and most clear 4.5:1.
+
+
+
+
+
+
+
+
+
+
+
   static const List<AccentOption> accentOptions = [
     AccentOption('Indigo', Color(0xFF5B5BD6)),
     AccentOption('Teal', Color(0xFF0D9488)),
@@ -52,9 +52,9 @@ class ThemeProvider extends ChangeNotifier {
   String get accentColorName => accentOptions[_accentColorIndex].name;
   int get accentColorIndex => _accentColorIndex;
 
-  // Themes are rebuilt only when the mode or accent actually changes. Building
-  // one walks a large ColorScheme and a dozen component themes, and MaterialApp
-  // reads both of these on every frame it rebuilds.
+
+
+
   ThemeData? _cachedLightTheme;
   ThemeData? _cachedDarkTheme;
 
@@ -103,14 +103,14 @@ class ThemeProvider extends ChangeNotifier {
     final secondary = _shiftHue(exactPrimary, 34);
     final isDark = brightness == Brightness.dark;
 
-    // A near-neutral ground with a whisper of the accent in it, the way iOS
-    // tints its greys towards the active colour rather than sitting on pure
-    // grey. Cards then sit a shade above it instead of blending in.
+
+
+
     final scaffoldColor = isDark
         ? Color.lerp(const Color(0xFF0E0F1A), exactPrimary, 0.08)!
         : Color.lerp(const Color(0xFFF2F4F8), exactPrimary, 0.035)!;
-    // Kept a hair off 0xFF1E1E32, the navy the screens paint their own cards
-    // with, so themed surfaces and hand-rolled ones read as the same material.
+
+
     final surfaceColor = isDark
         ? Color.lerp(const Color(0xFF1C1D2E), exactPrimary, 0.06)!
         : Colors.white;
@@ -121,10 +121,10 @@ class ThemeProvider extends ChangeNotifier {
     ).copyWith(
       primary: exactPrimary,
       onPrimary: _idealTextColor(exactPrimary),
-      // Screens read colorScheme.surface for their own cards and sheets, so it
-      // has to be the same material the card and dialog themes paint. Leaving
-      // it at the seeded default put hand-rolled cards on one shade and themed
-      // ones on another.
+
+
+
+
       surface: surfaceColor,
       primaryContainer: Color.lerp(
         exactPrimary,
@@ -156,7 +156,7 @@ class ThemeProvider extends ChangeNotifier {
         ? Colors.white.withValues(alpha: 0.07)
         : Colors.black.withValues(alpha: 0.06);
 
-    // Soft, wide, low-opacity shadows rather than the default hard drop.
+
     final shadowColor =
         isDark ? Colors.black : const Color(0xFF0B1120).withValues(alpha: 0.55);
 
@@ -201,8 +201,8 @@ class ThemeProvider extends ChangeNotifier {
         thickness: 1,
         space: 1,
       ),
-      // Every AlertDialog in the app picks these up, so shape and depth stay
-      // consistent without each screen restating them.
+
+
       dialogTheme: DialogThemeData(
         backgroundColor: surfaceColor,
         surfaceTintColor: Colors.transparent,
@@ -292,12 +292,12 @@ class ThemeProvider extends ChangeNotifier {
         prefixIconColor: colorScheme.primary,
         suffixIconColor: colorScheme.onSurfaceVariant,
       ),
-      // Almost every snackbar in the app passes its own saturated background --
-      // red, green, orange -- and expects white text on it, so the text style
-      // here is white. That means this theme MUST name a dark background too:
-      // without one the ~57 snackbars that pass no colour of their own fall
-      // back to Material's inverseSurface, which is *light* in dark mode, and
-      // the white text vanishes against it.
+
+
+
+
+
+
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         insetPadding: const EdgeInsets.fromLTRB(16, 5, 16, 16),
@@ -419,8 +419,8 @@ class ThemeProvider extends ChangeNotifier {
         textTheme: _tunedTextTheme(base.textTheme, colorScheme));
   }
 
-  /// Tightens tracking on the large sizes and firms up the weights, which is
-  /// most of what makes system UI on Apple platforms read the way it does.
+
+
   TextTheme _tunedTextTheme(TextTheme base, ColorScheme colorScheme) {
     final colored = base.apply(
       bodyColor: colorScheme.onSurface,
@@ -481,8 +481,8 @@ class ThemeProvider extends ChangeNotifier {
         .toColor();
   }
 
-  /// A darker version of an accent, for text that has to sit on a pale tint of
-  /// that same accent.
+
+
   Color _deepen(Color color) {
     final hsl = HSLColor.fromColor(color);
     return hsl

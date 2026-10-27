@@ -144,7 +144,7 @@ flutter test
 # 3. Build
 python build.py         # option 4, 5, 6 ...
 
-# 4. Publish in the admin at https://apps.example.com/beatzlock-admin/
+# 4. Publish in the downloads site admin
 #    App Release first  -- version, build number, the notes .txt
 #    Platform Build     -- one per binary, pointing at that release
 
@@ -154,36 +154,3 @@ python build.py         # option 4, 5, 6 ...
 ```
 
 Clients pick the release up on their next update check.
-
----
-
-## Deploying the Django projects
-
-Each project deploys itself; they share nothing.
-
-```bash
-sudo ./beatzlock_app/deploy/deploy.sh            # menu
-sudo ./beatzlock_app/deploy/deploy.sh --update   # routine deploy
-sudo ./otp_backend/deploy/deploy.sh  --update
-
-sudo ./beatzlock_app/deploy/deploy.sh --status
-sudo ./beatzlock_app/deploy/deploy.sh --logs
-sudo ./beatzlock_app/deploy/deploy.sh --restart
-sudo ./beatzlock_app/deploy/deploy.sh --django createsuperuser
-sudo ./beatzlock_app/deploy/deploy.sh --database
-```
-
-| Action | Does |
-|---|---|
-| `--fresh` | full install: apt, PostgreSQL, virtualenv, migrate, static, superuser, service, nginx, firewall |
-| `--update` | dependencies, migrate, collectstatic, re-render unit + nginx, restart |
-| `--restart` | restart gunicorn, reload nginx |
-| `--status` | service, port, database, migrations, certificate |
-| `--logs` | gunicorn, nginx, Django |
-| `--database` | create/repair, back up, restore, psql, reset |
-| `--django …` | any manage.py command |
-| `--renew` | renew this subdomain's certificate |
-| `--uninstall` | remove the unit and nginx site; keeps code, database, .env |
-
-A subdomain needs its DNS A record before its first deploy, or certbot cannot
-issue a certificate. The script checks and tells you the exact record.

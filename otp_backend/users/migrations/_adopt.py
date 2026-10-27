@@ -8,8 +8,6 @@ on one that has been serving accounts for a year, and leave both identical.
 
 LEGACY_COLUMNS = ('username', 'first_name', 'last_name')
 
-# Postgres names an inline UNIQUE in CREATE TABLE "<table>_<column>_key", so
-# reusing that name keeps an adopted table shaped like a freshly created one.
 EMAIL_UNIQUE_CONSTRAINT = 'auth_user_email_key'
 EMAIL_LIKE_INDEX = 'auth_user_email_like'
 

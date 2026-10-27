@@ -40,15 +40,11 @@ def make_email_the_identifier(apps, schema_editor):
         if 'username' in columns:
             report_diverging_usernames(connection)
 
-        # Addresses are compared case-insensitively everywhere in the app;
-        # storing them lowercased keeps the unique constraint from disagreeing
-        # with that.
         schema_editor.execute(
             'UPDATE "auth_user" SET "email" = lower(btrim("email"))', params=None
         )
 
         for column in legacy:
-            # Drops the column's own unique constraint and LIKE index with it.
             schema_editor.execute(
                 'ALTER TABLE "auth_user" DROP COLUMN %s'
                 % schema_editor.quote_name(column),
@@ -61,8 +57,6 @@ def make_email_the_identifier(apps, schema_editor):
             % schema_editor.quote_name(EMAIL_UNIQUE_CONSTRAINT),
             params=None,
         )
-        # The companion index Postgres needs for LIKE 'prefix%' lookups, which
-        # is what Django emits alongside any unique varchar column.
         schema_editor.execute(
             'CREATE INDEX %s ON "auth_user" ("email" varchar_pattern_ops)'
             % schema_editor.quote_name(EMAIL_LIKE_INDEX),
@@ -116,7 +110,6 @@ def restore_legacy_columns(apps, schema_editor):
             "DEFAULT ''" % quoted,
             params=None,
         )
-        # Django keeps no database-level default of its own.
         schema_editor.execute(
             'ALTER TABLE "auth_user" ALTER COLUMN %s DROP DEFAULT' % quoted,
             params=None,
@@ -152,17 +145,10 @@ def relabel_user_content_type(apps, schema_editor):
 
     current = ContentType.objects.filter(app_label='users', model='user').first()
     if current is None:
-        # The ordinary path. Renaming the row rather than replacing it means
-        # every admin log entry and permission that points at it follows along
-        # without being touched.
         legacy.app_label = 'users'
         legacy.save(update_fields=['app_label'])
         return
 
-    # Both rows exist, which happens if this migration was rolled back and
-    # re-applied: post_migrate re-created the new row while the old one was
-    # still there. Move the history across and leave the emptied legacy row
-    # for remove_stale_contenttypes rather than cascading a delete through it.
     LogEntry = apps.get_model('admin', 'logentry')
     LogEntry.objects.filter(content_type=legacy).update(content_type=current)
 
@@ -179,8 +165,6 @@ class Migration(migrations.Migration):
     dependencies = [
         ('users', '0001_initial'),
         ('contenttypes', '0002_remove_content_type_name'),
-        # LogEntry rows are re-pointed when a rollback leaves two user
-        # content types behind.
         ('admin', '0001_initial'),
     ]
 

@@ -1,4 +1,3 @@
-# twofa/models.py
 
 import secrets
 import string
@@ -33,7 +32,6 @@ class EmailVerification(models.Model):
     attempts = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
-        # Every lookup is "the newest unused code for this account".
         indexes = [
             models.Index(
                 fields=['user', 'is_used', '-created_at'],
@@ -43,8 +41,6 @@ class EmailVerification(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.code:
-            # secrets, not random: the Mersenne Twister behind random.choices
-            # has recoverable state, and this code gates a password reset.
             self.code = ''.join(
                 secrets.choice(string.digits) for _ in range(self.CODE_LENGTH)
             )

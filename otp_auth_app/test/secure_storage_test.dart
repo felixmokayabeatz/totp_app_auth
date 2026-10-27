@@ -3,9 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:beatzlock_auth/services/secure_storage_service.dart';
 
-/// The storage key is derived from the machine, and the keystream from that
-/// key. Both were rebuilt on every read and write and are now computed once,
-/// so what matters is that the values already on disk still come back.
+
+
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -26,8 +26,8 @@ void main() {
   });
 
   test('long values survive the multi-block keystream', () async {
-    // A JWT is the longest thing this store holds, and it spans many more
-    // blocks than the 32 bytes one SHA-256 round covers.
+
+
     final token = 'eyJhbGciOiJIUzI1NiJ9.${'A' * 700}.signature';
 
     await storage.write(SecureStorageService.accessTokenKey, token);
@@ -58,8 +58,8 @@ void main() {
 
   test('repeated writes stay readable, so the key is stable across calls',
       () async {
-    // If the derived key were recomputed differently on a later call, the
-    // first value would stop decrypting.
+
+
     await storage.write(SecureStorageService.userIdKey, 'first');
     await storage.write(
         SecureStorageService.userEmailKey, 'second@example.com');
@@ -94,7 +94,7 @@ void main() {
       'legacy-plaintext@example.com',
     );
 
-    // ...and is rewritten in the encrypted form rather than left in the clear.
+
     final prefs = await SharedPreferences.getInstance();
     expect(
       prefs.getString(SecureStorageService.currentUserKey),

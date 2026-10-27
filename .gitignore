@@ -96,20 +96,20 @@ beatzlock_*_amd64.deb
 #=========================================================================
 
 # Both Django projects keep their own .env of live database and email
-# credentials. Neither is ever committed -- each project's deploy/deploy.sh
-# reads it from the server's own copy.
+# credentials. Neither is ever committed.
 
-# Virtualenvs. beatzlock_app/deploy/deploy.sh builds beatzlock_app/beatzlock_v_env
-# and otp_backend/deploy/deploy.sh builds otp_backend/totp_v_env, so the
-# server's directory names match the local ones.
+# Virtualenvs.
 .venv/
 *_v_env/
 beatzlock_v_env/
 
-# collectstatic output and the pg_dump files the deploy scripts write.
+# collectstatic output and database dumps.
 staticfiles/
 backups/
 
 # Per-week Django log directories.
 logs/
 .tmp_test_media/
+
+# Firebase service account keys and other runtime secrets for the Flutter client.
+otp_auth_app/secrets/

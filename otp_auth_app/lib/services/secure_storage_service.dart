@@ -17,8 +17,8 @@ class SecureStorageService {
   static const encryptionKey = 'encryption_key';
   static const appPinHashKey = 'app_pin_hash';
 
-  /// Random per-install secret mixed into the local vault key, so that key is
-  /// not computable from the account's email address alone.
+
+
   static const localVaultSecretKey = 'local_vault_secret';
 
   static const List<String> _knownKeys = [
@@ -40,40 +40,40 @@ class SecureStorageService {
 
   static const _prefix = 'bls1:';
 
-  // --- Platform keychain ----------------------------------------------------
-  // These values were kept in SharedPreferences, encrypted with a key derived
-  // from the hostname, the OS username and the home directory. All three are
-  // readable by anything already on the machine, so the encryption did not
-  // survive an attacker who had the file -- which is the only case it existed
-  // for.
-  //
-  // They now live in the platform's own store: DPAPI on Windows, Keychain on
-  // Apple platforms, the Android Keystore, libsecret on Linux. Values written
-  // under the old scheme are moved across the first time they are read.
-  //
-  // The old path stays as a fallback rather than an assumption. A Linux desktop
-  // without libsecret installed would otherwise fail to store a session at all,
-  // and locking someone out of their vault to improve key storage is not a
-  // trade worth making.
 
-  // Android defaults to an AES-GCM storage cipher with a Keystore-wrapped key,
-  // so it needs nothing here. On Apple platforms first_unlock is deliberate:
-  // background sync has to reach these after a reboot, before the user has
-  // unlocked the device for the first time in that session.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   static const _keychain = FlutterSecureStorage(
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
     mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
-  /// Null until probed. False means this platform has no usable keychain and
-  /// the encrypted-preferences path is being used instead.
+
+
   static bool? _keychainUsable;
 
   Future<bool> _keychainAvailable() async {
     if (_keychainUsable != null) return _keychainUsable!;
     try {
-      // A write-read-delete probe: presence of the plugin is not the same as a
-      // working backing store, which is exactly how Linux fails.
+
+
       const probeKey = 'beatzlock_keychain_probe';
       await _keychain.write(key: probeKey, value: 'ok');
       final readBack = await _keychain.read(key: probeKey);
@@ -90,12 +90,12 @@ class SecureStorageService {
   static void resetKeychainProbeForTest() => _keychainUsable = null;
 
   Future<void> init() async {
-    // Each key migrates independently, so they run together rather than as
-    // eight sequential preference round trips on the launch path.
+
+
     await Future.wait(_knownKeys.map(_migrateLegacyPreference));
   }
 
-  /// The per-install local vault secret, created on first use.
+
   Future<String> localVaultSecret() async {
     final existing = await read(localVaultSecretKey);
     if (existing != null && existing.isNotEmpty) return existing;
@@ -112,8 +112,8 @@ class SecureStorageService {
     if (await _keychainAvailable()) {
       try {
         await _keychain.write(key: key, value: value);
-        // Drop any copy left in preferences, so the weaker one is not left
-        // sitting there as a second source of the same secret.
+
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(key);
         return;
@@ -135,8 +135,8 @@ class SecureStorageService {
       }
     }
 
-    // Not in the keychain: either this platform has none, or the value predates
-    // the move. Read it the old way and, if the keychain works, move it over.
+
+
     final legacyValue = await _migrateLegacyPreference(key);
     if (legacyValue == null) return null;
 
@@ -236,8 +236,8 @@ class SecureStorageService {
     List<int> keyBytes,
     List<int> nonce,
   ) {
-    // The key and nonce are the same for every block, so the prefix is built
-    // once and only the block counter is appended per round.
+
+
     final prefix = <int>[...keyBytes, ...nonce];
     final output = Uint8List(input.length);
     var written = 0;
@@ -260,9 +260,9 @@ class SecureStorageService {
   static String? _cachedStorageKey;
 
   String _deriveStorageKey() {
-    // Platform.localHostname is a real syscall -- eleven microseconds a go --
-    // and this was calling it on every single read and every single write, for
-    // a value that cannot change while the process is alive.
+
+
+
     return _cachedStorageKey ??= _computeStorageKey();
   }
 

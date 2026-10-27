@@ -11,9 +11,6 @@ from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
 
-# ====================
-# PATH CONFIGURATION
-# ====================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -30,28 +27,12 @@ def env_list(name, default=""):
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-# ====================
-# CORE CONFIGURATION
-# ====================
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 DEBUG = env_bool("DEBUG", False)
 
-# ====================================================================
-# Local settings for development
-#
-# Sits here, straight after DEBUG and before anything derived from it, for the
-# same reason the API's copy does: the static storage, the middleware and the
-# cookie flags below are all decided by DEBUG, so an override that arrived
-# later would leave them set for production. Per-machine values that are not
-# DEBUG -- database credentials, ports, hosts -- belong in .env, which is
-# per-machine already.
-#
-# local.py is git-ignored and dev-only. deploy/deploy.sh refuses to run on any
-# host where it exists, because it would quietly serve the site with DEBUG=True.
-# ====================================================================
 try:
-    from .local import *  # noqa: F401,F403
+    from .local import *
 except ImportError:
     pass
 
@@ -67,17 +48,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# ========================
-# APPLICATION DEFINITION
-# ========================
 
 INSTALLED_APPS = [
     "django.contrib.sitemaps",
-    # console comes first only so that its management/commands/createsuperuser.py
-    # wins over django.contrib.auth's: Django resolves a duplicated command name
-    # to whichever app is listed earlier. beatzlock_app has to stay *after*
-    # django.contrib.auth, on the other hand, because its admin module
-    # unregisters the User admin that django.contrib.auth registers.
     "console",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -93,11 +66,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    # WhiteNoise serves the collectstatic output, which does not exist until
-    # collectstatic has run -- so in development it only warns "No directory at:
-    # .../staticfiles/" on every start. runserver's own staticfiles app serves
-    # those files straight from the apps there, so WhiteNoise is loaded in
-    # production only, where deploy.sh has run collectstatic.
     *([] if DEBUG else ["whitenoise.middleware.WhiteNoiseMiddleware"]),
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -107,9 +75,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# ========================
-# TEMPLATES CONFIGURATION
-# ========================
 
 TEMPLATES = [
     {
@@ -128,9 +93,6 @@ TEMPLATES = [
     },
 ]
 
-# ========================
-# DATABASE CONFIGURATION
-# ========================
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -148,9 +110,6 @@ else:
         }
     }
 
-# ==============================
-# AUTHENTICATION CONFIGURATION
-# ==============================
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -163,14 +122,10 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 
-# =============================
-# STATIC & MEDIA CONFIGURATION
-# =============================
 
 STATIC_URL = "/staticfiles/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-# The hashed manifest needs collectstatic to have run, so it is production-only.
 _STATICFILES_BACKEND = (
     "django.contrib.staticfiles.storage.StaticFilesStorage"
     if DEBUG
@@ -184,13 +139,8 @@ STORAGES = {
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# App binaries are handed to nginx via X-Accel-Redirect in production so
-# Gunicorn workers never stream large download payloads.
 USE_X_ACCEL_REDIRECT = env_bool("USE_X_ACCEL_REDIRECT", not DEBUG)
 
-# ========================
-# EMAIL CONFIGURATION
-# ========================
 
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = os.getenv("EMAIL_HOST")
@@ -204,18 +154,7 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL") or "BeatzLock Authenticator
     EMAIL_HOST_USER or SUPPORT_EMAIL
 )
 
-# ================================
-# BEATZLOCK SERVICE CONFIGURATION
-# ================================
 
-# ==========================================
-# GOOGLE SIGN-IN
-# ==========================================
-# Client ID and secret come from the Google Cloud console, project credentials.
-# The redirect URI is built from the request at run time, so the only thing that
-# has to match there is the callback path:
-#   https://apps.example.com/accounts/google/callback/
-#   http://localhost:8005/accounts/google/callback/   (development)
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
@@ -223,14 +162,10 @@ BEATZLOCK_API_BASE_URL = os.getenv("BEATZLOCK_API_BASE_URL", "")
 BEATZLOCK_INTERNAL_SERVICE_SECRET = os.getenv("BEATZLOCK_INTERNAL_SERVICE_SECRET", "")
 BEATZLOCK_BUILD_LOGS_DIR = os.getenv("BEATZLOCK_BUILD_LOGS_DIR", "")
 
-# ===========================
-# SECURITY CONFIGURATION
-# ===========================
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", SITE_URL)
 
-# The native BeatzLock apps call the JSON endpoints on this host.
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", SITE_URL)
 
@@ -239,31 +174,17 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
 
-# =======================
-# INTERNATIONALIZATION
-# =======================
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = os.getenv("TIME_ZONE", "Africa/Nairobi")
 USE_I18N = True
 USE_TZ = True
 
-# ========================
-# UPLOAD CONFIGURATION
-# ========================
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
 
-# Django's default, deliberately: anything larger than this is streamed to a
-# temporary file instead of being held in the worker's memory. App binaries are
-# hundreds of megabytes, and at the previous 50MB three workers could hold
-# 150MB of upload in RAM between them -- enough to get one of them OOM-killed
-# on a small host, which drops the connection mid-upload with no response.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2621440
 
-# ========================
-# BRANDING (template use)
-# ========================
 
 SITE_NAME = os.getenv("SITE_NAME", "BeatzLock Apps")
 MAIN_SITE_URL = os.getenv("MAIN_SITE_URL", "https://example.com")
@@ -273,9 +194,6 @@ SITE_TAGLINE = os.getenv(
     "straight from the people who build it.",
 )
 
-# The other felixmokayabeatz sites, listed in the footer. Each is its own
-# project on its own subdomain, so each URL can be pointed elsewhere from .env
-# without touching the template.
 FMB_SITE_LINKS = [
     {"name": "Main site", "url": MAIN_SITE_URL, "icon": "fa-house"},
     {"name": "Blog", "url": os.getenv("BLOG_URL", "https://blog.example.com"), "icon": "fa-feather-pointed"},
@@ -284,9 +202,6 @@ FMB_SITE_LINKS = [
 ]
 GOOGLE_ANALYTICS_MEASUREMENT_ID = os.getenv("GOOGLE_ANALYTICS_MEASUREMENT_ID", "")
 
-# ========================
-# LOGGING CONFIGURATION
-# ========================
 
 _now = datetime.now()
 LOG_DIR = BASE_DIR / "logs" / str(_now.year) / "week_{:02d}".format(_now.isocalendar().week)

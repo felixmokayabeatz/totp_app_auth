@@ -148,8 +148,5 @@ class Migration(migrations.Migration):
             ],
             database_operations=[],
         ),
-        # Reversing leaves auth_user in place: rolling back means
-        # django.contrib.auth.User owns the table again, and it expects to
-        # find the rows that are already in it.
         migrations.RunPython(create_table_if_absent, migrations.RunPython.noop),
     ]

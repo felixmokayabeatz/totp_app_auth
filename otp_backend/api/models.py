@@ -1,4 +1,3 @@
-#  api/models.py
 
 from django.db import models
 from django.conf import settings
@@ -37,16 +36,15 @@ class SyncLog(models.Model):
     device_id = models.CharField(max_length=255, blank=True, default='')
     sync_type = models.CharField(max_length=50, blank=True, default='')
     status = models.CharField(max_length=50, blank=True, default='')
-    timestamp = models.DateTimeField(auto_now=True)  # Auto-updates on each change
+    timestamp = models.DateTimeField(auto_now=True)
     error_message = models.TextField(null=True, blank=True)
-    last_sync_count = models.IntegerField(default=0)  # OTP accounts included in the most recent successful upload
-    total_syncs = models.IntegerField(default=0)  # Successful cloud write operations
+    last_sync_count = models.IntegerField(default=0)
+    total_syncs = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.user.email} - Last sync: {self.timestamp}"
 
 
-# Tombstone table — once an account ID lands here, no device can re-add it.
 class AccountTombstone(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tombstones')
     account_id = models.CharField(max_length=255)
@@ -59,7 +57,6 @@ class AccountTombstone(models.Model):
         return f"{self.user.email} – tombstone {self.account_id}"
 
 
-# One-time OTP codes for dangerous operations (e.g. delete-all-everywhere)
 class DeleteOTPCode(models.Model):
     """The code that authorises wiping every account in someone's vault.
 
@@ -129,12 +126,10 @@ class AppNotification(models.Model):
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            # The notifications list: this user's rows, newest first.
             models.Index(
                 fields=['user', '-created_at'],
                 name='apinotif_user_created_idx',
             ),
-            # Unread badge counts.
             models.Index(
                 fields=['user', 'is_read'],
                 name='apinotif_user_unread_idx',
@@ -190,12 +185,10 @@ class DeviceSession(models.Model):
     class Meta:
         ordering = ['-last_seen_at', '-created_at']
         indexes = [
-            # The sessions list and every "which session is this" lookup.
             models.Index(
                 fields=['user', '-last_seen_at'],
                 name='apidevsess_user_seen_idx',
             ),
-            # Filtering to live sessions, which nearly every request does.
             models.Index(
                 fields=['user', 'is_active'],
                 name='apidevsess_user_active_idx',
@@ -209,11 +202,6 @@ class DeviceSession(models.Model):
 class PasswordlessLoginRequest(models.Model):
     CODE_LENGTH = 4
     CODE_WINDOW_SECONDS = 60
-    # The approving phone used to be handed three codes to pick between, the
-    # correct one among them, so a request could be approved by tapping until
-    # one stuck: one in three per try, with nothing counting the tries. The
-    # code is typed now, and typing gets the same budget every other code in
-    # this codebase has.
     MAX_ATTEMPTS = 5
     STATUS_PENDING = 'pending'
     STATUS_APPROVED = 'approved'
@@ -270,8 +258,6 @@ class PasswordlessLoginRequest(models.Model):
                 fields=['user', '-created_at'],
                 name='apipwless_user_created_idx',
             ),
-            # _expire_stale_passwordless_requests runs on nearly every related
-            # request and scans every pending row in the table without this.
             models.Index(
                 fields=['status', 'expires_at'],
                 name='apipwless_status_exp_idx',
@@ -357,9 +343,6 @@ class PasswordlessLoginRequest(models.Model):
         self.attempts += 1
         fields = ['attempts', 'updated_at']
         if self.attempts >= self.MAX_ATTEMPTS:
-            # A spent budget retires the request outright. The requesting
-            # device asks again and gets a fresh code, which is cheap for the
-            # owner and starts the guessing over for anyone else.
             self.status = self.STATUS_EXPIRED
             fields.append('status')
         self.save(update_fields=fields)
@@ -376,13 +359,9 @@ class PasswordlessLoginRequest(models.Model):
             current_slot = self._timeslot_for()
             valid_codes = [self._derive_seeded_code(current_slot, seed=stored_value)]
             if current_slot > 0:
-                # The previous window stays valid so a code entered as it rolls
-                # over is not rejected for arriving a second late.
                 valid_codes.append(
                     self._derive_seeded_code(current_slot - 1, seed=stored_value)
                 )
-            # Compared without short-circuiting: `raw_code in valid_codes` bails
-            # out at the first differing byte.
             matched = False
             for candidate in valid_codes:
                 matched |= constant_time_compare(candidate, raw_code)

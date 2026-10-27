@@ -1,11 +1,11 @@
-// models/user_model.dart
+
 
 class User {
   String id;
   String email;
   String username;
   String? profilePhotoUrl;
-  String encryptionKey; // For decrypting synced data
+  String encryptionKey; 
 
   User({
     required this.id,

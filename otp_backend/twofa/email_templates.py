@@ -28,8 +28,6 @@ def _base_context(
         'eyebrow': 'BeatzLock Authenticator',
         'title': title,
         'subtitle': subtitle,
-        # Deliberately impersonal: these emails address an account, and the
-        # only thing the account has is the address they are being sent to.
         'greeting': 'Hello,',
         'intro': intro,
         'code': code,
